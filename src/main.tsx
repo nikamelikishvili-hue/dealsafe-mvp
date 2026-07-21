@@ -14,6 +14,7 @@ import './agreement-export.css';
 import './chat.css';
 import './offers.css';
 import './shipping.css';
+import './create-status.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile';
 const initial: DealDraft = {title:'',description:'',price:'',condition:'Good',serialNumber:'',deliveryMethod:'Meet in person'};
@@ -82,6 +83,7 @@ function App() {
   const [authForm,setAuthForm]=useState({displayName:'',email:'',password:''});
   const [authMessage,setAuthMessage]=useState('');
   const [photos,setPhotos]=useState<File[]>([]);
+  const [creating,setCreating]=useState(false);
   const [profile,setProfile]=useState<ProfileSummary|null>(null);
   const [verificationMessage,setVerificationMessage]=useState('');
   const [notifications,setNotifications]=useState<DealNotification[]>([]);
@@ -89,7 +91,7 @@ function App() {
   useEffect(()=>{if(session)getMyNotifications(session).then(setNotifications).catch(()=>setNotifications([]));else setNotifications([])},[session]);
   useEffect(()=>{if(isSupabaseConfigured) checkSupabaseConnection().then(setDatabaseConnected)},[]);
   useEffect(()=>{const publicId=new URLSearchParams(location.search).get('deal');if(publicId){getPublicDeal(publicId).then(deal=>{setActive(deal);setView('deal')}).catch(error=>setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable'))}},[]);
-  const create=async(e:React.FormEvent)=>{e.preventDefault();if(!session)return;setAuthMessage('');try{let deal=await createUserDeal(session,draft);if(photos.length){const mediaUrls=await uploadDealPhotos(session,deal.id,photos);deal={...deal,mediaUrls}}setDeals(x=>[deal,...x]);setActive(deal);setDraft(initial);setPhotos([]);setView('deal')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save this deal')}};
+  const create=async(e:React.FormEvent)=>{e.preventDefault();if(!session||creating)return;setCreating(true);setAuthMessage('');try{let deal=await createUserDeal(session,draft);setDeals(x=>[deal,...x]);setActive(deal);setDraft(initial);setView('deal');if(photos.length){try{const mediaUrls=await uploadDealPhotos(session,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Deal created, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}setPhotos([])}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save this deal')}finally{setCreating(false)}};
   const open=(d:Deal)=>{setActive(d);setView('deal')};
   const accept=async()=>{if(!active||!buyer.trim())return;if(!session){setAuthMessage('Sign in or create an account to accept this deal.');setView('auth');return}try{await acceptPublicDeal(session,active.publicId,buyer.trim());const deal={...active,status:'accepted' as const,buyerName:buyer.trim(),buyerVerification:'not_started' as const,viewerRole:'buyer' as const};setActive(deal);setDeals(x=>x.map(d=>d.id===deal.id?deal:d))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not accept this deal')}};
   const openCreate=()=>{if(!user){setView('auth');return}setView('create')};
@@ -101,6 +103,8 @@ function App() {
   return <div className="app">
     <header><button className="brand" onClick={()=>setView('home')}><span><ShieldCheck size={20}/></span>DealSafe</button><span className={`beta ${databaseConnected?'connected':''}`}>{databaseConnected?'Database connected':'Private beta'}</span><div className="account">{user?<><button onClick={openProfile}>{user.displayName}</button><button onClick={logout}>Sign out</button></>:<button onClick={()=>setView('auth')}>Sign in</button>}</div></header>
     <main>
+      {view==='create'&&authMessage&&<div className="creation-error notice">{authMessage}</div>}
+      {view==='create'&&creating&&<div className="creation-progress notice">Creating your Deal Link…</div>}
       {view==='deal'&&active&&<AgreementExport deal={active}/>}
       {view==='deal'&&active&&session&&active.status==='published'&&<OfferPanel deal={active} session={session} onAccepted={amount=>{const updated={...active,priceCents:amount,status:'accepted' as const};setActive(updated);setDeals(items=>items.map(item=>item.id===active.id?updated:item))}}/>}
       {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&active.deliveryMethod==='Ship to buyer'&&(['accepted','completed'] as Deal['status'][]).includes(active.status)&&<ShippingPanel deal={active} session={session} onDelivered={()=>{const updated={...active,status:'completed' as const};setActive(updated);setDeals(items=>items.map(item=>item.id===active.id?updated:item))}}/>}

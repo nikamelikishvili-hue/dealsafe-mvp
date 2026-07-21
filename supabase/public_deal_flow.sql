@@ -19,7 +19,7 @@ begin
         'condition', new.condition,
         'delivery_method', new.delivery_method
       ),
-      encode(digest(concat_ws('|', new.title, new.description, new.price_cents, new.currency, new.condition, new.delivery_method), 'sha256'), 'hex'),
+      encode(extensions.digest(concat_ws('|', new.title, new.description, new.price_cents, new.currency, new.condition, new.delivery_method), 'sha256'), 'hex'),
       new.seller_id)
   on conflict (deal_id, version) do nothing;
   return new;
@@ -41,7 +41,7 @@ select d.id, 1,
     'condition', d.condition,
     'delivery_method', d.delivery_method
   ),
-  encode(digest(concat_ws('|', d.title, d.description, d.price_cents, d.currency, d.condition, d.delivery_method), 'sha256'), 'hex'),
+  encode(extensions.digest(concat_ws('|', d.title, d.description, d.price_cents, d.currency, d.condition, d.delivery_method), 'sha256'), 'hex'),
   d.seller_id
 from public.deals d
 on conflict (deal_id, version) do nothing;
