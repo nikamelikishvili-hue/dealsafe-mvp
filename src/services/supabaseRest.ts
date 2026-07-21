@@ -151,7 +151,7 @@ export async function createUserDeal(session: StoredSession, draft: DealDraft) {
   return mapDeal((data as DealRow[])[0], session.user.displayName, session.user.id);
 }
 
-export interface DealMeeting { id:string; deal_id:string; proposed_by:string; location_name:string; address:string; scheduled_at:string; status:'proposed'|'confirmed'|'cancelled' }
+export interface DealMeeting { id:string; deal_id:string; proposed_by:string; location_name:string; address:string; scheduled_at:string; status:'proposed'|'confirmed'|'cancelled'; seller_arrived:boolean; buyer_arrived:boolean }
 
 export async function getDealMeeting(session: StoredSession, dealId: string) {
   const response=await fetch(`${supabaseUrl}/rest/v1/deal_meetings?deal_id=eq.${dealId}&select=*`,{headers:headers(session.accessToken)});
@@ -167,6 +167,10 @@ export async function confirmMeeting(session:StoredSession,dealId:string){
   const response=await fetch(`${supabaseUrl}/rest/v1/rpc/confirm_meeting`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});
   if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not confirm meeting')}
 }
+export async function markArrived(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/mark_arrived`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not mark arrival')}}
+export async function generateHandoffPin(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/generate_handoff_pin`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not generate PIN')}return await response.json() as string}
+export async function completeHandoff(session:StoredSession,dealId:string,pin:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/complete_handoff`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_pin:pin})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not complete deal')}}
+export async function submitRating(session:StoredSession,dealId:string,stars:number,comment:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/submit_rating`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_stars:stars,p_comment:comment})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not submit rating')}}
 
 interface PublicDealRow extends DealRow {
   agreement_version: number;
