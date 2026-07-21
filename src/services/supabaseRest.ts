@@ -17,6 +17,7 @@ export interface TimelineEvent { id:string; event_type:string; created_at:string
 export interface DealNotification extends TimelineEvent { deal_id:string; public_id:string; title:string }
 export interface DealMessage { id:number; sender_id:string; sender_name:string; body:string; created_at:string; is_mine:boolean }
 export interface DealOffer { id:string;amount_cents:number;status:'pending'|'accepted'|'declined'|'withdrawn';buyer_name:string;created_at:string;is_mine:boolean }
+export interface DealShipment { id:string;deal_id:string;carrier:string;tracking_number:string;status:'shipped'|'delivered';shipped_at:string;delivered_at:string|null }
 
 interface DealRow {
   id: string; public_id: string; title: string; description: string;
@@ -187,6 +188,9 @@ export async function sendDealMessage(session:StoredSession,dealId:string,body:s
 export async function makeDealOffer(session:StoredSession,publicId:string,amountCents:number,typedName:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/make_deal_offer`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_public_id:publicId,p_amount_cents:amountCents,p_typed_name:typedName})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not send offer')}}
 export async function getDealOffers(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_deal_offers`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load offers')}return await response.json() as DealOffer[]}
 export async function respondToOffer(session:StoredSession,offerId:string,accept:boolean){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/respond_to_offer`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_offer_id:offerId,p_accept:accept})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not respond to offer')}}
+export async function getDealShipment(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/deal_shipments?deal_id=eq.${dealId}&select=*`,{headers:headers(session.accessToken)});if(!response.ok)throw new Error('Could not load shipment');return ((await response.json()) as DealShipment[])[0]||null}
+export async function createDealShipment(session:StoredSession,dealId:string,carrier:string,trackingNumber:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/create_deal_shipment`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_carrier:carrier,p_tracking_number:trackingNumber})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not save shipment')}}
+export async function confirmShipmentDelivery(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/confirm_shipment_delivery`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not confirm delivery')}}
 
 interface PublicDealRow extends DealRow {
   agreement_version: number;
