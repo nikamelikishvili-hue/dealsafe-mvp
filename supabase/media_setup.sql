@@ -3,6 +3,12 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('deal-media', 'deal-media', true, 6291456, array['image/jpeg','image/png','image/webp','image/heic'])
 on conflict (id) do update set public=excluded.public, file_size_limit=excluded.file_size_limit, allowed_mime_types=excluded.allowed_mime_types;
 
+drop policy if exists "owners upload deal media" on storage.objects;
+drop policy if exists "owners update deal media" on storage.objects;
+drop policy if exists "owners delete deal media" on storage.objects;
+drop policy if exists "participants read media records" on public.deal_media;
+drop policy if exists "seller inserts media records" on public.deal_media;
+
 create policy "owners upload deal media" on storage.objects for insert to authenticated
 with check (bucket_id='deal-media' and (storage.foldername(name))[1]=auth.uid()::text);
 create policy "owners update deal media" on storage.objects for update to authenticated
