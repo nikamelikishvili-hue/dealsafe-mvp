@@ -12,6 +12,7 @@ export interface AuthUser {
 }
 
 export interface StoredSession { accessToken: string; user: AuthUser }
+export interface ProfileSummary { display_name:string; verification_status:'not_started'|'pending'|'verified'|'failed'; member_since:string; completed_deals:number; rating_count:number; average_rating:number|null; recent_ratings:{stars:number;comment:string|null;created_at:string}[] }
 
 interface DealRow {
   id: string; public_id: string; title: string; description: string;
@@ -171,6 +172,7 @@ export async function markArrived(session:StoredSession,dealId:string){const res
 export async function generateHandoffPin(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/generate_handoff_pin`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not generate PIN')}return await response.json() as string}
 export async function completeHandoff(session:StoredSession,dealId:string,pin:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/complete_handoff`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_pin:pin})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not complete deal')}}
 export async function submitRating(session:StoredSession,dealId:string,stars:number,comment:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/submit_rating`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_stars:stars,p_comment:comment})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not submit rating')}}
+export async function getMyProfileSummary(session:StoredSession){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_my_profile_summary`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load profile')}const rows=await response.json() as ProfileSummary[];if(!rows[0])throw new Error('Profile was not found');return rows[0]}
 
 interface PublicDealRow extends DealRow {
   agreement_version: number;
