@@ -19,6 +19,7 @@ export interface Deal {
   agreementVersion: number;
   createdAt: string;
   mediaUrls?: string[];
+  viewerRole?: 'seller' | 'buyer' | 'visitor';
 }
 
 export interface DealDraft extends Pick<Deal, 'title' | 'description' | 'condition' | 'deliveryMethod'> {

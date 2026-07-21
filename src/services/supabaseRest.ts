@@ -1,3 +1,5 @@
+import type { Deal, DealDraft } from '../domain';
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
@@ -18,6 +20,7 @@ interface DealRow {
   status: 'draft' | 'published' | 'accepted' | 'completed';
   current_agreement_version: number; created_at: string;
   deal_media?: { storage_path: string; sort_order: number }[];
+  seller_id?: string; buyer_id?: string | null;
 }
 
 interface AuthResponse {
@@ -82,7 +85,8 @@ export async function signIn(email: string, password: string) {
 
 export function signOut() { localStorage.removeItem(sessionKey); }
 
-function mapDeal(row: DealRow, sellerName: string) {
+function mapDeal(row: DealRow, sellerName: string, viewerId?: string) {
+  const viewerRole: Deal['viewerRole'] = viewerId ? (row.seller_id===viewerId?'seller':row.buyer_id===viewerId?'buyer':'visitor') : 'visitor';
   return {
     id: row.id, publicId: row.public_id, title: row.title, description: row.description,
     priceCents: row.price_cents, currency: row.currency, condition: row.condition,
@@ -91,6 +95,7 @@ function mapDeal(row: DealRow, sellerName: string) {
     sellerVerification: 'not_started' as const,
     agreementVersion: Math.max(1, row.current_agreement_version), createdAt: row.created_at,
     mediaUrls: (row.deal_media || []).sort((a,b)=>a.sort_order-b.sort_order).map(item=>publicMediaUrl(item.storage_path)),
+    viewerRole,
   };
 }
 
@@ -100,7 +105,7 @@ export async function listUserDeals(session: StoredSession) {
   });
   if (!response.ok) throw new Error('Could not load your deals');
   const rows = await response.json() as DealRow[];
-  return rows.map(row => mapDeal(row, session.user.displayName));
+  return rows.map(row => mapDeal(row, session.user.displayName, session.user.id));
 }
 
 function publicMediaUrl(path: string) {
@@ -122,7 +127,7 @@ export async function uploadDealPhotos(session: StoredSession, dealId: string, f
   return urls;
 }
 
-export async function createUserDeal(session: StoredSession, draft: import('../domain').DealDraft) {
+export async function createUserDeal(session: StoredSession, draft: DealDraft) {
   const serial = draft.serialNumber.trim();
   const response = await fetch(`${supabaseUrl}/rest/v1/deals`, {
     method: 'POST',
@@ -143,7 +148,24 @@ export async function createUserDeal(session: StoredSession, draft: import('../d
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data?.message || 'Could not save this deal');
-  return mapDeal((data as DealRow[])[0], session.user.displayName);
+  return mapDeal((data as DealRow[])[0], session.user.displayName, session.user.id);
+}
+
+export interface DealMeeting { id:string; deal_id:string; proposed_by:string; location_name:string; address:string; scheduled_at:string; status:'proposed'|'confirmed'|'cancelled' }
+
+export async function getDealMeeting(session: StoredSession, dealId: string) {
+  const response=await fetch(`${supabaseUrl}/rest/v1/deal_meetings?deal_id=eq.${dealId}&select=*`,{headers:headers(session.accessToken)});
+  if(!response.ok) throw new Error('Could not load meeting');
+  return ((await response.json()) as DealMeeting[])[0] || null;
+}
+
+export async function proposeMeeting(session:StoredSession,dealId:string,locationName:string,address:string,scheduledAt:string){
+  const response=await fetch(`${supabaseUrl}/rest/v1/rpc/propose_meeting`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_location_name:locationName,p_address:address,p_scheduled_at:new Date(scheduledAt).toISOString()})});
+  if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not propose meeting')}
+}
+export async function confirmMeeting(session:StoredSession,dealId:string){
+  const response=await fetch(`${supabaseUrl}/rest/v1/rpc/confirm_meeting`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});
+  if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not confirm meeting')}
 }
 
 interface PublicDealRow extends DealRow {
