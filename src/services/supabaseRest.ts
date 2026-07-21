@@ -129,15 +129,17 @@ function publicMediaUrl(path: string) {
   return `${supabaseUrl}/storage/v1/object/public/deal-media/${path.split('/').map(encodeURIComponent).join('/')}`;
 }
 
-export async function uploadDealPhotos(session: StoredSession, dealId: string, files: File[]) {
+export async function uploadDealPhotos(session: StoredSession, dealId: string, files: File[], startIndex=0) {
   const urls: string[] = [];
   for (let index=0; index<files.length; index++) {
     const file=files[index];
+    if(file.size>6*1024*1024)throw new Error(`Photo ${index+1} is larger than 6 MB`);
+    if(!['image/jpeg','image/png','image/webp','image/heic'].includes(file.type)&&!/^.+\.(jpe?g|png|webp|heic)$/i.test(file.name))throw new Error(`Photo ${index+1} has an unsupported format`);
     const extension=file.name.split('.').pop()?.toLowerCase() || 'jpg';
     const path=`${session.user.id}/${dealId}/${crypto.randomUUID()}.${extension}`;
     const upload=await fetch(`${supabaseUrl}/storage/v1/object/deal-media/${path}`,{method:'POST',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`,'Content-Type':file.type||'image/jpeg','x-upsert':'false'},body:file});
     if(!upload.ok) throw new Error(`Photo ${index+1} could not be uploaded`);
-    const record=await fetch(`${supabaseUrl}/rest/v1/deal_media`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=minimal'},body:JSON.stringify({deal_id:dealId,storage_path:path,sort_order:index})});
+    const record=await fetch(`${supabaseUrl}/rest/v1/deal_media`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=minimal'},body:JSON.stringify({deal_id:dealId,storage_path:path,sort_order:startIndex+index})});
     if(!record.ok) throw new Error(`Photo ${index+1} could not be linked to the deal`);
     urls.push(publicMediaUrl(path));
   }
