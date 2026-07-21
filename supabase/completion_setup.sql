@@ -26,7 +26,7 @@ begin
     raise exception 'Both parties must arrive before generating a PIN';
   end if;
   v_pin:=lpad((floor(random()*1000000))::int::text,6,'0');
-  update public.deal_meetings set handoff_pin_hash=encode(digest(v_pin,'sha256'),'hex'),pin_created_at=now(),updated_at=now() where deal_id=p_deal_id;
+  update public.deal_meetings set handoff_pin_hash=encode(extensions.digest(v_pin,'sha256'),'hex'),pin_created_at=now(),updated_at=now() where deal_id=p_deal_id;
   insert into public.audit_events(deal_id,actor_id,event_type) values(p_deal_id,auth.uid(),'handoff_pin_generated');
   return v_pin;
 end; $$;
@@ -41,7 +41,7 @@ begin
   select * into v_meeting from public.deal_meetings where deal_id=p_deal_id;
   if v_deal.buyer_id<>auth.uid() then raise exception 'Only the buyer can confirm receipt'; end if;
   if not(v_meeting.seller_arrived and v_meeting.buyer_arrived) then raise exception 'Both parties must arrive first'; end if;
-  if v_meeting.handoff_pin_hash is null or v_meeting.handoff_pin_hash<>encode(digest(trim(p_pin),'sha256'),'hex') then raise exception 'Incorrect handoff PIN'; end if;
+  if v_meeting.handoff_pin_hash is null or v_meeting.handoff_pin_hash<>encode(extensions.digest(trim(p_pin),'sha256'),'hex') then raise exception 'Incorrect handoff PIN'; end if;
   update public.deals set status='completed',updated_at=now() where id=p_deal_id;
   update public.deal_meetings set handoff_pin_hash=null,updated_at=now() where deal_id=p_deal_id;
   insert into public.audit_events(deal_id,actor_id,event_type) values(p_deal_id,auth.uid(),'deal_completed');
