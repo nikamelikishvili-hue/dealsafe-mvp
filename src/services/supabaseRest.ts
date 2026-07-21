@@ -97,6 +97,9 @@ export async function refreshSession(session:StoredSession){
   return storeSession(data,toUser(data)||session.user);
 }
 
+export async function requestPasswordReset(email:string,redirectTo:string){const response=await fetch(`${supabaseUrl}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`,{method:'POST',headers:headers(),body:JSON.stringify({email})});if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not send reset email')}}
+export async function updateRecoveredPassword(accessToken:string,password:string){const response=await fetch(`${supabaseUrl}/auth/v1/user`,{method:'PUT',headers:headers(accessToken),body:JSON.stringify({password})});if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not update password')}}
+
 export function signOut() { localStorage.removeItem(sessionKey); }
 
 function mapDeal(row: DealRow, sellerName: string, viewerId?: string) {

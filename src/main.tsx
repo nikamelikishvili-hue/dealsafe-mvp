@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, CalendarDays, Check, Clock3, Copy, FileDown, FileSignature, Link2, LockKeyhole, MapPin, MessageCircle, PackageCheck, Plus, Search, Send, Share2, ShieldCheck, Smartphone, Star, Truck } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
-import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, generateHandoffPin, getDealMeeting, getDealMessages, getDealOffers, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, refreshSession, requestIdentityVerification, respondToOffer, sendDealMessage, signIn, signOut, signUp, submitRating, uploadDealPhotos, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type StoredSession, type TimelineEvent } from './services/supabaseRest';
+import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, generateHandoffPin, getDealMeeting, getDealMessages, getDealOffers, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, refreshSession, requestIdentityVerification, requestPasswordReset, respondToOffer, sendDealMessage, signIn, signOut, signUp, submitRating, updateRecoveredPassword, uploadDealPhotos, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type StoredSession, type TimelineEvent } from './services/supabaseRest';
 import type { Deal, DealDraft } from './domain';
 import './styles.css';
 import './security.css';
@@ -16,8 +16,9 @@ import './offers.css';
 import './shipping.css';
 import './create-status.css';
 import './install.css';
+import './recovery.css';
 
-type View = 'home' | 'create' | 'deal' | 'auth' | 'profile';
+type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'forgot' | 'reset';
 interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
 const initial: DealDraft = {title:'',description:'',price:'',condition:'Good',serialNumber:'',deliveryMethod:'Meet in person'};
 
@@ -77,9 +78,14 @@ function ShippingPanel({deal,session,onDelivered}:{deal:Deal;session:StoredSessi
 
 function InstallApp(){const [prompt,setPrompt]=useState<InstallPromptEvent|null>(null);useEffect(()=>{const handler=(event:Event)=>{event.preventDefault();setPrompt(event as InstallPromptEvent)};window.addEventListener('beforeinstallprompt',handler);return()=>window.removeEventListener('beforeinstallprompt',handler)},[]);if(!prompt)return null;const install=async()=>{await prompt.prompt();const choice=await prompt.userChoice;if(choice.outcome==='accepted')setPrompt(null)};return <aside className="install-app no-print"><Smartphone/><div><b>Install DealSafe</b><span>Add it to your home screen for faster access.</span></div><button className="primary" onClick={install}>Install app</button></aside>}
 
+function ForgotPassword({onBack}:{onBack:()=>void}){const [email,setEmail]=useState('');const [message,setMessage]=useState('');const [sending,setSending]=useState(false);const submit=async(e:React.FormEvent)=>{e.preventDefault();setSending(true);setMessage('');try{await requestPasswordReset(email,location.origin);setMessage('If an account exists for this email, a password reset link has been sent.')}catch(error){setMessage(error instanceof Error?error.message:'Could not send reset email')}finally{setSending(false)}};return <section className="recovery-page"><button className="back" onClick={onBack}>← Back to sign in</button><p className="eyebrow">Account recovery</p><h1>Reset your password</h1><p>Enter your account email. For privacy, the result will not reveal whether an account exists.</p><form onSubmit={submit}><label>Email<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/></label>{message&&<div className="notice">{message}</div>}<button className="primary full" disabled={sending}>{sending?'Sending…':'Send reset link'}</button></form></section>}
+
+function ResetPassword({token,onDone}:{token:string;onDone:()=>void}){const [password,setPassword]=useState('');const [confirmPassword,setConfirmPassword]=useState('');const [message,setMessage]=useState('');const submit=async(e:React.FormEvent)=>{e.preventDefault();setMessage('');if(password!==confirmPassword){setMessage('Passwords do not match.');return}try{await updateRecoveredPassword(token,password);history.replaceState(null,'',location.pathname);setMessage('Password updated. You can now sign in.');setTimeout(onDone,1000)}catch(error){setMessage(error instanceof Error?error.message:'Could not update password')}};return <section className="recovery-page"><p className="eyebrow">Secure recovery</p><h1>Choose a new password</h1><form onSubmit={submit}><label>New password<input required minLength={8} type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label><label>Confirm password<input required minLength={8} type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></label>{message&&<div className="notice">{message}</div>}<button className="primary full">Update password</button></form></section>}
+
 function App() {
   const initialSession=getStoredSession();
-  const [view,setView]=useState<View>('home'); const [deals,setDeals]=useState<Deal[]>([]); const [active,setActive]=useState<Deal>(); const [draft,setDraft]=useState(initial); const [buyer,setBuyer]=useState('');
+  const recoveryParams=new URLSearchParams(location.hash.slice(1));const recoveryToken=recoveryParams.get('type')==='recovery'?recoveryParams.get('access_token')||'':'';
+  const [view,setView]=useState<View>(recoveryToken?'reset':'home'); const [deals,setDeals]=useState<Deal[]>([]); const [active,setActive]=useState<Deal>(); const [draft,setDraft]=useState(initial); const [buyer,setBuyer]=useState('');
   const [databaseConnected,setDatabaseConnected]=useState(false);
   const [session,setSession]=useState<StoredSession|null>(initialSession);
   const user=session?.user??null;
@@ -108,6 +114,9 @@ function App() {
   return <div className="app">
     <header><button className="brand" onClick={()=>setView('home')}><span><ShieldCheck size={20}/></span>DealSafe</button><span className={`beta ${databaseConnected?'connected':''}`}>{databaseConnected?'Database connected':'Private beta'}</span><div className="account">{user?<><button onClick={openProfile}>{user.displayName}</button><button onClick={logout}>Sign out</button></>:<button onClick={()=>setView('auth')}>Sign in</button>}</div></header>
     <main>
+      {view==='auth'&&<div className="forgot-entry"><button onClick={()=>setView('forgot')}>Forgot password?</button></div>}
+      {view==='forgot'&&<ForgotPassword onBack={()=>setView('auth')}/>}
+      {view==='reset'&&recoveryToken&&<ResetPassword token={recoveryToken} onDone={()=>setView('auth')}/>}
       {view==='home'&&<InstallApp/>}
       {view==='create'&&authMessage&&<div className="creation-error notice">{authMessage}</div>}
       {view==='create'&&creating&&<div className="creation-progress notice">Creating your Deal Link…</div>}
