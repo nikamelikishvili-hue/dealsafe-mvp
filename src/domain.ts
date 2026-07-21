@@ -18,6 +18,7 @@ export interface Deal {
   buyerVerification?: VerificationStatus;
   agreementVersion: number;
   createdAt: string;
+  mediaUrls?: string[];
 }
 
 export interface DealDraft extends Pick<Deal, 'title' | 'description' | 'condition' | 'deliveryMethod'> {

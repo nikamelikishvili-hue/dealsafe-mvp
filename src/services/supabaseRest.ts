@@ -17,6 +17,7 @@ interface DealRow {
   serial_last_four: string | null; delivery_method: 'Meet in person' | 'Ship to buyer';
   status: 'draft' | 'published' | 'accepted' | 'completed';
   current_agreement_version: number; created_at: string;
+  deal_media?: { storage_path: string; sort_order: number }[];
 }
 
 interface AuthResponse {
@@ -89,16 +90,36 @@ function mapDeal(row: DealRow, sellerName: string) {
     deliveryMethod: row.delivery_method, status: row.status, sellerName,
     sellerVerification: 'not_started' as const,
     agreementVersion: Math.max(1, row.current_agreement_version), createdAt: row.created_at,
+    mediaUrls: (row.deal_media || []).sort((a,b)=>a.sort_order-b.sort_order).map(item=>publicMediaUrl(item.storage_path)),
   };
 }
 
 export async function listUserDeals(session: StoredSession) {
-  const response = await fetch(`${supabaseUrl}/rest/v1/deals?select=*&order=created_at.desc`, {
+  const response = await fetch(`${supabaseUrl}/rest/v1/deals?select=*,deal_media(storage_path,sort_order)&order=created_at.desc`, {
     headers: headers(session.accessToken),
   });
   if (!response.ok) throw new Error('Could not load your deals');
   const rows = await response.json() as DealRow[];
   return rows.map(row => mapDeal(row, session.user.displayName));
+}
+
+function publicMediaUrl(path: string) {
+  return `${supabaseUrl}/storage/v1/object/public/deal-media/${path.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+export async function uploadDealPhotos(session: StoredSession, dealId: string, files: File[]) {
+  const urls: string[] = [];
+  for (let index=0; index<files.length; index++) {
+    const file=files[index];
+    const extension=file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    const path=`${session.user.id}/${dealId}/${crypto.randomUUID()}.${extension}`;
+    const upload=await fetch(`${supabaseUrl}/storage/v1/object/deal-media/${path}`,{method:'POST',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`,'Content-Type':file.type||'image/jpeg','x-upsert':'false'},body:file});
+    if(!upload.ok) throw new Error(`Photo ${index+1} could not be uploaded`);
+    const record=await fetch(`${supabaseUrl}/rest/v1/deal_media`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=minimal'},body:JSON.stringify({deal_id:dealId,storage_path:path,sort_order:index})});
+    if(!record.ok) throw new Error(`Photo ${index+1} could not be linked to the deal`);
+    urls.push(publicMediaUrl(path));
+  }
+  return urls;
 }
 
 export async function createUserDeal(session: StoredSession, draft: import('../domain').DealDraft) {
@@ -129,6 +150,7 @@ interface PublicDealRow extends DealRow {
   agreement_version: number;
   seller_name: string;
   seller_verification: 'not_started' | 'pending' | 'verified';
+  media_paths: string[];
 }
 
 export async function getPublicDeal(publicId: string) {
@@ -143,6 +165,7 @@ export async function getPublicDeal(publicId: string) {
     ...mapDeal(row, row.seller_name),
     agreementVersion: row.agreement_version,
     sellerVerification: row.seller_verification,
+    mediaUrls: (row.media_paths || []).map(publicMediaUrl),
   };
 }
 
