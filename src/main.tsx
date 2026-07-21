@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, CalendarDays, Check, Clock3, Copy, FileDown, FileSignature, Link2, LockKeyhole, MapPin, MessageCircle, PackageCheck, Plus, Search, Send, Share2, ShieldCheck, Star, Truck } from 'lucide-react';
+import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, CalendarDays, Check, Clock3, Copy, FileDown, FileSignature, Link2, LockKeyhole, MapPin, MessageCircle, PackageCheck, Plus, Search, Send, Share2, ShieldCheck, Smartphone, Star, Truck } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
 import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, generateHandoffPin, getDealMeeting, getDealMessages, getDealOffers, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, requestIdentityVerification, respondToOffer, sendDealMessage, signIn, signOut, signUp, submitRating, uploadDealPhotos, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type StoredSession, type TimelineEvent } from './services/supabaseRest';
 import type { Deal, DealDraft } from './domain';
@@ -15,8 +15,10 @@ import './chat.css';
 import './offers.css';
 import './shipping.css';
 import './create-status.css';
+import './install.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile';
+interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
 const initial: DealDraft = {title:'',description:'',price:'',condition:'Good',serialNumber:'',deliveryMethod:'Meet in person'};
 
 function MeetingPanel({deal,session}:{deal:Deal;session:StoredSession}){
@@ -73,6 +75,8 @@ function OfferPanel({deal,session,onAccepted}:{deal:Deal;session:StoredSession;o
 
 function ShippingPanel({deal,session,onDelivered}:{deal:Deal;session:StoredSession;onDelivered:()=>void}){const [shipment,setShipment]=useState<DealShipment|null>(null);const [carrier,setCarrier]=useState('');const [tracking,setTracking]=useState('');const [message,setMessage]=useState('');const load=()=>getDealShipment(session,deal.id).then(setShipment).catch(()=>{});useEffect(()=>{load()},[deal.id,session]);const save=async(e:React.FormEvent)=>{e.preventDefault();setMessage('');try{await createDealShipment(session,deal.id,carrier,tracking);setMessage('Shipment details saved.');await load()}catch(error){setMessage(error instanceof Error?error.message:'Could not save shipment')}};const delivered=async()=>{if(!confirm('Confirm that you received and inspected this item?'))return;setMessage('');try{await confirmShipmentDelivery(session,deal.id);setMessage('Delivery confirmed. Deal completed.');await load();onDelivered()}catch(error){setMessage(error instanceof Error?error.message:'Could not confirm delivery')}};return <section className="shipping-panel no-print"><div className="shipping-heading"><Truck/><div><p className="eyebrow">Tracked delivery</p><h2>Shipping & receipt</h2></div></div>{shipment?<div className="shipment-card"><PackageCheck/><div><b>{shipment.carrier}</b><span>Tracking number: {shipment.tracking_number}</span><small>{shipment.status==='delivered'?'Delivered':'Shipped'} · {new Date(shipment.shipped_at).toLocaleString()}</small></div></div>:deal.viewerRole==='seller'?<form onSubmit={save}><label>Carrier<input required minLength={2} value={carrier} onChange={e=>setCarrier(e.target.value)} placeholder="UPS, FedEx, USPS…"/></label><label>Tracking number<input required minLength={4} value={tracking} onChange={e=>setTracking(e.target.value)} placeholder="Enter tracking number"/></label><button className="primary">Mark as shipped</button></form>:<div className="shipping-wait">Waiting for the seller to add tracking information.</div>}{shipment?.status==='shipped'&&deal.viewerRole==='buyer'&&deal.status==='accepted'&&<button className="primary confirm-delivery" onClick={delivered}><PackageCheck size={18}/>Confirm delivery</button>}{message&&<div className="notice">{message}</div>}<p className="shipping-note"><ShieldCheck/> Confirm delivery only after receiving and inspecting the item.</p></section>}
 
+function InstallApp(){const [prompt,setPrompt]=useState<InstallPromptEvent|null>(null);useEffect(()=>{const handler=(event:Event)=>{event.preventDefault();setPrompt(event as InstallPromptEvent)};window.addEventListener('beforeinstallprompt',handler);return()=>window.removeEventListener('beforeinstallprompt',handler)},[]);if(!prompt)return null;const install=async()=>{await prompt.prompt();const choice=await prompt.userChoice;if(choice.outcome==='accepted')setPrompt(null)};return <aside className="install-app no-print"><Smartphone/><div><b>Install DealSafe</b><span>Add it to your home screen for faster access.</span></div><button className="primary" onClick={install}>Install app</button></aside>}
+
 function App() {
   const initialSession=getStoredSession();
   const [view,setView]=useState<View>('home'); const [deals,setDeals]=useState<Deal[]>([]); const [active,setActive]=useState<Deal>(); const [draft,setDraft]=useState(initial); const [buyer,setBuyer]=useState('');
@@ -103,6 +107,7 @@ function App() {
   return <div className="app">
     <header><button className="brand" onClick={()=>setView('home')}><span><ShieldCheck size={20}/></span>DealSafe</button><span className={`beta ${databaseConnected?'connected':''}`}>{databaseConnected?'Database connected':'Private beta'}</span><div className="account">{user?<><button onClick={openProfile}>{user.displayName}</button><button onClick={logout}>Sign out</button></>:<button onClick={()=>setView('auth')}>Sign in</button>}</div></header>
     <main>
+      {view==='home'&&<InstallApp/>}
       {view==='create'&&authMessage&&<div className="creation-error notice">{authMessage}</div>}
       {view==='create'&&creating&&<div className="creation-progress notice">Creating your Deal Link…</div>}
       {view==='deal'&&active&&<AgreementExport deal={active}/>}
@@ -132,3 +137,4 @@ function App() {
   </div>
 }
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
