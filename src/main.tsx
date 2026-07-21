@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowRight, BadgeCheck, CalendarDays, Check, Copy, FileSignature, Link2, LockKeyhole, MapPin, Plus, Search, ShieldCheck, Star } from 'lucide-react';
+import { ArrowRight, BadgeCheck, Bell, CalendarDays, Check, Clock3, Copy, FileSignature, Link2, LockKeyhole, MapPin, Plus, Search, ShieldCheck, Star } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
-import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, createUserDeal, generateHandoffPin, getDealMeeting, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, markArrived, openDealDispute, proposeMeeting, requestIdentityVerification, signIn, signOut, signUp, submitRating, uploadDealPhotos, type DealMeeting, type ProfileSummary, type StoredSession } from './services/supabaseRest';
+import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, createUserDeal, generateHandoffPin, getDealMeeting, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, markArrived, openDealDispute, proposeMeeting, requestIdentityVerification, signIn, signOut, signUp, submitRating, uploadDealPhotos, type DealMeeting, type DealNotification, type ProfileSummary, type StoredSession, type TimelineEvent } from './services/supabaseRest';
 import type { Deal, DealDraft } from './domain';
 import './styles.css';
 import './security.css';
 import './dashboard.css';
 import './home.css';
 import './dispute.css';
+import './timeline.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile';
 const initial: DealDraft = {title:'',description:'',price:'',condition:'Good',serialNumber:'',deliveryMethod:'Meet in person'};
@@ -52,6 +53,13 @@ function DealSafetyActions({deal,session,onStatus}:{deal:Deal;session:StoredSess
   return <section className="deal-safety-actions"><div><p className="eyebrow">Safety controls</p><h2>Need to stop or report this deal?</h2><p>Reasons are recorded in the private audit history.</p></div><div className="safety-buttons">{deal.viewerRole==='seller'&&<button className="secondary danger" onClick={()=>setMode('cancel')}>Cancel deal</button>}{deal.status==='accepted'&&<button className="secondary" onClick={()=>setMode('dispute')}>Report a problem</button>}</div>{mode&&<form onSubmit={submit}><label>{mode==='cancel'?'Why are you cancelling?':'Describe the problem'}<textarea required minLength={mode==='cancel'?5:10} maxLength={500} value={reason} onChange={e=>setReason(e.target.value)} placeholder={mode==='cancel'?'Example: Item is no longer available':'Include what happened and what outcome you expect'}/></label><div><button type="button" className="secondary" onClick={()=>{setMode(null);setReason('')}}>Go back</button><button className="primary">{mode==='cancel'?'Confirm cancellation':'Open dispute'}</button></div></form>}{message&&<div className="notice">{message}</div>}</section>
 }
 
+const eventLabels:Record<string,string>={deal_published:'Deal Link published',deal_accepted:'Terms accepted',meeting_proposed:'Meeting proposed',meeting_confirmed:'Meeting confirmed',participant_arrived:'Arrival recorded',handoff_pin_generated:'Handoff PIN generated',deal_completed:'Deal completed',deal_cancelled:'Deal cancelled',dispute_opened:'Problem reported'};
+function friendlyEvent(type:string){return eventLabels[type]||type.replaceAll('_',' ')}
+
+function TimelinePanel({deal,session}:{deal:Deal;session:StoredSession}){const [events,setEvents]=useState<TimelineEvent[]>([]);const [error,setError]=useState('');useEffect(()=>{getDealTimeline(session,deal.id).then(setEvents).catch(e=>setError(e instanceof Error?e.message:'Could not load timeline'))},[deal.id,deal.status,session]);return <section className="timeline-panel"><div className="timeline-heading"><Clock3/><div><p className="eyebrow">Recorded history</p><h2>Deal timeline</h2></div></div>{error&&<div className="notice">{error}</div>}<div className="timeline-list">{events.map(event=><article key={event.id}><span></span><div><b>{friendlyEvent(event.event_type)}</b><small>{event.is_mine?'By you':'By the other party'} · {new Date(event.created_at).toLocaleString()}</small></div></article>)}</div></section>}
+
+function NotificationCenter({items,deals,onOpen}:{items:DealNotification[];deals:Deal[];onOpen:(deal:Deal)=>void}){const [expanded,setExpanded]=useState(false);return <section className="notification-center"><button className="notification-toggle" onClick={()=>setExpanded(!expanded)}><Bell size={19}/><span>Activity</span>{items.length>0&&<em>{items.length}</em>}</button>{expanded&&<div className="notification-menu"><h3>Recent activity</h3>{items.length?items.slice(0,8).map(item=><button key={item.id} onClick={()=>{const deal=deals.find(d=>d.id===item.deal_id);if(deal)onOpen(deal)}}><span className="notification-dot"></span><span><b>{friendlyEvent(item.event_type)}</b><small>{item.title} · {new Date(item.created_at).toLocaleString()}</small></span></button>):<p>No deal activity yet.</p>}</div>}</section>}
+
 function App() {
   const initialSession=getStoredSession();
   const [view,setView]=useState<View>('home'); const [deals,setDeals]=useState<Deal[]>([]); const [active,setActive]=useState<Deal>(); const [draft,setDraft]=useState(initial); const [buyer,setBuyer]=useState('');
@@ -64,7 +72,9 @@ function App() {
   const [photos,setPhotos]=useState<File[]>([]);
   const [profile,setProfile]=useState<ProfileSummary|null>(null);
   const [verificationMessage,setVerificationMessage]=useState('');
+  const [notifications,setNotifications]=useState<DealNotification[]>([]);
   useEffect(()=>{if(session){listUserDeals(session).then(setDeals).catch(()=>setDeals([]))}else{demoRepository.list().then(setDeals)}},[session]);
+  useEffect(()=>{if(session)getMyNotifications(session).then(setNotifications).catch(()=>setNotifications([]));else setNotifications([])},[session]);
   useEffect(()=>{if(isSupabaseConfigured) checkSupabaseConnection().then(setDatabaseConnected)},[]);
   useEffect(()=>{const publicId=new URLSearchParams(location.search).get('deal');if(publicId){getPublicDeal(publicId).then(deal=>{setActive(deal);setView('deal')}).catch(error=>setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable'))}},[]);
   const create=async(e:React.FormEvent)=>{e.preventDefault();if(!session)return;setAuthMessage('');try{let deal=await createUserDeal(session,draft);if(photos.length){const mediaUrls=await uploadDealPhotos(session,deal.id,photos);deal={...deal,mediaUrls}}setDeals(x=>[deal,...x]);setActive(deal);setDraft(initial);setPhotos([]);setView('deal')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save this deal')}};
@@ -79,7 +89,9 @@ function App() {
   return <div className="app">
     <header><button className="brand" onClick={()=>setView('home')}><span><ShieldCheck size={20}/></span>DealSafe</button><span className={`beta ${databaseConnected?'connected':''}`}>{databaseConnected?'Database connected':'Private beta'}</span><div className="account">{user?<><button onClick={openProfile}>{user.displayName}</button><button onClick={logout}>Sign out</button></>:<button onClick={()=>setView('auth')}>Sign in</button>}</div></header>
     <main>
+      {view==='home'&&user&&<NotificationCenter items={notifications} deals={deals} onOpen={open}/>}
       {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&<DealSafetyActions deal={active} session={session} onStatus={status=>{setActive({...active,status});setDeals(items=>items.map(item=>item.id===active.id?{...item,status}:item))}}/>}
+      {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&<TimelinePanel deal={active} session={session}/>}
       {view==='home'&&user&&<EnhancedDashboard deals={deals} onOpen={open} onCreate={openCreate}/>}
       {view==='profile'&&profile&&<SecurityCenter email={user?.email||''} status={profile.verification_status} message={verificationMessage} onRequest={requestVerification}/>}
       {view==='create'&&<section className="media-picker"><label>Item photos<input className="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic" capture="environment" multiple onChange={e=>setPhotos(Array.from(e.target.files||[]).slice(0,6))}/><small>Up to 6 photos · 6 MB each · JPG, PNG, WebP or HEIC</small></label>{photos.length>0&&<div className="photo-previews">{photos.map((file,index)=><div key={`${file.name}-${index}`}><img src={URL.createObjectURL(file)} alt={`Preview ${index+1}`}/><span>{index===0?'Main photo':`Photo ${index+1}`}</span></div>)}</div>}</section>}
