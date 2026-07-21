@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowRight, BadgeCheck, CalendarDays, Check, Copy, FileSignature, Link2, LockKeyhole, MapPin, Plus, ShieldCheck, Star } from 'lucide-react';
+import { ArrowRight, BadgeCheck, CalendarDays, Check, Copy, FileSignature, Link2, LockKeyhole, MapPin, Plus, Search, ShieldCheck, Star } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
 import { acceptPublicDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, createUserDeal, generateHandoffPin, getDealMeeting, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, markArrived, proposeMeeting, requestIdentityVerification, signIn, signOut, signUp, submitRating, uploadDealPhotos, type DealMeeting, type ProfileSummary, type StoredSession } from './services/supabaseRest';
 import type { Deal, DealDraft } from './domain';
 import './styles.css';
 import './security.css';
+import './dashboard.css';
+import './home.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile';
 const initial: DealDraft = {title:'',description:'',price:'',condition:'Good',serialNumber:'',deliveryMethod:'Meet in person'};
@@ -35,6 +37,13 @@ function SecurityCenter({email,status,message,onRequest}:{email:string;status:Pr
   return <section className="security-center"><div className="security-heading"><ShieldCheck/><div><p className="eyebrow">Account protection</p><h2>Verification & Security Center</h2></div></div><div className="security-checks"><article><Check/><div><b>Email account active</b><span>{email}</span></div></article><article className={status==='verified'?'verified':''}><BadgeCheck/><div><b>Identity verification</b><span>{status.replace('_',' ')}</span></div>{status==='not_started'&&<button className="secondary" onClick={onRequest}>Request verification</button>}</article><article><LockKeyhole/><div><b>Secure handoff enabled</b><span>Meeting confirmation and one-time PIN protect in-person deals.</span></div></article></div>{status==='pending'&&<div className="notice">Identity verification is pending. Approval requires a licensed verification provider, which is not connected in this beta.</div>}{message&&<div className="notice">{message}</div>}<p className="security-warning"><LockKeyhole/> DealSafe does not hold or insure payments in this beta. Never send deposits outside the agreed process.</p></section>
 }
 
+function EnhancedDashboard({deals,onOpen,onCreate}:{deals:Deal[];onOpen:(deal:Deal)=>void;onCreate:()=>void}){
+  const [query,setQuery]=useState('');const [filter,setFilter]=useState<'all'|Deal['status']>('all');
+  const visible=deals.filter(deal=>(filter==='all'||deal.status===filter)&&(`${deal.title} ${deal.publicId}`.toLowerCase().includes(query.toLowerCase())));
+  const activeCount=deals.filter(deal=>deal.status==='published'||deal.status==='accepted').length;const completedCount=deals.filter(deal=>deal.status==='completed').length;const totalValue=deals.reduce((sum,deal)=>sum+deal.priceCents,0)/100;
+  return <section className="enhanced-dashboard"><div className="dashboard-heading"><div><p className="eyebrow">Your workspace</p><h2>Deal dashboard</h2><p>Track every sale from published link to completed handoff.</p></div><button className="primary" onClick={onCreate}><Plus size={17}/>New deal</button></div><div className="dashboard-stats"><article><span>All deals</span><strong>{deals.length}</strong></article><article><span>Active</span><strong>{activeCount}</strong></article><article><span>Completed</span><strong>{completedCount}</strong></article><article><span>Total value</span><strong>${totalValue.toLocaleString(undefined,{maximumFractionDigits:0})}</strong></article></div><div className="dashboard-tools"><label><Search size={17}/><input aria-label="Search deals" placeholder="Search by item or Deal ID" value={query} onChange={event=>setQuery(event.target.value)}/></label><div className="filter-tabs">{(['all','published','accepted','completed'] as const).map(item=><button key={item} className={filter===item?'active':''} onClick={()=>setFilter(item)}>{item}</button>)}</div></div>{visible.length?<div className="dashboard-list">{visible.map(deal=><button key={deal.id} onClick={()=>onOpen(deal)}><span className="deal-icon">{deal.title.slice(0,1).toUpperCase()}</span><span className="deal-main"><b>{deal.title}</b><small>{deal.publicId} · {deal.viewerRole==='buyer'?'Buying':'Selling'}</small></span><strong>${(deal.priceCents/100).toFixed(2)}</strong><span className={`status ${deal.status}`}>{deal.status}</span><ArrowRight size={18}/></button>)}</div>:<div className="dashboard-empty"><Search/><b>No matching deals</b><span>Try another search or filter, or create a new Deal Link.</span><button className="secondary" onClick={onCreate}><Plus size={16}/>Create deal</button></div>}</section>
+}
+
 function App() {
   const initialSession=getStoredSession();
   const [view,setView]=useState<View>('home'); const [deals,setDeals]=useState<Deal[]>([]); const [active,setActive]=useState<Deal>(); const [draft,setDraft]=useState(initial); const [buyer,setBuyer]=useState('');
@@ -62,6 +71,7 @@ function App() {
   return <div className="app">
     <header><button className="brand" onClick={()=>setView('home')}><span><ShieldCheck size={20}/></span>DealSafe</button><span className={`beta ${databaseConnected?'connected':''}`}>{databaseConnected?'Database connected':'Private beta'}</span><div className="account">{user?<><button onClick={openProfile}>{user.displayName}</button><button onClick={logout}>Sign out</button></>:<button onClick={()=>setView('auth')}>Sign in</button>}</div></header>
     <main>
+      {view==='home'&&user&&<EnhancedDashboard deals={deals} onOpen={open} onCreate={openCreate}/>}
       {view==='profile'&&profile&&<SecurityCenter email={user?.email||''} status={profile.verification_status} message={verificationMessage} onRequest={requestVerification}/>}
       {view==='create'&&<section className="media-picker"><label>Item photos<input className="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic" capture="environment" multiple onChange={e=>setPhotos(Array.from(e.target.files||[]).slice(0,6))}/><small>Up to 6 photos · 6 MB each · JPG, PNG, WebP or HEIC</small></label>{photos.length>0&&<div className="photo-previews">{photos.map((file,index)=><div key={`${file.name}-${index}`}><img src={URL.createObjectURL(file)} alt={`Preview ${index+1}`}/><span>{index===0?'Main photo':`Photo ${index+1}`}</span></div>)}</div>}</section>}
       {view==='deal'&&active?.mediaUrls?.length&&<section className="public-gallery"><div className="deal-gallery">{active.mediaUrls.map((url,index)=><img key={url} className={index===0?'main-photo':''} src={url} alt={`${active.title} photo ${index+1}`}/>)}</div></section>}
