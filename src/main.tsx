@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowRight, BadgeCheck, Bell, CalendarDays, Check, Clock3, Copy, FileDown, FileSignature, Link2, LockKeyhole, MapPin, Plus, Search, Share2, ShieldCheck, Star } from 'lucide-react';
+import { ArrowRight, BadgeCheck, Bell, CalendarDays, Check, Clock3, Copy, FileDown, FileSignature, Link2, LockKeyhole, MapPin, MessageCircle, Plus, Search, Send, Share2, ShieldCheck, Star } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
-import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, createUserDeal, generateHandoffPin, getDealMeeting, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, markArrived, openDealDispute, proposeMeeting, requestIdentityVerification, signIn, signOut, signUp, submitRating, uploadDealPhotos, type DealMeeting, type DealNotification, type ProfileSummary, type StoredSession, type TimelineEvent } from './services/supabaseRest';
+import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, createUserDeal, generateHandoffPin, getDealMeeting, getDealMessages, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, markArrived, openDealDispute, proposeMeeting, requestIdentityVerification, sendDealMessage, signIn, signOut, signUp, submitRating, uploadDealPhotos, type DealMeeting, type DealMessage, type DealNotification, type ProfileSummary, type StoredSession, type TimelineEvent } from './services/supabaseRest';
 import type { Deal, DealDraft } from './domain';
 import './styles.css';
 import './security.css';
@@ -11,6 +11,7 @@ import './home.css';
 import './dispute.css';
 import './timeline.css';
 import './agreement-export.css';
+import './chat.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile';
 const initial: DealDraft = {title:'',description:'',price:'',condition:'Good',serialNumber:'',deliveryMethod:'Meet in person'};
@@ -63,6 +64,8 @@ function NotificationCenter({items,deals,onOpen}:{items:DealNotification[];deals
 
 function AgreementExport({deal}:{deal:Deal}){const [message,setMessage]=useState('');const url=`${location.origin}/?deal=${deal.publicId}`;const share=async()=>{try{if(navigator.share)await navigator.share({title:`DealSafe agreement: ${deal.title}`,text:`Review DealSafe agreement ${deal.publicId}`,url});else{await navigator.clipboard.writeText(url);setMessage('Deal Link copied.')}}catch(error){if(error instanceof Error&&error.name!=='AbortError')setMessage('Could not share this link.')}};return <section className="agreement-export no-print"><div><p className="eyebrow">Agreement copy</p><h2>Save or share this record</h2><p>Use your browser’s print screen to save a PDF copy. The live Deal Link remains the current record.</p></div><div><button className="secondary" onClick={()=>window.print()}><FileDown size={17}/>Print / Save PDF</button><button className="primary" onClick={share}><Share2 size={17}/>Share</button></div>{message&&<div className="notice">{message}</div>}</section>}
 
+function DealChat({deal,session}:{deal:Deal;session:StoredSession}){const [messages,setMessages]=useState<DealMessage[]>([]);const [body,setBody]=useState('');const [error,setError]=useState('');const load=()=>getDealMessages(session,deal.id).then(setMessages).catch(e=>setError(e instanceof Error?e.message:'Could not load messages'));useEffect(()=>{load();const timer=setInterval(load,10000);return()=>clearInterval(timer)},[deal.id,session]);const send=async(e:React.FormEvent)=>{e.preventDefault();if(!body.trim())return;setError('');try{await sendDealMessage(session,deal.id,body);setBody('');await load()}catch(e){setError(e instanceof Error?e.message:'Could not send message')}};return <section className="deal-chat no-print"><div className="chat-heading"><MessageCircle/><div><p className="eyebrow">Private conversation</p><h2>Deal chat</h2></div></div><div className="chat-messages">{messages.length?messages.map(message=><article key={message.id} className={message.is_mine?'mine':''}><small>{message.is_mine?'You':message.sender_name}</small><p>{message.body}</p><time>{new Date(message.created_at).toLocaleString()}</time></article>):<div className="chat-empty">No messages yet. Keep important deal details here.</div>}</div>{error&&<div className="notice">{error}</div>}<form onSubmit={send}><textarea required maxLength={1000} value={body} onChange={e=>setBody(e.target.value)} placeholder="Write a message about this deal…"/><button className="primary" disabled={!body.trim()}><Send size={17}/>Send</button></form><small className="chat-note"><LockKeyhole/> Never share passwords, payment codes, or full financial information.</small></section>}
+
 function App() {
   const initialSession=getStoredSession();
   const [view,setView]=useState<View>('home'); const [deals,setDeals]=useState<Deal[]>([]); const [active,setActive]=useState<Deal>(); const [draft,setDraft]=useState(initial); const [buyer,setBuyer]=useState('');
@@ -93,6 +96,7 @@ function App() {
     <header><button className="brand" onClick={()=>setView('home')}><span><ShieldCheck size={20}/></span>DealSafe</button><span className={`beta ${databaseConnected?'connected':''}`}>{databaseConnected?'Database connected':'Private beta'}</span><div className="account">{user?<><button onClick={openProfile}>{user.displayName}</button><button onClick={logout}>Sign out</button></>:<button onClick={()=>setView('auth')}>Sign in</button>}</div></header>
     <main>
       {view==='deal'&&active&&<AgreementExport deal={active}/>}
+      {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&(['accepted','completed','disputed'] as Deal['status'][]).includes(active.status)&&<DealChat deal={active} session={session}/>}
       {view==='home'&&user&&<NotificationCenter items={notifications} deals={deals} onOpen={open}/>}
       {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&<DealSafetyActions deal={active} session={session} onStatus={status=>{setActive({...active,status});setDeals(items=>items.map(item=>item.id===active.id?{...item,status}:item))}}/>}
       {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&<TimelinePanel deal={active} session={session}/>}
