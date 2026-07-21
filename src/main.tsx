@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, CalendarDays, Check, Clock3, Copy, FileDown, FileSignature, Link2, LockKeyhole, MapPin, MessageCircle, PackageCheck, Plus, Search, Send, Share2, ShieldCheck, Smartphone, Star, Truck } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
-import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, generateHandoffPin, getDealMeeting, getDealMessages, getDealOffers, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, requestIdentityVerification, respondToOffer, sendDealMessage, signIn, signOut, signUp, submitRating, uploadDealPhotos, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type StoredSession, type TimelineEvent } from './services/supabaseRest';
+import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, generateHandoffPin, getDealMeeting, getDealMessages, getDealOffers, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, refreshSession, requestIdentityVerification, respondToOffer, sendDealMessage, signIn, signOut, signUp, submitRating, uploadDealPhotos, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type StoredSession, type TimelineEvent } from './services/supabaseRest';
 import type { Deal, DealDraft } from './domain';
 import './styles.css';
 import './security.css';
@@ -92,6 +92,7 @@ function App() {
   const [verificationMessage,setVerificationMessage]=useState('');
   const [notifications,setNotifications]=useState<DealNotification[]>([]);
   useEffect(()=>{if(session){listUserDeals(session).then(setDeals).catch(()=>setDeals([]))}else{demoRepository.list().then(setDeals)}},[session]);
+  useEffect(()=>{if(!session?.refreshToken)return;const renew=()=>{if(!session.expiresAt||session.expiresAt-Date.now()<10*60*1000)refreshSession(session).then(setSession).catch(()=>{signOut();setSession(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')})};renew();const timer=setInterval(renew,5*60*1000);return()=>clearInterval(timer)},[session?.refreshToken,session?.expiresAt]);
   useEffect(()=>{if(session)getMyNotifications(session).then(setNotifications).catch(()=>setNotifications([]));else setNotifications([])},[session]);
   useEffect(()=>{if(isSupabaseConfigured) checkSupabaseConnection().then(setDatabaseConnected)},[]);
   useEffect(()=>{const publicId=new URLSearchParams(location.search).get('deal');if(publicId){getPublicDeal(publicId).then(deal=>{setActive(deal);setView('deal')}).catch(error=>setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable'))}},[]);

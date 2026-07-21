@@ -11,7 +11,7 @@ export interface AuthUser {
   displayName: string;
 }
 
-export interface StoredSession { accessToken: string; user: AuthUser }
+export interface StoredSession { accessToken:string;refreshToken?:string;expiresAt?:number;user:AuthUser }
 export interface ProfileSummary { display_name:string; verification_status:'not_started'|'pending'|'verified'|'failed'; member_since:string; completed_deals:number; rating_count:number; average_rating:number|null; recent_ratings:{stars:number;comment:string|null;created_at:string}[] }
 export interface TimelineEvent { id:string; event_type:string; created_at:string; is_mine:boolean }
 export interface DealNotification extends TimelineEvent { deal_id:string; public_id:string; title:string }
@@ -32,12 +32,15 @@ interface DealRow {
 interface AuthResponse {
   access_token?: string;
   refresh_token?: string;
+  expires_in?: number;
   user?: { id: string; email?: string; user_metadata?: { display_name?: string } };
   msg?: string;
   error_description?: string;
 }
 
 const sessionKey = 'dealsafe_session';
+
+function storeSession(data:AuthResponse,user:AuthUser){const session:StoredSession={accessToken:data.access_token!,refreshToken:data.refresh_token,expiresAt:Date.now()+(data.expires_in||3600)*1000,user};localStorage.setItem(sessionKey,JSON.stringify(session));return session}
 
 function headers(token?: string) {
   return {
@@ -69,8 +72,7 @@ export async function signUp(email: string, password: string, displayName: strin
   if (!response.ok) throw new Error(data.msg || data.error_description || 'Sign up failed');
   const user = toUser(data);
   if (data.access_token && user) {
-    const session = { accessToken: data.access_token, user };
-    localStorage.setItem(sessionKey, JSON.stringify(session));
+    const session = storeSession(data,user);
     return { session, needsEmailConfirmation: false };
   }
   return { session: null, needsEmailConfirmation: true };
@@ -84,9 +86,15 @@ export async function signIn(email: string, password: string) {
   if (!response.ok) throw new Error(data.error_description || data.msg || 'Sign in failed');
   const user = toUser(data);
   if (!data.access_token || !user) throw new Error('No session returned');
-  const session = { accessToken: data.access_token, user };
-  localStorage.setItem(sessionKey, JSON.stringify(session));
-  return session;
+  return storeSession(data,user);
+}
+
+export async function refreshSession(session:StoredSession){
+  if(!session.refreshToken)return session;
+  const response=await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:headers(),body:JSON.stringify({refresh_token:session.refreshToken})});
+  const data=await response.json() as AuthResponse;
+  if(!response.ok||!data.access_token)throw new Error(data.error_description||data.msg||'Session expired');
+  return storeSession(data,toUser(data)||session.user);
 }
 
 export function signOut() { localStorage.removeItem(sessionKey); }
