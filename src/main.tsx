@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ArrowRight, BadgeCheck, CalendarDays, Check, Copy, FileSignature, Link2, LockKeyhole, MapPin, Plus, ShieldCheck, Star } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
-import { acceptPublicDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, createUserDeal, generateHandoffPin, getDealMeeting, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, markArrived, proposeMeeting, signIn, signOut, signUp, submitRating, uploadDealPhotos, type DealMeeting, type ProfileSummary, type StoredSession } from './services/supabaseRest';
+import { acceptPublicDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, createUserDeal, generateHandoffPin, getDealMeeting, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, markArrived, proposeMeeting, requestIdentityVerification, signIn, signOut, signUp, submitRating, uploadDealPhotos, type DealMeeting, type ProfileSummary, type StoredSession } from './services/supabaseRest';
 import type { Deal, DealDraft } from './domain';
 import './styles.css';
+import './security.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile';
 const initial: DealDraft = {title:'',description:'',price:'',condition:'Good',serialNumber:'',deliveryMethod:'Meet in person'};
@@ -30,6 +31,10 @@ function HandoffPanel({deal,session,onComplete}:{deal:Deal;session:StoredSession
 
 function RatingPanel({deal,session}:{deal:Deal;session:StoredSession}){const [stars,setStars]=useState(5);const [comment,setComment]=useState('');const [message,setMessage]=useState('');const send=async(e:React.FormEvent)=>{e.preventDefault();try{await submitRating(session,deal.id,stars,comment);setMessage('Thank you. Your rating was saved.')}catch(error){setMessage(error instanceof Error?error.message:'Could not save rating')}};return <section className="rating-panel"><Star/><div><p className="eyebrow">Deal completed</p><h2>Rate the other party</h2><form onSubmit={send}><label>Rating<select value={stars} onChange={e=>setStars(Number(e.target.value))}><option value="5">5 — Excellent</option><option value="4">4 — Good</option><option value="3">3 — Okay</option><option value="2">2 — Poor</option><option value="1">1 — Very poor</option></select></label><label>Comment<textarea maxLength={500} value={comment} onChange={e=>setComment(e.target.value)} placeholder="What went well?"/></label><button className="primary">Submit rating</button></form>{message&&<div className="notice">{message}</div>}</div></section>}
 
+function SecurityCenter({email,status,message,onRequest}:{email:string;status:ProfileSummary['verification_status'];message:string;onRequest:()=>void}){
+  return <section className="security-center"><div className="security-heading"><ShieldCheck/><div><p className="eyebrow">Account protection</p><h2>Verification & Security Center</h2></div></div><div className="security-checks"><article><Check/><div><b>Email account active</b><span>{email}</span></div></article><article className={status==='verified'?'verified':''}><BadgeCheck/><div><b>Identity verification</b><span>{status.replace('_',' ')}</span></div>{status==='not_started'&&<button className="secondary" onClick={onRequest}>Request verification</button>}</article><article><LockKeyhole/><div><b>Secure handoff enabled</b><span>Meeting confirmation and one-time PIN protect in-person deals.</span></div></article></div>{status==='pending'&&<div className="notice">Identity verification is pending. Approval requires a licensed verification provider, which is not connected in this beta.</div>}{message&&<div className="notice">{message}</div>}<p className="security-warning"><LockKeyhole/> DealSafe does not hold or insure payments in this beta. Never send deposits outside the agreed process.</p></section>
+}
+
 function App() {
   const initialSession=getStoredSession();
   const [view,setView]=useState<View>('home'); const [deals,setDeals]=useState<Deal[]>([]); const [active,setActive]=useState<Deal>(); const [draft,setDraft]=useState(initial); const [buyer,setBuyer]=useState('');
@@ -41,6 +46,7 @@ function App() {
   const [authMessage,setAuthMessage]=useState('');
   const [photos,setPhotos]=useState<File[]>([]);
   const [profile,setProfile]=useState<ProfileSummary|null>(null);
+  const [verificationMessage,setVerificationMessage]=useState('');
   useEffect(()=>{if(session){listUserDeals(session).then(setDeals).catch(()=>setDeals([]))}else{demoRepository.list().then(setDeals)}},[session]);
   useEffect(()=>{if(isSupabaseConfigured) checkSupabaseConnection().then(setDatabaseConnected)},[]);
   useEffect(()=>{const publicId=new URLSearchParams(location.search).get('deal');if(publicId){getPublicDeal(publicId).then(deal=>{setActive(deal);setView('deal')}).catch(error=>setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable'))}},[]);
@@ -51,10 +57,12 @@ function App() {
   const submitAuth=async(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');try{if(authMode==='signup'){const result=await signUp(authForm.email,authForm.password,authForm.displayName);if(result.session){setSession(result.session);setView('home')}else setAuthMessage('Check your email to confirm your account, then sign in.')}else{const nextSession=await signIn(authForm.email,authForm.password);setSession(nextSession);setView('home')}}catch(error){setAuthMessage(error instanceof Error?error.message:'Something went wrong')}};
   const logout=()=>{signOut();setSession(null);setView('home')};
   const openProfile=async()=>{if(!session)return;setAuthMessage('');setView('profile');try{setProfile(await getMyProfileSummary(session))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not load profile')}};
+  const requestVerification=async()=>{if(!session||!profile)return;setVerificationMessage('');try{const status=await requestIdentityVerification(session);setProfile({...profile,verification_status:status});setVerificationMessage('Request recorded. A verification provider must be connected before identity can be approved.')}catch(error){setVerificationMessage(error instanceof Error?error.message:'Could not request verification')}};
 
   return <div className="app">
     <header><button className="brand" onClick={()=>setView('home')}><span><ShieldCheck size={20}/></span>DealSafe</button><span className={`beta ${databaseConnected?'connected':''}`}>{databaseConnected?'Database connected':'Private beta'}</span><div className="account">{user?<><button onClick={openProfile}>{user.displayName}</button><button onClick={logout}>Sign out</button></>:<button onClick={()=>setView('auth')}>Sign in</button>}</div></header>
     <main>
+      {view==='profile'&&profile&&<SecurityCenter email={user?.email||''} status={profile.verification_status} message={verificationMessage} onRequest={requestVerification}/>}
       {view==='create'&&<section className="media-picker"><label>Item photos<input className="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic" capture="environment" multiple onChange={e=>setPhotos(Array.from(e.target.files||[]).slice(0,6))}/><small>Up to 6 photos · 6 MB each · JPG, PNG, WebP or HEIC</small></label>{photos.length>0&&<div className="photo-previews">{photos.map((file,index)=><div key={`${file.name}-${index}`}><img src={URL.createObjectURL(file)} alt={`Preview ${index+1}`}/><span>{index===0?'Main photo':`Photo ${index+1}`}</span></div>)}</div>}</section>}
       {view==='deal'&&active?.mediaUrls?.length&&<section className="public-gallery"><div className="deal-gallery">{active.mediaUrls.map((url,index)=><img key={url} className={index===0?'main-photo':''} src={url} alt={`${active.title} photo ${index+1}`}/>)}</div></section>}
       {view==='deal'&&active&&session&&active.status==='accepted'&&active.viewerRole!=='visitor'&&<MeetingPanel deal={active} session={session}/>} 
