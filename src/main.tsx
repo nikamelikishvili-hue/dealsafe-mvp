@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ArrowRight, BadgeCheck, Bell, CalendarDays, Check, Clock3, Copy, FileSignature, Link2, LockKeyhole, MapPin, Plus, Search, ShieldCheck, Star } from 'lucide-react';
+import { ArrowRight, BadgeCheck, Bell, CalendarDays, Check, Clock3, Copy, FileDown, FileSignature, Link2, LockKeyhole, MapPin, Plus, Search, Share2, ShieldCheck, Star } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
 import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, createUserDeal, generateHandoffPin, getDealMeeting, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, markArrived, openDealDispute, proposeMeeting, requestIdentityVerification, signIn, signOut, signUp, submitRating, uploadDealPhotos, type DealMeeting, type DealNotification, type ProfileSummary, type StoredSession, type TimelineEvent } from './services/supabaseRest';
 import type { Deal, DealDraft } from './domain';
@@ -10,6 +10,7 @@ import './dashboard.css';
 import './home.css';
 import './dispute.css';
 import './timeline.css';
+import './agreement-export.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile';
 const initial: DealDraft = {title:'',description:'',price:'',condition:'Good',serialNumber:'',deliveryMethod:'Meet in person'};
@@ -60,6 +61,8 @@ function TimelinePanel({deal,session}:{deal:Deal;session:StoredSession}){const [
 
 function NotificationCenter({items,deals,onOpen}:{items:DealNotification[];deals:Deal[];onOpen:(deal:Deal)=>void}){const [expanded,setExpanded]=useState(false);return <section className="notification-center"><button className="notification-toggle" onClick={()=>setExpanded(!expanded)}><Bell size={19}/><span>Activity</span>{items.length>0&&<em>{items.length}</em>}</button>{expanded&&<div className="notification-menu"><h3>Recent activity</h3>{items.length?items.slice(0,8).map(item=><button key={item.id} onClick={()=>{const deal=deals.find(d=>d.id===item.deal_id);if(deal)onOpen(deal)}}><span className="notification-dot"></span><span><b>{friendlyEvent(item.event_type)}</b><small>{item.title} · {new Date(item.created_at).toLocaleString()}</small></span></button>):<p>No deal activity yet.</p>}</div>}</section>}
 
+function AgreementExport({deal}:{deal:Deal}){const [message,setMessage]=useState('');const url=`${location.origin}/?deal=${deal.publicId}`;const share=async()=>{try{if(navigator.share)await navigator.share({title:`DealSafe agreement: ${deal.title}`,text:`Review DealSafe agreement ${deal.publicId}`,url});else{await navigator.clipboard.writeText(url);setMessage('Deal Link copied.')}}catch(error){if(error instanceof Error&&error.name!=='AbortError')setMessage('Could not share this link.')}};return <section className="agreement-export no-print"><div><p className="eyebrow">Agreement copy</p><h2>Save or share this record</h2><p>Use your browser’s print screen to save a PDF copy. The live Deal Link remains the current record.</p></div><div><button className="secondary" onClick={()=>window.print()}><FileDown size={17}/>Print / Save PDF</button><button className="primary" onClick={share}><Share2 size={17}/>Share</button></div>{message&&<div className="notice">{message}</div>}</section>}
+
 function App() {
   const initialSession=getStoredSession();
   const [view,setView]=useState<View>('home'); const [deals,setDeals]=useState<Deal[]>([]); const [active,setActive]=useState<Deal>(); const [draft,setDraft]=useState(initial); const [buyer,setBuyer]=useState('');
@@ -89,6 +92,7 @@ function App() {
   return <div className="app">
     <header><button className="brand" onClick={()=>setView('home')}><span><ShieldCheck size={20}/></span>DealSafe</button><span className={`beta ${databaseConnected?'connected':''}`}>{databaseConnected?'Database connected':'Private beta'}</span><div className="account">{user?<><button onClick={openProfile}>{user.displayName}</button><button onClick={logout}>Sign out</button></>:<button onClick={()=>setView('auth')}>Sign in</button>}</div></header>
     <main>
+      {view==='deal'&&active&&<AgreementExport deal={active}/>}
       {view==='home'&&user&&<NotificationCenter items={notifications} deals={deals} onOpen={open}/>}
       {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&<DealSafetyActions deal={active} session={session} onStatus={status=>{setActive({...active,status});setDeals(items=>items.map(item=>item.id===active.id?{...item,status}:item))}}/>}
       {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&<TimelinePanel deal={active} session={session}/>}
