@@ -1,4 +1,4 @@
-export type DealStatus = 'draft' | 'published' | 'accepted' | 'completed';
+export type DealStatus = 'draft' | 'published' | 'accepted' | 'completed' | 'cancelled' | 'disputed';
 export type VerificationStatus = 'not_started' | 'pending' | 'verified';
 
 export interface Deal {

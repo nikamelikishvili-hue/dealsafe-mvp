@@ -18,7 +18,7 @@ interface DealRow {
   id: string; public_id: string; title: string; description: string;
   price_cents: number; currency: 'USD'; condition: 'Like new' | 'Good' | 'Fair';
   serial_last_four: string | null; delivery_method: 'Meet in person' | 'Ship to buyer';
-  status: 'draft' | 'published' | 'accepted' | 'completed';
+  status: 'draft' | 'published' | 'accepted' | 'completed' | 'cancelled' | 'disputed';
   current_agreement_version: number; created_at: string;
   deal_media?: { storage_path: string; sort_order: number }[];
   seller_id?: string; buyer_id?: string | null;
@@ -174,6 +174,8 @@ export async function completeHandoff(session:StoredSession,dealId:string,pin:st
 export async function submitRating(session:StoredSession,dealId:string,stars:number,comment:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/submit_rating`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_stars:stars,p_comment:comment})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not submit rating')}}
 export async function getMyProfileSummary(session:StoredSession){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_my_profile_summary`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load profile')}const rows=await response.json() as ProfileSummary[];if(!rows[0])throw new Error('Profile was not found');return rows[0]}
 export async function requestIdentityVerification(session:StoredSession){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/request_identity_verification`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not request verification')}return await response.json() as ProfileSummary['verification_status']}
+export async function cancelDeal(session:StoredSession,dealId:string,reason:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/cancel_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_reason:reason})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not cancel deal')}}
+export async function openDealDispute(session:StoredSession,dealId:string,reason:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/open_deal_dispute`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_reason:reason})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not open dispute')}}
 
 interface PublicDealRow extends DealRow {
   agreement_version: number;
