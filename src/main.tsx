@@ -7,6 +7,7 @@ import { acceptPublicDeal, askDealQuestion, cancelDeal, checkSupabaseConnection,
 import { markAllNotificationsRead, markDealNotificationsRead } from './services/supabaseRest';
 import { configureBuyerAccessCode, getDealAcceptanceProtection } from './services/supabaseRest';
 import { getDealParticipants, type DealParticipants } from './services/supabaseRest';
+import { getDealActionPlan, type DealActionPlan } from './services/supabaseRest';
 import { getAppLanguage, setAppLanguage, supportedLanguages, t, type AppLanguage } from './i18n';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import type { Deal, DealDraft } from './domain';
@@ -58,6 +59,7 @@ import './deal-renewal.css';
 import './deal-inquiries.css';
 import './buyer-access-code.css';
 import './deal-participants.css';
+import './deal-action-plan.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset';
 interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
@@ -290,6 +292,44 @@ function DealParticipantsCard({deal,session,onLoaded}:{deal:Deal;session:StoredS
   return <section className="deal-participants"><div className="participant-heading"><ShieldCheck/><div><p className="eyebrow">{t('Verified parties')}</p><h2>{t('Deal participants')}</h2><p>{t('Only the buyer and seller can view this participant record.')}</p></div></div><div className="participant-grid">{card('Seller',participants.seller_name,participants.seller_verification)}{card('Buyer',participants.buyer_name,participants.buyer_verification)}</div><div className="participant-meta">{participants.accepted_at&&<span><Clock3 size={16}/>{t('Accepted on')} {formatDateTime(participants.accepted_at)}</span>}<span><LockKeyhole size={16}/>{t('Private participant record')}</span></div><p className="participant-privacy"><ShieldCheck size={17}/>{t('Names and verification status are shown; contact and identity details stay private.')}</p></section>;
 }
 
+function DealActionPlanCard({deal,session,onSync}:{deal:Deal;session:StoredSession;onSync:(plan:DealActionPlan)=>void}){
+  const [plan,setPlan]=useState<DealActionPlan|null>(null);
+  useEffect(()=>{let current=true;const load=()=>getDealActionPlan(session,deal.id).then(record=>{if(!current||!record)return;setPlan(record);if(record.deal_status!==deal.status||record.viewer_role!==deal.viewerRole)onSync(record)}).catch(()=>{});void load();const timer=window.setInterval(load,12_000);return()=>{current=false;window.clearInterval(timer)}},[deal.id,deal.status,deal.viewerRole,session.accessToken]);
+  if(!plan)return null;
+  const completed=plan.deal_status==='completed';
+  const handoffReady=deal.deliveryMethod==='Meet in person'?plan.meeting_status==='confirmed':Boolean(plan.shipment_status);
+  const steps=[
+    {label:'Terms accepted',done:true},
+    {label:deal.deliveryMethod==='Meet in person'?'Meeting confirmed':'Shipped',done:handoffReady},
+    {label:'Buyer inspection recorded',done:plan.inspection_recorded},
+    {label:'Deal completed',done:completed},
+    {label:'Rating submitted',done:plan.rating_submitted}
+  ];
+  const currentIndex=steps.findIndex(step=>!step.done);const doneCount=steps.filter(step=>step.done).length;
+  const myArrived=plan.viewer_role==='seller'?plan.seller_arrived:plan.buyer_arrived;
+  const otherArrived=plan.viewer_role==='seller'?plan.buyer_arrived:plan.seller_arrived;
+  let action:{label:string;target?:string}={label:'All required steps are complete.'};
+  if(plan.deal_status==='cancelled')action={label:'This deal is cancelled.'};
+  else if(plan.deal_status==='disputed')action={label:'This deal is currently disputed.',target:'deal-alert'};
+  else if(completed&&!plan.rating_submitted)action={label:'Rate the other party',target:'rating-panel'};
+  else if(!completed&&deal.deliveryMethod==='Meet in person'){
+    if(plan.meeting_status!=='confirmed')action={label:'Plan or confirm the meeting',target:'meeting-panel'};
+    else if(!myArrived)action={label:'I arrived',target:'handoff-panel'};
+    else if(!otherArrived)action={label:'Waiting for the other party to arrive'};
+    else if(plan.viewer_role==='buyer'&&!plan.inspection_recorded)action={label:'Inspect the item and save the receipt',target:'handoff-panel'};
+    else if(plan.viewer_role==='seller'&&!plan.handoff_code_ready)action={label:'Generate handoff PIN',target:'handoff-panel'};
+    else if(plan.viewer_role==='buyer')action={label:'Enter seller’s 6-digit PIN',target:'handoff-panel'};
+    else action={label:'Waiting for buyer confirmation'};
+  }else if(!completed){
+    if(!plan.shipment_status)action=plan.viewer_role==='seller'?{label:'Add tracking details',target:'shipping-panel'}:{label:'Waiting for the seller to add tracking information.'};
+    else if(plan.viewer_role==='buyer'&&!plan.inspection_recorded)action={label:'Inspect the item and save the receipt',target:'shipping-panel'};
+    else if(plan.viewer_role==='buyer')action={label:'Confirm delivery',target:'shipping-panel'};
+    else action={label:'Waiting for buyer confirmation'};
+  }
+  const openNext=()=>{if(!action.target)return;const target=document.getElementById(action.target)||document.querySelector(`.${action.target}`);target?.scrollIntoView({behavior:'smooth',block:'center'})};
+  return <section className="deal-action-plan no-print"><div className="action-plan-heading"><div className="action-plan-title"><ArrowRight/><div><p className="eyebrow">{t('Your next step')}</p><h2>{t('Deal action plan')}</h2><p>{t('Follow this step to keep the deal moving.')}</p></div></div><div className="action-plan-score"><strong>{doneCount}</strong><span>/ {steps.length}</span></div></div><div className="action-plan-progress" role="progressbar" aria-label={t('Deal action plan')} aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={doneCount}><span style={{width:`${doneCount/steps.length*100}%`}}/></div><ol className="action-plan-steps">{steps.map((step,index)=><li key={step.label} className={step.done?'done':index===currentIndex?'current':''}>{step.done?<Check size={17}/>:index===currentIndex?<ArrowRight size={17}/>:<Clock3 size={17}/>}<span><b>{t(step.label)}</b><small>{t(step.done?'Done':index===currentIndex?'In progress':'Upcoming')}</small></span></li>)}</ol><div className="next-action"><div><ArrowRight/><span><p>{t('Your next step')}</p><strong>{t(action.label)}</strong></span></div>{action.target&&<button onClick={openNext}>{t('Open next step')}</button>}</div><p className="action-plan-note"><ShieldCheck size={16}/>{t('Progress updates automatically from the protected deal record.')}</p></section>;
+}
+
 function SellerTrustProfile({deal}:{deal:Deal}){
   const [profile,setProfile]=useState<PublicTrustProfile|null>(null);const [loading,setLoading]=useState(true);const [unavailable,setUnavailable]=useState(false);
   useEffect(()=>{let current=true;setLoading(true);setUnavailable(false);getPublicSellerTrustProfile(deal.publicId).then(result=>{if(current)setProfile(result)}).catch(()=>{if(current)setUnavailable(true)}).finally(()=>{if(current)setLoading(false)});return()=>{current=false}},[deal.publicId]);
@@ -500,6 +540,7 @@ function App() {
   const refreshSavedDeals=()=>{if(session)getMySavedDeals(session).then(setSavedDeals).catch(()=>setSavedDeals([]))};
   const markAllActivityRead=()=>{if(!session)return;setNotifications(items=>items.map(item=>({...item,is_read:true})));void markAllNotificationsRead(session).catch(()=>getMyNotifications(session).then(setNotifications).catch(()=>{}))};
   const applyDealParticipants=(dealId:string,participants:DealParticipants)=>{const merge=(deal:Deal):Deal=>({...deal,sellerName:participants.seller_name,sellerVerification:participants.seller_verification,buyerName:participants.buyer_name,buyerVerification:participants.buyer_verification,viewerRole:participants.viewer_role});setActive(current=>current?.id===dealId?merge(current):current);setDeals(items=>items.map(item=>item.id===dealId?merge(item):item))};
+  const applyDealActionPlan=(dealId:string,plan:DealActionPlan)=>{setActive(current=>current?.id===dealId?{...current,status:plan.deal_status,viewerRole:plan.viewer_role}:current);setDeals(items=>items.map(item=>item.id===dealId?{...item,status:plan.deal_status,viewerRole:plan.viewer_role}:item))};
   const activeExpired=active?isDealExpired(active,clock):false;
 
   return <div className="app">
@@ -520,6 +561,7 @@ function App() {
       {view==='deal'&&active&&active.status!=='draft'&&<PublicSellerDeclaration deal={active}/>}
       {view==='deal'&&active&&active.status!=='draft'&&<SellerTrustProfile deal={active}/>}
       {view==='deal'&&active&&session&&(['accepted','completed','disputed','cancelled'] as Deal['status'][]).includes(active.status)&&<DealParticipantsCard deal={active} session={session} onLoaded={participants=>applyDealParticipants(active.id,participants)}/>}
+      {view==='deal'&&active&&session&&(['accepted','completed','disputed','cancelled'] as Deal['status'][]).includes(active.status)&&<DealActionPlanCard deal={active} session={session} onSync={plan=>applyDealActionPlan(active.id,plan)}/>}
       {view==='deal'&&active&&active.viewerRole!=='seller'&&!(['draft','cancelled'] as Deal['status'][]).includes(active.status)&&<SaveDealButton deal={active} session={session} onChanged={refreshSavedDeals} onSignIn={()=>{setReturnAfterAuth('deal');setView('auth')}}/>}
       {view==='deal'&&active&&active.viewerRole==='seller'&&active.status==='published'&&!activeExpired&&<BuyerInvitePanel deal={active}/>}
       {view==='deal'&&active&&active.viewerRole!=='seller'&&active.status==='published'&&!activeExpired&&acceptanceProtected&&<BuyerAccessCodeEntry value={buyerAccessCode} onChange={setBuyerAccessCode}/>}
