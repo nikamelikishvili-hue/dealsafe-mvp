@@ -18,6 +18,7 @@ A mobile-first proof of concept for creating a trusted transaction record and sh
 - Privacy-preserving public seller trust profile with verified reputation totals
 - Opt-in Digital Trust Passport with a private-by-default, shareable reputation link
 - Private Saved Deal Links watchlist tied to the signed-in buyer account
+- Side-by-side comparison for up to three saved deals
 - Durable buyer inspection receipt required before in-person or shipped completion
 - Enforceable Deal Link expiration with seller-selected validity periods
 - Supabase-ready PostgreSQL schema with row-level-security notes
