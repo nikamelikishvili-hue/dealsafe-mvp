@@ -430,6 +430,25 @@ const readinessClarityLabels:Record<string,Record<string,string>>={
   hi:{'Seller identity verification':'विक्रेता की पहचान का सत्यापन','Minimum 20 characters required':'कम से कम 20 अक्षर आवश्यक हैं','Complete identity verification from Profile → Verification & Security Center.':'प्रोफ़ाइल → सत्यापन और सुरक्षा केंद्र से पहचान सत्यापन पूरा करें।','Description progress':'विवरण की प्रगति','Describe wear, repairs, or defects.':'घिसावट, मरम्मत या दोषों का वर्णन करें।'}
 };
 Object.entries(readinessClarityLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
+const readinessActionLabels:Record<string,Record<string,string>>={
+  en:{'Open verification center':'Open verification center','Edit description':'Edit description'},
+  ka:{'Open verification center':'ვერიფიკაციის ცენტრის გახსნა','Edit description':'აღწერის რედაქტირება'},
+  de:{'Open verification center':'Verifizierungscenter öffnen','Edit description':'Beschreibung bearbeiten'},
+  es:{'Open verification center':'Abrir centro de verificación','Edit description':'Editar descripción'},
+  fr:{'Open verification center':'Ouvrir le centre de vérification','Edit description':'Modifier la description'},
+  pt:{'Open verification center':'Abrir centro de verificação','Edit description':'Editar descrição'},
+  it:{'Open verification center':'Apri centro verifica','Edit description':'Modifica descrizione'},
+  ru:{'Open verification center':'Открыть центр проверки','Edit description':'Изменить описание'},
+  tr:{'Open verification center':'Doğrulama merkezini aç','Edit description':'Açıklamayı düzenle'},
+  el:{'Open verification center':'Άνοιγμα κέντρου επαλήθευσης','Edit description':'Επεξεργασία περιγραφής'},
+  zh:{'Open verification center':'打开验证中心','Edit description':'编辑描述'},
+  ja:{'Open verification center':'認証センターを開く','Edit description':'説明を編集'},
+  ko:{'Open verification center':'인증 센터 열기','Edit description':'설명 편집'},
+  ar:{'Open verification center':'فتح مركز التحقق','Edit description':'تعديل الوصف'},
+  he:{'Open verification center':'פתיחת מרכז האימות','Edit description':'עריכת התיאור'},
+  hi:{'Open verification center':'सत्यापन केंद्र खोलें','Edit description':'विवरण संपादित करें'}
+};
+Object.entries(readinessActionLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
 const applyDocumentLanguage=(language:AppLanguage)=>{document.documentElement.lang=language;document.documentElement.dir=language==='ar'||language==='he'?'rtl':'ltr'};
 applyDocumentLanguage(activeLanguage);
 
