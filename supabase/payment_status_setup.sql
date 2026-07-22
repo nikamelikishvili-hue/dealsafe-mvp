@@ -2,6 +2,8 @@
 -- Run after completion_setup.sql, inspection_receipt_setup.sql,
 -- delivery_details_setup.sql, and deal_action_plan_setup.sql.
 -- This records participant statements only; DealSafe does not move or verify money.
+-- New deals are electronic-payment only. cash_at_handoff remains in the table
+-- constraint solely so historical beta records continue to load.
 
 create table if not exists public.deal_payment_records (
   deal_id uuid primary key references public.deals(id) on delete cascade,
@@ -30,11 +32,8 @@ begin
   if not found or v_deal.seller_id<>auth.uid() or v_deal.status<>'accepted' then
     raise exception 'Only the seller can record a payment method for an accepted deal';
   end if;
-  if p_method not in ('cash_at_handoff','bank_transfer','payment_app','card_invoice','other') then
-    raise exception 'Choose a valid payment method';
-  end if;
-  if v_deal.delivery_method='Ship to buyer' and p_method='cash_at_handoff' then
-    raise exception 'Cash at handoff is available only for in-person deals';
+  if p_method not in ('bank_transfer','payment_app','card_invoice') then
+    raise exception 'DealSafe accepts only electronic payment methods';
   end if;
   select * into v_existing from public.deal_payment_records where deal_id=p_deal_id;
   if found and (v_existing.buyer_confirmed_at is not null

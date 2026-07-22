@@ -403,8 +403,8 @@ function OfferPanel({deal,session,onAccepted}:{deal:Deal;session:StoredSession;o
 
 const paymentMethodLabels:Record<DealPaymentMethod,string>={cash_at_handoff:'Cash at handoff',bank_transfer:'Bank transfer',payment_app:'Payment app',card_invoice:'Card invoice',other:'Other agreed method'};
 function PaymentStatusPanel({deal,session,onChanged}:{deal:Deal;session:StoredSession;onChanged:(received:boolean)=>void}){
-  const methods=(deal.deliveryMethod==='Meet in person'?Object.keys(paymentMethodLabels):Object.keys(paymentMethodLabels).filter(item=>item!=='cash_at_handoff')) as DealPaymentMethod[];
-  const [record,setRecord]=useState<DealPaymentRecord|null>(null);const [method,setMethod]=useState<DealPaymentMethod>(deal.deliveryMethod==='Meet in person'?'cash_at_handoff':'bank_transfer');const [message,setMessage]=useState('');const [busy,setBusy]=useState(false);const [loaded,setLoaded]=useState(false);
+  const methods:DealPaymentMethod[]=['card_invoice','bank_transfer','payment_app'];
+  const [record,setRecord]=useState<DealPaymentRecord|null>(null);const [method,setMethod]=useState<DealPaymentMethod>('card_invoice');const [message,setMessage]=useState('');const [busy,setBusy]=useState(false);const [loaded,setLoaded]=useState(false);
   const load=()=>getDealPaymentRecord(session,deal.id).then(result=>{setRecord(result);if(result)setMethod(result.method);onChanged(Boolean(result?.seller_marked_received_at));setLoaded(true)}).catch(()=>{onChanged(false);setLoaded(true)});
   useEffect(()=>{setLoaded(false);void load()},[deal.id,session.accessToken]);
   const saveMethod=async(event:React.FormEvent)=>{event.preventDefault();setBusy(true);setMessage('');try{await setDealPaymentMethod(session,deal.id,method);setMessage('Payment method recorded');await load()}catch(error){setMessage(error instanceof Error?error.message:'Action failed')}finally{setBusy(false)}};
