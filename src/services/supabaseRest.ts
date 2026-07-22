@@ -1,4 +1,5 @@
 import type { Deal, DealDraft } from '../domain';
+import { toMinorUnits, type CurrencyCode } from '../currency';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
@@ -21,7 +22,7 @@ export interface DealShipment { id:string;deal_id:string;carrier:string;tracking
 
 interface DealRow {
   id: string; public_id: string; title: string; description: string;
-  price_cents: number; currency: 'USD'; condition: 'Like new' | 'Good' | 'Fair';
+  price_cents: number; currency: CurrencyCode; condition: 'Like new' | 'Good' | 'Fair';
   serial_last_four: string | null; delivery_method: 'Meet in person' | 'Ship to buyer';
   status: 'draft' | 'published' | 'accepted' | 'completed' | 'cancelled' | 'disputed';
   current_agreement_version: number; created_at: string;
@@ -219,7 +220,7 @@ export async function uploadDealPhotos(session: StoredSession, dealId: string, f
 
 export async function deleteDealMedia(session:StoredSession,dealId:string,publicUrl:string){const marker='/storage/v1/object/public/deal-media/';const encodedPath=publicUrl.split(marker)[1];if(!encodedPath)throw new Error('Invalid media URL');const path=encodedPath.split('/').map(decodeURIComponent).join('/');const removeObject=await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/deal-media/${path.split('/').map(encodeURIComponent).join('/')}`,{method:'DELETE',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`}});if(!removeObject.ok)throw new Error('Could not remove the stored file');const removeRecord=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_media?deal_id=eq.${dealId}&storage_path=eq.${encodeURIComponent(path)}`,{method:'DELETE',headers:{...headers(session.accessToken),Prefer:'return=minimal'}});if(!removeRecord.ok)throw new Error('File removed, but its record could not be cleaned up')}
 export async function reorderDealMedia(session:StoredSession,dealId:string,publicUrls:string[]){const marker='/storage/v1/object/public/deal-media/';const paths=publicUrls.map(url=>{const encoded=url.split(marker)[1];if(!encoded)throw new Error('Invalid media URL');return encoded.split('/').map(decodeURIComponent).join('/')});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/reorder_deal_media`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_paths:paths})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not reorder media')}}
-export async function updatePublishedDeal(session:StoredSession,dealId:string,draft:DealDraft){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/update_published_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_title:draft.title,p_description:draft.description,p_price_cents:Math.round(Number(draft.price)*100),p_condition:draft.condition,p_delivery_method:draft.deliveryMethod})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not update deal')}return await response.json() as number}
+export async function updatePublishedDeal(session:StoredSession,dealId:string,draft:DealDraft){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/update_published_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_title:draft.title,p_description:draft.description,p_price_cents:toMinorUnits(draft.price,draft.currency),p_condition:draft.condition,p_delivery_method:draft.deliveryMethod})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not update deal')}return await response.json() as number}
 
 export async function createUserDeal(session: StoredSession, draft: DealDraft) {
   const serial = draft.serialNumber.trim();
@@ -230,8 +231,8 @@ export async function createUserDeal(session: StoredSession, draft: DealDraft) {
       seller_id: session.user.id,
       title: draft.title,
       description: draft.description,
-      price_cents: Math.round(Number(draft.price) * 100),
-      currency: 'USD',
+      price_cents: toMinorUnits(draft.price, draft.currency),
+      currency: draft.currency,
       condition: draft.condition,
       serial_last_four: serial ? serial.slice(-4) : null,
       delivery_method: draft.deliveryMethod,

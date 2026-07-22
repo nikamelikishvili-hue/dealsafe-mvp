@@ -65,6 +65,10 @@ const ka:Record<string,string>={
 
 const dictionaries:Record<string,Record<string,string>>=Object.fromEntries(Object.entries(localePacks).map(([code,pack])=>[code,{...pack,...extraLocalePacks[code]}]));
 dictionaries.ka={...ka,...extraLocalePacks.ka};
+const financeLabels:Record<string,Record<string,string>>={
+  en:{Price:'Price',Currency:'Currency'},ka:{Price:'ფასი',Currency:'ვალუტა'},de:{Price:'Preis',Currency:'Währung'},es:{Price:'Precio',Currency:'Moneda'},fr:{Price:'Prix',Currency:'Devise'},pt:{Price:'Preço',Currency:'Moeda'},it:{Price:'Prezzo',Currency:'Valuta'},ru:{Price:'Цена',Currency:'Валюта'},tr:{Price:'Fiyat',Currency:'Para birimi'},el:{Price:'Τιμή',Currency:'Νόμισμα'},zh:{Price:'价格',Currency:'货币'},ja:{Price:'価格',Currency:'通貨'},ko:{Price:'가격',Currency:'통화'},ar:{Price:'السعر',Currency:'العملة'},he:{Price:'מחיר',Currency:'מטבע'},hi:{Price:'कीमत',Currency:'मुद्रा'}
+};
+Object.entries(financeLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
 const applyDocumentLanguage=(language:AppLanguage)=>{document.documentElement.lang=language;document.documentElement.dir=language==='ar'||language==='he'?'rtl':'ltr'};
 applyDocumentLanguage(activeLanguage);
 

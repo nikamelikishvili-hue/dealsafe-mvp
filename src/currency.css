@@ -1,0 +1,21 @@
+.price-currency-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem;
+  gap: .65rem;
+}
+
+.price-currency-controls select {
+  min-width: 0;
+}
+
+.dashboard-stats article:last-child strong {
+  font-size: clamp(.95rem, 1.7vw, 1.25rem);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .price-currency-controls {
+    grid-template-columns: minmax(0, 1fr) 6.5rem;
+  }
+}

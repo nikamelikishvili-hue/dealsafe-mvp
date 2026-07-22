@@ -1,3 +1,5 @@
+import type { CurrencyCode } from './currency';
+
 export type DealStatus = 'draft' | 'published' | 'accepted' | 'completed' | 'cancelled' | 'disputed';
 export type VerificationStatus = 'not_started' | 'pending' | 'verified';
 
@@ -7,7 +9,7 @@ export interface Deal {
   title: string;
   description: string;
   priceCents: number;
-  currency: 'USD';
+  currency: CurrencyCode;
   condition: 'Like new' | 'Good' | 'Fair';
   serialNumber?: string;
   deliveryMethod: 'Meet in person' | 'Ship to buyer';
@@ -24,5 +26,6 @@ export interface Deal {
 
 export interface DealDraft extends Pick<Deal, 'title' | 'description' | 'condition' | 'deliveryMethod'> {
   price: string;
+  currency: CurrencyCode;
   serialNumber: string;
 }
