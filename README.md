@@ -16,6 +16,7 @@ A mobile-first proof of concept for creating a trusted transaction record and sh
 - Reversible public hiding and restoration of unsafe Deal Links
 - Explainable automated risk score with visible, non-accusatory signals
 - Privacy-preserving public seller trust profile with verified reputation totals
+- Opt-in Digital Trust Passport with a private-by-default, shareable reputation link
 - Durable buyer inspection receipt required before in-person or shipped completion
 - Enforceable Deal Link expiration with seller-selected validity periods
 - Supabase-ready PostgreSQL schema with row-level-security notes
@@ -33,7 +34,7 @@ Open the address shown in the terminal. No credentials are needed for the demo; 
 ## Production setup
 
 1. Create a Supabase project and run `supabase/schema.sql`.
-2. Run the feature setup files you need. For moderation, run `supabase/reporting_setup.sql`, `supabase/admin_reporting_setup.sql`, and then `supabase/admin_moderation_actions.sql`; run `supabase/deal_expiration_setup.sql` before the moderation action file because the latter installs the protected public Deal Link query. Run `supabase/risk_assessment_setup.sql` and `supabase/public_trust_profile_setup.sql` after moderation to enable the public trust panels. Run `supabase/inspection_receipt_setup.sql` after meeting and shipping setup to require a recorded buyer inspection before completion.
+2. Run the feature setup files you need. For moderation, run `supabase/reporting_setup.sql`, `supabase/admin_reporting_setup.sql`, and then `supabase/admin_moderation_actions.sql`; run `supabase/deal_expiration_setup.sql` before the moderation action file because the latter installs the protected public Deal Link query. Run `supabase/risk_assessment_setup.sql` and `supabase/public_trust_profile_setup.sql` after moderation to enable the public trust panels. Run `supabase/inspection_receipt_setup.sql` after meeting and shipping setup to require a recorded buyer inspection before completion. Run `supabase/trust_passport_setup.sql` to add the opt-in public Digital Trust Passport.
 3. Copy `.env.example` to `.env` and add the project URL and anonymous key.
 4. Connect verification and e-sign providers through the interfaces in `src/services/providers.ts`.
 

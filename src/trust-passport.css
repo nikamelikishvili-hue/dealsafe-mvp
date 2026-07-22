@@ -1,0 +1,29 @@
+.trust-passport-controls,.trust-passport-page{max-width:1100px;margin:28px auto;padding:clamp(22px,4vw,42px);border:1px solid #d5e2d9;border-radius:28px;background:#f1f7f2}
+.passport-heading,.passport-status,.passport-actions,.passport-identity,.passport-verification{display:flex;align-items:center;gap:14px}
+.passport-heading>svg{width:38px;height:38px;color:#347252}
+.passport-heading h2,.passport-hero h1{margin:3px 0 0}
+.passport-status{justify-content:space-between;margin-top:24px;padding:20px;border:1px solid #dbe4dd;border-radius:18px;background:#fff}
+.passport-status span{display:flex;flex-direction:column;gap:4px}
+.passport-status small,.passport-private,.passport-hero p,.passport-review small{color:#647069}
+.passport-actions{flex-wrap:wrap;margin-top:18px}
+.passport-actions button{min-height:48px}
+.passport-private{display:flex;align-items:flex-start;gap:9px;margin:20px 0 0;font-size:.92rem}
+.passport-private svg{flex:0 0 auto;color:#347252}
+.trust-passport-page{background:#fff}
+.passport-hero{padding:clamp(24px,5vw,52px);border-radius:24px;color:#f7fbf8;background:linear-gradient(135deg,#163d2a,#347252)}
+.passport-identity{align-items:flex-start}
+.passport-avatar{display:grid;place-items:center;flex:0 0 auto;width:76px;height:76px;border-radius:22px;background:#e2f0e6;color:#173e2a;font-size:2rem;font-weight:800;text-transform:uppercase}
+.passport-verification{margin-top:12px;color:#dcecdf}
+.passport-verification.verified{color:#fff}
+.passport-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:24px 0}
+.passport-grid article{padding:22px;border:1px solid #dbe4dd;border-radius:18px;background:#f8faf8}
+.passport-grid span,.passport-grid small{display:block;color:#647069}
+.passport-grid strong{display:flex;align-items:center;gap:7px;margin:8px 0;font-size:1.8rem;color:#173e2a}
+.passport-history{padding:24px;border:1px solid #dbe4dd;border-radius:22px}
+.passport-reviews{display:grid;gap:10px;margin-top:18px}
+.passport-review{display:flex;justify-content:space-between;gap:16px;padding:15px 0;border-top:1px solid #e4ebe6}
+.passport-review strong{color:#ad8a24;letter-spacing:2px}
+.passport-disclaimer{display:flex;gap:10px;margin:20px 0 0;padding:16px;border-radius:16px;background:#f1f7f2;color:#53635a}
+.passport-loading{display:grid;place-items:center;min-height:300px;text-align:center}
+@media(max-width:700px){.trust-passport-controls,.trust-passport-page{margin:18px 14px;padding:20px;border-radius:22px}.passport-status{align-items:flex-start;flex-direction:column}.passport-status button{width:100%}.passport-grid{grid-template-columns:1fr}.passport-identity{flex-direction:column}.passport-actions button{width:100%}}
+@media print{.trust-passport-controls{display:none}.trust-passport-page{border:0;margin:0;max-width:none}.passport-hero{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
