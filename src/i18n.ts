@@ -126,6 +126,25 @@ const inviteLabels:Record<string,Record<string,string>>={
   hi:{'Invite buyer':'खरीदार को आमंत्रित करें','Share this secure Deal Link with the buyer.':'यह सुरक्षित डील लिंक खरीदार के साथ साझा करें।','Waiting for buyer':'खरीदार की प्रतीक्षा','The buyer must review and accept this agreement from their own account.':'खरीदार को अपने खाते से इस समझौते की समीक्षा करके इसे स्वीकार करना होगा।'}
 };
 Object.entries(inviteLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
+const shareChannelLabels:Record<string,Record<string,string>>={
+  en:{'More apps':'More apps','Message copied. Paste it into SMS if needed.':'Message copied. Paste it into SMS if needed.','Sharing is not available. Message copied.':'Sharing is not available. Message copied.'},
+  ka:{'More apps':'სხვა აპები','Message copied. Paste it into SMS if needed.':'შეტყობინება დაკოპირდა. საჭიროების შემთხვევაში ჩასვით SMS-ში.','Sharing is not available. Message copied.':'გაზიარება მიუწვდომელია. შეტყობინება დაკოპირდა.'},
+  de:{'More apps':'Weitere Apps','Message copied. Paste it into SMS if needed.':'Nachricht kopiert. Bei Bedarf in die SMS einfügen.','Sharing is not available. Message copied.':'Teilen ist nicht verfügbar. Die Nachricht wurde kopiert.'},
+  es:{'More apps':'Más aplicaciones','Message copied. Paste it into SMS if needed.':'Mensaje copiado. Pégalo en el SMS si es necesario.','Sharing is not available. Message copied.':'La opción de compartir no está disponible. Se copió el mensaje.'},
+  fr:{'More apps':'Plus d’applications','Message copied. Paste it into SMS if needed.':'Message copié. Collez-le dans le SMS si nécessaire.','Sharing is not available. Message copied.':'Le partage n’est pas disponible. Le message a été copié.'},
+  pt:{'More apps':'Mais aplicações','Message copied. Paste it into SMS if needed.':'Mensagem copiada. Cole-a no SMS, se necessário.','Sharing is not available. Message copied.':'A partilha não está disponível. A mensagem foi copiada.'},
+  it:{'More apps':'Altre app','Message copied. Paste it into SMS if needed.':'Messaggio copiato. Incollalo nell’SMS se necessario.','Sharing is not available. Message copied.':'La condivisione non è disponibile. Il messaggio è stato copiato.'},
+  ru:{'More apps':'Другие приложения','Message copied. Paste it into SMS if needed.':'Сообщение скопировано. При необходимости вставьте его в SMS.','Sharing is not available. Message copied.':'Функция отправки недоступна. Сообщение скопировано.'},
+  tr:{'More apps':'Diğer uygulamalar','Message copied. Paste it into SMS if needed.':'Mesaj kopyalandı. Gerekirse SMS’e yapıştırın.','Sharing is not available. Message copied.':'Paylaşım kullanılamıyor. Mesaj kopyalandı.'},
+  el:{'More apps':'Περισσότερες εφαρμογές','Message copied. Paste it into SMS if needed.':'Το μήνυμα αντιγράφηκε. Επικολλήστε το στο SMS αν χρειάζεται.','Sharing is not available. Message copied.':'Η κοινή χρήση δεν είναι διαθέσιμη. Το μήνυμα αντιγράφηκε.'},
+  zh:{'More apps':'更多应用','Message copied. Paste it into SMS if needed.':'消息已复制。如有需要，请粘贴到短信中。','Sharing is not available. Message copied.':'无法使用系统分享。消息已复制。'},
+  ja:{'More apps':'その他のアプリ','Message copied. Paste it into SMS if needed.':'メッセージをコピーしました。必要に応じてSMSに貼り付けてください。','Sharing is not available. Message copied.':'共有を利用できません。メッセージをコピーしました。'},
+  ko:{'More apps':'다른 앱','Message copied. Paste it into SMS if needed.':'메시지를 복사했습니다. 필요한 경우 SMS에 붙여넣으세요.','Sharing is not available. Message copied.':'공유 기능을 사용할 수 없습니다. 메시지를 복사했습니다.'},
+  ar:{'More apps':'تطبيقات أخرى','Message copied. Paste it into SMS if needed.':'تم نسخ الرسالة. ألصقها في الرسالة النصية عند الحاجة.','Sharing is not available. Message copied.':'المشاركة غير متاحة. تم نسخ الرسالة.'},
+  he:{'More apps':'אפליקציות נוספות','Message copied. Paste it into SMS if needed.':'ההודעה הועתקה. אפשר להדביק אותה ב-SMS במידת הצורך.','Sharing is not available. Message copied.':'השיתוף אינו זמין. ההודעה הועתקה.'},
+  hi:{'More apps':'अन्य ऐप','Message copied. Paste it into SMS if needed.':'संदेश कॉपी हो गया। आवश्यकता होने पर इसे SMS में पेस्ट करें।','Sharing is not available. Message copied.':'शेयर करने की सुविधा उपलब्ध नहीं है। संदेश कॉपी हो गया।'}
+};
+Object.entries(shareChannelLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
 const applyDocumentLanguage=(language:AppLanguage)=>{document.documentElement.lang=language;document.documentElement.dir=language==='ar'||language==='he'?'rtl':'ltr'};
 applyDocumentLanguage(activeLanguage);
 
