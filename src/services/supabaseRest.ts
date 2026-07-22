@@ -320,6 +320,8 @@ export async function getPublicSellerDeclaration(publicId:string){const response
 export async function getPublicAgreementHistory(publicId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_public_agreement_history`,{method:'POST',headers:headers(),body:JSON.stringify({p_public_id:publicId})});if(!response.ok)throw new Error('Agreement history unavailable');return await response.json() as AgreementHistoryVersion[]}
 export async function verifyAgreementRecord(publicId:string,contentHash:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/verify_agreement_record`,{method:'POST',headers:headers(),body:JSON.stringify({p_public_id:publicId,p_content_hash:contentHash})});if(!response.ok)throw new Error('Agreement verification is unavailable');return ((await response.json()) as AgreementVerificationResult[])[0]||null}
 export async function renewDealLink(session:StoredSession,dealId:string,days:number){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/renew_deal_link`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_days:days})});if(!response.ok)throw new Error('Could not renew Deal Link');const rows=await response.json() as DealRenewalResult[];if(!rows[0])throw new Error('Could not renew Deal Link');return rows[0]}
+export async function getDealAcceptanceProtection(publicId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_deal_acceptance_protection`,{method:'POST',headers:headers(),body:JSON.stringify({p_public_id:publicId})});if(!response.ok)return false;return Boolean(await response.json())}
+export async function configureBuyerAccessCode(session:StoredSession,dealId:string,enabled:boolean){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/configure_buyer_access_code`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_enabled:enabled})});const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.message||'Could not update buyer access');return data as string|null}
 export async function isDealSaved(session:StoredSession,publicId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/is_deal_saved`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_public_id:publicId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not check saved deal')}return Boolean(await response.json())}
 export async function setDealSaved(session:StoredSession,publicId:string,saved:boolean){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_deal_saved`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_public_id:publicId,p_saved:saved})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not update saved deal')}return Boolean(await response.json())}
 export async function getDealInspection(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_inspection`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load inspection receipt')}return ((await response.json()) as DealInspection[])[0]||null}
@@ -381,15 +383,17 @@ export async function getPublicDeal(publicId: string) {
   };
 }
 
-export async function acceptPublicDeal(session: StoredSession, publicId: string, typedName: string) {
+export async function acceptPublicDeal(session: StoredSession, publicId: string, typedName: string, accessCode='') {
   const response = await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/accept_deal`, {
     method: 'POST', headers: headers(session.accessToken),
-    body: JSON.stringify({ p_public_id: publicId, p_typed_name: typedName }),
+    body: JSON.stringify({ p_public_id: publicId, p_typed_name: typedName, p_access_code: accessCode.trim() || null }),
   });
+  const data = await response.json().catch(()=>null);
   if (!response.ok) {
-    const data = await response.json();
     throw new Error(data?.message || 'Could not accept this deal');
   }
+  if(data==='incorrect_code')throw new Error('Incorrect buyer access code');
+  if(data==='rate_limited')throw new Error('Too many incorrect codes. Try again in 15 minutes.');
 }
 
 export async function checkSupabaseConnection(): Promise<boolean> {
