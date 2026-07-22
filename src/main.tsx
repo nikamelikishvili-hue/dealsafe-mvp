@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import QRCode from 'qrcode';
 import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, CalendarDays, Check, Clock3, Copy, FileDown, FileSignature, Fingerprint, Flag, ImagePlus, Link2, LockKeyhole, MapPin, MessageCircle, PackageCheck, Pencil, Plus, QrCode, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Trash2, Truck } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
-import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminReports, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, publishUserDealDraft, refreshSession, reorderDealMedia, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealPhotos, type AdminReport, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type RiskAssessment, type StoredSession, type TimelineEvent } from './services/supabaseRest';
+import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminReports, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getPublicSellerTrustProfile, getStoredSession, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, publishUserDealDraft, refreshSession, reorderDealMedia, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealPhotos, type AdminReport, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type StoredSession, type TimelineEvent } from './services/supabaseRest';
 import { getAppLanguage, setAppLanguage, supportedLanguages, t, type AppLanguage } from './i18n';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import type { Deal, DealDraft } from './domain';
@@ -44,6 +44,7 @@ import './saved-draft.css';
 import './report-deal.css';
 import './admin-center.css';
 import './risk-check.css';
+import './seller-trust.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'admin' | 'forgot' | 'reset';
 interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
@@ -175,6 +176,15 @@ function DealRiskCheck({deal}:{deal:Deal}){
   return <section className={`risk-check risk-${assessment.risk_level}`}><div className="risk-heading"><ShieldAlert/><div><p className="eyebrow">{t('Automated Risk Check')}</p><h2>{t(levelTitle)}</h2></div><div className="risk-score"><strong>{assessment.risk_score}</strong><small>/100</small></div></div><div className="risk-meter" aria-label={`${t('Risk score')} ${assessment.risk_score} ${t('out of 100')}`}><span style={{width:`${assessment.risk_score}%`}}/></div><ul>{assessment.signals.map(signal=><li key={signal}><span>{signal==='no_flags'?<Check size={17}/>:<ShieldAlert size={17}/>}</span>{t(riskSignalCopy[signal]||signal)}</li>)}</ul><div className="risk-disclaimer"><b>{t('Risk signals, not a verdict')}</b><span>{t('This automated check uses available DealSafe data and cannot guarantee that a deal or person is safe.')}</span></div></section>;
 }
 
+function SellerTrustProfile({deal}:{deal:Deal}){
+  const [profile,setProfile]=useState<PublicTrustProfile|null>(null);const [loading,setLoading]=useState(true);const [unavailable,setUnavailable]=useState(false);
+  useEffect(()=>{let current=true;setLoading(true);setUnavailable(false);getPublicSellerTrustProfile(deal.publicId).then(result=>{if(current)setProfile(result)}).catch(()=>{if(current)setUnavailable(true)}).finally(()=>{if(current)setLoading(false)});return()=>{current=false}},[deal.publicId]);
+  if(!isSupabaseConfigured||unavailable)return null;
+  if(loading)return <section className="seller-trust loading"><BadgeCheck/><span>{t('Loading seller trust profile…')}</span></section>;
+  if(!profile)return null;
+  return <section className="seller-trust"><div className="seller-trust-heading"><span className="seller-avatar">{profile.display_name.slice(0,1).toUpperCase()}</span><div><p className="eyebrow">{t('Seller Trust Profile')}</p><h2>{profile.display_name}</h2><span className={`seller-verification ${profile.verification_status==='verified'?'verified':''}`}><BadgeCheck size={16}/>{t(profile.verification_status==='verified'?'Identity verified':'Verification pending')}</span></div></div><div className="seller-trust-stats"><article><strong>{profile.completed_sales}</strong><span>{t('Completed sales')}</span></article><article><strong>{profile.average_rating??'—'} <Star size={18}/></strong><span>{profile.rating_count} {t('ratings')}</span></article><article><strong>{new Date(profile.member_since).toLocaleDateString(getAppLanguage(),{month:'short',year:'numeric'})}</strong><span>{t('Member since')}</span></article></div><p className="seller-trust-note"><LockKeyhole size={15}/>{t('Public profile excludes contact and identity details.')}</p></section>;
+}
+
 function AgreementExpiredNotice(){return <div className="expired-agreement"><Clock3/><div><b>{t('Deal Link expired')}</b><span>{t('This Deal Link can no longer be accepted.')}</span></div></div>}
 
 function AgreementFingerprint({deal}:{deal:Deal}){
@@ -303,6 +313,7 @@ function App() {
       {view==='deal'&&active&&active.status!=='draft'&&<AgreementExport deal={active}/>}
       {view==='deal'&&active&&<DealExpiry deal={active} now={clock}/>}
       {view==='deal'&&active&&active.status!=='draft'&&<DealRiskCheck deal={active}/>}
+      {view==='deal'&&active&&active.status!=='draft'&&<SellerTrustProfile deal={active}/>}
       {view==='deal'&&active&&active.viewerRole==='seller'&&active.status==='published'&&!activeExpired&&<BuyerInvitePanel deal={active}/>}
       {view==='deal'&&active&&active.status!=='draft'&&<AgreementFingerprint deal={active}/>}
       {view==='deal'&&active&&<DealReadiness deal={active}/>}
