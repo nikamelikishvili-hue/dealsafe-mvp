@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import QRCode from 'qrcode';
-import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, CalendarDays, Check, Clock3, Copy, FileDown, FileSignature, Fingerprint, Flag, ImagePlus, Link2, LockKeyhole, MapPin, MessageCircle, PackageCheck, Pencil, Plus, QrCode, Search, Send, Share2, ShieldCheck, Smartphone, Star, Trash2, Truck } from 'lucide-react';
+import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, CalendarDays, Check, Clock3, Copy, FileDown, FileSignature, Fingerprint, Flag, ImagePlus, Link2, LockKeyhole, MapPin, MessageCircle, PackageCheck, Pencil, Plus, QrCode, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Trash2, Truck } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
-import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminReports, getDealMeeting, getDealMessages, getDealOffers, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, publishUserDealDraft, refreshSession, reorderDealMedia, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealPhotos, type AdminReport, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type StoredSession, type TimelineEvent } from './services/supabaseRest';
+import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminReports, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getStoredSession, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, publishUserDealDraft, refreshSession, reorderDealMedia, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealPhotos, type AdminReport, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type RiskAssessment, type StoredSession, type TimelineEvent } from './services/supabaseRest';
 import { getAppLanguage, setAppLanguage, supportedLanguages, t, type AppLanguage } from './i18n';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import type { Deal, DealDraft } from './domain';
@@ -43,6 +43,7 @@ import './create-review.css';
 import './saved-draft.css';
 import './report-deal.css';
 import './admin-center.css';
+import './risk-check.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'admin' | 'forgot' | 'reset';
 interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
@@ -152,6 +153,28 @@ function AgreementExport({deal}:{deal:Deal}){const [message,setMessage]=useState
 function BuyerInvitePanel({deal}:{deal:Deal}){const [notice,setNotice]=useState('');const link=`${location.origin}/?deal=${deal.publicId}`;const message=`${t('Review agreement')}: ${deal.title} · ${dealPrice(deal)} · ${link}`;const flash=(text:string)=>{setNotice(text);window.setTimeout(()=>setNotice(''),2200)};const copyText=async(text:string)=>{try{await navigator.clipboard?.writeText(text)}catch{}};const copy=async()=>{await copyText(link);flash('Deal Link copied.')};const sms=async()=>{await copyText(message);flash('Message copied. Paste it into SMS if needed.');window.location.href=/Android/i.test(navigator.userAgent)?`sms:?body=${encodeURIComponent(message)}`:'sms:'};const more=async()=>{try{if(!navigator.share)throw new Error('share-unavailable');await navigator.share({title:`DealSafe · ${deal.title}`,text:message,url:link})}catch(error){if(error instanceof Error&&error.name==='AbortError')return;await copyText(message);flash('Sharing is not available. Message copied.')}};return <section className="buyer-invite no-print"><div className="invite-heading"><Send/><div><p className="eyebrow">{t('Share')}</p><h2>{t('Invite buyer')}</h2><p>{t('Share this secure Deal Link with the buyer.')}</p></div></div><div className="invite-actions"><button className="secondary" onClick={copy}><Copy size={16}/>{t('Copy Deal Link')}</button><a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">WhatsApp</a><a href={`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(`${t('Review agreement')}: ${deal.title}`)}`} target="_blank" rel="noreferrer">Telegram</a><a href={`mailto:?subject=${encodeURIComponent(`DealSafe · ${deal.title}`)}&body=${encodeURIComponent(message)}`}>{t('Email')}</a><button className="secondary" onClick={sms}><MessageCircle size={16}/>{t('SMS')}</button><button className="secondary invite-more" onClick={more}><Share2 size={16}/>{t('More apps')}</button></div>{notice&&<div className="notice">{t(notice)}</div>}</section>}
 
 function DealExpiry({deal,now}:{deal:Deal;now:number}){if(deal.status!=='published'||!deal.expiresAt)return null;const expired=isDealExpired(deal,now);return <section className={`deal-expiry ${expired?'expired':''}`}><Clock3/><div><p className="eyebrow">{t(expired?'Expired':'Offer active')}</p><h2>{t(expired?'Deal Link expired':'Offer expires')} {expired?'':relativeExpiry(deal.expiresAt,now)}</h2><span>{new Date(deal.expiresAt).toLocaleString(getAppLanguage())} · {t(expired?'This Deal Link can no longer be accepted.':'Buyer must accept before this time.')}</span></div></section>}
+const riskSignalCopy:Record<string,string>={
+  unverified_seller:'Seller identity verification is not complete.',
+  new_account:'Seller account was created recently.',
+  limited_history:'Seller account has limited history.',
+  no_photos:'No item photos were provided.',
+  single_photo:'Only one item photo was provided.',
+  missing_serial:'No serial or IMEI ending was recorded for this electronic item.',
+  payment_language:'The description contains language associated with higher-risk payment requests.',
+  community_reports:'This deal has unresolved community reports.',
+  no_flags:'No elevated risk signals were found in the available data.'
+};
+
+function DealRiskCheck({deal}:{deal:Deal}){
+  const [assessment,setAssessment]=useState<RiskAssessment|null>(null);const [loading,setLoading]=useState(true);const [unavailable,setUnavailable]=useState(false);
+  useEffect(()=>{let current=true;setLoading(true);setUnavailable(false);getDealRiskAssessment(deal.publicId).then(result=>{if(current)setAssessment(result)}).catch(()=>{if(current)setUnavailable(true)}).finally(()=>{if(current)setLoading(false)});return()=>{current=false}},[deal.publicId]);
+  if(!isSupabaseConfigured||unavailable)return null;
+  if(loading)return <section className="risk-check loading"><ShieldCheck/><span>{t('Checking visible risk signals…')}</span></section>;
+  if(!assessment)return null;
+  const levelTitle=assessment.risk_level==='high'?'High risk signals':assessment.risk_level==='medium'?'Medium risk signals':'Low risk signals';
+  return <section className={`risk-check risk-${assessment.risk_level}`}><div className="risk-heading"><ShieldAlert/><div><p className="eyebrow">{t('Automated Risk Check')}</p><h2>{t(levelTitle)}</h2></div><div className="risk-score"><strong>{assessment.risk_score}</strong><small>/100</small></div></div><div className="risk-meter" aria-label={`${t('Risk score')} ${assessment.risk_score} ${t('out of 100')}`}><span style={{width:`${assessment.risk_score}%`}}/></div><ul>{assessment.signals.map(signal=><li key={signal}><span>{signal==='no_flags'?<Check size={17}/>:<ShieldAlert size={17}/>}</span>{t(riskSignalCopy[signal]||signal)}</li>)}</ul><div className="risk-disclaimer"><b>{t('Risk signals, not a verdict')}</b><span>{t('This automated check uses available DealSafe data and cannot guarantee that a deal or person is safe.')}</span></div></section>;
+}
+
 function AgreementExpiredNotice(){return <div className="expired-agreement"><Clock3/><div><b>{t('Deal Link expired')}</b><span>{t('This Deal Link can no longer be accepted.')}</span></div></div>}
 
 function AgreementFingerprint({deal}:{deal:Deal}){
@@ -279,6 +302,7 @@ function App() {
       {view==='create'&&creating&&<div className="creation-progress notice">{t('Creating your Deal Link…')}</div>}
       {view==='deal'&&active&&active.status!=='draft'&&<AgreementExport deal={active}/>}
       {view==='deal'&&active&&<DealExpiry deal={active} now={clock}/>}
+      {view==='deal'&&active&&active.status!=='draft'&&<DealRiskCheck deal={active}/>}
       {view==='deal'&&active&&active.viewerRole==='seller'&&active.status==='published'&&!activeExpired&&<BuyerInvitePanel deal={active}/>}
       {view==='deal'&&active&&active.status!=='draft'&&<AgreementFingerprint deal={active}/>}
       {view==='deal'&&active&&<DealReadiness deal={active}/>}
