@@ -6,6 +6,7 @@ import { demoRepository } from './services/demoRepository';
 import { acceptPublicDeal, askDealQuestion, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminReports, getDealInquiries, getDealInspection, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicAgreementHistory, getPublicDeal, getPublicSellerDeclaration, getPublicSellerTrustProfile, getPublicTrustPassport, getStoredSession, getTrustPassportSettings, isCurrentUserDealSeller, isDealSaved, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, publishUserDealDraft, recordDealInspection, refreshSession, renewDealLink, reorderDealMedia, replyDealInquiry, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, setDealSaved, setTrustPassportEnabled, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealPhotos, verifyAgreementRecord, type AdminReport, type AgreementHistoryVersion, type AgreementVerificationResult, type DealInquiry, type DealInspection, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type SellerDeclarationRecord, type StoredSession, type TimelineEvent, type TrustPassport, type TrustPassportSettings } from './services/supabaseRest';
 import { markAllNotificationsRead, markDealNotificationsRead } from './services/supabaseRest';
 import { configureBuyerAccessCode, getDealAcceptanceProtection } from './services/supabaseRest';
+import { getDealParticipants, type DealParticipants } from './services/supabaseRest';
 import { getAppLanguage, setAppLanguage, supportedLanguages, t, type AppLanguage } from './i18n';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import type { Deal, DealDraft } from './domain';
@@ -56,6 +57,7 @@ import './agreement-verification.css';
 import './deal-renewal.css';
 import './deal-inquiries.css';
 import './buyer-access-code.css';
+import './deal-participants.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset';
 interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
@@ -279,6 +281,15 @@ function DealRiskCheck({deal}:{deal:Deal}){
   return <section className={`risk-check risk-${assessment.risk_level}`}><div className="risk-heading"><ShieldAlert/><div><p className="eyebrow">{t('Automated Risk Check')}</p><h2>{t(levelTitle)}</h2></div><div className="risk-score"><strong>{assessment.risk_score}</strong><small>/100</small></div></div><div className="risk-meter" aria-label={`${t('Risk score')} ${assessment.risk_score} ${t('out of 100')}`}><span style={{width:`${assessment.risk_score}%`}}/></div><ul>{assessment.signals.map(signal=><li key={signal}><span>{signal==='no_flags'?<Check size={17}/>:<ShieldAlert size={17}/>}</span>{t(riskSignalCopy[signal]||signal)}</li>)}</ul><div className="risk-disclaimer"><b>{t('Risk signals, not a verdict')}</b><span>{t('This automated check uses available DealSafe data and cannot guarantee that a deal or person is safe.')}</span></div></section>;
 }
 
+function DealParticipantsCard({deal,session,onLoaded}:{deal:Deal;session:StoredSession;onLoaded:(participants:DealParticipants)=>void}){
+  const [participants,setParticipants]=useState<DealParticipants|null>(null);
+  useEffect(()=>{let current=true;setParticipants(null);getDealParticipants(session,deal.id).then(record=>{if(!current||!record)return;setParticipants(record);onLoaded(record)}).catch(()=>{});return()=>{current=false}},[deal.id,deal.status,session.accessToken]);
+  if(!participants)return null;
+  const verification=(status:DealParticipants['seller_verification'])=>status==='verified'?'Identity verified':status==='pending'?'Verification pending':status==='failed'?'Verification failed':'Not verified';
+  const card=(role:'Seller'|'Buyer',name:string,status:DealParticipants['seller_verification'])=><article className="participant-card"><span className="participant-avatar">{name.slice(0,1)||'?'}</span><div><span className="participant-role">{t(role)}{participants.viewer_role===role.toLowerCase()?` · ${t('You')}`:''}</span><strong>{name}</strong><span className={`participant-verification ${status}`}><BadgeCheck size={16}/>{t(verification(status))}</span></div></article>;
+  return <section className="deal-participants"><div className="participant-heading"><ShieldCheck/><div><p className="eyebrow">{t('Verified parties')}</p><h2>{t('Deal participants')}</h2><p>{t('Only the buyer and seller can view this participant record.')}</p></div></div><div className="participant-grid">{card('Seller',participants.seller_name,participants.seller_verification)}{card('Buyer',participants.buyer_name,participants.buyer_verification)}</div><div className="participant-meta">{participants.accepted_at&&<span><Clock3 size={16}/>{t('Accepted on')} {formatDateTime(participants.accepted_at)}</span>}<span><LockKeyhole size={16}/>{t('Private participant record')}</span></div><p className="participant-privacy"><ShieldCheck size={17}/>{t('Names and verification status are shown; contact and identity details stay private.')}</p></section>;
+}
+
 function SellerTrustProfile({deal}:{deal:Deal}){
   const [profile,setProfile]=useState<PublicTrustProfile|null>(null);const [loading,setLoading]=useState(true);const [unavailable,setUnavailable]=useState(false);
   useEffect(()=>{let current=true;setLoading(true);setUnavailable(false);getPublicSellerTrustProfile(deal.publicId).then(result=>{if(current)setProfile(result)}).catch(()=>{if(current)setUnavailable(true)}).finally(()=>{if(current)setLoading(false)});return()=>{current=false}},[deal.publicId]);
@@ -488,6 +499,7 @@ function App() {
   const requestVerification=async()=>{if(!session||!profile)return;setVerificationMessage('');try{const status=await requestIdentityVerification(session);setProfile({...profile,verification_status:status});setVerificationMessage('Request recorded. A verification provider must be connected before identity can be approved.')}catch(error){setVerificationMessage(error instanceof Error?error.message:'Could not request verification')}};
   const refreshSavedDeals=()=>{if(session)getMySavedDeals(session).then(setSavedDeals).catch(()=>setSavedDeals([]))};
   const markAllActivityRead=()=>{if(!session)return;setNotifications(items=>items.map(item=>({...item,is_read:true})));void markAllNotificationsRead(session).catch(()=>getMyNotifications(session).then(setNotifications).catch(()=>{}))};
+  const applyDealParticipants=(dealId:string,participants:DealParticipants)=>{const merge=(deal:Deal):Deal=>({...deal,sellerName:participants.seller_name,sellerVerification:participants.seller_verification,buyerName:participants.buyer_name,buyerVerification:participants.buyer_verification,viewerRole:participants.viewer_role});setActive(current=>current?.id===dealId?merge(current):current);setDeals(items=>items.map(item=>item.id===dealId?merge(item):item))};
   const activeExpired=active?isDealExpired(active,clock):false;
 
   return <div className="app">
@@ -507,6 +519,7 @@ function App() {
       {view==='deal'&&active&&active.status!=='draft'&&<DealRiskCheck deal={active}/>}
       {view==='deal'&&active&&active.status!=='draft'&&<PublicSellerDeclaration deal={active}/>}
       {view==='deal'&&active&&active.status!=='draft'&&<SellerTrustProfile deal={active}/>}
+      {view==='deal'&&active&&session&&(['accepted','completed','disputed','cancelled'] as Deal['status'][]).includes(active.status)&&<DealParticipantsCard deal={active} session={session} onLoaded={participants=>applyDealParticipants(active.id,participants)}/>}
       {view==='deal'&&active&&active.viewerRole!=='seller'&&!(['draft','cancelled'] as Deal['status'][]).includes(active.status)&&<SaveDealButton deal={active} session={session} onChanged={refreshSavedDeals} onSignIn={()=>{setReturnAfterAuth('deal');setView('auth')}}/>}
       {view==='deal'&&active&&active.viewerRole==='seller'&&active.status==='published'&&!activeExpired&&<BuyerInvitePanel deal={active}/>}
       {view==='deal'&&active&&active.viewerRole!=='seller'&&active.status==='published'&&!activeExpired&&acceptanceProtected&&<BuyerAccessCodeEntry value={buyerAccessCode} onChange={setBuyerAccessCode}/>}

@@ -1,7 +1,7 @@
 import type { CurrencyCode } from './currency';
 
 export type DealStatus = 'draft' | 'published' | 'accepted' | 'completed' | 'cancelled' | 'disputed';
-export type VerificationStatus = 'not_started' | 'pending' | 'verified';
+export type VerificationStatus = 'not_started' | 'pending' | 'verified' | 'failed';
 
 export interface Deal {
   id: string;
