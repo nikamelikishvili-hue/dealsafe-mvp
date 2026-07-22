@@ -8,6 +8,7 @@ drop policy if exists "owners update deal media" on storage.objects;
 drop policy if exists "owners delete deal media" on storage.objects;
 drop policy if exists "participants read media records" on public.deal_media;
 drop policy if exists "seller inserts media records" on public.deal_media;
+drop policy if exists "seller deletes media records" on public.deal_media;
 
 create policy "owners upload deal media" on storage.objects for insert to authenticated
 with check (bucket_id='deal-media' and (storage.foldername(name))[1]=auth.uid()::text);
@@ -19,6 +20,8 @@ create policy "participants read media records" on public.deal_media for select 
 using (exists (select 1 from public.deals d where d.id=deal_media.deal_id and (d.seller_id=auth.uid() or d.buyer_id=auth.uid())));
 create policy "seller inserts media records" on public.deal_media for insert to authenticated
 with check (exists (select 1 from public.deals d where d.id=deal_media.deal_id and d.seller_id=auth.uid()));
+create policy "seller deletes media records" on public.deal_media for delete to authenticated
+using (exists (select 1 from public.deals d where d.id=deal_media.deal_id and d.seller_id=auth.uid()));
 
 drop function if exists public.get_public_deal(text);
 create function public.get_public_deal(p_public_id text)
