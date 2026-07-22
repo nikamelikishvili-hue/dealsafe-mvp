@@ -56,6 +56,18 @@ end; $$;
 revoke all on function public.accept_deal(text,text) from public;
 grant execute on function public.accept_deal(text,text) to authenticated;
 
+create table if not exists public.deal_offers(
+  id uuid primary key default gen_random_uuid(),
+  deal_id uuid not null references public.deals(id) on delete cascade,
+  buyer_id uuid not null references public.profiles(id),
+  amount_cents bigint not null check(amount_cents>0),
+  typed_name text not null,
+  status text not null default 'pending' check(status in('pending','accepted','declined','withdrawn')),
+  created_at timestamptz not null default now(),
+  responded_at timestamptz
+);
+alter table public.deal_offers enable row level security;
+
 create or replace function public.make_deal_offer(p_public_id text,p_amount_cents bigint,p_typed_name text)
 returns void language plpgsql security definer set search_path=public as $$
 declare v_deal public.deals%rowtype;
@@ -70,6 +82,19 @@ begin
 end; $$;
 revoke all on function public.make_deal_offer(text,bigint,text) from public;
 grant execute on function public.make_deal_offer(text,bigint,text) to authenticated;
+
+create or replace function public.get_deal_offers(p_deal_id uuid)
+returns table(id uuid,amount_cents bigint,status text,buyer_name text,created_at timestamptz,is_mine boolean)
+language sql security definer set search_path=public as $$
+  select o.id,o.amount_cents,o.status,p.display_name,o.created_at,o.buyer_id=auth.uid()
+  from public.deal_offers o
+  join public.deals d on d.id=o.deal_id
+  join public.profiles p on p.id=o.buyer_id
+  where o.deal_id=p_deal_id and (d.seller_id=auth.uid() or o.buyer_id=auth.uid())
+  order by o.created_at desc;
+$$;
+revoke all on function public.get_deal_offers(uuid) from public;
+grant execute on function public.get_deal_offers(uuid) to authenticated;
 
 create or replace function public.respond_to_offer(p_offer_id uuid,p_accept boolean)
 returns void language plpgsql security definer set search_path=public as $$
