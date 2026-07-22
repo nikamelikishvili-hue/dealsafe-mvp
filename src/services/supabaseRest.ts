@@ -241,38 +241,8 @@ export async function reorderDealMedia(session:StoredSession,dealId:string,publi
 export async function updatePublishedDeal(session:StoredSession,dealId:string,draft:DealDraft){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/update_published_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_title:draft.title,p_description:draft.description,p_price_cents:toMinorUnits(draft.price,draft.currency),p_condition:draft.condition,p_delivery_method:draft.deliveryMethod})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not update deal')}return await response.json() as number}
 
 export async function createUserDeal(session: StoredSession, draft: DealDraft) {
-  const title = draft.title.trim();
-  if (title.length < 3 || title.length > 120) {
-    throw new Error('Item title must contain 3 to 120 characters.');
-  }
-  const serial = draft.serialNumber.trim();
-  const response = await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals`, {
-    method: 'POST',
-    headers: { ...headers(session.accessToken), Prefer: 'return=representation' },
-    body: JSON.stringify({
-      seller_id: session.user.id,
-      title,
-      description: draft.description,
-      price_cents: toMinorUnits(draft.price, draft.currency),
-      currency: draft.currency,
-      condition: draft.condition,
-      serial_last_four: serial ? serial.slice(-4) : null,
-      delivery_method: draft.deliveryMethod,
-      status: 'published',
-      current_agreement_version: 1,
-      published_at: new Date().toISOString(),
-      expires_at: new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString(),
-    }),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    const message = String(data?.message || '');
-    if (message.includes('deals_title_check')) {
-      throw new Error('Item title must contain 3 to 120 characters.');
-    }
-    throw new Error(message || 'Could not save this deal');
-  }
-  return mapDeal((data as DealRow[])[0], session.user.displayName, session.user.id, await accountEmailConfirmed(session));
+  const saved=await saveUserDealDraft(session,draft);
+  return publishUserDealDraft(session,saved.id,draft);
 }
 
 export async function saveUserDealDraft(session:StoredSession,draft:DealDraft){
@@ -299,8 +269,8 @@ export async function updateUserDealDraft(session:StoredSession,dealId:string,dr
 export async function publishUserDealDraft(session:StoredSession,dealId:string,draft:DealDraft){
   const title=draft.title.trim();
   if(title.length<3||title.length>120)throw new Error('Item title must contain 3 to 120 characters.');
-  const serial=draft.serialNumber.trim();const now=new Date().toISOString();
-  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals?id=eq.${encodeURIComponent(dealId)}&seller_id=eq.${session.user.id}&status=eq.draft`,{method:'PATCH',headers:{...headers(session.accessToken),Prefer:'return=representation'},body:JSON.stringify({title,description:draft.description.trim(),price_cents:toMinorUnits(draft.price,draft.currency),currency:draft.currency,condition:draft.condition,serial_last_four:serial?serial.slice(-4):null,delivery_method:draft.deliveryMethod,status:'published',current_agreement_version:1,published_at:now,expires_at:new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString(),updated_at:now})});
+  const serial=draft.serialNumber.trim();
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/publish_deal_with_seller_declarations`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_title:title,p_description:draft.description.trim(),p_price_cents:toMinorUnits(draft.price,draft.currency),p_currency:draft.currency,p_condition:draft.condition,p_serial_last_four:serial?serial.slice(-4):null,p_delivery_method:draft.deliveryMethod,p_expires_in_days:draft.expiresInDays||7})});
   const data=await response.json();
   if(!response.ok)throw new Error(data?.message||'Could not publish draft');
   if(!(data as DealRow[])[0])throw new Error('Draft was not found');
