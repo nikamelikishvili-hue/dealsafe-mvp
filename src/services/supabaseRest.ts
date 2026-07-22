@@ -150,6 +150,26 @@ async function authenticatedFetch(session:StoredSession,input:RequestInfo|URL,in
 export async function requestPasswordReset(email:string,redirectTo:string){const response=await fetch(`${supabaseUrl}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`,{method:'POST',headers:headers(),body:JSON.stringify({email})});if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not send reset email')}}
 export async function updateRecoveredPassword(accessToken:string,password:string){const response=await fetch(`${supabaseUrl}/auth/v1/user`,{method:'PUT',headers:headers(accessToken),body:JSON.stringify({password})});if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not update password')}}
 
+export async function updateAccountName(session:StoredSession,displayName:string){
+  const name=displayName.trim();
+  if(name.length<2)throw new Error('Name must contain at least 2 characters.');
+  const authResponse=await authenticatedFetch(session,`${supabaseUrl}/auth/v1/user`,{method:'PUT',headers:headers(session.accessToken),body:JSON.stringify({data:{display_name:name}})});
+  if(!authResponse.ok){const data=await authResponse.json();throw new Error(data?.msg||data?.error_description||'Could not update account name')}
+  const profileResponse=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(session.user.id)}`,{method:'PATCH',headers:{...headers(session.accessToken),Prefer:'return=minimal'},body:JSON.stringify({display_name:name})});
+  if(!profileResponse.ok){const data=await profileResponse.json();throw new Error(data?.message||'Could not update profile name')}
+  const current=getStoredSession()||session;
+  const updated:StoredSession={...current,user:{...current.user,displayName:name}};
+  localStorage.setItem(sessionKey,JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent<StoredSession>(sessionUpdatedEvent,{detail:updated}));
+  return updated;
+}
+
+export async function updateAccountPassword(session:StoredSession,password:string){
+  if(password.length<8)throw new Error('Password must contain at least 8 characters.');
+  const response=await authenticatedFetch(session,`${supabaseUrl}/auth/v1/user`,{method:'PUT',headers:headers(session.accessToken),body:JSON.stringify({password})});
+  if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not update password')}
+}
+
 export function signOut() { localStorage.removeItem(sessionKey); }
 
 function mapDeal(row: DealRow, sellerName: string, viewerId?: string) {
