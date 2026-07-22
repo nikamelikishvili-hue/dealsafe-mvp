@@ -71,3 +71,20 @@ $$;
 
 revoke all on function public.publish_deal_with_seller_declarations(uuid,text,text,bigint,text,text,text,text,integer) from public;
 grant execute on function public.publish_deal_with_seller_declarations(uuid,text,text,bigint,text,text,text,text,integer) to authenticated;
+
+create or replace function public.get_public_seller_declaration(p_public_id text)
+returns table(attested boolean,attested_at timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select deal.seller_attested_at is not null,deal.seller_attested_at
+  from public.deals deal
+  where deal.public_id=upper(trim(p_public_id))
+    and deal.status in ('published','accepted','completed')
+  limit 1;
+$$;
+
+revoke all on function public.get_public_seller_declaration(text) from public;
+grant execute on function public.get_public_seller_declaration(text) to anon,authenticated;

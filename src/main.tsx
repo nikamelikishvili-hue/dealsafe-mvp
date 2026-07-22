@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import QRCode from 'qrcode';
 import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, Bookmark, CalendarDays, Car, Check, Clock3, Copy, FileDown, FileSignature, Fingerprint, Flag, ImagePlus, Laptop, Link2, LockKeyhole, MailCheck, MapPin, MessageCircle, Package, PackageCheck, Pencil, Plus, QrCode, Scale, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Trash2, Truck, Watch, X } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
-import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminReports, getDealInspection, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicDeal, getPublicSellerTrustProfile, getPublicTrustPassport, getStoredSession, getTrustPassportSettings, isDealSaved, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, publishUserDealDraft, recordDealInspection, refreshSession, reorderDealMedia, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, setDealSaved, setTrustPassportEnabled, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealPhotos, type AdminReport, type DealInspection, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type StoredSession, type TimelineEvent, type TrustPassport, type TrustPassportSettings } from './services/supabaseRest';
+import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminReports, getDealInspection, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicDeal, getPublicSellerDeclaration, getPublicSellerTrustProfile, getPublicTrustPassport, getStoredSession, getTrustPassportSettings, isDealSaved, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, publishUserDealDraft, recordDealInspection, refreshSession, reorderDealMedia, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, setDealSaved, setTrustPassportEnabled, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealPhotos, type AdminReport, type DealInspection, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type SellerDeclarationRecord, type StoredSession, type TimelineEvent, type TrustPassport, type TrustPassportSettings } from './services/supabaseRest';
 import { getAppLanguage, setAppLanguage, supportedLanguages, t, type AppLanguage } from './i18n';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import type { Deal, DealDraft } from './domain';
@@ -48,6 +48,7 @@ import './seller-trust.css';
 import './trust-passport.css';
 import './watchlist.css';
 import './deal-templates.css';
+import './seller-declaration-status.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset';
 interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
@@ -305,6 +306,15 @@ function SellerDeclarationChecklist({value,onChange}:{value:SellerDeclarations;o
   return <fieldset className="seller-declarations"><legend><ShieldCheck/>{t('Seller declaration')}</legend>{items.map(item=><label key={item.key} className={value[item.key]?'checked':''}><input type="checkbox" checked={value[item.key]} onChange={event=>onChange({...value,[item.key]:event.target.checked})}/><span>{t(item.label)}</span></label>)}<small><LockKeyhole/>{t('These confirmations are recorded when the Deal Link is published.')}</small></fieldset>;
 }
 
+function PublicSellerDeclaration({deal}:{deal:Deal}){
+  const [record,setRecord]=useState<SellerDeclarationRecord|null>(null);const [loaded,setLoaded]=useState(false);
+  useEffect(()=>{let current=true;setLoaded(false);getPublicSellerDeclaration(deal.publicId).then(value=>{if(current){setRecord(value);setLoaded(true)}}).catch(()=>{if(current){setRecord(null);setLoaded(true)}});return()=>{current=false}},[deal.publicId]);
+  if(!loaded||!record)return null;
+  if(!record.attested)return <section className="seller-declaration-status missing no-print"><div className="seller-declaration-heading"><ShieldAlert/><div><p className="eyebrow">{t('Seller declaration')}</p><h2>{t('No recorded seller declaration')}</h2></div></div><p className="seller-declaration-note"><Clock3/>{t('This Deal Link may have been published before seller declarations were required.')}</p></section>;
+  const items=['Ownership or authority to sell declared','Item declared not stolen, counterfeit, or prohibited','Known defects and material facts declared'];
+  return <section className="seller-declaration-status no-print"><div className="seller-declaration-heading"><BadgeCheck/><div><p className="eyebrow">{t('Recorded statement')}</p><h2>{t('Seller declarations recorded')}</h2></div></div><ul>{items.map(item=><li key={item}><Check/><span>{t(item)}</span></li>)}</ul>{record.attested_at&&<p className="seller-declaration-meta">{t('Recorded')} · {formatDateTime(record.attested_at)}</p>}<p className="seller-declaration-note"><ShieldCheck/>{t("This records the seller's statements. It does not verify ownership or authenticity.")}</p></section>;
+}
+
 function CreateDealReview({draft,photos,creating,onEdit,onSaveDraft,onPublish}:{draft:DealDraft;photos:File[];creating:boolean;onEdit:()=>void;onSaveDraft:()=>void;onPublish:()=>void}){
   const expiresAt=new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000);
   const [declarations,setDeclarations]=useState<SellerDeclarations>(emptySellerDeclarations);
@@ -434,6 +444,7 @@ function App() {
       {view==='deal'&&active&&active.status!=='draft'&&<AgreementExport deal={active}/>}
       {view==='deal'&&active&&<DealExpiry deal={active} now={clock}/>}
       {view==='deal'&&active&&active.status!=='draft'&&<DealRiskCheck deal={active}/>}
+      {view==='deal'&&active&&active.status!=='draft'&&<PublicSellerDeclaration deal={active}/>}
       {view==='deal'&&active&&active.status!=='draft'&&<SellerTrustProfile deal={active}/>}
       {view==='deal'&&active&&active.viewerRole!=='seller'&&!(['draft','cancelled'] as Deal['status'][]).includes(active.status)&&<SaveDealButton deal={active} session={session} onChanged={refreshSavedDeals} onSignIn={()=>{setReturnAfterAuth('deal');setView('auth')}}/>}
       {view==='deal'&&active&&active.viewerRole==='seller'&&active.status==='published'&&!activeExpired&&<BuyerInvitePanel deal={active}/>}
