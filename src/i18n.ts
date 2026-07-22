@@ -1,5 +1,6 @@
 import { localePacks } from './localePacks';
 import { extraLocalePacks } from './extraLocalePacks';
+import { paymentLocalePacks } from './paymentLocalePacks';
 
 export const supportedLanguages=[
   {code:'en',name:'English'},
@@ -786,6 +787,7 @@ const deliveryAddressLabels:Record<string,Record<string,string>>={
   }
 };
 Object.entries(deliveryAddressLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
+Object.entries(paymentLocalePacks).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
 const applyDocumentLanguage=(language:AppLanguage)=>{document.documentElement.lang=language;document.documentElement.dir=language==='ar'||language==='he'?'rtl':'ltr'};
 applyDocumentLanguage(activeLanguage);
 
