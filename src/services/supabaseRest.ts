@@ -1,5 +1,6 @@
 import type { Deal, DealDraft } from '../domain';
 import { toMinorUnits, type CurrencyCode } from '../currency';
+import { isVideoUpload, prepareMediaUpload } from '../mediaPrivacy';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
@@ -220,8 +221,8 @@ function publicMediaUrl(path: string) {
 export async function uploadDealPhotos(session: StoredSession, dealId: string, files: File[], startIndex=0) {
   const urls: string[] = [];
   for (let index=0; index<files.length; index++) {
-    const file=files[index];
-    const isVideo=['video/mp4','video/webm'].includes(file.type)||/^.+\.(mp4|webm)$/i.test(file.name);
+    const file=await prepareMediaUpload(files[index]);
+    const isVideo=isVideoUpload(file);
     if(file.size>(isVideo?25:6)*1024*1024)throw new Error(`${isVideo?'Video':'Photo'} ${index+1} is too large`);
     if(!['image/jpeg','image/png','image/webp','image/heic','video/mp4','video/webm'].includes(file.type)&&!/^.+\.(jpe?g|png|webp|heic|mp4|webm)$/i.test(file.name))throw new Error(`File ${index+1} has an unsupported format`);
     const extension=file.name.split('.').pop()?.toLowerCase() || 'jpg';
