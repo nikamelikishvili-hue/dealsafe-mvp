@@ -28,6 +28,7 @@ import './cover-selector.css';
 import './deal-edit.css';
 import './account-settings.css';
 import './address-autocomplete.css';
+import './deal-readiness.css';
 import './language.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'forgot' | 'reset';
@@ -56,6 +57,21 @@ function HandoffPanel({deal,session,onComplete}:{deal:Deal;session:StoredSession
 }
 
 function RatingPanel({deal,session}:{deal:Deal;session:StoredSession}){const [stars,setStars]=useState(5);const [comment,setComment]=useState('');const [message,setMessage]=useState('');const send=async(e:React.FormEvent)=>{e.preventDefault();try{await submitRating(session,deal.id,stars,comment);setMessage('Thank you. Your rating was saved.')}catch(error){setMessage(error instanceof Error?error.message:'Could not save rating')}};return <section className="rating-panel"><Star/><div><p className="eyebrow">{t('Deal completed')}</p><h2>{t('Rate the other party')}</h2><form onSubmit={send}><label>{t('Rating')}<select value={stars} onChange={e=>setStars(Number(e.target.value))}><option value="5">{t('5 — Excellent')}</option><option value="4">{t('4 — Good')}</option><option value="3">{t('3 — Okay')}</option><option value="2">{t('2 — Poor')}</option><option value="1">{t('1 — Very poor')}</option></select></label><label>{t('Comment')}<textarea maxLength={500} value={comment} onChange={e=>setComment(e.target.value)} placeholder={t('What went well?')}/></label><button className="primary">{t('Submit rating')}</button></form>{message&&<div className="notice">{t(message)}</div>}</div></section>}
+
+function DealReadiness({deal}:{deal:Deal}){
+  const checks=[
+    {label:'Seller contact',complete:deal.sellerVerification==='verified'},
+    {label:'Item photos or video',complete:Boolean(deal.mediaUrls?.length)},
+    {label:'Known condition and defects',complete:deal.description.trim().length>=20},
+    {label:'Serial or IMEI (optional)',complete:Boolean(deal.serialNumber)},
+    {label:'Shared terms',complete:deal.agreementVersion>=1},
+    {label:'Recorded consent',complete:!['draft','published'].includes(deal.status)},
+    {label:'Handoff',complete:Boolean(deal.deliveryMethod)}
+  ];
+  const completed=checks.filter(check=>check.complete).length;
+  const percentage=Math.round(completed/checks.length*100);
+  return <section className="deal-readiness no-print"><div className="readiness-heading"><ShieldCheck/><div><p className="eyebrow">{t('Clear verification')}</p><h2>{t('Verification & Security Center')}</h2></div><div className="readiness-score"><strong>{completed}/{checks.length}</strong><small>{t('Completed')}</small></div></div><div className="readiness-progress" role="progressbar" aria-label={t('Verification & Security Center')} aria-valuemin={0} aria-valuemax={checks.length} aria-valuenow={completed}><span style={{width:`${percentage}%`}}/></div><div className="readiness-grid">{checks.map(check=><article key={check.label} className={check.complete?'complete':''}>{check.complete?<Check/>:<Clock3/>}<span>{t(check.label)}</span><small>{t(check.complete?'Completed':'pending')}</small></article>)}</div><p className="readiness-note"><ShieldCheck/>{t('DealSafe does not hold or insure payments in this beta. Never send deposits outside the agreed process.')}</p></section>
+}
 
 function SecurityCenter({email,status,message,onRequest}:{email:string;status:ProfileSummary['verification_status'];message:string;onRequest:()=>void}){
   return <section className="security-center"><div className="security-heading"><ShieldCheck/><div><p className="eyebrow">{t('Account protection')}</p><h2>{t('Verification & Security Center')}</h2></div></div><div className="security-checks"><article><Check/><div><b>{t('Email account active')}</b><span>{email}</span></div></article><article className={status==='verified'?'verified':''}><BadgeCheck/><div><b>{t('Identity verification')}</b><span>{t(status.replace('_',' '))}</span></div>{status==='not_started'&&<button className="secondary" onClick={onRequest}>{t('Request verification')}</button>}</article><article><LockKeyhole/><div><b>{t('Secure handoff enabled')}</b><span>{t('Meeting confirmation and one-time PIN protect in-person deals.')}</span></div></article></div>{status==='pending'&&<div className="notice">{t('Identity verification is pending. Approval requires a licensed verification provider, which is not connected in this beta.')}</div>}{message&&<div className="notice">{t(message)}</div>}<p className="security-warning"><LockKeyhole/> {t('DealSafe does not hold or insure payments in this beta. Never send deposits outside the agreed process.')}</p></section>
@@ -155,6 +171,7 @@ function App() {
       {view==='create'&&authMessage&&<div className="creation-error notice">{t(authMessage)}</div>}
       {view==='create'&&creating&&<div className="creation-progress notice">{t('Creating your Deal Link…')}</div>}
       {view==='deal'&&active&&<AgreementExport deal={active}/>}
+      {view==='deal'&&active&&<DealReadiness deal={active}/>}
       {view==='deal'&&active&&session&&active.viewerRole==='seller'&&active.status==='published'&&<DealEditor deal={active} session={session} onSaved={updated=>{setActive(updated);setDeals(items=>items.map(item=>item.id===updated.id?updated:item))}}/>}
       {view==='deal'&&active&&session&&active.viewerRole==='seller'&&active.status!=='cancelled'&&<PhotoManager deal={active} session={session} onAdded={urls=>{const updated={...active,mediaUrls:[...(active.mediaUrls||[]),...urls]};setActive(updated);setDeals(items=>items.map(item=>item.id===active.id?updated:item))}}/>}
       {view==='deal'&&active&&session&&active.viewerRole==='seller'&&active.status!=='cancelled'&&<ExistingMediaManager deal={active} session={session} onRemoved={url=>{const updated={...active,mediaUrls:(active.mediaUrls||[]).filter(item=>item!==url)};setActive(updated);setDeals(items=>items.map(item=>item.id===active.id?updated:item))}}/>}
