@@ -1,0 +1,1 @@
+.photo-previews video,.manager-previews video{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;background:#15221d}.deal-gallery video{width:100%;aspect-ratio:1;object-fit:contain;border-radius:12px;background:#15221d}.deal-gallery video.main-photo{grid-column:1/-1;aspect-ratio:16/9}

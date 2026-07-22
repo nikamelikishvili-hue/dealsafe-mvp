@@ -133,11 +133,12 @@ export async function uploadDealPhotos(session: StoredSession, dealId: string, f
   const urls: string[] = [];
   for (let index=0; index<files.length; index++) {
     const file=files[index];
-    if(file.size>6*1024*1024)throw new Error(`Photo ${index+1} is larger than 6 MB`);
-    if(!['image/jpeg','image/png','image/webp','image/heic'].includes(file.type)&&!/^.+\.(jpe?g|png|webp|heic)$/i.test(file.name))throw new Error(`Photo ${index+1} has an unsupported format`);
+    const isVideo=['video/mp4','video/webm'].includes(file.type)||/^.+\.(mp4|webm)$/i.test(file.name);
+    if(file.size>(isVideo?25:6)*1024*1024)throw new Error(`${isVideo?'Video':'Photo'} ${index+1} is too large`);
+    if(!['image/jpeg','image/png','image/webp','image/heic','video/mp4','video/webm'].includes(file.type)&&!/^.+\.(jpe?g|png|webp|heic|mp4|webm)$/i.test(file.name))throw new Error(`File ${index+1} has an unsupported format`);
     const extension=file.name.split('.').pop()?.toLowerCase() || 'jpg';
     const path=`${session.user.id}/${dealId}/${crypto.randomUUID()}.${extension}`;
-    const upload=await fetch(`${supabaseUrl}/storage/v1/object/deal-media/${path}`,{method:'POST',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`,'Content-Type':file.type||'image/jpeg','x-upsert':'false'},body:file});
+    const upload=await fetch(`${supabaseUrl}/storage/v1/object/deal-media/${path}`,{method:'POST',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`,'Content-Type':file.type||(isVideo?'video/mp4':'image/jpeg'),'x-upsert':'false'},body:file});
     if(!upload.ok) throw new Error(`Photo ${index+1} could not be uploaded`);
     const record=await fetch(`${supabaseUrl}/rest/v1/deal_media`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=minimal'},body:JSON.stringify({deal_id:dealId,storage_path:path,sort_order:startIndex+index})});
     if(!record.ok) throw new Error(`Photo ${index+1} could not be linked to the deal`);

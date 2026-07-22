@@ -1,6 +1,6 @@
 -- Run once in Supabase SQL Editor. Published item photos are intentionally public.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('deal-media', 'deal-media', true, 6291456, array['image/jpeg','image/png','image/webp','image/heic'])
+values ('deal-media', 'deal-media', true, 26214400, array['image/jpeg','image/png','image/webp','image/heic','video/mp4','video/webm'])
 on conflict (id) do update set public=excluded.public, file_size_limit=excluded.file_size_limit, allowed_mime_types=excluded.allowed_mime_types;
 
 drop policy if exists "owners upload deal media" on storage.objects;
