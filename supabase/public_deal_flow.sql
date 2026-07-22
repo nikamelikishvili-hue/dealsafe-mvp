@@ -17,9 +17,10 @@ begin
         'price_cents', new.price_cents,
         'currency', new.currency,
         'condition', new.condition,
-        'delivery_method', new.delivery_method
+        'delivery_method', new.delivery_method,
+        'expires_at', new.expires_at
       ),
-      encode(extensions.digest(concat_ws('|', new.title, new.description, new.price_cents, new.currency, new.condition, new.delivery_method), 'sha256'), 'hex'),
+      encode(extensions.digest(concat_ws('|', new.title, new.description, new.price_cents, new.currency, new.condition, new.delivery_method, new.expires_at), 'sha256'), 'hex'),
       new.seller_id)
   on conflict (deal_id, version) do nothing;
   return new;
@@ -46,12 +47,13 @@ select d.id, 1,
 from public.deals d
 on conflict (deal_id, version) do nothing;
 
-create or replace function public.get_public_deal(p_public_id text)
+drop function if exists public.get_public_deal(text);
+create function public.get_public_deal(p_public_id text)
 returns table (
   id uuid, public_id text, title text, description text, price_cents bigint,
   currency char(3), condition text, serial_last_four text, delivery_method text,
   status public.deal_status, agreement_version integer, seller_name text,
-  seller_verification public.verification_status, created_at timestamptz
+  seller_verification public.verification_status, created_at timestamptz, expires_at timestamptz
 )
 language sql
 stable
@@ -59,7 +61,7 @@ security definer set search_path = public
 as $$
   select d.id, d.public_id, d.title, d.description, d.price_cents, d.currency,
     d.condition, d.serial_last_four, d.delivery_method, d.status,
-    greatest(d.current_agreement_version, 1), p.display_name, p.verification_status, d.created_at
+    greatest(d.current_agreement_version, 1), p.display_name, p.verification_status, d.created_at, d.expires_at
   from public.deals d
   join public.profiles p on p.id = d.seller_id
   where d.public_id = p_public_id and d.status in ('published', 'accepted', 'completed');
@@ -83,6 +85,8 @@ begin
   select * into v_deal from public.deals where public_id = p_public_id for update;
   if not found then raise exception 'Deal not found'; end if;
   if v_deal.seller_id = auth.uid() then raise exception 'Seller cannot accept their own deal'; end if;
+  if v_deal.status <> 'published' then raise exception 'Deal is no longer available'; end if;
+  if v_deal.expires_at <= now() then raise exception 'This Deal Link has expired'; end if;
   if v_deal.buyer_id is not null and v_deal.buyer_id <> auth.uid() then raise exception 'Deal already has a buyer'; end if;
 
   select id into v_agreement_id from public.agreement_versions

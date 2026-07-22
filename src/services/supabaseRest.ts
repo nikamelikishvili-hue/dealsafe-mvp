@@ -26,6 +26,7 @@ interface DealRow {
   serial_last_four: string | null; delivery_method: 'Meet in person' | 'Ship to buyer';
   status: 'draft' | 'published' | 'accepted' | 'completed' | 'cancelled' | 'disputed';
   current_agreement_version: number; created_at: string;
+  expires_at: string | null;
   deal_media?: { storage_path: string; sort_order: number }[];
   seller_id?: string; buyer_id?: string | null;
 }
@@ -182,6 +183,7 @@ function mapDeal(row: DealRow, sellerName: string, viewerId?: string) {
     deliveryMethod: row.delivery_method, status: row.status, sellerName,
     sellerVerification: 'not_started' as const,
     agreementVersion: Math.max(1, row.current_agreement_version), createdAt: row.created_at,
+    expiresAt: row.expires_at || undefined,
     mediaUrls: (row.deal_media || []).sort((a,b)=>a.sort_order-b.sort_order).map(item=>publicMediaUrl(item.storage_path)),
     viewerRole,
   };
@@ -239,6 +241,7 @@ export async function createUserDeal(session: StoredSession, draft: DealDraft) {
       status: 'published',
       current_agreement_version: 1,
       published_at: new Date().toISOString(),
+      expires_at: new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString(),
     }),
   });
   const data = await response.json();

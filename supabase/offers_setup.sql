@@ -10,7 +10,7 @@ create or replace function public.make_deal_offer(p_public_id text,p_amount_cent
 returns void language plpgsql security definer set search_path=public as $$
 declare v_deal public.deals%rowtype;
 begin
-  select * into v_deal from public.deals where public_id=p_public_id and status='published';
+  select * into v_deal from public.deals where public_id=p_public_id and status='published' and expires_at>now();
   if not found then raise exception 'This deal is not accepting offers'; end if;
   if v_deal.seller_id=auth.uid() then raise exception 'Seller cannot make an offer'; end if;
   if p_amount_cents<100 or char_length(trim(p_typed_name))<2 then raise exception 'Enter a valid offer and full name'; end if;
@@ -35,9 +35,9 @@ begin
  select * into v_offer from public.deal_offers where id=p_offer_id and status='pending' for update;if not found then raise exception 'Pending offer not found';end if;
  select * into v_deal from public.deals where id=v_offer.deal_id for update;if v_deal.seller_id<>auth.uid() then raise exception 'Only the seller can respond';end if;
  if not p_accept then update public.deal_offers set status='declined',responded_at=now() where id=p_offer_id;insert into public.audit_events(deal_id,actor_id,event_type) values(v_deal.id,auth.uid(),'offer_declined');return;end if;
- if v_deal.status<>'published' then raise exception 'Deal is no longer available';end if;
+ if v_deal.status<>'published' or v_deal.expires_at<=now() then raise exception 'Deal is no longer available';end if;
  v_version:=greatest(v_deal.current_agreement_version,1)+1;
- insert into public.agreement_versions(deal_id,version,terms_json,content_hash,created_by) values(v_deal.id,v_version,jsonb_build_object('title',v_deal.title,'description',v_deal.description,'price_cents',v_offer.amount_cents,'currency',v_deal.currency,'condition',v_deal.condition,'delivery_method',v_deal.delivery_method),encode(extensions.digest(concat_ws('|',v_deal.title,v_deal.description,v_offer.amount_cents,v_deal.currency,v_deal.condition,v_deal.delivery_method),'sha256'),'hex'),auth.uid()) returning id into v_agreement_id;
+ insert into public.agreement_versions(deal_id,version,terms_json,content_hash,created_by) values(v_deal.id,v_version,jsonb_build_object('title',v_deal.title,'description',v_deal.description,'price_cents',v_offer.amount_cents,'currency',v_deal.currency,'condition',v_deal.condition,'delivery_method',v_deal.delivery_method,'expires_at',v_deal.expires_at),encode(extensions.digest(concat_ws('|',v_deal.title,v_deal.description,v_offer.amount_cents,v_deal.currency,v_deal.condition,v_deal.delivery_method,v_deal.expires_at),'sha256'),'hex'),auth.uid()) returning id into v_agreement_id;
  insert into public.agreement_acceptances(agreement_version_id,signer_id,typed_name,consent_text) values(v_agreement_id,v_offer.buyer_id,v_offer.typed_name,'I offered this amount and accept this version of the DealSafe agreement.');
  select display_name into v_seller_name from public.profiles where id=auth.uid();insert into public.agreement_acceptances(agreement_version_id,signer_id,typed_name,consent_text) values(v_agreement_id,auth.uid(),v_seller_name,'I accept this offer and this version of the DealSafe agreement.');
  update public.deals set price_cents=v_offer.amount_cents,buyer_id=v_offer.buyer_id,status='accepted',current_agreement_version=v_version,updated_at=now() where id=v_deal.id;

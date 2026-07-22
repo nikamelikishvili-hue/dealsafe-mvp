@@ -20,6 +20,7 @@ export interface Deal {
   buyerVerification?: VerificationStatus;
   agreementVersion: number;
   createdAt: string;
+  expiresAt?: string;
   mediaUrls?: string[];
   viewerRole?: 'seller' | 'buyer' | 'visitor';
 }
@@ -28,4 +29,5 @@ export interface DealDraft extends Pick<Deal, 'title' | 'description' | 'conditi
   price: string;
   currency: CurrencyCode;
   serialNumber: string;
+  expiresInDays?: number;
 }

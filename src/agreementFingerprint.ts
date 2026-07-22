@@ -2,7 +2,7 @@ import type { Deal } from './domain';
 
 type FingerprintDeal = Pick<Deal,
   'publicId' | 'agreementVersion' | 'title' | 'description' | 'priceCents' |
-  'currency' | 'condition' | 'serialNumber' | 'deliveryMethod'
+  'currency' | 'condition' | 'serialNumber' | 'deliveryMethod' | 'expiresAt'
 >;
 
 export function serializeAgreement(deal: FingerprintDeal) {
@@ -17,6 +17,7 @@ export function serializeAgreement(deal: FingerprintDeal) {
     condition: deal.condition,
     serialNumber: deal.serialNumber || '',
     deliveryMethod: deal.deliveryMethod,
+    expiresAt: deal.expiresAt || '',
   });
 }
 

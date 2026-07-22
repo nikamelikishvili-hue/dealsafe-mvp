@@ -28,6 +28,7 @@ create table public.deals (
   status public.deal_status not null default 'draft',
   current_agreement_version integer not null default 0,
   published_at timestamptz,
+  expires_at timestamptz not null default (now() + interval '7 days'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

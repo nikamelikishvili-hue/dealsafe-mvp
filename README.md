@@ -10,6 +10,7 @@ A mobile-first proof of concept for creating a trusted transaction record and sh
 - Verification placeholders for both parties
 - Digital agreement preview and acceptance record
 - Post-completion ratings
+- Enforceable Deal Link expiration with seller-selected validity periods
 - Supabase-ready PostgreSQL schema with row-level-security notes
 - Editable product brief, flows, roadmap, and budget
 
@@ -25,8 +26,8 @@ Open the address shown in the terminal. No credentials are needed for the demo; 
 ## Production setup
 
 1. Create a Supabase project and run `supabase/schema.sql`.
-2. Copy `.env.example` to `.env` and add the project URL and anonymous key.
-3. Replace `src/services/demoRepository.ts` with a Supabase implementation of `DealRepository`.
+2. After the other feature setup files, run `supabase/deal_expiration_setup.sql` last.
+3. Copy `.env.example` to `.env` and add the project URL and anonymous key.
 4. Connect verification and e-sign providers through the interfaces in `src/services/providers.ts`.
 
 ## Important MVP boundary
