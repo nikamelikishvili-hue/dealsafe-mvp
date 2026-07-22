@@ -202,6 +202,44 @@ const createReviewLabels:Record<string,Record<string,string>>={
   hi:{'Review before publishing':'प्रकाशित करने से पहले समीक्षा करें','Check every detail before creating the public Deal Link.':'सार्वजनिक डील लिंक बनाने से पहले हर विवरण जाँचें।','No media selected':'कोई मीडिया चयनित नहीं है','The Deal Link is not public until you confirm.':'आपकी पुष्टि से पहले डील लिंक सार्वजनिक नहीं होगा।','Confirm and publish':'पुष्टि करें और प्रकाशित करें','Review deal':'डील की समीक्षा करें'}
 };
 Object.entries(createReviewLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
+const savedDraftLabels:Record<string,Record<string,string>>={
+  en:{'Save as draft':'Save as draft','Private draft':'Private draft','This draft is private and only you can see it.':'This draft is private and only you can see it.','Not published':'Not published','Save changes':'Save changes','Draft saved.':'Draft saved.','Deal Link published.':'Deal Link published.','draft':'draft'},
+  ka:{'Save as draft':'მონახაზად შენახვა','Private draft':'პირადი მონახაზი','This draft is private and only you can see it.':'ეს მონახაზი პირადია და მხოლოდ თქვენ ხედავთ.','Not published':'გამოქვეყნებული არ არის','Save changes':'ცვლილებების შენახვა','Draft saved.':'მონახაზი შენახულია.','Deal Link published.':'Deal Link გამოქვეყნებულია.','draft':'მონახაზი'},
+  de:{'Save as draft':'Als Entwurf speichern','Private draft':'Privater Entwurf','This draft is private and only you can see it.':'Dieser Entwurf ist privat und nur für Sie sichtbar.','Not published':'Nicht veröffentlicht','Save changes':'Änderungen speichern','Draft saved.':'Entwurf gespeichert.','Deal Link published.':'Deal-Link veröffentlicht.','draft':'Entwurf'},
+  es:{'Save as draft':'Guardar como borrador','Private draft':'Borrador privado','This draft is private and only you can see it.':'Este borrador es privado y solo usted puede verlo.','Not published':'Sin publicar','Save changes':'Guardar cambios','Draft saved.':'Borrador guardado.','Deal Link published.':'Enlace publicado.','draft':'borrador'},
+  fr:{'Save as draft':'Enregistrer comme brouillon','Private draft':'Brouillon privé','This draft is private and only you can see it.':'Ce brouillon est privé et vous seul pouvez le voir.','Not published':'Non publié','Save changes':'Enregistrer les modifications','Draft saved.':'Brouillon enregistré.','Deal Link published.':'Lien publié.','draft':'brouillon'},
+  pt:{'Save as draft':'Guardar como rascunho','Private draft':'Rascunho privado','This draft is private and only you can see it.':'Este rascunho é privado e apenas o utilizador pode vê-lo.','Not published':'Não publicado','Save changes':'Guardar alterações','Draft saved.':'Rascunho guardado.','Deal Link published.':'Link publicado.','draft':'rascunho'},
+  it:{'Save as draft':'Salva come bozza','Private draft':'Bozza privata','This draft is private and only you can see it.':'Questa bozza è privata e visibile solo a te.','Not published':'Non pubblicato','Save changes':'Salva modifiche','Draft saved.':'Bozza salvata.','Deal Link published.':'Link pubblicato.','draft':'bozza'},
+  ru:{'Save as draft':'Сохранить как черновик','Private draft':'Личный черновик','This draft is private and only you can see it.':'Этот черновик виден только вам.','Not published':'Не опубликовано','Save changes':'Сохранить изменения','Draft saved.':'Черновик сохранён.','Deal Link published.':'Ссылка опубликована.','draft':'черновик'},
+  tr:{'Save as draft':'Taslak olarak kaydet','Private draft':'Özel taslak','This draft is private and only you can see it.':'Bu taslak özeldir ve yalnızca siz görebilirsiniz.','Not published':'Yayınlanmadı','Save changes':'Değişiklikleri kaydet','Draft saved.':'Taslak kaydedildi.','Deal Link published.':'Anlaşma bağlantısı yayınlandı.','draft':'taslak'},
+  el:{'Save as draft':'Αποθήκευση ως πρόχειρο','Private draft':'Ιδιωτικό πρόχειρο','This draft is private and only you can see it.':'Αυτό το πρόχειρο είναι ιδιωτικό και το βλέπετε μόνο εσείς.','Not published':'Δεν δημοσιεύτηκε','Save changes':'Αποθήκευση αλλαγών','Draft saved.':'Το πρόχειρο αποθηκεύτηκε.','Deal Link published.':'Ο σύνδεσμος δημοσιεύτηκε.','draft':'πρόχειρο'},
+  zh:{'Save as draft':'保存为草稿','Private draft':'私人草稿','This draft is private and only you can see it.':'此草稿为私人内容，仅您可见。','Not published':'未发布','Save changes':'保存更改','Draft saved.':'草稿已保存。','Deal Link published.':'交易链接已发布。','draft':'草稿'},
+  ja:{'Save as draft':'下書きとして保存','Private draft':'非公開の下書き','This draft is private and only you can see it.':'この下書きは非公開で、あなただけが閲覧できます。','Not published':'未公開','Save changes':'変更を保存','Draft saved.':'下書きを保存しました。','Deal Link published.':'取引リンクを公開しました。','draft':'下書き'},
+  ko:{'Save as draft':'초안으로 저장','Private draft':'비공개 초안','This draft is private and only you can see it.':'이 초안은 비공개이며 본인만 볼 수 있습니다.','Not published':'게시되지 않음','Save changes':'변경사항 저장','Draft saved.':'초안이 저장되었습니다.','Deal Link published.':'거래 링크가 게시되었습니다.','draft':'초안'},
+  ar:{'Save as draft':'حفظ كمسودة','Private draft':'مسودة خاصة','This draft is private and only you can see it.':'هذه المسودة خاصة ولا يراها سواك.','Not published':'غير منشور','Save changes':'حفظ التغييرات','Draft saved.':'تم حفظ المسودة.','Deal Link published.':'تم نشر رابط الصفقة.','draft':'مسودة'},
+  he:{'Save as draft':'שמירה כטיוטה','Private draft':'טיוטה פרטית','This draft is private and only you can see it.':'הטיוטה פרטית ורק לך יש גישה אליה.','Not published':'לא פורסם','Save changes':'שמירת שינויים','Draft saved.':'הטיוטה נשמרה.','Deal Link published.':'קישור העסקה פורסם.','draft':'טיוטה'},
+  hi:{'Save as draft':'ड्राफ़्ट के रूप में सहेजें','Private draft':'निजी ड्राफ़्ट','This draft is private and only you can see it.':'यह ड्राफ़्ट निजी है और केवल आपको दिखाई देता है।','Not published':'प्रकाशित नहीं','Save changes':'बदलाव सहेजें','Draft saved.':'ड्राफ़्ट सहेजा गया।','Deal Link published.':'डील लिंक प्रकाशित हुआ।','draft':'ड्राफ़्ट'}
+};
+Object.entries(savedDraftLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
+const draftPrivacyLabels:Record<string,Record<string,string>>={
+  en:{'This draft is not shared through a Deal Link until you publish it.':'This draft is not shared through a Deal Link until you publish it.'},
+  ka:{'This draft is not shared through a Deal Link until you publish it.':'გამოქვეყნებამდე ეს მონახაზი Deal Link-ით არ გაზიარდება.'},
+  de:{'This draft is not shared through a Deal Link until you publish it.':'Dieser Entwurf wird erst nach der Veröffentlichung über einen Deal-Link geteilt.'},
+  es:{'This draft is not shared through a Deal Link until you publish it.':'Este borrador no se comparte mediante un enlace hasta que lo publique.'},
+  fr:{'This draft is not shared through a Deal Link until you publish it.':'Ce brouillon n’est pas partagé par un lien avant sa publication.'},
+  pt:{'This draft is not shared through a Deal Link until you publish it.':'Este rascunho não é partilhado por um link até ser publicado.'},
+  it:{'This draft is not shared through a Deal Link until you publish it.':'Questa bozza non viene condivisa tramite un link finché non la pubblichi.'},
+  ru:{'This draft is not shared through a Deal Link until you publish it.':'Черновик не будет доступен по ссылке, пока вы его не опубликуете.'},
+  tr:{'This draft is not shared through a Deal Link until you publish it.':'Bu taslak siz yayınlayana kadar bir anlaşma bağlantısıyla paylaşılmaz.'},
+  el:{'This draft is not shared through a Deal Link until you publish it.':'Αυτό το πρόχειρο δεν κοινοποιείται μέσω συνδέσμου μέχρι να το δημοσιεύσετε.'},
+  zh:{'This draft is not shared through a Deal Link until you publish it.':'在您发布之前，此草稿不会通过交易链接共享。'},
+  ja:{'This draft is not shared through a Deal Link until you publish it.':'公開するまで、この下書きは取引リンクで共有されません。'},
+  ko:{'This draft is not shared through a Deal Link until you publish it.':'게시하기 전에는 이 초안이 거래 링크로 공유되지 않습니다.'},
+  ar:{'This draft is not shared through a Deal Link until you publish it.':'لن تتم مشاركة هذه المسودة عبر رابط الصفقة حتى تنشرها.'},
+  he:{'This draft is not shared through a Deal Link until you publish it.':'הטיוטה לא תשותף באמצעות קישור עסקה עד לפרסומה.'},
+  hi:{'This draft is not shared through a Deal Link until you publish it.':'जब तक आप प्रकाशित नहीं करते, यह ड्राफ़्ट डील लिंक से साझा नहीं होगा।'}
+};
+Object.entries(draftPrivacyLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
 const applyDocumentLanguage=(language:AppLanguage)=>{document.documentElement.lang=language;document.documentElement.dir=language==='ar'||language==='he'?'rtl':'ltr'};
 applyDocumentLanguage(activeLanguage);
 

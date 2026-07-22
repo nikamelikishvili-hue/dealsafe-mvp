@@ -182,7 +182,7 @@ function mapDeal(row: DealRow, sellerName: string, viewerId?: string) {
     serialNumber: row.serial_last_four ? `•••• ${row.serial_last_four}` : undefined,
     deliveryMethod: row.delivery_method, status: row.status, sellerName,
     sellerVerification: 'not_started' as const,
-    agreementVersion: Math.max(1, row.current_agreement_version), createdAt: row.created_at,
+    agreementVersion: row.current_agreement_version, createdAt: row.created_at,
     expiresAt: row.expires_at || undefined,
     mediaUrls: (row.deal_media || []).sort((a,b)=>a.sort_order-b.sort_order).map(item=>publicMediaUrl(item.storage_path)),
     viewerRole,
@@ -257,6 +257,38 @@ export async function createUserDeal(session: StoredSession, draft: DealDraft) {
     throw new Error(message || 'Could not save this deal');
   }
   return mapDeal((data as DealRow[])[0], session.user.displayName, session.user.id);
+}
+
+export async function saveUserDealDraft(session:StoredSession,draft:DealDraft){
+  const title=draft.title.trim();
+  if(title.length<3||title.length>120)throw new Error('Item title must contain 3 to 120 characters.');
+  const serial=draft.serialNumber.trim();
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=representation'},body:JSON.stringify({seller_id:session.user.id,title,description:draft.description.trim(),price_cents:toMinorUnits(draft.price,draft.currency),currency:draft.currency,condition:draft.condition,serial_last_four:serial?serial.slice(-4):null,delivery_method:draft.deliveryMethod,status:'draft',current_agreement_version:0,published_at:null,expires_at:new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString()})});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data?.message||'Could not save draft');
+  return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id);
+}
+
+export async function updateUserDealDraft(session:StoredSession,dealId:string,draft:DealDraft){
+  const title=draft.title.trim();
+  if(title.length<3||title.length>120)throw new Error('Item title must contain 3 to 120 characters.');
+  const serial=draft.serialNumber.trim();
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals?id=eq.${encodeURIComponent(dealId)}&seller_id=eq.${session.user.id}&status=eq.draft`,{method:'PATCH',headers:{...headers(session.accessToken),Prefer:'return=representation'},body:JSON.stringify({title,description:draft.description.trim(),price_cents:toMinorUnits(draft.price,draft.currency),currency:draft.currency,condition:draft.condition,serial_last_four:serial?serial.slice(-4):null,delivery_method:draft.deliveryMethod,expires_at:new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString(),updated_at:new Date().toISOString()})});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data?.message||'Could not update draft');
+  if(!(data as DealRow[])[0])throw new Error('Draft was not found');
+  return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id);
+}
+
+export async function publishUserDealDraft(session:StoredSession,dealId:string,draft:DealDraft){
+  const title=draft.title.trim();
+  if(title.length<3||title.length>120)throw new Error('Item title must contain 3 to 120 characters.');
+  const serial=draft.serialNumber.trim();const now=new Date().toISOString();
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals?id=eq.${encodeURIComponent(dealId)}&seller_id=eq.${session.user.id}&status=eq.draft`,{method:'PATCH',headers:{...headers(session.accessToken),Prefer:'return=representation'},body:JSON.stringify({title,description:draft.description.trim(),price_cents:toMinorUnits(draft.price,draft.currency),currency:draft.currency,condition:draft.condition,serial_last_four:serial?serial.slice(-4):null,delivery_method:draft.deliveryMethod,status:'published',current_agreement_version:1,published_at:now,expires_at:new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString(),updated_at:now})});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data?.message||'Could not publish draft');
+  if(!(data as DealRow[])[0])throw new Error('Draft was not found');
+  return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id);
 }
 
 export interface DealMeeting { id:string; deal_id:string; proposed_by:string; location_name:string; address:string; scheduled_at:string; status:'proposed'|'confirmed'|'cancelled'; seller_arrived:boolean; buyer_arrived:boolean }

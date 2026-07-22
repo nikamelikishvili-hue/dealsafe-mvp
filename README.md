@@ -5,6 +5,7 @@ A mobile-first proof of concept for creating a trusted transaction record and sh
 ## What is included
 
 - Create and preview a deal
+- Save private deal drafts, resume editing, and publish when ready
 - Public Deal Link with immutable-style terms summary
 - Buyer acceptance flow
 - Verification placeholders for both parties
