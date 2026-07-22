@@ -15,6 +15,7 @@ export const supportedLanguages=[
   {code:'ja',name:'日本語'},
   {code:'ko',name:'한국어'},
   {code:'ar',name:'العربية'},
+  {code:'he',name:'עברית'},
   {code:'hi',name:'हिन्दी'}
 ] as const;
 
@@ -62,7 +63,7 @@ const ka:Record<string,string>={
 };
 
 const dictionaries:Record<string,Record<string,string>>={ka,...localePacks};
-const applyDocumentLanguage=(language:AppLanguage)=>{document.documentElement.lang=language;document.documentElement.dir=language==='ar'?'rtl':'ltr'};
+const applyDocumentLanguage=(language:AppLanguage)=>{document.documentElement.lang=language;document.documentElement.dir=language==='ar'||language==='he'?'rtl':'ltr'};
 applyDocumentLanguage(activeLanguage);
 
 export function getAppLanguage(){return activeLanguage}
