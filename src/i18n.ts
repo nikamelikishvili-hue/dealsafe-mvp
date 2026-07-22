@@ -658,6 +658,25 @@ const inquiryLabels:Record<string,Record<string,string>>={
   hi:{'Questions before accepting':'स्वीकार करने से पहले प्रश्न','Buyer questions':'खरीदारों के प्रश्न','Ask the seller':'विक्रेता से पूछें','Keep important item questions inside the DealSafe record.':'वस्तु के महत्वपूर्ण प्रश्न DealSafe रिकॉर्ड में रखें।','Sign in to ask seller':'पूछने के लिए साइन इन करें','Your question':'आपका प्रश्न','Ask question':'प्रश्न भेजें','Question sent.':'प्रश्न भेज दिया गया।','Seller reply':'विक्रेता का उत्तर','Reply':'उत्तर','Send reply':'उत्तर भेजें','Reply sent.':'उत्तर भेज दिया गया।','Waiting for seller reply.':'विक्रेता के उत्तर की प्रतीक्षा है।','No questions yet.':'अभी कोई प्रश्न नहीं है।','Only the questioner and seller can see each conversation.':'हर बातचीत केवल प्रश्नकर्ता और विक्रेता देख सकते हैं।','Could not load questions':'प्रश्न लोड नहीं हो सके','Could not send question':'प्रश्न भेजा नहीं जा सका','Could not send reply':'उत्तर भेजा नहीं जा सका','Buyer question received':'खरीदार का प्रश्न मिला','Seller replied to question':'विक्रेता ने उत्तर दिया'}
 };
 Object.entries(inquiryLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
+const activityReadLabels:Record<string,Record<string,string>>={
+  en:{'Mark all as read':'Mark all as read','Unread':'Unread'},
+  ka:{'Mark all as read':'ყველას წაკითხულად მონიშვნა','Unread':'წაუკითხავი'},
+  de:{'Mark all as read':'Alle als gelesen markieren','Unread':'Ungelesen'},
+  es:{'Mark all as read':'Marcar todo como leído','Unread':'Sin leer'},
+  fr:{'Mark all as read':'Tout marquer comme lu','Unread':'Non lu'},
+  pt:{'Mark all as read':'Marcar tudo como lido','Unread':'Não lido'},
+  it:{'Mark all as read':'Segna tutto come letto','Unread':'Non letto'},
+  ru:{'Mark all as read':'Отметить всё прочитанным','Unread':'Непрочитано'},
+  tr:{'Mark all as read':'Tümünü okundu işaretle','Unread':'Okunmamış'},
+  el:{'Mark all as read':'Σήμανση όλων ως αναγνωσμένων','Unread':'Μη αναγνωσμένο'},
+  zh:{'Mark all as read':'全部标为已读','Unread':'未读'},
+  ja:{'Mark all as read':'すべて既読にする','Unread':'未読'},
+  ko:{'Mark all as read':'모두 읽음으로 표시','Unread':'읽지 않음'},
+  ar:{'Mark all as read':'تعليم الكل كمقروء','Unread':'غير مقروء'},
+  he:{'Mark all as read':'סימון הכול כנקרא','Unread':'לא נקרא'},
+  hi:{'Mark all as read':'सभी को पढ़ा हुआ चिह्नित करें','Unread':'अपठित'}
+};
+Object.entries(activityReadLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
 const applyDocumentLanguage=(language:AppLanguage)=>{document.documentElement.lang=language;document.documentElement.dir=language==='ar'||language==='he'?'rtl':'ltr'};
 applyDocumentLanguage(activeLanguage);
 

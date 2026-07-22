@@ -123,7 +123,8 @@ grant execute on function public.is_current_user_deal_seller(uuid) to authentica
 grant execute on function public.reply_deal_inquiry(uuid,text) to authenticated;
 
 -- Include seller answers in the questioner's activity menu even before acceptance.
-create or replace function public.get_my_notifications(p_limit integer default 12)
+drop function if exists public.get_my_notifications(integer);
+create function public.get_my_notifications(p_limit integer default 12)
 returns table(id text,deal_id uuid,public_id text,title text,event_type text,created_at timestamptz,is_mine boolean)
 language sql
 security definer
