@@ -53,13 +53,13 @@ type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'passport' | 'admi
 interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
 const initial: DealDraft = {title:'',description:'',price:'',currency:'USD',condition:'Good',serialNumber:'',deliveryMethod:'Meet in person',expiresInDays:7};
 type DealTemplateId='phone'|'laptop'|'vehicle'|'watch'|'general';
-type DealTemplate={id:DealTemplateId;label:string;titlePlaceholder:string;descriptionPrompt:string;icon:typeof Smartphone};
+type DealTemplate={id:DealTemplateId;label:string;titlePlaceholder:string;descriptionPrompt:string;photoPrompt:string;icon:typeof Smartphone};
 const dealTemplates:DealTemplate[]=[
-  {id:'phone',label:'Phone',titlePlaceholder:'iPhone 15 Pro · 256 GB',descriptionPrompt:'Include the model, storage, battery health, lock status, repairs, damage, and accessories.',icon:Smartphone},
-  {id:'laptop',label:'Laptop',titlePlaceholder:'MacBook Pro 14 · M3 · 512 GB',descriptionPrompt:'Include the processor, memory, storage, battery condition, screen condition, repairs, and charger.',icon:Laptop},
-  {id:'vehicle',label:'Vehicle',titlePlaceholder:'2021 BMW X5 · 42,000 miles',descriptionPrompt:'Include the mileage, title status, accident history, service history, warning lights, and known defects.',icon:Car},
-  {id:'watch',label:'Luxury watch',titlePlaceholder:'Rolex Submariner · Reference 126610LN',descriptionPrompt:'Include the reference number, authenticity evidence, service history, condition, box, papers, and accessories.',icon:Watch},
-  {id:'general',label:'Other item',titlePlaceholder:'Item brand and model',descriptionPrompt:'Include the brand, model, age, usage, known defects, repairs, and included parts or accessories.',icon:Package}
+  {id:'phone',label:'Phone',titlePlaceholder:'iPhone 15 Pro · 256 GB',descriptionPrompt:'Include the model, storage, battery health, lock status, repairs, damage, and accessories.',photoPrompt:'Photograph the front, back, sides, powered-on screen, serial or IMEI label, damage, and accessories.',icon:Smartphone},
+  {id:'laptop',label:'Laptop',titlePlaceholder:'MacBook Pro 14 · M3 · 512 GB',descriptionPrompt:'Include the processor, memory, storage, battery condition, screen condition, repairs, and charger.',photoPrompt:'Photograph the lid, powered-on screen, keyboard, ports, bottom serial label, charger, and damage.',icon:Laptop},
+  {id:'vehicle',label:'Vehicle',titlePlaceholder:'2021 BMW X5 · 42,000 miles',descriptionPrompt:'Include the mileage, title status, accident history, service history, warning lights, and known defects.',photoPrompt:'Photograph the front, rear, both sides, interior, odometer, VIN label, tires, and known defects.',icon:Car},
+  {id:'watch',label:'Luxury watch',titlePlaceholder:'Rolex Submariner · Reference 126610LN',descriptionPrompt:'Include the reference number, authenticity evidence, service history, condition, box, papers, and accessories.',photoPrompt:'Photograph the dial, caseback, crown, bracelet, serial or reference, box, papers, and visible wear.',icon:Watch},
+  {id:'general',label:'Other item',titlePlaceholder:'Item brand and model',descriptionPrompt:'Include the brand, model, age, usage, known defects, repairs, and included parts or accessories.',photoPrompt:'Photograph the front, back, multiple angles, serial or reference label, defects, and included parts.',icon:Package}
 ];
 const formatDateTime=(value:string)=>new Date(value).toLocaleString(getAppLanguage());
 const formatDate=(value:string)=>new Date(value).toLocaleDateString(getAppLanguage());
@@ -71,6 +71,11 @@ const relativeExpiry=(expiresAt:string,now:number)=>{const difference=new Date(e
 function DealTemplatePicker({selected,onSelect}:{selected:DealTemplateId;onSelect:(id:DealTemplateId)=>void}){
   const template=dealTemplates.find(item=>item.id===selected)||dealTemplates[0];
   return <section className="deal-template-picker no-print"><div className="deal-template-heading"><PackageCheck/><div><p className="eyebrow">{t('Start with a template')}</p><h2>{t('Choose an item category')}</h2><p>{t('Select the closest category to get a safer description checklist.')}</p></div></div><div className="deal-template-grid">{dealTemplates.map(item=>{const Icon=item.icon;return <button key={item.id} type="button" className={selected===item.id?'selected':''} aria-pressed={selected===item.id} onClick={()=>onSelect(item.id)}><Icon/><span>{t(item.label)}</span>{selected===item.id&&<Check/>}</button>})}</div><div className="deal-template-guidance"><ShieldCheck/><div><b>{t('Include these details')}</b><span>{t(template.descriptionPrompt)}</span></div></div></section>;
+}
+
+function DealPhotoGuide({template,count}:{template:DealTemplate;count:number}){
+  const goal=6;const progress=Math.min(100,Math.round(count/goal*100));const enough=count>=4;
+  return <section className={`deal-photo-guide no-print ${enough?'ready':''}`}><div className="deal-photo-guide-title"><ImagePlus/><div><p className="eyebrow">{t('Photo evidence')}</p><h3>{t('Recommended photo set')}</h3></div><strong>{count}/{goal}</strong></div><p>{t(template.photoPrompt)}</p><div className="deal-photo-progress" role="progressbar" aria-label={t('Recommended photo set')} aria-valuemin={0} aria-valuemax={goal} aria-valuenow={Math.min(count,goal)}><span style={{width:`${progress}%`}}/></div><small>{t(enough?'Good coverage. Add more angles if they show important condition details.':'Add at least 4 clear photos before publishing.')}</small></section>;
 }
 
 function MeetingPanel({deal,session}:{deal:Deal;session:StoredSession}){
@@ -441,6 +446,7 @@ function App() {
       {view==='passport'&&<PublicTrustPassportPage profile={publicPassport} message={passportMessage} onBack={()=>{history.replaceState({},'',location.pathname);setView('home')}}/>}
       {view==='create'&&!reviewingDraft&&<DealTemplatePicker selected={dealTemplate} onSelect={setDealTemplate}/>}
       {view==='create'&&!reviewingDraft&&<section className="media-picker"><label>{t('Item photos or video')}<input className="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,video/mp4,video/webm" multiple onChange={e=>{const added=Array.from(e.target.files||[]);setPhotos(previous=>{const combined=[...previous,...added].filter((file,index,all)=>all.findIndex(other=>other.name===file.name&&other.size===file.size)===index).slice(0,6);let videoSeen=false;return combined.filter(file=>!isVideoFile(file)||(!videoSeen&&(videoSeen=true)))});e.currentTarget.value=''}}/><small>{t('Choose photos together or add them one at a time')} · {photos.length} {t('of 6')} {t('selected')}</small></label><p className="media-privacy"><ShieldCheck/>{t('Photo privacy: location and camera metadata are removed before upload.')}</p>{photos.length>0&&<div className="photo-previews">{photos.map((file,index)=><div key={`${file.name}-${index}`}><FilePreview file={file} alt={`${t('Preview')} ${index+1}`}/><span>{t(isVideoFile(file)?'Item video':index===0?'Main photo':'Photo')} {index>0&&!isVideoFile(file)?index+1:''}</span></div>)}</div>}</section>}
+      {view==='create'&&!reviewingDraft&&<DealPhotoGuide template={selectedDealTemplate} count={photos.filter(file=>!file.type.startsWith('video/')).length}/>}
       {view==='deal'&&active&&session&&active.status==='accepted'&&active.deliveryMethod==='Meet in person'&&active.viewerRole!=='visitor'&&<MeetingPanel deal={active} session={session}/>}
       {view==='deal'&&active&&session&&active.status==='accepted'&&active.deliveryMethod==='Meet in person'&&active.viewerRole!=='visitor'&&<HandoffPanel deal={active} session={session} onComplete={()=>setActive({...active,status:'completed'})}/>}
       {view==='deal'&&active&&session&&active.status==='completed'&&active.viewerRole!=='visitor'&&<RatingPanel deal={active} session={session}/>} 
