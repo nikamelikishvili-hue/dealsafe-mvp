@@ -15,6 +15,7 @@ export interface Deal {
   deliveryMethod: 'Meet in person' | 'Ship to buyer';
   status: DealStatus;
   sellerName: string;
+  sellerContactVerified?: boolean;
   sellerVerification: VerificationStatus;
   buyerName?: string;
   buyerVerification?: VerificationStatus;

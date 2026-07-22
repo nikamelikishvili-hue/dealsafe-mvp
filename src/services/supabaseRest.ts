@@ -180,13 +180,21 @@ export async function updateAccountPassword(session:StoredSession,password:strin
 
 export function signOut() { localStorage.removeItem(sessionKey); }
 
-function mapDeal(row: DealRow, sellerName: string, viewerId?: string) {
+async function accountEmailConfirmed(session:StoredSession){
+  const response=await authenticatedFetch(session,`${supabaseUrl}/auth/v1/user`,{headers:headers(session.accessToken)});
+  if(!response.ok)return false;
+  const account=await response.json() as {email_confirmed_at?:string|null};
+  return Boolean(account.email_confirmed_at);
+}
+
+function mapDeal(row: DealRow, sellerName: string, viewerId?: string, sellerContactVerified=false) {
   const viewerRole: Deal['viewerRole'] = viewerId ? (row.seller_id===viewerId?'seller':row.buyer_id===viewerId?'buyer':'visitor') : 'visitor';
   return {
     id: row.id, publicId: row.public_id, title: row.title, description: row.description,
     priceCents: row.price_cents, currency: row.currency, condition: row.condition,
     serialNumber: row.serial_last_four ? `•••• ${row.serial_last_four}` : undefined,
     deliveryMethod: row.delivery_method, status: row.status, sellerName,
+    sellerContactVerified,
     sellerVerification: 'not_started' as const,
     agreementVersion: row.current_agreement_version, createdAt: row.created_at,
     expiresAt: row.expires_at || undefined,
@@ -196,12 +204,13 @@ function mapDeal(row: DealRow, sellerName: string, viewerId?: string) {
 }
 
 export async function listUserDeals(session: StoredSession) {
-  const response = await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals?select=*,deal_media(storage_path,sort_order)&order=created_at.desc`, {
-    headers: headers(session.accessToken),
-  });
+  const [response,sellerContactVerified] = await Promise.all([
+    authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals?select=*,deal_media(storage_path,sort_order)&order=created_at.desc`, {headers: headers(session.accessToken)}),
+    accountEmailConfirmed(session)
+  ]);
   if (!response.ok) throw new Error('Could not load your deals');
   const rows = await response.json() as DealRow[];
-  return rows.map(row => mapDeal(row, session.user.displayName, session.user.id));
+  return rows.map(row => mapDeal(row, session.user.displayName, session.user.id, sellerContactVerified));
 }
 
 function publicMediaUrl(path: string) {
@@ -262,7 +271,7 @@ export async function createUserDeal(session: StoredSession, draft: DealDraft) {
     }
     throw new Error(message || 'Could not save this deal');
   }
-  return mapDeal((data as DealRow[])[0], session.user.displayName, session.user.id);
+  return mapDeal((data as DealRow[])[0], session.user.displayName, session.user.id, await accountEmailConfirmed(session));
 }
 
 export async function saveUserDealDraft(session:StoredSession,draft:DealDraft){
@@ -272,7 +281,7 @@ export async function saveUserDealDraft(session:StoredSession,draft:DealDraft){
   const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=representation'},body:JSON.stringify({seller_id:session.user.id,title,description:draft.description.trim(),price_cents:toMinorUnits(draft.price,draft.currency),currency:draft.currency,condition:draft.condition,serial_last_four:serial?serial.slice(-4):null,delivery_method:draft.deliveryMethod,status:'draft',current_agreement_version:0,published_at:null,expires_at:new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString()})});
   const data=await response.json();
   if(!response.ok)throw new Error(data?.message||'Could not save draft');
-  return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id);
+  return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id,await accountEmailConfirmed(session));
 }
 
 export async function updateUserDealDraft(session:StoredSession,dealId:string,draft:DealDraft){
@@ -283,7 +292,7 @@ export async function updateUserDealDraft(session:StoredSession,dealId:string,dr
   const data=await response.json();
   if(!response.ok)throw new Error(data?.message||'Could not update draft');
   if(!(data as DealRow[])[0])throw new Error('Draft was not found');
-  return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id);
+  return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id,await accountEmailConfirmed(session));
 }
 
 export async function publishUserDealDraft(session:StoredSession,dealId:string,draft:DealDraft){
@@ -294,7 +303,7 @@ export async function publishUserDealDraft(session:StoredSession,dealId:string,d
   const data=await response.json();
   if(!response.ok)throw new Error(data?.message||'Could not publish draft');
   if(!(data as DealRow[])[0])throw new Error('Draft was not found');
-  return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id);
+  return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id,await accountEmailConfirmed(session));
 }
 
 export interface DealMeeting { id:string; deal_id:string; proposed_by:string; location_name:string; address:string; scheduled_at:string; status:'proposed'|'confirmed'|'cancelled'; seller_arrived:boolean; buyer_arrived:boolean }
@@ -349,12 +358,14 @@ export async function confirmShipmentDelivery(session:StoredSession,dealId:strin
 interface PublicDealRow extends DealRow {
   agreement_version: number;
   seller_name: string;
+  seller_contact_verified: boolean;
   seller_verification: 'not_started' | 'pending' | 'verified';
   media_paths: string[];
 }
 
 interface SavedDealRow extends DealRow {
   seller_name: string;
+  seller_contact_verified: boolean;
   seller_verification: 'not_started' | 'pending' | 'verified';
   media_paths: string[];
   saved_at: string;
@@ -364,7 +375,7 @@ export async function getMySavedDeals(session:StoredSession){
   const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_saved_deals`,{method:'POST',headers:headers(session.accessToken),body:'{}'});
   if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load saved deals')}
   const rows=await response.json() as SavedDealRow[];
-  return rows.map(row=>({...mapDeal(row,row.seller_name),sellerVerification:row.seller_verification,mediaUrls:(row.media_paths||[]).map(publicMediaUrl)}));
+  return rows.map(row=>({...mapDeal(row,row.seller_name),sellerContactVerified:row.seller_contact_verified,sellerVerification:row.seller_verification,mediaUrls:(row.media_paths||[]).map(publicMediaUrl)}));
 }
 
 export async function getPublicDeal(publicId: string) {
@@ -378,6 +389,7 @@ export async function getPublicDeal(publicId: string) {
   return {
     ...mapDeal(row, row.seller_name),
     agreementVersion: row.agreement_version,
+    sellerContactVerified: row.seller_contact_verified,
     sellerVerification: row.seller_verification,
     mediaUrls: (row.media_paths || []).map(publicMediaUrl),
   };
