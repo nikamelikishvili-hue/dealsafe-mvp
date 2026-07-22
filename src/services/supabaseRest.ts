@@ -39,8 +39,11 @@ interface AuthResponse {
 }
 
 const sessionKey = 'dealsafe_session';
+export const sessionUpdatedEvent = 'dealsafe-session-updated';
+export const sessionExpiredEvent = 'dealsafe-session-expired';
+let refreshPromise: Promise<StoredSession> | null = null;
 
-function storeSession(data:AuthResponse,user:AuthUser){const session:StoredSession={accessToken:data.access_token!,refreshToken:data.refresh_token,expiresAt:Date.now()+(data.expires_in||3600)*1000,user};localStorage.setItem(sessionKey,JSON.stringify(session));return session}
+function storeSession(data:AuthResponse,user:AuthUser){const session:StoredSession={accessToken:data.access_token!,refreshToken:data.refresh_token,expiresAt:Date.now()+(data.expires_in||3600)*1000,user};localStorage.setItem(sessionKey,JSON.stringify(session));window.dispatchEvent(new CustomEvent<StoredSession>(sessionUpdatedEvent,{detail:session}));return session}
 
 function headers(token?: string) {
   return {
@@ -60,7 +63,17 @@ function toUser(data: AuthResponse): AuthUser | null {
 }
 
 export function getStoredSession(): StoredSession | null {
-  try { return JSON.parse(localStorage.getItem(sessionKey) || 'null'); } catch { return null; }
+  try {
+    const session=JSON.parse(localStorage.getItem(sessionKey) || 'null') as StoredSession|null;
+    if(!session?.accessToken||!session.refreshToken||!session.user?.id){
+      localStorage.removeItem(sessionKey);
+      return null;
+    }
+    return session;
+  } catch {
+    localStorage.removeItem(sessionKey);
+    return null;
+  }
 }
 
 export async function signUp(email: string, password: string, displayName: string) {
@@ -90,11 +103,48 @@ export async function signIn(email: string, password: string) {
 }
 
 export async function refreshSession(session:StoredSession){
-  if(!session.refreshToken)return session;
-  const response=await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:headers(),body:JSON.stringify({refresh_token:session.refreshToken})});
-  const data=await response.json() as AuthResponse;
-  if(!response.ok||!data.access_token)throw new Error(data.error_description||data.msg||'Session expired');
-  return storeSession(data,toUser(data)||session.user);
+  const current=getStoredSession()||session;
+  if(!current.refreshToken)throw new Error('Your session expired. Please sign in again.');
+  if(refreshPromise)return refreshPromise;
+  refreshPromise=(async()=>{
+    const response=await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:headers(),body:JSON.stringify({refresh_token:current.refreshToken})});
+    const data=await response.json() as AuthResponse;
+    if(!response.ok||!data.access_token)throw new Error(data.error_description||data.msg||'Your session expired. Please sign in again.');
+    return storeSession(data,toUser(data)||current.user);
+  })();
+  try{return await refreshPromise}finally{refreshPromise=null}
+}
+
+function expireSession(){
+  localStorage.removeItem(sessionKey);
+  window.dispatchEvent(new Event(sessionExpiredEvent));
+}
+
+async function authenticatedFetch(session:StoredSession,input:RequestInfo|URL,init:RequestInit={}){
+  let current=getStoredSession()||session;
+  const renew=async()=>{
+    try{return await refreshSession(current)}catch(error){
+      expireSession();
+      throw error instanceof Error?error:new Error('Your session expired. Please sign in again.');
+    }
+  };
+  if(!current.refreshToken){
+    expireSession();
+    throw new Error('Your session expired. Please sign in again.');
+  }
+  if(!current.expiresAt||current.expiresAt-Date.now()<60_000)current=await renew();
+  const send=(token:string)=>{
+    const requestHeaders=new Headers(init.headers);
+    requestHeaders.set('apikey',publishableKey??'');
+    requestHeaders.set('Authorization',`Bearer ${token}`);
+    return fetch(input,{...init,headers:requestHeaders});
+  };
+  let response=await send(current.accessToken);
+  if(response.status===401){
+    current=await renew();
+    response=await send(current.accessToken);
+  }
+  return response;
 }
 
 export async function requestPasswordReset(email:string,redirectTo:string){const response=await fetch(`${supabaseUrl}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`,{method:'POST',headers:headers(),body:JSON.stringify({email})});if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not send reset email')}}
@@ -117,7 +167,7 @@ function mapDeal(row: DealRow, sellerName: string, viewerId?: string) {
 }
 
 export async function listUserDeals(session: StoredSession) {
-  const response = await fetch(`${supabaseUrl}/rest/v1/deals?select=*,deal_media(storage_path,sort_order)&order=created_at.desc`, {
+  const response = await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals?select=*,deal_media(storage_path,sort_order)&order=created_at.desc`, {
     headers: headers(session.accessToken),
   });
   if (!response.ok) throw new Error('Could not load your deals');
@@ -138,22 +188,22 @@ export async function uploadDealPhotos(session: StoredSession, dealId: string, f
     if(!['image/jpeg','image/png','image/webp','image/heic','video/mp4','video/webm'].includes(file.type)&&!/^.+\.(jpe?g|png|webp|heic|mp4|webm)$/i.test(file.name))throw new Error(`File ${index+1} has an unsupported format`);
     const extension=file.name.split('.').pop()?.toLowerCase() || 'jpg';
     const path=`${session.user.id}/${dealId}/${crypto.randomUUID()}.${extension}`;
-    const upload=await fetch(`${supabaseUrl}/storage/v1/object/deal-media/${path}`,{method:'POST',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`,'Content-Type':file.type||(isVideo?'video/mp4':'image/jpeg'),'x-upsert':'false'},body:file});
+    const upload=await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/deal-media/${path}`,{method:'POST',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`,'Content-Type':file.type||(isVideo?'video/mp4':'image/jpeg'),'x-upsert':'false'},body:file});
     if(!upload.ok) throw new Error(`Photo ${index+1} could not be uploaded`);
-    const record=await fetch(`${supabaseUrl}/rest/v1/deal_media`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=minimal'},body:JSON.stringify({deal_id:dealId,storage_path:path,sort_order:startIndex+index})});
+    const record=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_media`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=minimal'},body:JSON.stringify({deal_id:dealId,storage_path:path,sort_order:startIndex+index})});
     if(!record.ok) throw new Error(`Photo ${index+1} could not be linked to the deal`);
     urls.push(publicMediaUrl(path));
   }
   return urls;
 }
 
-export async function deleteDealMedia(session:StoredSession,dealId:string,publicUrl:string){const marker='/storage/v1/object/public/deal-media/';const encodedPath=publicUrl.split(marker)[1];if(!encodedPath)throw new Error('Invalid media URL');const path=encodedPath.split('/').map(decodeURIComponent).join('/');const removeObject=await fetch(`${supabaseUrl}/storage/v1/object/deal-media/${path.split('/').map(encodeURIComponent).join('/')}`,{method:'DELETE',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`}});if(!removeObject.ok)throw new Error('Could not remove the stored file');const removeRecord=await fetch(`${supabaseUrl}/rest/v1/deal_media?deal_id=eq.${dealId}&storage_path=eq.${encodeURIComponent(path)}`,{method:'DELETE',headers:{...headers(session.accessToken),Prefer:'return=minimal'}});if(!removeRecord.ok)throw new Error('File removed, but its record could not be cleaned up')}
-export async function reorderDealMedia(session:StoredSession,dealId:string,publicUrls:string[]){const marker='/storage/v1/object/public/deal-media/';const paths=publicUrls.map(url=>{const encoded=url.split(marker)[1];if(!encoded)throw new Error('Invalid media URL');return encoded.split('/').map(decodeURIComponent).join('/')});const response=await fetch(`${supabaseUrl}/rest/v1/rpc/reorder_deal_media`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_paths:paths})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not reorder media')}}
-export async function updatePublishedDeal(session:StoredSession,dealId:string,draft:DealDraft){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/update_published_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_title:draft.title,p_description:draft.description,p_price_cents:Math.round(Number(draft.price)*100),p_condition:draft.condition,p_delivery_method:draft.deliveryMethod})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not update deal')}return await response.json() as number}
+export async function deleteDealMedia(session:StoredSession,dealId:string,publicUrl:string){const marker='/storage/v1/object/public/deal-media/';const encodedPath=publicUrl.split(marker)[1];if(!encodedPath)throw new Error('Invalid media URL');const path=encodedPath.split('/').map(decodeURIComponent).join('/');const removeObject=await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/deal-media/${path.split('/').map(encodeURIComponent).join('/')}`,{method:'DELETE',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`}});if(!removeObject.ok)throw new Error('Could not remove the stored file');const removeRecord=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_media?deal_id=eq.${dealId}&storage_path=eq.${encodeURIComponent(path)}`,{method:'DELETE',headers:{...headers(session.accessToken),Prefer:'return=minimal'}});if(!removeRecord.ok)throw new Error('File removed, but its record could not be cleaned up')}
+export async function reorderDealMedia(session:StoredSession,dealId:string,publicUrls:string[]){const marker='/storage/v1/object/public/deal-media/';const paths=publicUrls.map(url=>{const encoded=url.split(marker)[1];if(!encoded)throw new Error('Invalid media URL');return encoded.split('/').map(decodeURIComponent).join('/')});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/reorder_deal_media`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_paths:paths})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not reorder media')}}
+export async function updatePublishedDeal(session:StoredSession,dealId:string,draft:DealDraft){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/update_published_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_title:draft.title,p_description:draft.description,p_price_cents:Math.round(Number(draft.price)*100),p_condition:draft.condition,p_delivery_method:draft.deliveryMethod})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not update deal')}return await response.json() as number}
 
 export async function createUserDeal(session: StoredSession, draft: DealDraft) {
   const serial = draft.serialNumber.trim();
-  const response = await fetch(`${supabaseUrl}/rest/v1/deals`, {
+  const response = await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals`, {
     method: 'POST',
     headers: { ...headers(session.accessToken), Prefer: 'return=representation' },
     body: JSON.stringify({
@@ -178,37 +228,37 @@ export async function createUserDeal(session: StoredSession, draft: DealDraft) {
 export interface DealMeeting { id:string; deal_id:string; proposed_by:string; location_name:string; address:string; scheduled_at:string; status:'proposed'|'confirmed'|'cancelled'; seller_arrived:boolean; buyer_arrived:boolean }
 
 export async function getDealMeeting(session: StoredSession, dealId: string) {
-  const response=await fetch(`${supabaseUrl}/rest/v1/deal_meetings?deal_id=eq.${dealId}&select=*`,{headers:headers(session.accessToken)});
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_meetings?deal_id=eq.${dealId}&select=*`,{headers:headers(session.accessToken)});
   if(!response.ok) throw new Error('Could not load meeting');
   return ((await response.json()) as DealMeeting[])[0] || null;
 }
 
 export async function proposeMeeting(session:StoredSession,dealId:string,locationName:string,address:string,scheduledAt:string){
-  const response=await fetch(`${supabaseUrl}/rest/v1/rpc/propose_meeting`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_location_name:locationName,p_address:address,p_scheduled_at:new Date(scheduledAt).toISOString()})});
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/propose_meeting`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_location_name:locationName,p_address:address,p_scheduled_at:new Date(scheduledAt).toISOString()})});
   if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not propose meeting')}
 }
 export async function confirmMeeting(session:StoredSession,dealId:string){
-  const response=await fetch(`${supabaseUrl}/rest/v1/rpc/confirm_meeting`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/confirm_meeting`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});
   if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not confirm meeting')}
 }
-export async function markArrived(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/mark_arrived`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not mark arrival')}}
-export async function generateHandoffPin(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/generate_handoff_pin`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not generate PIN')}return await response.json() as string}
-export async function completeHandoff(session:StoredSession,dealId:string,pin:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/complete_handoff`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_pin:pin})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not complete deal')}}
-export async function submitRating(session:StoredSession,dealId:string,stars:number,comment:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/submit_rating`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_stars:stars,p_comment:comment})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not submit rating')}}
-export async function getMyProfileSummary(session:StoredSession){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_my_profile_summary`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load profile')}const rows=await response.json() as ProfileSummary[];if(!rows[0])throw new Error('Profile was not found');return rows[0]}
-export async function requestIdentityVerification(session:StoredSession){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/request_identity_verification`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not request verification')}return await response.json() as ProfileSummary['verification_status']}
-export async function cancelDeal(session:StoredSession,dealId:string,reason:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/cancel_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_reason:reason})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not cancel deal')}}
-export async function openDealDispute(session:StoredSession,dealId:string,reason:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/open_deal_dispute`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_reason:reason})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not open dispute')}}
-export async function getDealTimeline(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_deal_timeline`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load timeline')}return await response.json() as TimelineEvent[]}
-export async function getMyNotifications(session:StoredSession){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_my_notifications`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_limit:12})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load notifications')}return await response.json() as DealNotification[]}
-export async function getDealMessages(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_deal_messages`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load messages')}return await response.json() as DealMessage[]}
-export async function sendDealMessage(session:StoredSession,dealId:string,body:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/send_deal_message`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_body:body})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not send message')}}
-export async function makeDealOffer(session:StoredSession,publicId:string,amountCents:number,typedName:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/make_deal_offer`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_public_id:publicId,p_amount_cents:amountCents,p_typed_name:typedName})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not send offer')}}
-export async function getDealOffers(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_deal_offers`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load offers')}return await response.json() as DealOffer[]}
-export async function respondToOffer(session:StoredSession,offerId:string,accept:boolean){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/respond_to_offer`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_offer_id:offerId,p_accept:accept})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not respond to offer')}}
-export async function getDealShipment(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/deal_shipments?deal_id=eq.${dealId}&select=*`,{headers:headers(session.accessToken)});if(!response.ok)throw new Error('Could not load shipment');return ((await response.json()) as DealShipment[])[0]||null}
-export async function createDealShipment(session:StoredSession,dealId:string,carrier:string,trackingNumber:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/create_deal_shipment`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_carrier:carrier,p_tracking_number:trackingNumber})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not save shipment')}}
-export async function confirmShipmentDelivery(session:StoredSession,dealId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/confirm_shipment_delivery`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not confirm delivery')}}
+export async function markArrived(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/mark_arrived`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not mark arrival')}}
+export async function generateHandoffPin(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/generate_handoff_pin`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not generate PIN')}return await response.json() as string}
+export async function completeHandoff(session:StoredSession,dealId:string,pin:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/complete_handoff`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_pin:pin})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not complete deal')}}
+export async function submitRating(session:StoredSession,dealId:string,stars:number,comment:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/submit_rating`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_stars:stars,p_comment:comment})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not submit rating')}}
+export async function getMyProfileSummary(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_profile_summary`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load profile')}const rows=await response.json() as ProfileSummary[];if(!rows[0])throw new Error('Profile was not found');return rows[0]}
+export async function requestIdentityVerification(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/request_identity_verification`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not request verification')}return await response.json() as ProfileSummary['verification_status']}
+export async function cancelDeal(session:StoredSession,dealId:string,reason:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/cancel_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_reason:reason})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not cancel deal')}}
+export async function openDealDispute(session:StoredSession,dealId:string,reason:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/open_deal_dispute`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_reason:reason})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not open dispute')}}
+export async function getDealTimeline(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_timeline`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load timeline')}return await response.json() as TimelineEvent[]}
+export async function getMyNotifications(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_notifications`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_limit:12})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load notifications')}return await response.json() as DealNotification[]}
+export async function getDealMessages(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_messages`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load messages')}return await response.json() as DealMessage[]}
+export async function sendDealMessage(session:StoredSession,dealId:string,body:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/send_deal_message`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_body:body})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not send message')}}
+export async function makeDealOffer(session:StoredSession,publicId:string,amountCents:number,typedName:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/make_deal_offer`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_public_id:publicId,p_amount_cents:amountCents,p_typed_name:typedName})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not send offer')}}
+export async function getDealOffers(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_offers`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load offers')}return await response.json() as DealOffer[]}
+export async function respondToOffer(session:StoredSession,offerId:string,accept:boolean){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/respond_to_offer`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_offer_id:offerId,p_accept:accept})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not respond to offer')}}
+export async function getDealShipment(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_shipments?deal_id=eq.${dealId}&select=*`,{headers:headers(session.accessToken)});if(!response.ok)throw new Error('Could not load shipment');return ((await response.json()) as DealShipment[])[0]||null}
+export async function createDealShipment(session:StoredSession,dealId:string,carrier:string,trackingNumber:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/create_deal_shipment`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_carrier:carrier,p_tracking_number:trackingNumber})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not save shipment')}}
+export async function confirmShipmentDelivery(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/confirm_shipment_delivery`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not confirm delivery')}}
 
 interface PublicDealRow extends DealRow {
   agreement_version: number;
@@ -234,7 +284,7 @@ export async function getPublicDeal(publicId: string) {
 }
 
 export async function acceptPublicDeal(session: StoredSession, publicId: string, typedName: string) {
-  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/accept_deal`, {
+  const response = await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/accept_deal`, {
     method: 'POST', headers: headers(session.accessToken),
     body: JSON.stringify({ p_public_id: publicId, p_typed_name: typedName }),
   });
