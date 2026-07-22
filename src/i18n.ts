@@ -164,6 +164,25 @@ const expiryLabels:Record<string,Record<string,string>>={
   hi:{'Offer valid for':'ऑफ़र की वैधता','1 day':'1 दिन','3 days':'3 दिन','7 days':'7 दिन','14 days':'14 दिन','30 days':'30 दिन','Offer active':'ऑफ़र सक्रिय है','Offer expires':'ऑफ़र समाप्त होगा','Expired':'समाप्त','expired':'समाप्त','Deal Link expired':'डील लिंक समाप्त हो गया','This Deal Link can no longer be accepted.':'इस डील लिंक को अब स्वीकार नहीं किया जा सकता।','Buyer must accept before this time.':'खरीदार को इस समय से पहले स्वीकार करना होगा।','This Deal Link has expired':'यह डील लिंक समाप्त हो गया है'}
 };
 Object.entries(expiryLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
+const titleValidationLabels:Record<string,Record<string,string>>={
+  en:{'Item title must contain 3 to 120 characters.':'Item title must contain 3 to 120 characters.'},
+  ka:{'Item title must contain 3 to 120 characters.':'ნივთის დასახელება უნდა შეიცავდეს 3-დან 120 სიმბოლომდე.'},
+  de:{'Item title must contain 3 to 120 characters.':'Der Artikeltitel muss 3 bis 120 Zeichen enthalten.'},
+  es:{'Item title must contain 3 to 120 characters.':'El título del artículo debe tener entre 3 y 120 caracteres.'},
+  fr:{'Item title must contain 3 to 120 characters.':'Le titre de l’article doit contenir entre 3 et 120 caractères.'},
+  pt:{'Item title must contain 3 to 120 characters.':'O título do artigo deve ter entre 3 e 120 caracteres.'},
+  it:{'Item title must contain 3 to 120 characters.':'Il titolo dell’articolo deve contenere da 3 a 120 caratteri.'},
+  ru:{'Item title must contain 3 to 120 characters.':'Название товара должно содержать от 3 до 120 символов.'},
+  tr:{'Item title must contain 3 to 120 characters.':'Ürün başlığı 3 ile 120 karakter arasında olmalıdır.'},
+  el:{'Item title must contain 3 to 120 characters.':'Ο τίτλος του αντικειμένου πρέπει να περιέχει από 3 έως 120 χαρακτήρες.'},
+  zh:{'Item title must contain 3 to 120 characters.':'商品标题必须包含 3 到 120 个字符。'},
+  ja:{'Item title must contain 3 to 120 characters.':'商品タイトルは3文字以上120文字以内で入力してください。'},
+  ko:{'Item title must contain 3 to 120 characters.':'상품 제목은 3자 이상 120자 이하여야 합니다.'},
+  ar:{'Item title must contain 3 to 120 characters.':'يجب أن يتراوح عنوان العنصر بين 3 و120 حرفًا.'},
+  he:{'Item title must contain 3 to 120 characters.':'כותרת הפריט חייבת להכיל בין 3 ל-120 תווים.'},
+  hi:{'Item title must contain 3 to 120 characters.':'वस्तु का शीर्षक 3 से 120 अक्षरों के बीच होना चाहिए।'}
+};
+Object.entries(titleValidationLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
 const applyDocumentLanguage=(language:AppLanguage)=>{document.documentElement.lang=language;document.documentElement.dir=language==='ar'||language==='he'?'rtl':'ltr'};
 applyDocumentLanguage(activeLanguage);
 

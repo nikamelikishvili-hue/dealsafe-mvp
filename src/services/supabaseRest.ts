@@ -225,13 +225,17 @@ export async function reorderDealMedia(session:StoredSession,dealId:string,publi
 export async function updatePublishedDeal(session:StoredSession,dealId:string,draft:DealDraft){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/update_published_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_title:draft.title,p_description:draft.description,p_price_cents:toMinorUnits(draft.price,draft.currency),p_condition:draft.condition,p_delivery_method:draft.deliveryMethod})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not update deal')}return await response.json() as number}
 
 export async function createUserDeal(session: StoredSession, draft: DealDraft) {
+  const title = draft.title.trim();
+  if (title.length < 3 || title.length > 120) {
+    throw new Error('Item title must contain 3 to 120 characters.');
+  }
   const serial = draft.serialNumber.trim();
   const response = await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals`, {
     method: 'POST',
     headers: { ...headers(session.accessToken), Prefer: 'return=representation' },
     body: JSON.stringify({
       seller_id: session.user.id,
-      title: draft.title,
+      title,
       description: draft.description,
       price_cents: toMinorUnits(draft.price, draft.currency),
       currency: draft.currency,
@@ -245,7 +249,13 @@ export async function createUserDeal(session: StoredSession, draft: DealDraft) {
     }),
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data?.message || 'Could not save this deal');
+  if (!response.ok) {
+    const message = String(data?.message || '');
+    if (message.includes('deals_title_check')) {
+      throw new Error('Item title must contain 3 to 120 characters.');
+    }
+    throw new Error(message || 'Could not save this deal');
+  }
   return mapDeal((data as DealRow[])[0], session.user.displayName, session.user.id);
 }
 
