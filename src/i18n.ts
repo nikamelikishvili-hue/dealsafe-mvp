@@ -1,4 +1,5 @@
 import { localePacks } from './localePacks';
+import { extraLocalePacks } from './extraLocalePacks';
 
 export const supportedLanguages=[
   {code:'en',name:'English'},
@@ -62,7 +63,8 @@ const ka:Record<string,string>={
   'No written comment.':'წერილობითი კომენტარი არ არის.','Facts, consent, and a clearer handoff.':'ფაქტები, თანხმობა და უფრო ნათელი გადაცემა.'
 };
 
-const dictionaries:Record<string,Record<string,string>>={ka,...localePacks};
+const dictionaries:Record<string,Record<string,string>>=Object.fromEntries(Object.entries(localePacks).map(([code,pack])=>[code,{...pack,...extraLocalePacks[code]}]));
+dictionaries.ka={...ka,...extraLocalePacks.ka};
 const applyDocumentLanguage=(language:AppLanguage)=>{document.documentElement.lang=language;document.documentElement.dir=language==='ar'||language==='he'?'rtl':'ltr'};
 applyDocumentLanguage(activeLanguage);
 
