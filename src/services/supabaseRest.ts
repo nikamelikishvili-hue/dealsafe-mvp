@@ -331,6 +331,8 @@ export async function getPublicSellerTrustProfile(publicId:string){const respons
 export async function getTrustPassportSettings(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_trust_passport_settings`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load passport settings')}const rows=await response.json() as TrustPassportSettings[];if(!rows[0])throw new Error('Profile was not found');return rows[0]}
 export async function setTrustPassportEnabled(session:StoredSession,enabled:boolean){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_trust_passport_enabled`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_enabled:enabled})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not update passport settings')}return await response.json() as string}
 export async function getPublicTrustPassport(publicId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_public_trust_passport`,{method:'POST',headers:headers(),body:JSON.stringify({p_public_id:publicId})});if(!response.ok)throw new Error('Passport unavailable');return ((await response.json()) as TrustPassport[])[0]||null}
+export async function isDealSaved(session:StoredSession,publicId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/is_deal_saved`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_public_id:publicId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not check saved deal')}return Boolean(await response.json())}
+export async function setDealSaved(session:StoredSession,publicId:string,saved:boolean){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_deal_saved`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_public_id:publicId,p_saved:saved})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not update saved deal')}return Boolean(await response.json())}
 export async function getDealInspection(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_inspection`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load inspection receipt')}return ((await response.json()) as DealInspection[])[0]||null}
 export async function recordDealInspection(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/record_deal_inspection`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_item_reviewed:true,p_price_confirmed:true,p_handoff_confirmed:true,p_reference_checked:true})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not save inspection receipt')}}
 export async function getDealTimeline(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_timeline`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load timeline')}return await response.json() as TimelineEvent[]}
@@ -349,6 +351,20 @@ interface PublicDealRow extends DealRow {
   seller_name: string;
   seller_verification: 'not_started' | 'pending' | 'verified';
   media_paths: string[];
+}
+
+interface SavedDealRow extends DealRow {
+  seller_name: string;
+  seller_verification: 'not_started' | 'pending' | 'verified';
+  media_paths: string[];
+  saved_at: string;
+}
+
+export async function getMySavedDeals(session:StoredSession){
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_saved_deals`,{method:'POST',headers:headers(session.accessToken),body:'{}'});
+  if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load saved deals')}
+  const rows=await response.json() as SavedDealRow[];
+  return rows.map(row=>({...mapDeal(row,row.seller_name),sellerVerification:row.seller_verification,mediaUrls:(row.media_paths||[]).map(publicMediaUrl)}));
 }
 
 export async function getPublicDeal(publicId: string) {

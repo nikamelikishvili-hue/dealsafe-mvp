@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import QRCode from 'qrcode';
-import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, CalendarDays, Check, Clock3, Copy, FileDown, FileSignature, Fingerprint, Flag, ImagePlus, Link2, LockKeyhole, MapPin, MessageCircle, PackageCheck, Pencil, Plus, QrCode, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Trash2, Truck } from 'lucide-react';
+import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, Bookmark, CalendarDays, Check, Clock3, Copy, FileDown, FileSignature, Fingerprint, Flag, ImagePlus, Link2, LockKeyhole, MapPin, MessageCircle, PackageCheck, Pencil, Plus, QrCode, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Trash2, Truck } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
-import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminReports, getDealInspection, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getPublicDeal, getPublicSellerTrustProfile, getPublicTrustPassport, getStoredSession, getTrustPassportSettings, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, publishUserDealDraft, recordDealInspection, refreshSession, reorderDealMedia, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, setTrustPassportEnabled, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealPhotos, type AdminReport, type DealInspection, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type StoredSession, type TimelineEvent, type TrustPassport, type TrustPassportSettings } from './services/supabaseRest';
+import { acceptPublicDeal, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminReports, getDealInspection, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicDeal, getPublicSellerTrustProfile, getPublicTrustPassport, getStoredSession, getTrustPassportSettings, isDealSaved, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, publishUserDealDraft, recordDealInspection, refreshSession, reorderDealMedia, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, setDealSaved, setTrustPassportEnabled, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealPhotos, type AdminReport, type DealInspection, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type StoredSession, type TimelineEvent, type TrustPassport, type TrustPassportSettings } from './services/supabaseRest';
 import { getAppLanguage, setAppLanguage, supportedLanguages, t, type AppLanguage } from './i18n';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import type { Deal, DealDraft } from './domain';
@@ -46,6 +46,7 @@ import './admin-center.css';
 import './risk-check.css';
 import './seller-trust.css';
 import './trust-passport.css';
+import './watchlist.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset';
 interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
@@ -125,6 +126,17 @@ function TrustPassportControls({session}:{session:StoredSession}){
 
 function PublicTrustPassportPage({profile,message,onBack}:{profile:TrustPassport|null;message:string;onBack:()=>void}){
   return <section className="trust-passport-page"><button className="back no-print" onClick={onBack}>← {t('Dashboard')}</button>{profile?<><div className="passport-hero"><p className="eyebrow">DealSafe · {t('Digital Trust Passport')}</p><div className="passport-identity"><span className="passport-avatar">{profile.display_name.slice(0,1)}</span><div><h1>{profile.display_name}</h1><div className={`passport-verification ${profile.verification_status==='verified'?'verified':''}`}><BadgeCheck size={20}/>{t(profile.verification_status==='verified'?'Identity verified':'Verification pending')}</div><p>{t('Member since')} {formatDate(profile.member_since)}</p></div></div></div><div className="passport-grid"><article><span>{t('Completed deals')}</span><strong>{profile.completed_deals}</strong><small>{t('Successful handoffs')}</small></article><article><span>{t('Completed sales')}</span><strong>{profile.completed_sales}</strong><small>{t('Seller activity')}</small></article><article><span>{t('Completed purchases')}</span><strong>{profile.completed_purchases}</strong><small>{t('Buyer activity')}</small></article><article><span>{t('Average rating')}</span><strong>{profile.average_rating??'—'} <Star size={21}/></strong><small>{profile.rating_count} {t('ratings')}</small></article></div><div className="passport-history"><h2>{t('Reputation history')}</h2>{profile.recent_ratings.length?<div className="passport-reviews">{profile.recent_ratings.map((rating,index)=><article className="passport-review" key={`${rating.created_at}-${index}`}><strong>{'★'.repeat(rating.stars)}{'☆'.repeat(5-rating.stars)}</strong><small>{formatDate(rating.created_at)}</small></article>)}</div>:<div className="empty-state"><Star/><b>{t('No ratings yet')}</b></div>}</div><p className="passport-disclaimer"><ShieldCheck size={18}/>{t('This profile shows recorded DealSafe activity and does not guarantee future behavior.')}</p></>:<div className="passport-loading"><div><ShieldCheck size={42}/><h1>{t(message?'Passport unavailable':'Loading passport…')}</h1>{message&&<p>{t(message)}</p>}</div></div>}</section>
+}
+
+function SaveDealButton({deal,session,onSignIn,onChanged}:{deal:Deal;session:StoredSession|null;onSignIn:()=>void;onChanged:()=>void}){
+  const [saved,setSaved]=useState(false);const [loading,setLoading]=useState(Boolean(session));const [message,setMessage]=useState('');
+  useEffect(()=>{let current=true;if(!session){setSaved(false);setLoading(false);return}setLoading(true);isDealSaved(session,deal.publicId).then(value=>{if(current)setSaved(value)}).catch(()=>{}).finally(()=>{if(current)setLoading(false)});return()=>{current=false}},[deal.publicId,session]);
+  const toggle=async()=>{if(!session){onSignIn();return}setLoading(true);setMessage('');try{const next=await setDealSaved(session,deal.publicId,!saved);setSaved(next);setMessage(next?'Deal Link saved to your Watchlist.':'Deal Link removed from your Watchlist.');onChanged()}catch(error){setMessage(error instanceof Error?error.message:'Could not update saved deal')}finally{setLoading(false)}};
+  return <section className="save-deal no-print"><div><Bookmark fill={saved?'currentColor':'none'}/><span><b>{t(saved?'Saved to Watchlist':'Save this Deal Link')}</b><small>{t(saved?'You can find it on your Dashboard.':'Keep this deal in your private account list.')}</small></span></div><button className={saved?'secondary':'primary'} disabled={loading} onClick={toggle}><Bookmark size={17} fill={saved?'currentColor':'none'}/>{t(session?(saved?'Remove saved deal':'Save Deal Link'):'Sign in to save')}</button>{message&&<div className="notice">{t(message)}</div>}</section>
+}
+
+function SavedDealsPanel({items,onOpen}:{items:Deal[];onOpen:(deal:Deal)=>void}){
+  return <section className="saved-deals"><div className="saved-heading"><div><p className="eyebrow">{t('Private Watchlist')}</p><h2>{t('Saved Deal Links')}</h2><p>{t('Deals you want to review again stay here.')}</p></div><span><Bookmark size={17}/>{items.length}</span></div>{items.length?<div className="saved-grid">{items.map(deal=><button className="saved-card" key={deal.id} onClick={()=>onOpen(deal)}><span className="saved-card-media">{deal.mediaUrls?.[0]?<MediaPreview source={deal.mediaUrls[0]} alt={deal.title}/>:deal.title.slice(0,1).toUpperCase()}</span><span className="saved-card-body"><b>{deal.title}</b><small>{t('Seller')}: {deal.sellerName}</small><span className="saved-card-meta"><strong>{dealPrice(deal)}</strong><span className={`status ${isDealExpired(deal)?'expired':deal.status}`}>{t(isDealExpired(deal)?'expired':deal.status)}</span></span></span></button>)}</div>:<div className="saved-empty"><Bookmark/><span><b>{t('No saved deals yet')}</b><span>{t('Open a Deal Link and choose Save Deal Link.')}</span></span></div>}</section>
 }
 
 function EnhancedDashboard({deals,onOpen,onCreate}:{deals:Deal[];onOpen:(deal:Deal)=>void;onCreate:()=>void}){
@@ -304,6 +316,7 @@ function App() {
   const [profile,setProfile]=useState<ProfileSummary|null>(null);
   const [publicPassport,setPublicPassport]=useState<TrustPassport|null>(null);
   const [passportMessage,setPassportMessage]=useState('');
+  const [savedDeals,setSavedDeals]=useState<Deal[]>([]);
   const [verificationMessage,setVerificationMessage]=useState('');
   const [notifications,setNotifications]=useState<DealNotification[]>([]);
   const [isAdmin,setIsAdmin]=useState(false);
@@ -312,6 +325,7 @@ function App() {
   useEffect(()=>{const timer=window.setInterval(()=>setClock(Date.now()),60_000);return()=>window.clearInterval(timer)},[]);
   useEffect(()=>{const updated=(event:Event)=>setSession((event as CustomEvent<StoredSession>).detail);const expired=()=>{setSession(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')};window.addEventListener(sessionUpdatedEvent,updated);window.addEventListener(sessionExpiredEvent,expired);return()=>{window.removeEventListener(sessionUpdatedEvent,updated);window.removeEventListener(sessionExpiredEvent,expired)}},[]);
   useEffect(()=>{if(session){listUserDeals(session).then(setDeals).catch(()=>setDeals([]))}else{demoRepository.list().then(setDeals)}},[session]);
+  useEffect(()=>{if(session)getMySavedDeals(session).then(setSavedDeals).catch(()=>setSavedDeals([]));else setSavedDeals([])},[session]);
   useEffect(()=>{if(!session?.refreshToken)return;const renew=()=>{if(!session.expiresAt||session.expiresAt-Date.now()<10*60*1000)refreshSession(session).then(setSession).catch(()=>{signOut();setSession(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')})};renew();const timer=setInterval(renew,5*60*1000);return()=>clearInterval(timer)},[session?.refreshToken,session?.expiresAt]);
   useEffect(()=>{if(session)getMyNotifications(session).then(setNotifications).catch(()=>setNotifications([]));else setNotifications([])},[session]);
   useEffect(()=>{if(session)getAdminAccess(session).then(setIsAdmin).catch(()=>setIsAdmin(false));else setIsAdmin(false)},[session]);
@@ -329,6 +343,7 @@ function App() {
   const logout=()=>{signOut();setSession(null);setIsAdmin(false);setView('home')};
   const openProfile=async()=>{if(!session)return;setAuthMessage('');setView('profile');try{setProfile(await getMyProfileSummary(session))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not load profile')}};
   const requestVerification=async()=>{if(!session||!profile)return;setVerificationMessage('');try{const status=await requestIdentityVerification(session);setProfile({...profile,verification_status:status});setVerificationMessage('Request recorded. A verification provider must be connected before identity can be approved.')}catch(error){setVerificationMessage(error instanceof Error?error.message:'Could not request verification')}};
+  const refreshSavedDeals=()=>{if(session)getMySavedDeals(session).then(setSavedDeals).catch(()=>setSavedDeals([]))};
   const activeExpired=active?isDealExpired(active,clock):false;
 
   return <div className="app">
@@ -345,6 +360,7 @@ function App() {
       {view==='deal'&&active&&<DealExpiry deal={active} now={clock}/>}
       {view==='deal'&&active&&active.status!=='draft'&&<DealRiskCheck deal={active}/>}
       {view==='deal'&&active&&active.status!=='draft'&&<SellerTrustProfile deal={active}/>}
+      {view==='deal'&&active&&active.viewerRole!=='seller'&&!(['draft','cancelled'] as Deal['status'][]).includes(active.status)&&<SaveDealButton deal={active} session={session} onChanged={refreshSavedDeals} onSignIn={()=>{setReturnAfterAuth('deal');setView('auth')}}/>}
       {view==='deal'&&active&&active.viewerRole==='seller'&&active.status==='published'&&!activeExpired&&<BuyerInvitePanel deal={active}/>}
       {view==='deal'&&active&&active.status!=='draft'&&<AgreementFingerprint deal={active}/>}
       {view==='deal'&&active&&<DealReadiness deal={active}/>}
@@ -357,6 +373,7 @@ function App() {
       {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&active.deliveryMethod==='Ship to buyer'&&(['accepted','completed'] as Deal['status'][]).includes(active.status)&&<ShippingPanel deal={active} session={session} onDelivered={()=>{const updated={...active,status:'completed' as const};setActive(updated);setDeals(items=>items.map(item=>item.id===active.id?updated:item))}}/>}
       {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&(['accepted','completed','disputed'] as Deal['status'][]).includes(active.status)&&<DealChat deal={active} session={session}/>}
       {view==='home'&&user&&<NotificationCenter items={notifications} deals={deals} onOpen={open}/>}
+      {view==='home'&&user&&<SavedDealsPanel items={savedDeals} onOpen={open}/>}
       {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&<DealSafetyActions deal={active} session={session} onStatus={status=>{setActive({...active,status});setDeals(items=>items.map(item=>item.id===active.id?{...item,status}:item))}}/>}
       {view==='deal'&&active&&active.viewerRole!=='seller'&&!(['draft','cancelled'] as Deal['status'][]).includes(active.status)&&<ReportDealPanel deal={active} session={session} onSignIn={()=>{setReturnAfterAuth('deal');setView('auth')}}/>}
       {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&<TimelinePanel deal={active} session={session}/>}
