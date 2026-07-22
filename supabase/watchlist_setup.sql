@@ -11,6 +11,33 @@ create index if not exists deal_watchlist_user_created_idx
 
 alter table public.deal_watchlist enable row level security;
 
+-- Moderation was introduced in a later setup file. This helper keeps the
+-- Watchlist compatible with projects that have not installed it yet.
+create or replace function public.is_saved_deal_visible(p_deal_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, auth
+as $$
+declare
+  v_visible boolean;
+begin
+  if to_regclass('public.deal_moderation') is null then
+    return true;
+  end if;
+
+  execute 'select not exists(
+    select 1 from public.deal_moderation
+    where deal_id = $1 and status = ''hidden''
+  )'
+  into v_visible
+  using p_deal_id;
+
+  return coalesce(v_visible, true);
+end;
+$$;
+
 create or replace function public.is_deal_saved(p_public_id text)
 returns boolean
 language sql
@@ -44,10 +71,7 @@ begin
   from public.deals deal
   where deal.public_id = upper(trim(p_public_id))
     and deal.status in ('published','accepted','completed')
-    and not exists(
-      select 1 from public.deal_moderation moderation
-      where moderation.deal_id = deal.id and moderation.status = 'hidden'
-    );
+    and public.is_saved_deal_visible(deal.id);
 
   if v_deal_id is null then
     raise exception 'Deal Link is unavailable';
@@ -119,15 +143,13 @@ as $$
   left join public.deal_media media on media.deal_id = deal.id
   where saved.user_id = auth.uid()
     and deal.status in ('published','accepted','completed')
-    and not exists(
-      select 1 from public.deal_moderation moderation
-      where moderation.deal_id = deal.id and moderation.status = 'hidden'
-    )
+    and public.is_saved_deal_visible(deal.id)
   group by deal.id, seller.display_name, seller.verification_status, saved.created_at
   order by saved.created_at desc;
 $$;
 
 revoke all on table public.deal_watchlist from anon, authenticated;
+revoke all on function public.is_saved_deal_visible(uuid) from public;
 revoke all on function public.is_deal_saved(text) from public;
 revoke all on function public.set_deal_saved(text, boolean) from public;
 revoke all on function public.get_my_saved_deals() from public;
