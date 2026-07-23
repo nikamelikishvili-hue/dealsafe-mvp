@@ -4,6 +4,7 @@ import { getAppLanguage } from './i18n';
 type PlaceResult={
   displayName?:string;
   formattedAddress?:string;
+  addressComponents?:Array<{longText?:string;shortText?:string;types?:string[]}>;
   fetchFields:(options:{fields:string[]})=>Promise<void>;
 };
 
@@ -52,15 +53,18 @@ function loadGoogleMaps(apiKey:string){
   return mapsLoader;
 }
 
-export function AddressAutocomplete({value,onChange,placeholder}:{value:string;onChange:(value:string)=>void;placeholder:string}){
+export type AddressParts={streetAddress?:string;city?:string;country?:string};
+
+export function AddressAutocomplete({value,onChange,placeholder,onAddressParts}:{value:string;onChange:(value:string)=>void;placeholder:string;onAddressParts?:(parts:AddressParts)=>void}){
   const apiKey=(import.meta.env.VITE_GOOGLE_MAPS_API_KEY||'').trim();
   const hostRef=useRef<HTMLDivElement>(null);
   const elementRef=useRef<GooglePlaceAutocompleteElement|null>(null);
   const onChangeRef=useRef(onChange);
+  const onAddressPartsRef=useRef(onAddressParts);
   const [googleReady,setGoogleReady]=useState(false);
   const [googleFailed,setGoogleFailed]=useState(false);
 
-  useEffect(()=>{onChangeRef.current=onChange},[onChange]);
+  useEffect(()=>{onChangeRef.current=onChange;onAddressPartsRef.current=onAddressParts},[onChange,onAddressParts]);
 
   useEffect(()=>{
     if(!apiKey||!hostRef.current)return;
@@ -69,11 +73,19 @@ export function AddressAutocomplete({value,onChange,placeholder}:{value:string;o
     const handleInput=()=>autocomplete&&onChangeRef.current(autocomplete.value);
     const handleSelect=async(event:Event)=>{
       const place=(event as PlaceSelectEvent).placePrediction.toPlace();
-      await place.fetchFields({fields:['displayName','formattedAddress']});
+      await place.fetchFields({fields:['displayName','formattedAddress','addressComponents']});
       if(!active)return;
       const selected=place.formattedAddress||place.displayName||autocomplete?.value||'';
-      if(autocomplete)autocomplete.value=selected;
-      onChangeRef.current(selected);
+      const components=place.addressComponents||[];
+      const component=(...types:string[])=>components.find(item=>types.some(type=>item.types?.includes(type)))?.longText||'';
+      const streetNumber=component('street_number');
+      const route=component('route');
+      const streetAddress=[streetNumber,route].filter(Boolean).join(' ').trim()||selected;
+      const city=component('locality','postal_town','sublocality_level_1','administrative_area_level_2');
+      const country=component('country');
+      if(autocomplete)autocomplete.value=streetAddress;
+      onChangeRef.current(streetAddress);
+      onAddressPartsRef.current?.({streetAddress,city,country});
     };
     loadGoogleMaps(apiKey).then(async()=>{
       if(!active||!hostRef.current||!window.google)return;
