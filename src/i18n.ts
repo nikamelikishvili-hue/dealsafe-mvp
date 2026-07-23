@@ -787,6 +787,25 @@ const deliveryAddressLabels:Record<string,Record<string,string>>={
   }
 };
 Object.entries(deliveryAddressLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
+const deliveryAddressLineTwoLabels:Record<string,Record<string,string>>={
+  en:{'Apartment / Suite / Unit (optional)':'Apartment / Suite / Unit (optional)','Apt 4B, Suite 210, Unit 3':'Apt 4B, Suite 210, Unit 3'},
+  ka:{'Apartment / Suite / Unit (optional)':'ბინა / სუიტი / ერთეული (არასავალდებულო)','Apt 4B, Suite 210, Unit 3':'მაგ. Apt 4B, Suite 210, Unit 3'},
+  de:{'Apartment / Suite / Unit (optional)':'Wohnung / Suite / Einheit (optional)','Apt 4B, Suite 210, Unit 3':'z. B. Apt 4B, Suite 210, Unit 3'},
+  es:{'Apartment / Suite / Unit (optional)':'Apartamento / Suite / Unidad (opcional)','Apt 4B, Suite 210, Unit 3':'p. ej. Apt 4B, Suite 210, Unit 3'},
+  fr:{'Apartment / Suite / Unit (optional)':'Appartement / Suite / Unité (facultatif)','Apt 4B, Suite 210, Unit 3':'ex. Apt 4B, Suite 210, Unit 3'},
+  pt:{'Apartment / Suite / Unit (optional)':'Apartamento / Suíte / Unidade (opcional)','Apt 4B, Suite 210, Unit 3':'ex.: Apt 4B, Suite 210, Unit 3'},
+  it:{'Apartment / Suite / Unit (optional)':'Appartamento / Suite / Unità (facoltativo)','Apt 4B, Suite 210, Unit 3':'es. Apt 4B, Suite 210, Unit 3'},
+  ru:{'Apartment / Suite / Unit (optional)':'Квартира / офис / помещение (необязательно)','Apt 4B, Suite 210, Unit 3':'например: Apt 4B, Suite 210, Unit 3'},
+  tr:{'Apartment / Suite / Unit (optional)':'Daire / Süit / Birim (isteğe bağlı)','Apt 4B, Suite 210, Unit 3':'örn. Apt 4B, Suite 210, Unit 3'},
+  el:{'Apartment / Suite / Unit (optional)':'Διαμέρισμα / Σουίτα / Μονάδα (προαιρετικά)','Apt 4B, Suite 210, Unit 3':'π.χ. Apt 4B, Suite 210, Unit 3'},
+  zh:{'Apartment / Suite / Unit (optional)':'公寓 / 套房 / 单元（可选）','Apt 4B, Suite 210, Unit 3':'例如：Apt 4B、Suite 210、Unit 3'},
+  ja:{'Apartment / Suite / Unit (optional)':'アパート / スイート / 部屋（任意）','Apt 4B, Suite 210, Unit 3':'例：Apt 4B、Suite 210、Unit 3'},
+  ko:{'Apartment / Suite / Unit (optional)':'아파트 / 스위트 / 호수 (선택 사항)','Apt 4B, Suite 210, Unit 3':'예: Apt 4B, Suite 210, Unit 3'},
+  ar:{'Apartment / Suite / Unit (optional)':'شقة / جناح / وحدة (اختياري)','Apt 4B, Suite 210, Unit 3':'مثال: Apt 4B، Suite 210، Unit 3'},
+  he:{'Apartment / Suite / Unit (optional)':'דירה / סוויטה / יחידה (אופציונלי)','Apt 4B, Suite 210, Unit 3':'לדוגמה: Apt 4B, Suite 210, Unit 3'},
+  hi:{'Apartment / Suite / Unit (optional)':'अपार्टमेंट / सुइट / यूनिट (वैकल्पिक)','Apt 4B, Suite 210, Unit 3':'उदाहरण: Apt 4B, Suite 210, Unit 3'}
+};
+Object.entries(deliveryAddressLineTwoLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
 Object.entries(paymentLocalePacks).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
 const applyDocumentLanguage=(language:AppLanguage)=>{document.documentElement.lang=language;document.documentElement.dir=language==='ar'||language==='he'?'rtl':'ltr'};
 applyDocumentLanguage(activeLanguage);
