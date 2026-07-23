@@ -398,8 +398,11 @@ export async function getMySavedDeals(session:StoredSession){
 }
 
 export async function getPublicDeal(publicId: string) {
+  // Deal IDs are generated and stored in uppercase. Normalize copied or
+  // manually typed links so a lowercase query string still resolves.
+  const normalizedPublicId = publicId.trim().toUpperCase();
   const response = await fetch(`${supabaseUrl}/rest/v1/rpc/get_public_deal`, {
-    method: 'POST', headers: headers(), body: JSON.stringify({ p_public_id: publicId }),
+    method: 'POST', headers: headers(), body: JSON.stringify({ p_public_id: normalizedPublicId }),
   });
   if (!response.ok) throw new Error('Deal Link is unavailable');
   const rows = await response.json() as PublicDealRow[];
