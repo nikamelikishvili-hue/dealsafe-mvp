@@ -1,6 +1,7 @@
-import { adminClient, errorResponse, json, requiredSecret } from "../_shared/common.ts";
+import { adminClient, errorResponse, json, requiredSecret, stripeRequest } from "../_shared/common.ts";
 
 type StripeEvent = { id: string; type: string; data: { object: Record<string, any> } };
+type StripePaymentIntent = { latest_charge?: string | { id?: string } | null };
 
 async function verifyStripeSignature(payload: string, header: string, secret: string) {
   const parts = header.split(",").map((part) => part.trim().split("="));
@@ -64,7 +65,14 @@ Deno.serve(async (request) => {
           updated_at: new Date().toISOString(),
         }).eq("deal_id", dealId);
         if (object.payment_status === "paid" && typeof object.payment_intent === "string") {
-          await secureFunds(dealId, object.payment_intent, null);
+          const intent = await stripeRequest<StripePaymentIntent>(
+            `/v1/payment_intents/${encodeURIComponent(object.payment_intent)}`,
+            { method: "GET" },
+          );
+          const chargeId = typeof intent.latest_charge === "string"
+            ? intent.latest_charge
+            : intent.latest_charge?.id || null;
+          await secureFunds(dealId, object.payment_intent, chargeId);
         }
       }
     } else if (event.type === "checkout.session.expired") {
@@ -100,4 +108,3 @@ Deno.serve(async (request) => {
     return errorResponse(error);
   }
 });
-

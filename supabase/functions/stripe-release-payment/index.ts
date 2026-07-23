@@ -20,13 +20,26 @@ Deno.serve(async (request) => {
     if (deal.status !== "completed") throw new Error("Payment can be released only after the deal is completed");
     const { data: payment, error: paymentError } = await admin
       .from("protected_payments")
-      .select("id,status,seller_stripe_account_id,seller_amount_cents,currency,charge_id,transfer_group,transfer_id")
+      .select("id,status,seller_stripe_account_id,seller_amount_cents,currency,payment_intent_id,charge_id,transfer_group,transfer_id")
       .eq("deal_id", deal.id)
       .single();
     if (paymentError || !payment) throw new Error("Protected payment was not found");
     if (payment.transfer_id && payment.status === "released") return json({ released: true, transferId: payment.transfer_id });
     if (payment.status !== "funds_secured" && payment.status !== "release_failed") throw new Error("Payment is not ready for release");
-    if (!payment.charge_id) throw new Error("Stripe charge is not ready for release");
+    let chargeId = payment.charge_id as string | null;
+    if (!chargeId && payment.payment_intent_id) {
+      const intent = await stripeRequest<{ latest_charge?: string | { id?: string } | null }>(
+        `/v1/payment_intents/${encodeURIComponent(payment.payment_intent_id)}`,
+        { method: "GET" },
+      );
+      chargeId = typeof intent.latest_charge === "string"
+        ? intent.latest_charge
+        : intent.latest_charge?.id || null;
+      if (chargeId) {
+        await admin.from("protected_payments").update({ charge_id: chargeId, updated_at: new Date().toISOString() }).eq("id", payment.id);
+      }
+    }
+    if (!chargeId) throw new Error("Stripe charge is not ready for release");
 
     await admin.from("protected_payments").update({ status: "release_pending", failure_message: null, updated_at: new Date().toISOString() }).eq("id", payment.id);
     try {
@@ -34,7 +47,7 @@ Deno.serve(async (request) => {
       params.set("amount", String(payment.seller_amount_cents));
       params.set("currency", String(payment.currency).toLowerCase());
       params.set("destination", payment.seller_stripe_account_id);
-      params.set("source_transaction", payment.charge_id);
+      params.set("source_transaction", chargeId);
       params.set("transfer_group", payment.transfer_group);
       params.set("description", `DealSafe ${deal.public_id}`);
       params.set("metadata[deal_id]", deal.id);

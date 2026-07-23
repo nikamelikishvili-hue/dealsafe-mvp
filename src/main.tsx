@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import QRCode from 'qrcode';
-import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, Bookmark, CalendarDays, Car, Check, Clock3, Copy, FileDown, FileSignature, Fingerprint, Flag, ImagePlus, Laptop, Link2, LockKeyhole, MailCheck, MapPin, MessageCircle, Package, PackageCheck, Pencil, Plus, QrCode, Scale, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Trash2, Truck, Watch, X } from 'lucide-react';
+import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, Bookmark, CalendarDays, Car, Check, Clock3, Copy, FileDown, FileSignature, Fingerprint, Flag, ImagePlus, Laptop, Link2, LockKeyhole, MailCheck, MapPin, MessageCircle, Package, PackageCheck, Pencil, Plus, QrCode, Scale, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Trash2, Truck, Watch, X, ZoomIn } from 'lucide-react';
 import { demoRepository } from './services/demoRepository';
 import { acceptPublicDeal, askDealQuestion, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminReports, getDealInquiries, getDealInspection, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicAgreementHistory, getPublicDeal, getPublicSellerDeclaration, getPublicSellerTrustProfile, getPublicTrustPassport, getStoredSession, getTrustPassportSettings, isCurrentUserDealSeller, isDealSaved, isSupabaseConfigured, listUserDeals, makeDealOffer, markArrived, openDealDispute, proposeMeeting, publishUserDealDraft, recordDealInspection, refreshSession, renewDealLink, reorderDealMedia, replyDealInquiry, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, setDealSaved, setTrustPassportEnabled, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealPhotos, verifyAgreementRecord, type AdminReport, type AgreementHistoryVersion, type AgreementVerificationResult, type DealInquiry, type DealInspection, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type SellerDeclarationRecord, type StoredSession, type TimelineEvent, type TrustPassport, type TrustPassportSettings } from './services/supabaseRest';
 import { markAllNotificationsRead, markDealNotificationsRead } from './services/supabaseRest';
@@ -22,6 +22,7 @@ import './home.css';
 import './dispute.css';
 import './timeline.css';
 import './agreement-export.css';
+import './media-zoom.css';
 import './qr.css';
 import './chat.css';
 import './offers.css';
@@ -440,7 +441,38 @@ function ResetPassword({token,onDone}:{token:string;onDone:()=>void}){const [pas
 const isVideoSource=(source:string)=>/\.(mp4|webm)(?:$|\?)/i.test(source);
 const isVideoFile=(file:File)=>file.type.startsWith('video/')||/\.(mp4|webm)$/i.test(file.name);
 function MediaPreview({source,className,alt}:{source:string;className?:string;alt:string}){return isVideoSource(source)?<video className={className} src={source} controls playsInline preload="metadata" aria-label={alt}/>:<img className={className} src={source} alt={alt}/>}
-function DealMedia({deal}:{deal:Deal}){const media=deal.mediaUrls||[];const cover=media[0];const printable=media.find(url=>!isVideoSource(url));if(!cover)return <div className="product-art">{deal.title.slice(0,1)}<small>{t('Photo placeholder')}</small></div>;return <><MediaPreview className={`product-media${isVideoSource(cover)?' video-cover':''}`} source={cover} alt={`${deal.title} ${t('cover')}`}/>{isVideoSource(cover)&&printable&&<img className="product-media print-photo" src={printable} alt={`${deal.title} ${t('printable item')}`}/>} {isVideoSource(cover)&&!printable&&<div className="product-art print-video-note">{t('Item video is attached to the live Deal Link')}</div>}{media.length>1&&<div className="deal-gallery supporting-gallery">{media.slice(1).map((url,index)=><MediaPreview key={url} source={url} alt={`${deal.title} ${t('media')} ${index+2}`}/>)}</div>}</>}
+function MediaLightbox({source,alt,onClose}:{source:string;alt:string;onClose:()=>void}){
+  useEffect(()=>{
+    const onKeyDown=(event:KeyboardEvent)=>{if(event.key==='Escape')onClose()};
+    window.addEventListener('keydown',onKeyDown);
+    const previousOverflow=document.body.style.overflow;
+    document.body.style.overflow='hidden';
+    return()=>{window.removeEventListener('keydown',onKeyDown);document.body.style.overflow=previousOverflow};
+  },[onClose]);
+  return <div className="media-lightbox" role="dialog" aria-modal="true" aria-label={t('Image preview')} onClick={event=>{if(event.target===event.currentTarget)onClose()}}><button className="media-lightbox-close" type="button" onClick={onClose} aria-label={t('Close image')}><X size={22}/></button>{isVideoSource(source)?<video className="media-lightbox-content" src={source} controls autoPlay playsInline aria-label={alt}/>:<img className="media-lightbox-content" src={source} alt={alt}/>}</div>;
+}
+function ZoomableMedia({source,className,alt,onOpen}:{source:string;className?:string;alt:string;onOpen:()=>void}){
+  if(isVideoSource(source))return <MediaPreview className={className} source={source} alt={alt}/>;
+  return <button type="button" className="media-zoom-button" onClick={onOpen} aria-label={`${t('Zoom image')}: ${alt}`}><MediaPreview className={className} source={source} alt={alt}/><span className="media-zoom-indicator" aria-hidden="true"><ZoomIn size={20}/></span></button>;
+}
+function DealMedia({deal}:{deal:Deal}){
+  const media=deal.mediaUrls||[];
+  const cover=media[0];
+  const printable=media.filter(url=>!isVideoSource(url));
+  const [lightboxSource,setLightboxSource]=useState<string|null>(null);
+  if(!cover)return <div className="product-art">{deal.title.slice(0,1)}<small>{t('Photo placeholder')}</small></div>;
+  const openImage=(source:string)=>setLightboxSource(source);
+  return <>
+    <div className="screen-media-gallery">
+      <ZoomableMedia className={`product-media${isVideoSource(cover)?' video-cover':''}`} source={cover} alt={`${deal.title} ${t('cover')}`} onOpen={()=>openImage(cover)}/>
+      {media.length>1&&<div className="deal-gallery supporting-gallery">{media.slice(1).map((url,index)=><ZoomableMedia key={url} source={url} alt={`${deal.title} ${t('media')} ${index+2}`} onOpen={()=>openImage(url)}/>)}</div>}
+    </div>
+    <div className="print-media-gallery" aria-label={t('Printable item photos')}>
+      {printable.length>0?printable.map((url,index)=><img key={url} className="print-photo" src={url} alt={`${deal.title} ${t('printable item')} ${index+1}`}/>):<div className="product-art print-video-note">{t('Item video is attached to the live Deal Link')}</div>}
+    </div>
+    {lightboxSource&&<MediaLightbox source={lightboxSource} alt={`${deal.title} ${t('image preview')}`} onClose={()=>setLightboxSource(null)}/>} 
+  </>;
+}
 function FilePreview({file,alt}:{file:File;alt:string}){const source=URL.createObjectURL(file);return isVideoFile(file)?<video src={source} controls muted playsInline preload="metadata" aria-label={alt}/>:<img src={source} alt={alt}/>}
 
 type SellerDeclarations={authority:boolean;lawful:boolean;disclosure:boolean};
@@ -516,7 +548,7 @@ function PhotoManager({deal,session,onAdded}:{deal:Deal;session:StoredSession;on
   return <section className="photo-manager no-print"><div><ImagePlus/><span><b>{t('Add photos or video')}</b><small>{remaining} {t('of 6 spaces available')} · {files.length} {t('selected')}</small></span></div><p className="media-privacy"><ShieldCheck/>{t('Photo privacy: location and camera metadata are removed before upload.')}</p>{remaining>files.length&&<label className="secondary">{t('Choose more media')}<input type="file" accept="image/jpeg,image/png,image/webp,image/heic,video/mp4,video/webm" multiple onChange={e=>{choose(Array.from(e.target.files||[]));e.currentTarget.value=''}}/></label>}{files.length>0&&<div className="manager-previews">{files.map((file,index)=><FilePreview key={`${file.name}-${index}`} file={file} alt={t('Upload preview')}/>)}</div>}{files.length>0&&<button className="primary" disabled={uploading} onClick={upload}>{uploading?t('Preparing and uploading…'):`${t('Upload')} ${files.length} ${t(files.length>1?'files':'file')}`}</button>}{message&&<div className="notice">{t(message)}</div>}</section>
 }
 
-function ExistingMediaManager({deal,session,onRemoved}:{deal:Deal;session:StoredSession;onRemoved:(url:string)=>void}){const [removing,setRemoving]=useState('');const [message,setMessage]=useState('');const remove=async(url:string)=>{if(!confirm(t('Remove this photo or video from the Deal Link?')))return;setRemoving(url);setMessage('');try{await deleteDealMedia(session,deal.id,url);onRemoved(url);setMessage('Media removed.')}catch(error){setMessage(error instanceof Error?error.message:'Could not remove media')}finally{setRemoving('')}};if(!deal.mediaUrls?.length)return null;return <section className="existing-media no-print"><div><p className="eyebrow">{t('Published media')}</p><h2>{t('Manage photos and video')}</h2></div><div className="existing-media-grid">{deal.mediaUrls.map((url,index)=><article key={url}><MediaPreview source={url} alt={`${deal.title} ${t('media')} ${index+1}`}/><button aria-label={`${t('Remove media')} ${index+1}`} disabled={removing===url} onClick={()=>remove(url)}><Trash2 size={16}/>{t(removing===url?'Removing…':'Remove')}</button></article>)}</div>{message&&<div className="notice">{t(message)}</div>}</section>}
+function ExistingMediaManager({deal,session,onRemoved}:{deal:Deal;session:StoredSession;onRemoved:(url:string)=>void}){const [removing,setRemoving]=useState('');const [message,setMessage]=useState('');const [previewSource,setPreviewSource]=useState<string|null>(null);const remove=async(url:string)=>{if(!confirm(t('Remove this photo or video from the Deal Link?')))return;setRemoving(url);setMessage('');try{await deleteDealMedia(session,deal.id,url);onRemoved(url);setMessage('Media removed.');if(previewSource===url)setPreviewSource(null)}catch(error){setMessage(error instanceof Error?error.message:'Could not remove media')}finally{setRemoving('')}};if(!deal.mediaUrls?.length)return null;return <section className="existing-media no-print"><div><p className="eyebrow">{t('Published media')}</p><h2>{t('Manage photos and video')}</h2></div><div className="existing-media-grid">{deal.mediaUrls.map((url,index)=><article key={url}><ZoomableMedia source={url} alt={`${deal.title} ${t('media')} ${index+1}`} onOpen={()=>setPreviewSource(url)}/><button aria-label={`${t('Remove media')} ${index+1}`} disabled={removing===url} onClick={()=>remove(url)}><Trash2 size={16}/>{t(removing===url?'Removing…':'Remove')}</button></article>)}</div>{message&&<div className="notice">{t(message)}</div>}{previewSource&&<MediaLightbox source={previewSource} alt={`${deal.title} ${t('image preview')}`} onClose={()=>setPreviewSource(null)}/>}</section>}
 
 function CoverSelector({deal,session,onReordered}:{deal:Deal;session:StoredSession;onReordered:(urls:string[])=>void}){const urls=deal.mediaUrls||[];const [selected,setSelected]=useState(urls[0]||'');const [message,setMessage]=useState('');const [saving,setSaving]=useState(false);useEffect(()=>setSelected(urls[0]||''),[urls[0]]);if(urls.length<2)return null;const save=async()=>{const ordered=[selected,...urls.filter(url=>url!==selected)];setSaving(true);setMessage('');try{await reorderDealMedia(session,deal.id,ordered);onReordered(ordered);setMessage('Cover media updated.')}catch(error){setMessage(error instanceof Error?error.message:'Could not update cover')}finally{setSaving(false)}};return <section className="cover-selector no-print"><div><p className="eyebrow">{t('Deal Link cover')}</p><h2>{t('Choose the first photo')}</h2><span>{t('The selected file appears first and at the largest size.')}</span></div><div className="cover-options">{urls.map((url,index)=><button key={url} className={selected===url?'selected':''} onClick={()=>setSelected(url)}><MediaPreview source={url} alt={`${t('Cover option')} ${index+1}`}/><span>{selected===url?<><Star size={14}/>{t('Selected')}</>:`${t('Media')} ${index+1}`}</span></button>)}</div><button className="primary" disabled={saving||selected===urls[0]} onClick={save}>{t(saving?'Saving…':'Set as cover')}</button>{message&&<div className="notice">{t(message)}</div>}</section>}
 
