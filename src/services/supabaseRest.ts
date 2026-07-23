@@ -2,8 +2,16 @@ import type { Deal, DealDraft } from '../domain';
 import { toMinorUnits, type CurrencyCode } from '../currency';
 import { isVideoUpload, prepareMediaUpload } from '../mediaPrivacy';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+// Vercel can preserve pasted line breaks in environment variables. Keep only
+// the first non-empty line so an accidental multi-line key never becomes an
+// invalid HTTP header value in the browser.
+function readPublicEnv(name: string) {
+  const raw = import.meta.env[name] as string | undefined;
+  return raw?.split(/\r?\n/).map(value => value.trim()).find(Boolean);
+}
+
+const supabaseUrl = readPublicEnv('VITE_SUPABASE_URL')?.replace(/\/+$/, '');
+const publishableKey = readPublicEnv('VITE_SUPABASE_PUBLISHABLE_KEY');
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && publishableKey);
 
