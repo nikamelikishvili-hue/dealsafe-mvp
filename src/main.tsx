@@ -65,7 +65,7 @@ import './deal-action-plan.css';
 import './delivery-address.css';
 import './payment-status.css';
 
-type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset';
+type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset' | 'link-error';
 interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
 const initial: DealDraft = {title:'',description:'',price:'',currency:'USD',condition:'Good',serialNumber:'',deliveryMethod:'Meet in person',expiresInDays:7};
 type DealTemplateId='phone'|'laptop'|'vehicle'|'watch'|'general';
@@ -522,6 +522,16 @@ function CoverSelector({deal,session,onReordered}:{deal:Deal;session:StoredSessi
 
 function DealEditor({deal,session,onSaved}:{deal:Deal;session:StoredSession;onSaved:(deal:Deal)=>void}){const [open,setOpen]=useState(false);const [saving,setSaving]=useState(false);const [message,setMessage]=useState('');const [edit,setEdit]=useState<DealDraft>({title:deal.title,description:deal.description,price:amountForInput(deal.priceCents,deal.currency),currency:deal.currency,condition:deal.condition,serialNumber:'',deliveryMethod:deal.deliveryMethod});const save=async(e:React.FormEvent)=>{e.preventDefault();setSaving(true);setMessage('');try{const version=await updatePublishedDeal(session,deal.id,edit);onSaved({...deal,title:edit.title,description:edit.description,priceCents:toMinorUnits(edit.price,edit.currency),condition:edit.condition,deliveryMethod:edit.deliveryMethod,agreementVersion:version});setMessage(`${t('Changes published as agreement version')} ${version}.`);setOpen(false)}catch(error){setMessage(error instanceof Error?error.message:'Could not update deal')}finally{setSaving(false)}};return <section id="deal-editor" className="deal-editor no-print"><div><Pencil/><span><b>{t('Edit published deal')}</b><small>{t('Changes create a new agreement version.')}</small></span></div><button id="deal-editor-toggle" className="secondary" onClick={()=>setOpen(!open)}>{t(open?'Close editor':'Edit details')}</button>{open&&<form onSubmit={save}><label>{t('Item title')}<input required minLength={3} maxLength={120} value={edit.title} onChange={e=>setEdit({...edit,title:e.target.value})}/></label><div className="edit-two"><label>{t('Price')} ({edit.currency})<input required type="number" min={currencyStep(edit.currency)} step={currencyStep(edit.currency)} value={edit.price} onChange={e=>setEdit({...edit,price:e.target.value})}/></label><label>{t('Condition')}<select value={edit.condition} onChange={e=>setEdit({...edit,condition:e.target.value as DealDraft['condition']})}><option value="Like new">{t('Like new')}</option><option value="Good">{t('Good')}</option><option value="Fair">{t('Fair')}</option></select></label></div><label>{t('Description and defects')}<textarea required minLength={20} value={edit.description} onChange={e=>setEdit({...edit,description:e.target.value})}/><small>{edit.description.trim().length}/20 · {t('Describe wear, repairs, or defects.')}</small></label><label>{t('Handoff')}<select value={edit.deliveryMethod} onChange={e=>setEdit({...edit,deliveryMethod:e.target.value as DealDraft['deliveryMethod']})}><option value="Meet in person">{t('Meet in person')}</option><option value="Ship to buyer">{t('Ship to buyer')}</option></select></label><button className="primary full" disabled={saving}>{t(saving?'Publishing…':'Publish changes')}</button></form>}{message&&<div className="notice">{t(message)}</div>}</section>}
 
+function DealLinkError({message,onBack}:{message:string;onBack:()=>void}){
+  return <section className="form-wrap deal-link-error">
+    <div className="safe pending"><ShieldAlert/>{t('Deal Link unavailable')}</div>
+    <h1>{t('Deal Link unavailable')}</h1>
+    <p className="lede small">{t('The link may be incomplete, expired, or no longer public.')}</p>
+    {message&&<div className="notice"><ShieldAlert size={18}/><span>{t(message)}</span></div>}
+    <button className="primary" onClick={onBack}>{t('Back')}</button>
+  </section>
+}
+
 function App() {
   const initialSession=getStoredSession();
   const recoveryParams=new URLSearchParams(location.hash.slice(1));const recoveryToken=recoveryParams.get('type')==='recovery'?recoveryParams.get('access_token')||'':'';
@@ -563,7 +573,7 @@ function App() {
   useEffect(()=>{if(view!=='deal'||!active||!session)return;setNotifications(items=>items.map(item=>item.deal_id===active.id?{...item,is_read:true}:item));void markDealNotificationsRead(session,active.id).catch(()=>{})},[view,active?.id,session?.accessToken]);
   useEffect(()=>{if(session)getAdminAccess(session).then(setIsAdmin).catch(()=>setIsAdmin(false));else setIsAdmin(false)},[session]);
   useEffect(()=>{if(isSupabaseConfigured) checkSupabaseConnection().then(setDatabaseConnected)},[]);
-  useEffect(()=>{const params=new URLSearchParams(location.search);const trustId=params.get('trust');const publicId=params.get('deal');if(trustId){setView('passport');setPassportMessage('');getPublicTrustPassport(trustId).then(passport=>{if(passport)setPublicPassport(passport);else setPassportMessage('Passport unavailable')}).catch(error=>setPassportMessage(error instanceof Error?error.message:'Passport unavailable'))}else if(publicId){getPublicDeal(publicId).then(deal=>{setActive(deal);setView('deal')}).catch(error=>setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable'))}},[]);
+   useEffect(()=>{const params=new URLSearchParams(location.search);const trustId=params.get('trust');const publicId=params.get('deal');if(trustId){setView('passport');setPassportMessage('');getPublicTrustPassport(trustId).then(passport=>{if(passport)setPublicPassport(passport);else setPassportMessage('Passport unavailable')}).catch(error=>setPassportMessage(error instanceof Error?error.message:'Passport unavailable'))}else if(publicId){getPublicDeal(publicId).then(deal=>{setActive(deal);setView('deal')}).catch(error=>{setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable');setView('link-error')})}},[]);
   useEffect(()=>{setBuyer('');setBuyerAccessCode('');setAgreementChecks({item:false,price:false,handoff:false})},[active?.publicId,active?.agreementVersion]);
   useEffect(()=>{let current=true;setAcceptanceProtected(false);if(!active||active.status!=='published')return;getDealAcceptanceProtection(active.publicId).then(enabled=>{if(current)setAcceptanceProtected(enabled)}).catch(()=>{});return()=>{current=false}},[active?.publicId,active?.status]);
   const reviewDraft=(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');setReviewingDraft(true);window.scrollTo({top:0,behavior:'smooth'})};
@@ -589,6 +599,7 @@ function App() {
       {view==='auth'&&<div className="forgot-entry"><button onClick={()=>setView('forgot')}>{t('Forgot password?')}</button></div>}
       {view==='forgot'&&<ForgotPassword onBack={()=>setView('auth')}/>}
       {view==='reset'&&recoveryToken&&<ResetPassword token={recoveryToken} onDone={()=>setView('auth')}/>}
+      {view==='link-error'&&<DealLinkError message={authMessage} onBack={()=>{history.replaceState({},'',location.pathname);setAuthMessage('');setView('home')}}/>}
       {view==='home'&&<InstallApp/>}
       {view==='admin'&&session&&isAdmin&&<AdminReportCenter session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/>}
       {view==='create'&&authMessage&&<div className="creation-error notice">{t(authMessage)}</div>}
