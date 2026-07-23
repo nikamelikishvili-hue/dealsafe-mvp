@@ -59,6 +59,7 @@ export function AddressAutocomplete({value,onChange,placeholder,onAddressParts}:
   const apiKey=(import.meta.env.VITE_GOOGLE_MAPS_API_KEY||'').trim();
   const hostRef=useRef<HTMLDivElement>(null);
   const elementRef=useRef<GooglePlaceAutocompleteElement|null>(null);
+  const inputValueRef=useRef(value);
   const onChangeRef=useRef(onChange);
   const onAddressPartsRef=useRef(onAddressParts);
   const [googleReady,setGoogleReady]=useState(false);
@@ -70,20 +71,23 @@ export function AddressAutocomplete({value,onChange,placeholder,onAddressParts}:
     if(!apiKey||!hostRef.current)return;
     let active=true;
     let autocomplete:GooglePlaceAutocompleteElement|null=null;
-    const handleInput=()=>autocomplete&&onChangeRef.current(autocomplete.value);
+    const handleInput=()=>{if(!autocomplete)return;inputValueRef.current=autocomplete.value;onChangeRef.current(autocomplete.value)};
     const handleSelect=async(event:Event)=>{
       const place=(event as PlaceSelectEvent).placePrediction.toPlace();
       await place.fetchFields({fields:['displayName','formattedAddress','addressComponents']});
       if(!active)return;
       const selected=place.formattedAddress||place.displayName||autocomplete?.value||'';
       const components=place.addressComponents||[];
-      const component=(...types:string[])=>components.find(item=>types.some(type=>item.types?.includes(type)))?.longText||'';
-      const streetNumber=component('street_number');
+      const component=(...types:string[])=>{const item=components.find(entry=>types.some(type=>entry.types?.includes(type)));return item?.longText||item?.shortText||''};
+      const selectedStreetPart=selected.split(',')[0]?.trim()||selected;
+      const leadingNumber=(text:string)=>text.match(/^\s*(\d+[A-Za-z]?(?:\s*[-/]\s*\d+[A-Za-z]?)?)(?:\s|$)/)?.[1]||'';
+      const streetNumber=component('street_number')||leadingNumber(selectedStreetPart)||leadingNumber(inputValueRef.current);
       const route=component('route');
-      const streetAddress=[streetNumber,route].filter(Boolean).join(' ').trim()||selected;
+      const streetAddress=route?[streetNumber,route].filter(Boolean).join(' ').trim():selectedStreetPart;
       const city=component('locality','postal_town','sublocality_level_1','administrative_area_level_2');
       const country=component('country');
       if(autocomplete)autocomplete.value=streetAddress;
+      inputValueRef.current=streetAddress;
       onChangeRef.current(streetAddress);
       onAddressPartsRef.current?.({streetAddress,city,country});
     };
@@ -116,7 +120,7 @@ export function AddressAutocomplete({value,onChange,placeholder,onAddressParts}:
     };
   },[apiKey,placeholder]);
 
-  useEffect(()=>{if(elementRef.current&&elementRef.current.value!==value)elementRef.current.value=value},[value]);
+  useEffect(()=>{inputValueRef.current=value;if(elementRef.current&&elementRef.current.value!==value)elementRef.current.value=value},[value]);
 
   if(!apiKey||googleFailed)return <input required placeholder={placeholder} value={value} onChange={event=>onChange(event.target.value)}/>;
   return <div className={`google-address-autocomplete ${googleReady?'ready':'loading'}`}><div ref={hostRef}/>{!googleReady&&<input required placeholder={placeholder} value={value} onChange={event=>onChange(event.target.value)}/>}</div>;
