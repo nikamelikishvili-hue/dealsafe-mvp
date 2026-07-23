@@ -806,6 +806,25 @@ const deliveryAddressLineTwoLabels:Record<string,Record<string,string>>={
   hi:{'Apartment / Suite / Unit (optional)':'अपार्टमेंट / सुइट / यूनिट (वैकल्पिक)','Apt 4B, Suite 210, Unit 3':'उदाहरण: Apt 4B, Suite 210, Unit 3'}
 };
 Object.entries(deliveryAddressLineTwoLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
+const deliveryAddressPartsLabels:Record<string,Record<string,string>>={
+  en:{'Street address (number and name)':'Street address (number and name)','123 Main St':'123 Main St','City':'City','New York':'New York'},
+  ka:{'Street address (number and name)':'ქუჩის ნომერი და დასახელება','123 Main St':'მაგ. 123 Main St','City':'ქალაქი','New York':'ნიუ-იორკი'},
+  de:{'Street address (number and name)':'Straße (Nummer und Name)','123 Main St':'z. B. 123 Main St','City':'Stadt','New York':'New York'},
+  es:{'Street address (number and name)':'Calle (número y nombre)','123 Main St':'p. ej. 123 Main St','City':'Ciudad','New York':'Nueva York'},
+  fr:{'Street address (number and name)':'Rue (numéro et nom)','123 Main St':'ex. 123 Main St','City':'Ville','New York':'New York'},
+  pt:{'Street address (number and name)':'Rua (número e nome)','123 Main St':'ex.: 123 Main St','City':'Cidade','New York':'Nova York'},
+  it:{'Street address (number and name)':'Via (numero e nome)','123 Main St':'es. 123 Main St','City':'Città','New York':'New York'},
+  ru:{'Street address (number and name)':'Улица (номер и название)','123 Main St':'например: 123 Main St','City':'Город','New York':'Нью-Йорк'},
+  tr:{'Street address (number and name)':'Sokak (numara ve ad)','123 Main St':'örn. 123 Main St','City':'Şehir','New York':'New York'},
+  el:{'Street address (number and name)':'Οδός (αριθμός και όνομα)','123 Main St':'π.χ. 123 Main St','City':'Πόλη','New York':'Νέα Υόρκη'},
+  zh:{'Street address (number and name)':'街道（门牌号和名称）','123 Main St':'例如：123 Main St','City':'城市','New York':'纽约'},
+  ja:{'Street address (number and name)':'番地・通り名','123 Main St':'例：123 Main St','City':'市区町村','New York':'ニューヨーク'},
+  ko:{'Street address (number and name)':'도로명 및 번지','123 Main St':'예: 123 Main St','City':'도시','New York':'뉴욕'},
+  ar:{'Street address (number and name)':'الشارع (الرقم والاسم)','123 Main St':'مثال: 123 Main St','City':'المدينة','New York':'نيويورك'},
+  he:{'Street address (number and name)':'רחוב (מספר ושם)','123 Main St':'לדוגמה: 123 Main St','City':'עיר','New York':'ניו יורק'},
+  hi:{'Street address (number and name)':'सड़क (नंबर और नाम)','123 Main St':'उदाहरण: 123 Main St','City':'शहर','New York':'न्यूयॉर्क'}
+};
+Object.entries(deliveryAddressPartsLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
 Object.entries(paymentLocalePacks).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
 const applyDocumentLanguage=(language:AppLanguage)=>{document.documentElement.lang=language;document.documentElement.dir=language==='ar'||language==='he'?'rtl':'ltr'};
 applyDocumentLanguage(activeLanguage);
