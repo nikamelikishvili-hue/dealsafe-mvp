@@ -807,8 +807,8 @@ const deliveryAddressLineTwoLabels:Record<string,Record<string,string>>={
 };
 Object.entries(deliveryAddressLineTwoLabels).forEach(([code,labels])=>{dictionaries[code]={...dictionaries[code],...labels}});
 const deliveryAddressPartsLabels:Record<string,Record<string,string>>={
-  en:{'Street address (number and name)':'Street address (number and name)','123 Main St':'123 Main St','City':'City','New York':'New York'},
-  ka:{'Street address (number and name)':'ქუჩის ნომერი და დასახელება','123 Main St':'მაგ. 123 Main St','City':'ქალაქი','New York':'ნიუ-იორკი'},
+  en:{'Street address (number and name)':'Street address (number and name)','123 Main St':'123 Main St','City':'City','New York':'New York','Choose a specific address that includes a street number.':'Choose a specific address that includes a street number.'},
+  ka:{'Street address (number and name)':'ქუჩის ნომერი და დასახელება','123 Main St':'მაგ. 123 Main St','City':'ქალაქი','New York':'ნიუ-იორკი','Choose a specific address that includes a street number.':'აირჩიე კონკრეტული მისამართი, რომელშიც ქუჩის ნომერიც არის.'},
   de:{'Street address (number and name)':'Straße (Nummer und Name)','123 Main St':'z. B. 123 Main St','City':'Stadt','New York':'New York'},
   es:{'Street address (number and name)':'Calle (número y nombre)','123 Main St':'p. ej. 123 Main St','City':'Ciudad','New York':'Nueva York'},
   fr:{'Street address (number and name)':'Rue (numéro et nom)','123 Main St':'ex. 123 Main St','City':'Ville','New York':'New York'},

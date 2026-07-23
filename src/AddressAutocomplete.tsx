@@ -16,6 +16,7 @@ type GooglePlaceAutocompleteElement=HTMLElement&{
   placeholder:string;
   requestedLanguage:string;
   value:string;
+  includedPrimaryTypes?:string[];
 };
 
 type PlaceLibrary={
@@ -55,7 +56,7 @@ function loadGoogleMaps(apiKey:string){
 
 export type AddressParts={streetAddress?:string;city?:string;country?:string};
 
-export function AddressAutocomplete({value,onChange,placeholder,onAddressParts}:{value:string;onChange:(value:string)=>void;placeholder:string;onAddressParts?:(parts:AddressParts)=>void}){
+export function AddressAutocomplete({value,onChange,placeholder,onAddressParts,streetAddressOnly=false}:{value:string;onChange:(value:string)=>void;placeholder:string;onAddressParts?:(parts:AddressParts)=>void;streetAddressOnly?:boolean}){
   const apiKey=(import.meta.env.VITE_GOOGLE_MAPS_API_KEY||'').trim();
   const hostRef=useRef<HTMLDivElement>(null);
   const elementRef=useRef<GooglePlaceAutocompleteElement|null>(null);
@@ -99,6 +100,7 @@ export function AddressAutocomplete({value,onChange,placeholder,onAddressParts}:
       autocomplete.name='meeting-address';
       autocomplete.placeholder=placeholder;
       autocomplete.requestedLanguage=getAppLanguage();
+      if(streetAddressOnly)autocomplete.includedPrimaryTypes=['street_address'];
       autocomplete.value=value;
       autocomplete.setAttribute('aria-label',placeholder);
       autocomplete.addEventListener('input',handleInput);
@@ -118,7 +120,7 @@ export function AddressAutocomplete({value,onChange,placeholder,onAddressParts}:
       }
       elementRef.current=null;
     };
-  },[apiKey,placeholder]);
+  },[apiKey,placeholder,streetAddressOnly]);
 
   useEffect(()=>{inputValueRef.current=value;if(elementRef.current&&elementRef.current.value!==value)elementRef.current.value=value},[value]);
 
