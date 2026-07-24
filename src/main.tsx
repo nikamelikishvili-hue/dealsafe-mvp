@@ -69,6 +69,7 @@ import './delivery-address.css';
 import './payment-status.css';
 import './payment-receipt.css';
 import './evidence.css';
+import './global-redesign.css';
 
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset' | 'link-error';
 interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
@@ -700,6 +701,74 @@ function DealLinkError({message,onBack}:{message:string;onBack:()=>void}){
   </section>
 }
 
+function GlobalHome({onCreate}:{onCreate:()=>void}){
+  const openSection=(id:string)=>document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'});
+  const steps=[
+    {icon:<FileSignature/>,number:'01',title:'Create one secure record',body:'Add the item, price, condition, photos, and handoff terms.'},
+    {icon:<Link2/>,number:'02',title:'Share the Deal Link',body:'Both parties review the same version and keep the conversation together.'},
+    {icon:<LockKeyhole/>,number:'03',title:'Secure the payment',body:'The buyer pays by card and funds stay protected during the deal.'},
+    {icon:<PackageCheck/>,number:'04',title:'Complete with evidence',body:'Record delivery, inspection, and the final release to the seller.'},
+  ];
+  return <>
+    <section className="global-hero">
+      <div className="global-hero-copy">
+        <p className="global-kicker"><ShieldCheck size={17}/>{t('The trust layer for private deals')}</p>
+        <h1>{t('Private deals.')}<br/><span>{t('Protected from link to handoff.')}</span></h1>
+        <p className="global-lede">{t('Create one trusted record for the item, agreement, card payment, evidence, delivery, and final release.')}</p>
+        <div className="global-hero-actions">
+          <button type="button" className="global-primary" onClick={onCreate}><Plus size={18}/>{t('Create secure deal')}<ArrowRight size={18}/></button>
+          <button type="button" className="global-secondary" onClick={()=>openSection('how-it-works')}>{t('How it works')}</button>
+        </div>
+        <div className="global-proof">
+          <span><FileSignature size={18}/>{t('Shared agreement')}</span>
+          <span><LockKeyhole size={18}/>{t('Protected payment')}</span>
+          <span><PackageCheck size={18}/>{t('Recorded handoff')}</span>
+        </div>
+      </div>
+      <div className="network-stage" aria-label={t('DealSafe protected transaction flow')}>
+        <div className="network-orb" aria-hidden="true">
+          <i className="orbit orbit-one"></i><i className="orbit orbit-two"></i><i className="orbit orbit-three"></i>
+          <i className="network-node node-one"></i><i className="network-node node-two"></i><i className="network-node node-three"></i><i className="network-node node-four"></i><i className="network-node node-five"></i>
+          <div className="orb-shield"><ShieldCheck/></div>
+        </div>
+        <article className="signal-card signal-agreement"><span><FileSignature/></span><div><small>{t('AGREEMENT')}</small><b>{t('Terms accepted')}</b></div><BadgeCheck/></article>
+        <article className="signal-card signal-payment"><span><BadgeDollarSign/></span><div><small>{t('PAYMENT')}</small><b>{t('Funds secured')}</b></div><LockKeyhole/></article>
+        <article className="signal-card signal-handoff"><span><PackageCheck/></span><div><small>{t('HANDOFF')}</small><b>{t('Evidence recorded')}</b></div><Check/></article>
+      </div>
+    </section>
+
+    <section className="deal-flow" id="how-it-works">
+      <div className="global-section-heading">
+        <p className="eyebrow">{t('HOW DEALSAFE WORKS')}</p>
+        <h2>{t('A clear path from agreement to completion.')}</h2>
+        <p>{t('The essential steps stay visible to both sides, without the clutter of a traditional marketplace.')}</p>
+      </div>
+      <div className="deal-flow-grid">{steps.map(step=><article key={step.number}><div className="flow-icon">{step.icon}</div><span>{step.number}</span><h3>{t(step.title)}</h3><p>{t(step.body)}</p></article>)}</div>
+    </section>
+
+    <AgreementVerifier/>
+
+    <section className="global-protection" id="protection">
+      <div className="global-protection-copy">
+        <p className="eyebrow">{t('BUILT FOR TRUST')}</p>
+        <h2>{t('Protection both parties can understand.')}</h2>
+        <p>{t('DealSafe keeps the agreement, payment status, evidence, and handoff history in one private transaction record.')}</p>
+        <button type="button" className="global-secondary light" onClick={onCreate}>{t('Start a protected deal')}<ArrowRight size={17}/></button>
+      </div>
+      <div className="protection-grid">
+        <article><FileSignature/><div><h3>{t('One shared agreement')}</h3><p>{t('Price, disclosures, and every accepted version stay together.')}</p></div></article>
+        <article><BadgeDollarSign/><div><h3>{t('Protected card payment')}</h3><p>{t('Payment status and seller release are recorded step by step.')}</p></div></article>
+        <article><ShieldCheck/><div><h3>{t('Evidence before release')}</h3><p>{t('Shipping, inspection, and disputes use the same deal history.')}</p></div></article>
+      </div>
+    </section>
+
+    <section className="global-cta">
+      <div><p className="eyebrow">{t('READY WHEN YOU ARE')}</p><h2>{t('Make the next private deal easier to trust.')}</h2></div>
+      <button type="button" className="global-primary" onClick={onCreate}>{t('Create a Deal Link')}<ArrowRight size={18}/></button>
+    </section>
+  </>
+}
+
 function App() {
   const initialSession=getStoredSession();
   const recoveryParams=new URLSearchParams(location.hash.slice(1));const recoveryToken=recoveryParams.get('type')==='recovery'?recoveryParams.get('access_token')||'':'';
@@ -761,9 +830,14 @@ function App() {
   const applyDealParticipants=(dealId:string,participants:DealParticipants)=>{const merge=(deal:Deal):Deal=>({...deal,sellerName:participants.seller_name,sellerVerification:participants.seller_verification,buyerName:participants.buyer_name,buyerVerification:participants.buyer_verification,viewerRole:participants.viewer_role});setActive(current=>current?.id===dealId?merge(current):current);setDeals(items=>items.map(item=>item.id===dealId?merge(item):item))};
   const applyDealActionPlan=(dealId:string,plan:DealActionPlan)=>{setActive(current=>current?.id===dealId?{...current,status:plan.deal_status,viewerRole:plan.viewer_role}:current);setDeals(items=>items.map(item=>item.id===dealId?{...item,status:plan.deal_status,viewerRole:plan.viewer_role}:item))};
   const activeExpired=active?isDealExpired(active,clock):false;
+  const goHomeSection=(id?:string)=>{setView('home');if(id)window.setTimeout(()=>document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'}),0)};
 
-  return <div className="app">
-    <header><button className="brand" onClick={()=>setView('home')}><span><ShieldCheck size={20}/></span>DealSafe</button><span className={`beta ${databaseConnected?'connected':''}`}>{t(databaseConnected?'Database connected':'Private beta')}</span><label className="language-select"><select value={language} onChange={event=>{const next=event.target.value as AppLanguage;setAppLanguage(next);setLanguageState(next)}} aria-label={t('Language')}>{supportedLanguages.map(item=><option key={item.code} value={item.code}>{item.name}</option>)}</select></label><div className="account">{user?<>{isAdmin&&<button className="admin-link" onClick={()=>setView('admin')}><ShieldCheck size={15}/>{t('Admin')}</button>}<button onClick={openProfile}>{user.displayName}</button><button onClick={logout}>{t('Sign out')}</button></>:<button onClick={()=>{setReturnAfterAuth('home');setView('auth')}}>{t('Sign in')}</button>}</div></header>
+  return <div className={`app view-${view}`}>
+    <header className="site-header"><div className="header-inner">
+      <div className="header-brand-group"><button className="brand" onClick={()=>goHomeSection()}><span><ShieldCheck size={21}/></span>DealSafe</button><span className={`beta ${databaseConnected?'connected':''}`}>{t(databaseConnected?'Database connected':'Private beta')}</span></div>
+      <nav className="site-nav" aria-label={t('Primary navigation')}><button onClick={()=>goHomeSection()}>{t(user?'Dashboard':'Home')}</button><button onClick={()=>goHomeSection('how-it-works')}>{t('How it works')}</button><button onClick={()=>goHomeSection('protection')}>{t('Protection')}</button></nav>
+      <div className="header-actions"><label className="language-select"><select value={language} onChange={event=>{const next=event.target.value as AppLanguage;setAppLanguage(next);setLanguageState(next)}} aria-label={t('Language')}>{supportedLanguages.map(item=><option key={item.code} value={item.code}>{item.name}</option>)}</select></label>{user&&<button className="header-create" onClick={openCreate}><Plus size={16}/><span>{t('New deal')}</span></button>}<div className="account">{user?<>{isAdmin&&<button className="admin-link" onClick={()=>setView('admin')}><ShieldCheck size={15}/>{t('Admin')}</button>}<button onClick={openProfile}>{user.displayName}</button><button onClick={logout}>{t('Sign out')}</button></>:<><button onClick={()=>{setReturnAfterAuth('home');setView('auth')}}>{t('Sign in')}</button><button className="header-signup" onClick={()=>{setAuthMode('signup');setReturnAfterAuth('home');setView('auth')}}>{t('Create account')}</button></>}</div></div>
+    </div></header>
     <main>
       {view==='auth'&&<div className="forgot-entry"><button onClick={()=>setView('forgot')}>{t('Forgot password?')}</button></div>}
       {view==='forgot'&&<ForgotPassword onBack={()=>setView('auth')}/>}
@@ -817,7 +891,8 @@ function App() {
       {view==='deal'&&active&&session&&active.status==='accepted'&&active.deliveryMethod==='Meet in person'&&active.viewerRole!=='visitor'&&<HandoffPanel deal={active} session={session} paymentReady={Boolean(paymentReadyByDeal[active.id])} onComplete={()=>setActive({...active,status:'completed'})}/>}
       {view==='deal'&&active&&session&&active.status==='completed'&&active.viewerRole!=='visitor'&&<RatingPanel deal={active} session={session}/>} 
       {view==='deal'&&active&&session&&active.status==='completed'&&active.viewerRole!=='visitor'&&<CompletionReceipt deal={active} session={session}/>}
-      {view==='home'&&<>
+      {view==='home'&&!user&&<GlobalHome onCreate={openCreate}/>}
+      {false&&<>
         <section className="hero"><div><p className="eyebrow">{t('A clearer way to make a private sale')}</p><h1>{t('Put the deal in writing.')}<br/>{t('Share it with confidence.')}</h1><p className="lede">{t('Create a single link with the item, price, parties, and agreed terms—before money or goods change hands.')}</p><button className="primary" onClick={openCreate}><Plus size={18}/>{t('Create a Deal Link')}</button><p className="micro"><LockKeyhole size={14}/> {t('DealSafe does not hold your money in this beta.')}</p></div><div className="phone"><div className="phone-top">dealsafe.link/DS-7K4M2Q</div><div className="phone-body"><div className="safe"><BadgeCheck/> {t('Seller contact verified')}</div><h3>iPhone 15 Pro · 256 GB</h3><strong>{formatMoney(78000,'USD',getAppLanguage())}</strong><div className="fake-photo">15 <small>PRO</small></div><div className="fact"><span>{t('Condition')}</span><b>{t('Good')}</b></div><div className="fact"><span>{t('Handoff')}</span><b>{t('Meet in person')}</b></div><button className="dark">{t('Review agreement')}</button></div></div></section>
         <AgreementVerifier/>
         <section className="trust"><h2>{t('One link. The facts that matter.')}</h2><div className="features"><article><Link2/><h3>{t('Shared terms')}</h3><p>{t('Price, condition, handoff, and disclosures stay together.')}</p></article><article><BadgeCheck/><h3>{t('Clear verification')}</h3><p>{t('See exactly which contact or identity checks are complete.')}</p></article><article><FileSignature/><h3>{t('Recorded consent')}</h3><p>{t('Both parties accept the same version of the agreement.')}</p></article></div></section>

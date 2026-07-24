@@ -7,7 +7,16 @@ values (
   'deal-evidence',
   false,
   52428800,
-  array['image/jpeg','image/png','image/webp','image/heic','video/mp4','video/webm']
+  array[
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/heic',
+    'image/heif',
+    'video/mp4',
+    'video/webm',
+    'video/quicktime'
+  ]
 )
 on conflict (id) do update set
   public=excluded.public,
@@ -22,7 +31,7 @@ create policy "participants upload deal evidence files" on storage.objects
     and (storage.foldername(name))[1]=auth.uid()::text
     and exists (
       select 1 from public.deals d
-      where d.id=(storage.foldername(name))[2]::uuid
+      where d.id::text=(storage.foldername(name))[2]
         and (d.seller_id=auth.uid() or d.buyer_id=auth.uid())
     )
   );
@@ -34,7 +43,7 @@ create policy "participants read deal evidence files" on storage.objects
     bucket_id='deal-evidence'
     and exists (
       select 1 from public.deals d
-      where d.id=(storage.foldername(name))[2]::uuid
+      where d.id::text=(storage.foldername(name))[2]
         and (d.seller_id=auth.uid() or d.buyer_id=auth.uid())
     )
   );
