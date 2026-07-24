@@ -453,6 +453,13 @@ body{background:var(--ds-surface);color:var(--ds-ink)}
 .global-cta h2{margin-bottom:0;font-size:32px}
 .global-cta .global-primary{flex:none}
 
+/* Keep the complete landing page available to search and assistive tech while
+   allowing the browser to skip layout and paint work below the first viewport. */
+.deferred-home-section{
+  content-visibility:auto;
+  contain-intrinsic-size:auto 620px;
+}
+
 .view-home main>.agreement-verifier{
   width:min(1180px,calc(100% - 44px));
   margin:0 auto;
