@@ -154,8 +154,8 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   scroll-margin-top:150px;
 }
 .view-deal .deal-grid>aside{min-width:0;scroll-margin-top:150px}
-.view-deal .deal-page h1{margin:10px 0;font-size:clamp(32px,4vw,46px);line-height:1.08;letter-spacing:-.04em}
-.view-deal .deal-page h2{font-size:24px}
+.view-deal .deal-page h1{margin:10px 0;font-size:clamp(30px,3vw,38px);line-height:1.1;letter-spacing:-.035em}
+.view-deal .deal-page h2{font-size:22px}
 .view-deal .price{font-size:27px}
 .view-deal .product-art{height:250px}
 .view-deal .deal-gallery{margin:16px 0}
@@ -307,14 +307,23 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .deal-workspace-bar{top:64px;margin-bottom:12px;border-radius:12px}
   .deal-workspace-id{display:none}
   .deal-workspace-bar nav button:first-child{display:none}
-  .deal-workspace-bar nav .deal-action-link{padding:0 10px}
+  .deal-workspace-bar nav .deal-action-link{display:none}
   .view-deal .demo-deal-banner{grid-template-columns:38px minmax(0,1fr);padding:14px}
   .view-deal .deal-grid{grid-template-columns:1fr;gap:12px}
   .view-deal .deal-grid>aside{order:-1}
-  .view-deal .agreement{position:static;padding:18px}
+  .view-deal .agreement{position:static;padding:16px}
+  .view-deal .agreement>svg{width:21px;height:21px}
+  .view-deal .agreement h2{margin:7px 0 5px;font-size:19px}
+  .view-deal .agreement>p:not(.agreement-instruction){margin:5px 0 8px;font-size:12px;line-height:1.45}
+  .view-deal .agreement .agreement-instruction{display:none}
+  .view-deal .agreement-confirm-list{gap:5px;margin:8px 0 10px}
+  .view-deal .agreement-confirm-list label{padding:8px 9px}
+  .view-deal .agreement>label{margin-bottom:10px}
+  .view-deal .agreement>.primary.full,
+  .view-deal .agreement>small{display:none}
   .view-deal .deal-grid>div{padding:19px;scroll-margin-top:126px}
   .view-deal .deal-grid>aside{scroll-margin-top:126px}
-  .view-deal .deal-page h1{font-size:32px}
+  .view-deal .deal-page h1{font-size:28px}
   .view-deal .product-art{height:210px}
   .view-deal #main-content>section:not(.deal-page){width:calc(100% - 24px);margin:7px auto}
   .deal-progress-strip{gap:5px;margin-bottom:12px}
@@ -408,6 +417,11 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .deal-primary-dock button,.create-action-dock button,.create-review-dock button{min-height:46px;justify-content:center;white-space:nowrap}
 .deal-primary-dock button:focus-visible,.create-action-dock button:focus-visible,.create-review-dock button:focus-visible{outline:3px solid #fff;outline-offset:3px}
 #payment-status-panel,#shipping-panel,#meeting-panel,#handoff-panel,#rating-panel,#seller-declarations{scroll-margin-top:150px}
+
+@media(min-width:761px){
+  .view-deal #main-content{padding-bottom:44px}
+  .deal-primary-dock{display:none}
+}
 
 .product-art-empty{
   gap:10px;
@@ -547,7 +561,8 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 }
 
 @media(max-width:760px){
-  .view-deal #main-content,.view-create #main-content{padding-bottom:118px}
+  .view-deal #main-content{padding-bottom:150px}
+  .view-create #main-content{padding-bottom:128px}
   .deal-primary-dock,.create-action-dock,.create-review-dock{
     right:10px;
     bottom:calc(10px + env(safe-area-inset-bottom));
@@ -566,7 +581,10 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 }
 
 @media(max-width:430px){
-  .deal-primary-dock,.create-action-dock,.create-review-dock{grid-template-columns:minmax(0,1fr) 132px}
+  .deal-primary-dock{grid-template-columns:minmax(72px,1fr) auto;gap:9px}
+  .create-action-dock,.create-review-dock{grid-template-columns:minmax(0,1fr) 132px}
   .deal-primary-dock strong,.create-action-dock strong,.create-review-dock strong{font-size:14px}
-  .deal-primary-dock button,.create-action-dock button,.create-review-dock button{overflow:hidden;padding:0 10px;font-size:11px;text-overflow:ellipsis}
+  .deal-primary-dock span{display:none}
+  .deal-primary-dock button{overflow:visible;padding:0 11px;font-size:11px;text-overflow:clip}
+  .create-action-dock button,.create-review-dock button{overflow:hidden;padding:0 10px;font-size:11px;text-overflow:ellipsis}
 }

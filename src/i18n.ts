@@ -1,20 +1,5 @@
 export const supportedLanguages = [
-  { code: 'en', name: 'English' },
-  { code: 'ka', name: 'ქართული' },
-  { code: 'de', name: 'Deutsch' },
-  { code: 'es', name: 'Español' },
-  { code: 'fr', name: 'Français' },
-  { code: 'pt', name: 'Português' },
-  { code: 'it', name: 'Italiano' },
-  { code: 'ru', name: 'Русский' },
-  { code: 'tr', name: 'Türkçe' },
-  { code: 'el', name: 'Ελληνικά' },
-  { code: 'zh', name: '简体中文' },
-  { code: 'ja', name: '日本語' },
-  { code: 'ko', name: '한국어' },
-  { code: 'ar', name: 'العربية' },
-  { code: 'he', name: 'עברית' },
-  { code: 'hi', name: 'हिन्दी' },
+  { code: 'en', name: 'English (US)' },
 ] as const;
 
 export type AppLanguage = (typeof supportedLanguages)[number]['code'];
