@@ -172,6 +172,81 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .view-deal #main-content>section:not(.deal-page) h2{font-size:clamp(19px,2.5vw,24px)}
 .view-deal #main-content>section:not(.deal-page) p{line-height:1.55}
 
+.deal-progress-strip{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  margin:0 0 16px;
+  padding:0;
+  list-style:none;
+}
+.deal-progress-strip li{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:10px 12px;
+  border:1px solid #dce5ef;
+  border-radius:12px;
+  color:#8290a0;
+  background:#f7f9fc;
+}
+.deal-progress-strip li>span{width:27px;height:27px;display:grid;flex:none;place-items:center;border-radius:9px;background:#e8edf3}
+.deal-progress-strip li svg{width:14px;height:14px}
+.deal-progress-strip li small{overflow:hidden;font-size:11px;font-weight:800;text-overflow:ellipsis;white-space:nowrap}
+.deal-progress-strip li.current{border-color:#9bc4fa;color:#175fbf;background:#edf5ff;box-shadow:0 8px 20px rgba(31,106,208,.08)}
+.deal-progress-strip li.current>span{color:#fff;background:#1f73df}
+.deal-progress-strip li.complete{border-color:#cde5d8;color:#18704f;background:#edf8f2}
+.deal-progress-strip li.complete>span{color:#fff;background:#18845c}
+
+.deal-workspace-sections{
+  order:-90;
+  width:min(960px,calc(100% - 44px));
+  margin:0 auto 74px;
+  display:grid;
+  gap:12px;
+}
+.deal-workspace-group{
+  scroll-margin-top:148px;
+  overflow:hidden;
+  border:1px solid #d9e3ee;
+  border-radius:17px;
+  background:#fff;
+  box-shadow:0 12px 30px rgba(31,57,88,.055);
+}
+.deal-workspace-group>summary{
+  min-height:82px;
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr) 28px;
+  align-items:center;
+  gap:13px;
+  padding:15px 18px;
+  cursor:pointer;
+  list-style:none;
+  transition:background .18s ease;
+}
+.deal-workspace-group>summary::-webkit-details-marker{display:none}
+.deal-workspace-group>summary:hover{background:#f7faff}
+.deal-workspace-group>summary:focus-visible{outline:3px solid rgba(37,119,233,.32);outline-offset:-3px}
+.deal-workspace-group-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;color:#1e6fdc;background:#eaf3ff}
+.deal-workspace-group-icon svg{width:20px;height:20px}
+.deal-workspace-group-copy{min-width:0;display:grid;gap:2px}
+.deal-workspace-group-copy small{color:#2a72d2;font-size:9px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}
+.deal-workspace-group-copy strong{color:#1d3149;font:800 17px/1.25 Manrope,sans-serif}
+.deal-workspace-group-copy em{overflow:hidden;color:#718196;font-size:12px;font-style:normal;text-overflow:ellipsis;white-space:nowrap}
+.deal-workspace-chevron{width:18px;color:#718196;transition:transform .2s ease}
+.deal-workspace-group[open]>summary .deal-workspace-chevron{transform:rotate(180deg)}
+.deal-workspace-group[open]>summary{border-bottom:1px solid #e4eaf1;background:#f9fbfe}
+.deal-workspace-group-content{display:grid;gap:12px;padding:14px}
+.deal-workspace-group-content>:is(section,aside){width:100%;max-width:none;margin:0}
+.deal-workspace-group-content>.deal-readiness,
+.deal-workspace-group-content>.deal-expiry,
+.deal-workspace-group-content>.buyer-invite,
+.deal-workspace-group-content>.deal-action-plan,
+.deal-workspace-group-content>.deal-participants,
+.deal-workspace-group-content>.payment-status,
+.deal-workspace-group-content>.payment-receipt{max-width:none;margin:0}
+
 /* Create flow: core fields and media controls share the first screen on desktop. */
 .view-create #main-content{
   width:min(1100px,calc(100% - 44px));
@@ -242,6 +317,18 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .view-deal .deal-page h1{font-size:32px}
   .view-deal .product-art{height:210px}
   .view-deal #main-content>section:not(.deal-page){width:calc(100% - 24px);margin:7px auto}
+  .deal-progress-strip{gap:5px;margin-bottom:12px}
+  .deal-progress-strip li{gap:6px;padding:8px 7px}
+  .deal-progress-strip li>span{width:25px;height:25px}
+  .deal-progress-strip li small{font-size:9px}
+  .deal-workspace-sections{width:calc(100% - 24px);margin-bottom:52px}
+  .deal-workspace-group{scroll-margin-top:126px;border-radius:14px}
+  .deal-workspace-group>summary{min-height:72px;grid-template-columns:38px minmax(0,1fr) 22px;gap:10px;padding:12px 14px}
+  .deal-workspace-group-icon{width:38px;height:38px}
+  .deal-workspace-group-copy strong{font-size:15px}
+  .deal-workspace-group-copy em{font-size:11px}
+  .deal-workspace-group-content{padding:10px}
+  .deal-workspace-bar .deal-nav-records{display:none}
 
   .view-create #main-content{width:calc(100% - 24px);grid-template-columns:1fr;margin:14px auto 54px}
   .view-create #main-content>.deal-template-picker,
