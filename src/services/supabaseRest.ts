@@ -29,6 +29,15 @@ export interface DealMessage { id:number; sender_id:string; sender_name:string; 
 export interface DealOffer { id:string;amount_cents:number;status:'pending'|'accepted'|'declined'|'withdrawn';buyer_name:string;created_at:string;is_mine:boolean }
 export interface DealInquiry { id:string;buyer_name:string;body:string;seller_reply:string|null;created_at:string;replied_at:string|null;is_mine:boolean }
 export interface DealShipment { id:string;deal_id:string;carrier:string;tracking_number:string;status:'shipped'|'delivered';shipped_at:string;delivered_at:string|null }
+export interface SellerShippingEvidenceReadiness {
+  item_photo_ready:boolean;
+  packing_video_ready:boolean;
+  package_weight_ready:boolean;
+  serial_required:boolean;
+  serial_photo_ready:boolean;
+  distinct_files_ready:boolean;
+  ready:boolean;
+}
 export interface DealDeliveryDetails { recipient_name:string;full_address:string;country:string;instructions:string|null;updated_at:string;locked:boolean }
 export type DealPaymentMethod='cash_at_handoff'|'bank_transfer'|'payment_app'|'card_invoice'|'other';
 export interface DealPaymentRecord { method:DealPaymentMethod;buyer_confirmed_at:string|null;buyer_marked_sent_at:string|null;seller_marked_received_at:string|null;updated_at:string;viewer_role:'seller'|'buyer' }
@@ -267,6 +276,12 @@ async function fileSha256(file:File){try{if(!crypto.subtle)return null;const dig
 export async function uploadDealEvidence(session:StoredSession,dealId:string,uploaderRole:'seller'|'buyer',evidenceType:EvidenceType,file:File){
   if(file.size>50*1024*1024)throw new Error('Evidence files must be 50 MB or smaller.');
   if(!file.type.startsWith('image/')&&!file.type.startsWith('video/'))throw new Error('Choose an image or video file.');
+  if(uploaderRole==='seller'){
+    const imageEvidence:EvidenceType[]=['seller_item_photo','seller_serial_number','seller_package_weight'];
+    if(evidenceType==='seller_packing_video'&&!file.type.startsWith('video/'))throw new Error('Packing evidence must be a video file.');
+    if(imageEvidence.includes(evidenceType)&&!file.type.startsWith('image/'))throw new Error('This evidence type requires a photo.');
+    if(!imageEvidence.includes(evidenceType)&&evidenceType!=='seller_packing_video')throw new Error('Choose a seller evidence type.');
+  }
   const path=`${session.user.id}/${dealId}/${crypto.randomUUID()}.${evidenceExtension(file)}`;
   const upload=await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/deal-evidence/${path.split('/').map(encodeURIComponent).join('/')}`,{method:'POST',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`,'Content-Type':file.type||'application/octet-stream','x-upsert':'false'},body:file});
   if(!upload.ok){const data=await upload.json().catch(()=>null);throw new Error(data?.message||data?.error||'Could not upload evidence file');}
@@ -383,6 +398,12 @@ export async function askDealQuestion(session:StoredSession,publicId:string,body
 export async function replyDealInquiry(session:StoredSession,inquiryId:string,reply:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/reply_deal_inquiry`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_inquiry_id:inquiryId,p_reply:reply.trim()})});if(!response.ok)throw new Error('Could not send reply')}
 export async function respondToOffer(session:StoredSession,offerId:string,accept:boolean){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/respond_to_offer`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_offer_id:offerId,p_accept:accept})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not respond to offer')}}
 export async function getDealShipment(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_shipments?deal_id=eq.${dealId}&select=*`,{headers:headers(session.accessToken)});if(!response.ok)throw new Error('Could not load shipment');return ((await response.json()) as DealShipment[])[0]||null}
+export async function getSellerShippingEvidenceReadiness(session:StoredSession,dealId:string){
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_seller_shipping_evidence_readiness`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});
+  const data=await response.json().catch(()=>null);
+  if(!response.ok)throw new Error(data?.message||'Could not check shipping evidence');
+  return ((data||[]) as SellerShippingEvidenceReadiness[])[0]||null;
+}
 export async function getDealDeliveryDetails(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_delivery_details`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok)throw new Error('Could not load delivery address');return ((await response.json()) as DealDeliveryDetails[])[0]||null}
 export async function saveDealDeliveryDetails(session:StoredSession,dealId:string,recipientName:string,fullAddress:string,country:string,instructions:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_deal_delivery_details`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_recipient_name:recipientName,p_full_address:fullAddress,p_country:country,p_instructions:instructions||null})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not save delivery address')}}
 export async function getDealPaymentRecord(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_payment_record`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok)throw new Error('Could not load payment record');return ((await response.json()) as DealPaymentRecord[])[0]||null}
