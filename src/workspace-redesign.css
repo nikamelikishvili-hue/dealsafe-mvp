@@ -374,6 +374,41 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .deal-workspace-next b{overflow:hidden;color:#263c56;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
 .deal-mobile-summary,.mobile-deal-action{display:none}
 
+/* Keep the single next action reachable without requiring a long scroll. */
+.view-deal #main-content,.view-create #main-content{padding-bottom:104px}
+.deal-primary-dock,.create-action-dock,.create-review-dock{
+  position:fixed;
+  right:50%;
+  bottom:calc(16px + env(safe-area-inset-bottom));
+  z-index:90;
+  display:grid;
+  align-items:center;
+  gap:14px;
+  width:min(880px,calc(100% - 32px));
+  padding:12px 13px 12px 17px;
+  border:1px solid rgba(112,151,200,.38);
+  border-radius:17px;
+  color:#fff;
+  background:rgba(8,25,47,.97);
+  box-shadow:0 22px 54px rgba(4,16,34,.34);
+  backdrop-filter:blur(18px);
+  transform:translateX(50%);
+}
+.deal-primary-dock{grid-template-columns:minmax(0,1fr) auto auto}
+.create-action-dock{grid-template-columns:minmax(0,1fr) auto}
+.create-review-dock{grid-template-columns:minmax(0,1fr) auto auto}
+.deal-primary-dock>div,.create-action-dock>div,.create-review-dock>div{min-width:0}
+.deal-primary-dock small,.deal-primary-dock strong,.deal-primary-dock span,
+.create-action-dock small,.create-action-dock strong,.create-action-dock span,
+.create-review-dock small,.create-review-dock strong,.create-review-dock span{display:block}
+.deal-primary-dock small,.create-action-dock small,.create-review-dock small{color:#83baff;font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase}
+.deal-primary-dock strong,.create-action-dock strong,.create-review-dock strong{margin-top:2px;font:800 16px Manrope,sans-serif}
+.deal-primary-dock span,.create-action-dock span,.create-review-dock span{overflow:hidden;margin-top:2px;color:#a8b8ca;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.deal-primary-dock em{color:#d7e8fb;font:800 15px Manrope,sans-serif;font-style:normal;white-space:nowrap}
+.deal-primary-dock button,.create-action-dock button,.create-review-dock button{min-height:46px;justify-content:center;white-space:nowrap}
+.deal-primary-dock button:focus-visible,.create-action-dock button:focus-visible,.create-review-dock button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+#payment-status-panel,#shipping-panel,#meeting-panel,#handoff-panel,#rating-panel,#seller-declarations{scroll-margin-top:150px}
+
 .product-art-empty{
   gap:10px;
   padding:26px;
@@ -509,4 +544,29 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .global-proof{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
   .global-proof span{min-width:0;gap:5px;font-size:10px;line-height:1.25}
   .global-proof svg{width:15px;flex:none}
+}
+
+@media(max-width:760px){
+  .view-deal #main-content,.view-create #main-content{padding-bottom:118px}
+  .deal-primary-dock,.create-action-dock,.create-review-dock{
+    right:10px;
+    bottom:calc(10px + env(safe-area-inset-bottom));
+    left:10px;
+    width:auto;
+    padding:10px 10px 10px 13px;
+    border-radius:15px;
+    transform:none;
+  }
+  .deal-primary-dock{grid-template-columns:minmax(0,1fr) auto}
+  .deal-primary-dock em{display:none}
+  .create-review-dock{grid-template-columns:minmax(0,1fr) auto}
+  .create-review-dock>.secondary{display:none}
+  .deal-primary-dock span,.create-action-dock span,.create-review-dock span{font-size:10px}
+  .deal-primary-dock button,.create-action-dock button,.create-review-dock button{min-height:44px;padding:0 13px;font-size:12px}
+}
+
+@media(max-width:430px){
+  .deal-primary-dock,.create-action-dock,.create-review-dock{grid-template-columns:minmax(0,1fr) 132px}
+  .deal-primary-dock strong,.create-action-dock strong,.create-review-dock strong{font-size:14px}
+  .deal-primary-dock button,.create-action-dock button,.create-review-dock button{overflow:hidden;padding:0 10px;font-size:11px;text-overflow:ellipsis}
 }

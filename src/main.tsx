@@ -629,9 +629,9 @@ function FilePreview({file,alt}:{file:File;alt:string}){const source=URL.createO
 
 type SellerDeclarations={authority:boolean;lawful:boolean;disclosure:boolean};
 const emptySellerDeclarations:SellerDeclarations={authority:false,lawful:false,disclosure:false};
-function SellerDeclarationChecklist({value,onChange}:{value:SellerDeclarations;onChange:(next:SellerDeclarations)=>void}){
+function SellerDeclarationChecklist({value,onChange,id}:{value:SellerDeclarations;onChange:(next:SellerDeclarations)=>void;id?:string}){
   const items=[{key:'authority' as const,label:'I confirm I own this item or have authority to sell it.'},{key:'lawful' as const,label:'I confirm this item is not stolen, counterfeit, or prohibited by law.'},{key:'disclosure' as const,label:'I confirm the description includes all known defects and material facts.'}];
-  return <fieldset className="seller-declarations"><legend><ShieldCheck/>{t('Seller declaration')}</legend>{items.map(item=><label key={item.key} className={value[item.key]?'checked':''}><input type="checkbox" checked={value[item.key]} onChange={event=>onChange({...value,[item.key]:event.target.checked})}/><span>{t(item.label)}</span></label>)}<small><LockKeyhole/>{t('These confirmations are recorded when the Deal Link is published.')}</small></fieldset>;
+  return <fieldset id={id} className="seller-declarations"><legend><ShieldCheck/>{t('Seller declaration')}</legend>{items.map(item=><label key={item.key} className={value[item.key]?'checked':''}><input type="checkbox" checked={value[item.key]} onChange={event=>onChange({...value,[item.key]:event.target.checked})}/><span>{t(item.label)}</span></label>)}<small><LockKeyhole/>{t('These confirmations are recorded when the Deal Link is published.')}</small></fieldset>;
 }
 
 function PublicSellerDeclaration({deal}:{deal:Deal}){
@@ -664,11 +664,16 @@ function CreateDealReview({draft,photos,creating,onEdit,onSaveDraft,onPublish}:{
         <div><span>{t('Handoff')}</span><b>{t(draft.deliveryMethod)}</b></div>
         <div><span>{t('Serial')}</span><b>{draft.serialNumber.trim()?`•••• ${draft.serialNumber.trim().slice(-4)}`:t('Not provided')}</b></div>
         <div><span>{t('Offer expires')}</span><b>{expiresAt.toLocaleString(getAppLanguage())}</b></div>
-        <SellerDeclarationChecklist value={declarations} onChange={setDeclarations}/>
+        <SellerDeclarationChecklist id="seller-declarations" value={declarations} onChange={setDeclarations}/>
         <p><LockKeyhole/>{t('The Deal Link is not public until you confirm.')}</p>
         {!declarationsComplete&&<small className="declaration-required">{t('Confirm all declarations before publishing.')}</small>}
         <div className="draft-review-actions"><button className="secondary" disabled={creating} onClick={onEdit}>{t('Edit details')}</button><button className="secondary" disabled={creating} onClick={onSaveDraft}>{t('Save as draft')}</button><button className="primary" disabled={creating||!declarationsComplete} onClick={onPublish}>{t(creating?'Publishing…':'Confirm and publish')}<ArrowRight size={18}/></button></div>
       </aside>
+    </div>
+    <div className="create-review-dock" role="region" aria-live="polite" aria-label={t('Publish deal actions')}>
+      <div><small>{t('Final step')}</small><strong>{t(declarationsComplete?'Ready to publish':'Seller confirmation required')}</strong><span>{t(declarationsComplete?'Your deal details are ready.':'Complete the 3 seller declarations to continue.')}</span></div>
+      <button type="button" className="secondary" disabled={creating} onClick={onEdit}>{t('Edit')}</button>
+      <button type="button" className="primary" disabled={creating} onClick={()=>{if(declarationsComplete){onPublish();return}const checklist=document.getElementById('seller-declarations');checklist?.scrollIntoView({behavior:'smooth',block:'center'});checklist?.setAttribute('tabindex','-1');checklist?.focus({preventScroll:true})}}>{t(creating?'Publishing…':declarationsComplete?'Confirm and publish':'Complete declarations')}<ArrowRight size={18}/></button>
     </div>
   </section>
 }
@@ -1027,7 +1032,10 @@ function App() {
   useEffect(()=>{
     if(previousViewRef.current===view)return;
     previousViewRef.current=view;
-    const frame=window.requestAnimationFrame(()=>document.getElementById('main-content')?.focus({preventScroll:true}));
+    const frame=window.requestAnimationFrame(()=>{
+      document.getElementById('main-content')?.focus({preventScroll:true});
+      window.scrollTo({top:0,behavior:'auto'});
+    });
     return()=>window.cancelAnimationFrame(frame);
   },[view]);
   useEffect(()=>{const onPopState=()=>setView(viewFromPath());window.addEventListener('popstate',onPopState);return()=>window.removeEventListener('popstate',onPopState)},[]);
@@ -1060,26 +1068,64 @@ function App() {
   const applyDealActionPlan=(dealId:string,plan:DealActionPlan)=>{setActive(current=>current?.id===dealId?{...current,status:plan.deal_status,viewerRole:plan.viewer_role}:current);setDeals(items=>items.map(item=>item.id===dealId?{...item,status:plan.deal_status,viewerRole:plan.viewer_role}:item))};
   const activeExpired=active?isDealExpired(active,clock):false;
   const isDemoActive=Boolean(active?.publicId===DEMO_DEAL_PUBLIC_ID&&!user);
-  const agreementActionVisible=Boolean(active&&active.status==='published'&&!activeExpired&&active.viewerRole!=='seller');
   const agreementActionReady=agreementConfirmed&&Boolean(buyer.trim());
-  const scrollToAgreement=()=>document.querySelector('.deal-grid aside')?.scrollIntoView({behavior:'smooth',block:'start'});
+  const scrollToAgreement=()=>{
+    const agreement=document.querySelector<HTMLElement>('.deal-grid aside');
+    agreement?.scrollIntoView({behavior:'smooth',block:'start'});
+    agreement?.setAttribute('tabindex','-1');
+    agreement?.focus({preventScroll:true});
+  };
   const scrollToDealSection=(id:string)=>{
     const section=document.getElementById(id);
-    if(section instanceof HTMLDetailsElement)section.open=true;
-    section?.scrollIntoView({behavior:'smooth',block:'start'});
+    const expandable=section instanceof HTMLDetailsElement?section:section?.closest('details');
+    if(expandable instanceof HTMLDetailsElement)expandable.open=true;
+    window.requestAnimationFrame(()=>{
+      section?.scrollIntoView({behavior:'smooth',block:'center'});
+      section?.setAttribute('tabindex','-1');
+      section?.focus({preventScroll:true});
+    });
   };
   const dealNextStep=!active?'Review the deal':active.status==='published'
     ?active.viewerRole==='seller'?'Waiting for the buyer to accept':'Review and accept the agreement'
     :active.status==='accepted'?'Follow payment and handoff steps'
     :active.status==='completed'?'Deal completed':'Review the current deal status';
+  const activePaymentReady=Boolean(active&&paymentReadyByDeal[active.id]);
+  const dealPrimaryAction=active
+    ? activeExpired
+      ? {label:'Review status',detail:'This offer has expired.',targetId:'deal-safety',kind:'scroll' as const}
+      : active.status==='draft'
+        ? {label:'Finish draft',detail:'Complete the details and publish when ready.',targetId:'deal-manage',kind:'scroll' as const}
+        : active.status==='published'&&active.viewerRole!=='seller'
+          ? {label:agreementActionReady?'Accept terms':'Review agreement',detail:agreementActionReady?'Your confirmations are complete.':'Confirm the item, price, handoff, and your name.',targetId:'deal-agreement',kind:agreementActionReady?'accept' as const:'scroll' as const}
+          : active.status==='published'
+            ? {label:'Share with buyer',detail:'Copy the Deal Link or invite the buyer.',targetId:'deal-actions',kind:'scroll' as const}
+            : active.status==='accepted'&&(!session||active.viewerRole==='visitor')
+              ? {label:'Sign in to continue',detail:'Sign in to access payment and delivery actions.',targetId:'deal-actions',kind:'signin' as const}
+              : active.status==='accepted'&&!activePaymentReady
+                ? {label:active.viewerRole==='seller'?'Set up payment':'Continue payment',detail:active.viewerRole==='seller'?'Connect payouts so the buyer can pay.':'Open the protected payment step.',targetId:'payment-status-panel',kind:'scroll' as const}
+                : active.status==='accepted'&&active.deliveryMethod==='Ship to buyer'
+                  ? {label:'Continue delivery',detail:'Complete the next shipping or receipt step.',targetId:'shipping-panel',kind:'scroll' as const}
+                  : active.status==='accepted'
+                    ? {label:'Plan handoff',detail:'Arrange and complete the in-person exchange.',targetId:'meeting-panel',kind:'scroll' as const}
+                    : active.status==='completed'&&session&&active.viewerRole!=='visitor'
+                      ? {label:'Finish deal',detail:'Review the receipt or rate the other party.',targetId:'rating-panel',kind:'scroll' as const}
+                      : {label:'Review status',detail:'See the current record and safety actions.',targetId:active.status==='disputed'||active.status==='cancelled'?'deal-safety':'deal-records',kind:'scroll' as const}
+    : null;
+  const runDealPrimaryAction=()=>{
+    if(!dealPrimaryAction)return;
+    if(dealPrimaryAction.kind==='accept'){void accept();return}
+    if(dealPrimaryAction.kind==='signin'){setReturnAfterAuth('deal');setView('auth');return}
+    if(dealPrimaryAction.targetId==='deal-agreement'){scrollToAgreement();return}
+    scrollToDealSection(dealPrimaryAction.targetId);
+  };
   const goHomeSection=(id?:string)=>{
     if(location.pathname!=='/'||location.search||location.hash)history.pushState({},'','/');
     setView('home');
     setMobileMenuOpen(false);
     setAuthMessage('');
-    window.setTimeout(()=>id
+    window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>id
       ?document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'})
-      :window.scrollTo({top:0,behavior:'smooth'}),0);
+      :window.scrollTo({top:0,behavior:'smooth'})));
   };
   const openInfo=(next:PublicInfoView)=>{history.pushState({},'',publicInfoPaths[next]);setView(next);setMobileMenuOpen(false);window.scrollTo({top:0,behavior:'smooth'})};
   const openVerify=()=>{history.pushState({},'',verifyPath);setView('verify');setMobileMenuOpen(false);window.scrollTo({top:0,behavior:'smooth'})};
@@ -1124,10 +1170,10 @@ function App() {
           {session&&(['accepted','completed','disputed','cancelled'] as Deal['status'][]).includes(active.status)&&<DealParticipantsCard deal={active} session={session} onLoaded={participants=>applyDealParticipants(active.id,participants)}/>}
           {session&&(['accepted','completed','disputed','cancelled'] as Deal['status'][]).includes(active.status)&&<DealActionPlanCard deal={active} session={session} onSync={plan=>applyDealActionPlan(active.id,plan)}/>}
           {session&&active.viewerRole!=='visitor'&&(['accepted','completed','disputed','cancelled'] as Deal['status'][]).includes(active.status)&&<ProtectedPaymentPanel deal={active} session={session} onChanged={ready=>setPaymentReadyByDeal(current=>({...current,[active.id]:ready}))}/>}
-          {session&&active.viewerRole!=='visitor'&&active.deliveryMethod==='Ship to buyer'&&(['accepted','completed'] as Deal['status'][]).includes(active.status)&&<ShippingPanel deal={active} session={session} paymentReady={Boolean(paymentReadyByDeal[active.id])} evidenceRevision={evidenceRevision} onDelivered={()=>{const updated={...active,status:'completed' as const};setActive(updated);setDeals(items=>items.map(item=>item.id===active.id?updated:item))}}/>}
-          {session&&active.status==='accepted'&&active.deliveryMethod==='Meet in person'&&active.viewerRole!=='visitor'&&<MeetingPanel deal={active} session={session}/>}
-          {session&&active.status==='accepted'&&active.deliveryMethod==='Meet in person'&&active.viewerRole!=='visitor'&&<HandoffPanel deal={active} session={session} paymentReady={Boolean(paymentReadyByDeal[active.id])} onComplete={()=>setActive({...active,status:'completed'})}/>}
-          {session&&active.status==='completed'&&active.viewerRole!=='visitor'&&<RatingPanel deal={active} session={session}/>}
+          {session&&active.viewerRole!=='visitor'&&active.deliveryMethod==='Ship to buyer'&&(['accepted','completed'] as Deal['status'][]).includes(active.status)&&<div id="shipping-panel"><ShippingPanel deal={active} session={session} paymentReady={Boolean(paymentReadyByDeal[active.id])} evidenceRevision={evidenceRevision} onDelivered={()=>{const updated={...active,status:'completed' as const};setActive(updated);setDeals(items=>items.map(item=>item.id===active.id?updated:item))}}/></div>}
+          {session&&active.status==='accepted'&&active.deliveryMethod==='Meet in person'&&active.viewerRole!=='visitor'&&<div id="meeting-panel"><MeetingPanel deal={active} session={session}/></div>}
+          {session&&active.status==='accepted'&&active.deliveryMethod==='Meet in person'&&active.viewerRole!=='visitor'&&<div id="handoff-panel"><HandoffPanel deal={active} session={session} paymentReady={Boolean(paymentReadyByDeal[active.id])} onComplete={()=>setActive({...active,status:'completed'})}/></div>}
+          {session&&active.status==='completed'&&active.viewerRole!=='visitor'&&<div id="rating-panel"><RatingPanel deal={active} session={session}/></div>}
         </DealWorkspaceGroup>
 
         <DealWorkspaceGroup id="deal-records" icon={FileSignature} kicker="DEAL RECORD" title="Agreement and activity" summary="Versions, receipts, trust checks, and the complete timeline.">
@@ -1179,6 +1225,7 @@ function App() {
       {view==='profile'&&<section className="profile-page"><button className="back" onClick={()=>setView('home')}>← {t('Dashboard')}</button><p className="eyebrow">{t('Trust profile')}</p><h1>{profile?.display_name||user?.displayName}</h1>{authMessage&&<div className="notice">{t(authMessage)}</div>}{profile&&<><div className="profile-stats"><article><span>{t('Average rating')}</span><strong>{profile.average_rating??'—'} <Star size={22}/></strong><small>{profile.rating_count} {t('received')}</small></article><article><span>{t('Completed deals')}</span><strong>{profile.completed_deals}</strong><small>{t('Successful handoffs')}</small></article><article><span>{t('Verification')}</span><strong className="verification-value"><BadgeCheck size={22}/>{t(profile.verification_status.replace('_',' '))}</strong><small>{t('Identity verification comes next')}</small></article></div><div className="profile-details"><h2>{t('Reputation history')}</h2><p>{t('Member since')} {new Date(profile.member_since).toLocaleDateString(getAppLanguage())}</p>{profile.recent_ratings.length?<div className="review-list">{profile.recent_ratings.map((rating,index)=><article key={`${rating.created_at}-${index}`}><div>{'★'.repeat(rating.stars)}{'☆'.repeat(5-rating.stars)}</div><p>{rating.comment||t('No written comment.')}</p><small>{new Date(rating.created_at).toLocaleDateString(getAppLanguage())}</small></article>)}</div>:<div className="empty-state"><Star/><b>{t('No ratings yet')}</b><span>{t('Ratings received after completed deals will appear here.')}</span></div>}</div></>}</section>}
       {view==='auth'&&<section className="form-wrap auth-wrap"><button className="back" onClick={()=>setView('home')}>← {t('Back')}</button><p className="eyebrow">{t('U.S. DealSafe account')}</p><h1>{t(authMode==='signup'?'Create your account':'Welcome back')}</h1><p className="auth-market-note">{t('English (US) · U.S. dollars · United States private beta')}</p><form onSubmit={submitAuth}>{authMode==='signup'&&<label>{t('Your name')}<input required autoComplete="name" placeholder="Alex Morgan" value={authForm.displayName} onChange={e=>setAuthForm({...authForm,displayName:e.target.value})}/></label>}<label>{t('Email')}<input required type="email" autoComplete="email" placeholder="you@example.com" value={authForm.email} onChange={e=>setAuthForm({...authForm,email:e.target.value})}/></label><label>{t('Password')}<span className="password-field"><input required minLength={8} type={passwordVisible?'text':'password'} autoComplete={authMode==='signup'?'new-password':'current-password'} placeholder={t('At least 8 characters')} value={authForm.password} onChange={e=>setAuthForm({...authForm,password:e.target.value})}/><button type="button" aria-label={t(passwordVisible?'Hide password':'Show password')} onClick={()=>setPasswordVisible(visible=>!visible)}>{passwordVisible?<EyeOff/>:<Eye/>}</button></span><small>{t('Use at least 8 characters. A longer, unique password is safer.')}</small></label>{authMode==='signup'&&<label className="policy-consent"><input required type="checkbox" checked={acceptedPolicies} onChange={event=>setAcceptedPolicies(event.target.checked)}/><span>I agree to the beta <a href={publicInfoPaths.terms} onClick={event=>{event.preventDefault();event.stopPropagation();openInfo('terms')}}>Terms</a> and acknowledge the <a href={publicInfoPaths.privacy} onClick={event=>{event.preventDefault();event.stopPropagation();openInfo('privacy')}}>Privacy notice</a>.</span></label>}{authMessage&&<div className="notice" role="status">{t(authMessage)}</div>}<button className="primary full" disabled={authMode==='signup'&&!acceptedPolicies}>{t(authMode==='signup'?'Create account':'Sign in')}</button><button type="button" className="switch-auth" onClick={()=>{setAuthMode(authMode==='signup'?'signin':'signup');setAuthMessage('');setPasswordVisible(false);setAcceptedPolicies(false)}}>{t(authMode==='signup'?'Already have an account? Sign in':'New to DealSafe? Create account')}</button></form></section>}
       {view==='create'&&!reviewingDraft&&<section className="form-wrap"><button className="back" onClick={()=>setView('home')}>← {t('Dashboard')}</button><p className="eyebrow">{t('New Deal Link')}</p><h1>{t('Describe what you’re selling')}</h1><p className="lede small">{t('Four essentials first: item, price, condition, and handoff. You can review everything before publishing.')}</p><form onSubmit={reviewDraft}><label>{t('Item title')}<input required minLength={3} maxLength={120} placeholder={selectedDealTemplate.titlePlaceholder} value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})}/><small>{t('Item title must contain 3 to 120 characters.')}</small></label><div className="two"><label>{t('Price')}<span className="price-currency-controls"><input required min={currencyStep(draft.currency)} step={currencyStep(draft.currency)} type="number" placeholder="780" value={draft.price} onChange={e=>setDraft({...draft,price:e.target.value})}/><span className="currency-label">USD</span></span></label><label>{t('Condition')}<select value={draft.condition} onChange={e=>setDraft({...draft,condition:e.target.value as DealDraft['condition']})}><option value="Like new">{t('Like new')}</option><option value="Good">{t('Good')}</option><option value="Fair">{t('Fair')}</option></select></label></div><label>{t('Known condition and defects')}<textarea required minLength={20} placeholder={t(selectedDealTemplate.descriptionPrompt)} value={draft.description} onChange={e=>setDraft({...draft,description:e.target.value})}/><small>{draft.description.trim().length}/20 · {t('Describe wear, repairs, or defects.')}</small></label><label>{t(selectedDealTemplate.identifierLabel)}<input maxLength={40} pattern={selectedDealTemplate.identifierPattern} title={t(selectedDealTemplate.identifierHelp)} placeholder={t(selectedDealTemplate.identifierPlaceholder)} spellCheck={false} aria-invalid={identifierEntered&&!identifierValid} value={draft.serialNumber} onChange={e=>setDraft({...draft,serialNumber:dealTemplate==='vehicle'?e.target.value.toUpperCase():e.target.value})}/><small className={`identifier-feedback ${identifierEntered?(identifierValid?'valid':'invalid'):''}`}>{t(identifierEntered?(identifierValid?'Format looks correct. This checks format only, not ownership or authenticity.':selectedDealTemplate.identifierHelp):'Stored privately; only last characters shown')}</small></label><div className="two"><label>{t('Handoff')}<select value={draft.deliveryMethod} onChange={e=>setDraft({...draft,deliveryMethod:e.target.value as DealDraft['deliveryMethod']})}><option value="Meet in person">{t('Meet in person')}</option><option value="Ship to buyer">{t('Ship to buyer')}</option></select></label><label>{t('Offer valid for')}<select value={draft.expiresInDays||7} onChange={e=>setDraft({...draft,expiresInDays:Number(e.target.value)})}><option value={1}>{t('1 day')}</option><option value={3}>{t('3 days')}</option><option value={7}>{t('7 days')}</option><option value={14}>{t('14 days')}</option><option value={30}>{t('30 days')}</option></select></label></div><div className="notice"><ShieldCheck/><span>{t('The Deal Link is not public until you confirm.')}</span></div><button className="primary full">{t('Review deal')} <ArrowRight size={18}/></button></form></section>}
+      {view==='create'&&!reviewingDraft&&<div className="create-action-dock" role="region" aria-label={t('Create deal action')}><div><small>{t('Step 1 of 2')}</small><strong>{t('Add the essentials')}</strong><span>{t('Photos are recommended, but you can add them later.')}</span></div><button type="button" className="primary" onClick={()=>{const form=document.querySelector('.view-create .form-wrap form');if(form instanceof HTMLFormElement)form.requestSubmit()}}>{t('Review deal')}<ArrowRight size={18}/></button></div>}
       {view==='create'&&reviewingDraft&&<CreateDealReview draft={draft} photos={photos} creating={creating} onEdit={()=>setReviewingDraft(false)} onSaveDraft={saveDraft} onPublish={create}/>}
       {view==='deal'&&active&&<section id="deal-overview" className="deal-page">
         <div className="deal-workspace-bar">
@@ -1199,7 +1246,7 @@ function App() {
         <div className="deal-mobile-summary"><span className="deal-mobile-icon"><Package/></span><div><small>{active.publicId} · {t(active.viewerRole==='seller'?'Seller view':'Buyer view')}</small><b>{active.title}</b></div><strong>{dealPrice(active)}</strong></div>
         <div className="deal-grid"><div><div className={`safe ${active.sellerContactVerified?'':'pending'}`}>{active.sellerContactVerified?<MailCheck/>:<Clock3/>} {t(active.sellerContactVerified?'Seller contact verified':'Seller contact verification pending')}</div><p className="eyebrow">{t('Deal')} {active.publicId}</p><h1>{active.title}</h1><div className="price">{dealPrice(active)}</div><DealMedia deal={active}/><h2>{t('Item details')}</h2><p>{active.description}</p><div className="facts"><div><span>{t('Condition')}</span><b>{t(active.condition)}</b></div><div><span>{t('Handoff')}</span><b>{t(active.deliveryMethod)}</b></div><div><span>{t('Serial')}</span><b>{active.serialNumber||t('Not provided')}</b></div></div></div><aside><div className="agreement"><FileSignature/><h2>{t(active.status==='draft'?'Private draft':'Deal agreement')}</h2>{active.status==='draft'?<div className="draft-agreement-notice"><LockKeyhole/><div><b>{t('Not published')}</b><span>{t('This draft is not shared through a Deal Link until you publish it.')}</span></div></div>:<><p>{t('Version')} {active.agreementVersion} · {t('The buyer agrees to the stated price, condition disclosures, and handoff method.')}</p>{active.status==='published'&&!activeExpired?(active.viewerRole==='seller'?<><ul><li><Check/>{t('Item and defects reviewed')}</li><li><Check/>{t('Price confirmed')}</li><li><Check/>{t('Handoff terms confirmed')}</li></ul><div className="waiting-buyer"><Clock3/><div><b>{t('Waiting for buyer')}</b><span>{t('The buyer must review and accept this agreement from their own account.')}</span></div></div></>:<><p className="agreement-instruction">{t('Review agreement')}</p><ul className="agreement-confirm-list"><li className={agreementChecks.item?'checked':''}><label><input type="checkbox" checked={agreementChecks.item} onChange={event=>setAgreementChecks(current=>({...current,item:event.target.checked}))}/><span>{t('Item and defects reviewed')}</span></label></li><li className={agreementChecks.price?'checked':''}><label><input type="checkbox" checked={agreementChecks.price} onChange={event=>setAgreementChecks(current=>({...current,price:event.target.checked}))}/><span>{t('Price confirmed')}</span></label></li><li className={agreementChecks.handoff?'checked':''}><label><input type="checkbox" checked={agreementChecks.handoff} onChange={event=>setAgreementChecks(current=>({...current,handoff:event.target.checked}))}/><span>{t('Handoff terms confirmed')}</span></label></li></ul><label>{t('Your full name')}<input placeholder={t('Buyer name')} value={buyer} onChange={e=>setBuyer(e.target.value)}/></label>{authMessage&&<div className="notice">{t(authMessage)}</div>}<button className="primary full" disabled={!agreementActionReady} onClick={accept}>{t('Accept these terms')}</button><small>{t(agreementActionReady?'Your name records consent to this agreement version.':'Complete all three confirmations and enter your full name.')}</small></>):activeExpired?<AgreementExpiredNotice/>:<><ul><li><Check/>{t('Item and defects reviewed')}</li><li><Check/>{t('Price confirmed')}</li><li><Check/>{t('Handoff terms confirmed')}</li></ul><div className="accepted"><BadgeCheck/><div><b>{t('Terms accepted')}</b><span>{active.buyerName||t('Buyer')} · {t('verification pending')}</span></div></div></>}</>}</div>{active.status!=='draft'&&!isDemoActive&&<><button className="copy" onClick={()=>navigator.clipboard?.writeText(`${location.origin}/?deal=${active.publicId}`)}><Copy size={16}/>{t('Copy Deal Link')}</button><DealQrCode deal={active}/></>}</aside></div>
       </section>}
-      {view==='deal'&&active&&agreementActionVisible&&<div className="mobile-deal-action" role="region" aria-label={t('Primary deal action')}><div><small>{t(agreementActionReady?'Ready to confirm':'Next step')}</small><strong>{dealPrice(active)}</strong><span>{t(agreementActionReady?'Accept this agreement version.':'Confirm 3 items and enter your name.')}</span></div><button type="button" onClick={agreementActionReady?accept:scrollToAgreement}>{t(agreementActionReady?'Accept terms':'Review agreement')}<ArrowRight size={17}/></button></div>}
+      {view==='deal'&&active&&dealPrimaryAction&&<div className="deal-primary-dock" role="region" aria-live="polite" aria-label={t('Primary deal action')}><div><small>{t('Next step')}</small><strong>{t(dealPrimaryAction.label)}</strong><span>{t(dealPrimaryAction.detail)}</span></div><em>{dealPrice(active)}</em><button type="button" onClick={runDealPrimaryAction}>{t(dealPrimaryAction.label)}<ArrowRight size={17}/></button></div>}
     </main><footer><div><strong>DealSafe U.S. beta</strong><span>{t('English (US) · U.S. dollars · United States only')}</span></div><nav aria-label={t('Legal and protection')}><a href={publicInfoPaths['buyer-protection']} onClick={event=>{event.preventDefault();openInfo('buyer-protection')}}>{t('Buyer protection')}</a><a href={publicInfoPaths['seller-protection']} onClick={event=>{event.preventDefault();openInfo('seller-protection')}}>{t('Seller protection')}</a><a href={publicInfoPaths.fees} onClick={event=>{event.preventDefault();openInfo('fees')}}>{t('Fees')}</a><a href={publicInfoPaths.disputes} onClick={event=>{event.preventDefault();openInfo('disputes')}}>{t('Disputes')}</a><a href={verifyPath} onClick={event=>{event.preventDefault();openVerify()}}>{t('Verify agreement')}</a><a href={publicInfoPaths.terms} onClick={event=>{event.preventDefault();openInfo('terms')}}>{t('Terms')}</a><a href={publicInfoPaths.privacy} onClick={event=>{event.preventDefault();openInfo('privacy')}}>{t('Privacy')}</a></nav></footer>
   </div>
 }
