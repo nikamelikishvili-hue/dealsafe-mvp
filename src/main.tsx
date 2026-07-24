@@ -231,7 +231,7 @@ function AdminEvidenceReview({dispute,session}:{dispute:AdminDispute;session:Sto
   return <div className="admin-evidence-review"><div className="admin-evidence-heading"><b>{t('Evidence files')}</b><span>{items.length} {t(items.length===1?'file':'files')}</span></div>{message&&<div className="notice">{t(message)}</div>}{items.length?items.map(item=><article key={item.id}><div className="admin-evidence-preview">{urls[item.id]&&item.mime_type?.startsWith('image/')?<img src={urls[item.id]} alt={item.file_name||t('Evidence file')}/>:urls[item.id]&&item.mime_type?.startsWith('video/')?<video src={urls[item.id]} controls preload="metadata"/>:<Package size={20}/>}</div><div><b>{t(evidenceLabels[item.evidence_type]||'Other evidence')}</b><span>{item.file_name||t('Uploaded file')} · {item.uploader_role} · {item.sha256?`SHA-256 ${item.sha256.slice(0,12)}…`:t('Fingerprint unavailable')}</span></div>{urls[item.id]?<a className="secondary" href={urls[item.id]} target="_blank" rel="noreferrer">{t('Open file')}</a>:<em>{t('Preparing…')}</em>}</article>):<p>{t('No evidence uploaded yet.')}</p>}</div>
 }
 
-function AdminRevenueCenter({session}:{session:StoredSession}){
+function AdminRevenueCenter({session,onOpenDeal}:{session:StoredSession;onOpenDeal:(deal:Deal)=>void}){
   const [summary,setSummary]=useState<AdminRevenueSummary|null>(null);
   const [transactions,setTransactions]=useState<AdminRevenueTransaction[]>([]);
   const [loading,setLoading]=useState(true);
@@ -239,11 +239,14 @@ function AdminRevenueCenter({session}:{session:StoredSession}){
   const [transactionsMessage,setTransactionsMessage]=useState('');
   const [transactionQuery,setTransactionQuery]=useState('');
   const [transactionStatus,setTransactionStatus]=useState('all');
+  const [openingDeal,setOpeningDeal]=useState('');
   const load=async()=>{setLoading(true);setMessage('');setTransactionsMessage('');try{setSummary(await getAdminRevenueSummary(session))}catch(error){setMessage(error instanceof Error?error.message:'Could not load revenue summary')}try{setTransactions(await getAdminRevenueTransactions(session,100))}catch(error){setTransactionsMessage(error instanceof Error?error.message:'Could not load revenue transactions')}finally{setLoading(false)}};
   useEffect(()=>{void load()},[session.accessToken]);
   const money=(cents:number)=>summary?formatMoney(Number(cents||0),summary.currency,getAppLanguage()):'—';
   const filteredTransactions=transactions.filter(item=>{const query=transactionQuery.trim().toLowerCase();const matchesQuery=!query||[item.public_id,item.title,item.seller_name,item.buyer_name].some(value=>String(value||'').toLowerCase().includes(query));const matchesStatus=transactionStatus==='all'||item.status===transactionStatus;return matchesQuery&&matchesStatus});
   const transactionStatuses=Array.from(new Set(transactions.map(item=>item.status))).sort();
+  const openDeal=async(publicId:string)=>{setOpeningDeal(publicId);setTransactionsMessage('');try{onOpenDeal(await getPublicDeal(publicId))}catch(error){setTransactionsMessage(error instanceof Error?error.message:'Deal Link is unavailable')}finally{setOpeningDeal('')}};
+  useEffect(()=>{const table=document.querySelector('.admin-revenue-table');if(!table)return;const head=table.querySelector('thead tr');if(head&&!head.querySelector('.action-heading')){const cell=document.createElement('th');cell.className='action-heading';cell.textContent=t('Action');head.appendChild(cell)}const rows=Array.from(table.querySelectorAll('tbody tr'));rows.forEach((row,index)=>{row.querySelector('.table-open-cell')?.remove();const item=filteredTransactions[index];if(!item)return;const cell=document.createElement('td');cell.className='table-open-cell';const button=document.createElement('button');button.className='table-open secondary';button.type='button';button.disabled=openingDeal===item.public_id;button.textContent=openingDeal===item.public_id?t('Opening'):t('Open Deal Link');button.onclick=()=>void openDeal(item.public_id);cell.appendChild(button);row.appendChild(cell)});},[filteredTransactions,openingDeal]);
   const exportCsv=()=>{if(!filteredTransactions.length)return;const cell=(value:unknown)=>`"${String(value??'').replaceAll('"','""')}"`;const rows=[['DealSafe ID','Title','Status','Gross USD','DealSafe fee allocation USD','Seller amount USD','Seller','Buyer','Created'],...filteredTransactions.map(item=>[item.public_id,item.title,item.status,(Number(item.item_amount_cents)/100).toFixed(2),(Number(item.platform_fee_cents)/100).toFixed(2),(Number(item.seller_amount_cents)/100).toFixed(2),item.seller_name,item.buyer_name,item.created_at])];const csv=rows.map(row=>row.map(cell).join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const anchor=document.createElement('a');anchor.href=url;anchor.download=`dealsafe-revenue-${new Date().toISOString().slice(0,10)}.csv`;anchor.click();URL.revokeObjectURL(url)};
   const cards=summary?[
     {label:'Payment volume',value:money(summary.total_payment_volume_cents),detail:`${summary.payment_count} ${t(summary.payment_count===1?'payment':'payments')}`,tone:'neutral'},
@@ -689,7 +692,7 @@ function App() {
       {view==='reset'&&recoveryToken&&<ResetPassword token={recoveryToken} onDone={()=>setView('auth')}/>}
       {view==='link-error'&&<DealLinkError message={authMessage} onBack={()=>{history.replaceState({},'',location.pathname);setAuthMessage('');setView('home')}}/>}
       {view==='home'&&<InstallApp/>}
-      {view==='admin'&&session&&isAdmin&&<><AdminRevenueCenter session={session}/><AdminDisputeCenter session={session}/><AdminReportCenter session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/></>}
+      {view==='admin'&&session&&isAdmin&&<><AdminRevenueCenter session={session} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/><AdminDisputeCenter session={session}/><AdminReportCenter session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/></>}
       {view==='create'&&authMessage&&<div className="creation-error notice">{t(authMessage)}</div>}
       {view==='create'&&creating&&<div className="creation-progress notice">{t('Creating your Deal Link…')}</div>}
       {view==='deal'&&active&&active.status!=='draft'&&<AgreementExport deal={active}/>}

@@ -257,6 +257,15 @@
   color: #8b691f;
 }
 
+.admin-revenue-table .table-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
 @media (max-width: 760px) {
   .admin-revenue {
     padding: 0 14px;
