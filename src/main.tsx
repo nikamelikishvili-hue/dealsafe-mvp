@@ -835,6 +835,45 @@ function GlobalHome({onCreate,onDemo,onInfo}:{onCreate:()=>void;onDemo:()=>void;
       <div className="deal-flow-grid">{steps.map(step=><article key={step.number}><div className="flow-icon">{step.icon}</div><span>{step.number}</span><h3>{t(step.title)}</h3><p>{t(step.body)}</p></article>)}</div>
     </section>
 
+    <section className="home-use-cases" aria-labelledby="use-cases-title">
+      <div className="global-section-heading">
+        <p className="eyebrow">{t('BUILT FOR PRIVATE SALES')}</p>
+        <h2 id="use-cases-title">{t('Useful when the item matters and the buyer is not beside you.')}</h2>
+        <p>{t('DealSafe is focused on higher-trust private transactions, not an endless public marketplace feed.')}</p>
+      </div>
+      <div className="use-case-grid">
+        <article><Laptop/><div><h3>{t('Electronics')}</h3><p>{t('Record condition, serial details, photos, shipping, and inspection expectations.')}</p></div></article>
+        <article><Car/><div><h3>{t('Vehicles')}</h3><p>{t('Keep VIN details, known defects, price, and the planned in-person handoff together.')}</p></div></article>
+        <article><Watch/><div><h3>{t('Watches and collectibles')}</h3><p>{t('Document identifiers, authenticity claims, included accessories, and delivery evidence.')}</p></div></article>
+      </div>
+    </section>
+
+    <section className="money-flow" aria-labelledby="money-flow-title">
+      <div className="money-flow-copy">
+        <p className="eyebrow">{t('PAYMENT CLARITY')}</p>
+        <h2 id="money-flow-title">{t('Know what the beta does before you continue.')}</h2>
+        <p>{t('The current product demonstrates a Stripe Sandbox payment workflow. It does not transfer real money and DealSafe is not a licensed escrow service.')}</p>
+        <ol>
+          <li><span>1</span><div><strong>{t('Agree to one version')}</strong><small>{t('Both parties review the same item, price, disclosures, and handoff terms.')}</small></div></li>
+          <li><span>2</span><div><strong>{t('Open Stripe Sandbox')}</strong><small>{t('The buyer tests checkout without a real charge or live card transfer.')}</small></div></li>
+          <li><span>3</span><div><strong>{t('Record delivery evidence')}</strong><small>{t('Shipping, inspection, messages, and handoff activity stay with the deal.')}</small></div></li>
+          <li><span>4</span><div><strong>{t('Complete or raise a problem')}</strong><small>{t('The final status remains visible in the same transaction history.')}</small></div></li>
+        </ol>
+      </div>
+      <aside className="fee-preview" aria-label={t('Production cost preview')}>
+        <p className="eyebrow">{t('PRODUCTION COST PREVIEW')}</p>
+        <h3>{t('Every charge must be visible before payment.')}</h3>
+        <dl>
+          <div><dt>{t('Item price')}</dt><dd>{t('Set by seller')}</dd></div>
+          <div><dt>{t('DealSafe service fee')}</dt><dd>{t('Shown before payment')}</dd></div>
+          <div><dt>{t('Processing, shipping, and tax')}</dt><dd>{t('Itemized separately')}</dd></div>
+          <div className="fee-total"><dt>{t('Final amount')}</dt><dd>{t('One U.S. dollar total')}</dd></div>
+        </dl>
+        <p><ShieldAlert/>{t('Production pricing, payment limits, and state availability are not published yet.')}</p>
+        <button type="button" className="global-secondary light" onClick={()=>onInfo('fees')}>{t('Read fees and availability')}<ArrowRight size={16}/></button>
+      </aside>
+    </section>
+
     <section className="global-protection" id="protection">
       <div className="global-protection-copy">
         <p className="eyebrow">{t('BUILT FOR TRUST')}</p>
@@ -852,6 +891,19 @@ function GlobalHome({onCreate,onDemo,onInfo}:{onCreate:()=>void;onDemo:()=>void;
         <a href={publicInfoPaths['seller-protection']} onClick={event=>{event.preventDefault();onInfo('seller-protection')}}>{t('Seller protection')}<ArrowRight size={15}/></a>
         <a href={publicInfoPaths.disputes} onClick={event=>{event.preventDefault();onInfo('disputes')}}>{t('Disputes and refunds')}<ArrowRight size={15}/></a>
         <a href={publicInfoPaths.fees} onClick={event=>{event.preventDefault();onInfo('fees')}}>{t('Fees and availability')}<ArrowRight size={15}/></a>
+      </div>
+    </section>
+
+    <section className="home-faq" aria-labelledby="faq-title">
+      <div className="global-section-heading">
+        <p className="eyebrow">{t('BEFORE YOU START')}</p>
+        <h2 id="faq-title">{t('Straight answers about the U.S. beta.')}</h2>
+      </div>
+      <div className="faq-list">
+        <details><summary>{t('Is DealSafe a legal escrow service?')}<ChevronDown/></summary><p>{t('No. The current beta records agreements, Sandbox payment status, evidence, and handoff activity. A licensed payment or escrow partner and legal review are required before a live-money launch.')}</p></details>
+        <details><summary>{t('Does DealSafe store card or bank details?')}<ChevronDown/></summary><p>{t('No. Payment credentials belong in the payment provider flow, not in DealSafe messages, forms, or evidence uploads.')}</p></details>
+        <details><summary>{t('Where is the first release available?')}<ChevronDown/></summary><p>{t('The first release is planned for the United States in English (US) and U.S. dollars. Provider approval and applicable law may limit availability by state.')}</p></details>
+        <details><summary>{t('What happens if something goes wrong?')}<ChevronDown/></summary><p>{t('A dispute keeps the reason, messages, delivery evidence, and inspection details in the deal record. Final refund and release rights must follow the published terms and payment-provider rules.')}</p></details>
       </div>
     </section>
 
@@ -1090,8 +1142,11 @@ function App() {
     :active.status==='accepted'?'Follow payment and handoff steps'
     :active.status==='completed'?'Deal completed':'Review the current deal status';
   const activePaymentReady=Boolean(active&&paymentReadyByDeal[active.id]);
+  const demoFlowCompleted=isDemoActive&&authMessage.startsWith('Demo complete');
   const dealPrimaryAction=active
-    ? activeExpired
+    ? demoFlowCompleted
+      ? {label:'Start a deal',detail:'Create your own private Deal Link.',targetId:'deal-overview',kind:'create' as const}
+      : activeExpired
       ? {label:'Review status',detail:'This offer has expired.',targetId:'deal-safety',kind:'scroll' as const}
       : active.status==='draft'
         ? {label:'Finish draft',detail:'Complete the details and publish when ready.',targetId:'deal-manage',kind:'scroll' as const}
@@ -1102,7 +1157,7 @@ function App() {
             : active.status==='accepted'&&(!session||active.viewerRole==='visitor')
               ? {label:'Sign in to continue',detail:'Sign in to access payment and delivery actions.',targetId:'deal-actions',kind:'signin' as const}
               : active.status==='accepted'&&!activePaymentReady
-                ? {label:active.viewerRole==='seller'?'Set up payment':'Continue payment',detail:active.viewerRole==='seller'?'Connect payouts so the buyer can pay.':'Open the protected payment step.',targetId:'payment-status-panel',kind:'scroll' as const}
+                ? {label:active.viewerRole==='seller'?'Set up payment':'Continue payment',detail:active.viewerRole==='seller'?'Connect payouts so the buyer can pay.':'Open the Stripe Sandbox payment step.',targetId:'payment-status-panel',kind:'scroll' as const}
                 : active.status==='accepted'&&active.deliveryMethod==='Ship to buyer'
                   ? {label:'Continue delivery',detail:'Complete the next shipping or receipt step.',targetId:'shipping-panel',kind:'scroll' as const}
                   : active.status==='accepted'
@@ -1113,6 +1168,7 @@ function App() {
     : null;
   const runDealPrimaryAction=()=>{
     if(!dealPrimaryAction)return;
+    if(dealPrimaryAction.kind==='create'){openCreate();return}
     if(dealPrimaryAction.kind==='accept'){void accept();return}
     if(dealPrimaryAction.kind==='signin'){setReturnAfterAuth('deal');setView('auth');return}
     if(dealPrimaryAction.targetId==='deal-agreement'){scrollToAgreement();return}
@@ -1234,7 +1290,7 @@ function App() {
           <nav aria-label={t('Deal page navigation')}>
             <span className="deal-workspace-next"><small>{t('Next step')}</small><b>{t(dealNextStep)}</b></span>
             {!isDemoActive&&<><button type="button" className="deal-nav-actions" onClick={()=>scrollToDealSection('deal-actions')}>{t('Actions')}</button><button type="button" className="deal-nav-records" onClick={()=>scrollToDealSection('deal-records')}>{t('Records')}</button></>}
-            <button type="button" className="deal-action-link" onClick={scrollToAgreement}>{t('Review agreement')}<ArrowRight size={15}/></button>
+            <button type="button" className="deal-action-link" onClick={runDealPrimaryAction}>{t(dealPrimaryAction?.label||'Review agreement')}<ArrowRight size={15}/></button>
           </nav>
         </div>
         {isDemoActive&&<section className="demo-deal-banner" aria-label={t('Interactive sample deal')}>
@@ -1246,7 +1302,7 @@ function App() {
         <div className="deal-mobile-summary"><span className="deal-mobile-icon"><Package/></span><div><small>{active.publicId} · {t(active.viewerRole==='seller'?'Seller view':'Buyer view')}</small><b>{active.title}</b></div><strong>{dealPrice(active)}</strong></div>
         <div className="deal-grid"><div><div className={`safe ${active.sellerContactVerified?'':'pending'}`}>{active.sellerContactVerified?<MailCheck/>:<Clock3/>} {t(active.sellerContactVerified?'Seller contact verified':'Seller contact verification pending')}</div><p className="eyebrow">{t('Deal')} {active.publicId}</p><h1>{active.title}</h1><div className="price">{dealPrice(active)}</div><DealMedia deal={active}/><h2>{t('Item details')}</h2><p>{active.description}</p><div className="facts"><div><span>{t('Condition')}</span><b>{t(active.condition)}</b></div><div><span>{t('Handoff')}</span><b>{t(active.deliveryMethod)}</b></div><div><span>{t('Serial')}</span><b>{active.serialNumber||t('Not provided')}</b></div></div></div><aside><div className="agreement"><FileSignature/><h2>{t(active.status==='draft'?'Private draft':'Deal agreement')}</h2>{active.status==='draft'?<div className="draft-agreement-notice"><LockKeyhole/><div><b>{t('Not published')}</b><span>{t('This draft is not shared through a Deal Link until you publish it.')}</span></div></div>:<><p>{t('Version')} {active.agreementVersion} · {t('The buyer agrees to the stated price, condition disclosures, and handoff method.')}</p>{active.status==='published'&&!activeExpired?(active.viewerRole==='seller'?<><ul><li><Check/>{t('Item and defects reviewed')}</li><li><Check/>{t('Price confirmed')}</li><li><Check/>{t('Handoff terms confirmed')}</li></ul><div className="waiting-buyer"><Clock3/><div><b>{t('Waiting for buyer')}</b><span>{t('The buyer must review and accept this agreement from their own account.')}</span></div></div></>:<><p className="agreement-instruction">{t('Review agreement')}</p><ul className="agreement-confirm-list"><li className={agreementChecks.item?'checked':''}><label><input type="checkbox" checked={agreementChecks.item} onChange={event=>setAgreementChecks(current=>({...current,item:event.target.checked}))}/><span>{t('Item and defects reviewed')}</span></label></li><li className={agreementChecks.price?'checked':''}><label><input type="checkbox" checked={agreementChecks.price} onChange={event=>setAgreementChecks(current=>({...current,price:event.target.checked}))}/><span>{t('Price confirmed')}</span></label></li><li className={agreementChecks.handoff?'checked':''}><label><input type="checkbox" checked={agreementChecks.handoff} onChange={event=>setAgreementChecks(current=>({...current,handoff:event.target.checked}))}/><span>{t('Handoff terms confirmed')}</span></label></li></ul><label>{t('Your full name')}<input placeholder={t('Buyer name')} value={buyer} onChange={e=>setBuyer(e.target.value)}/></label>{authMessage&&<div className="notice">{t(authMessage)}</div>}<button className="primary full" disabled={!agreementActionReady} onClick={accept}>{t('Accept these terms')}</button><small>{t(agreementActionReady?'Your name records consent to this agreement version.':'Complete all three confirmations and enter your full name.')}</small></>):activeExpired?<AgreementExpiredNotice/>:<><ul><li><Check/>{t('Item and defects reviewed')}</li><li><Check/>{t('Price confirmed')}</li><li><Check/>{t('Handoff terms confirmed')}</li></ul><div className="accepted"><BadgeCheck/><div><b>{t('Terms accepted')}</b><span>{active.buyerName||t('Buyer')} · {t('verification pending')}</span></div></div></>}</>}</div>{active.status!=='draft'&&!isDemoActive&&<><button className="copy" onClick={()=>navigator.clipboard?.writeText(`${location.origin}/?deal=${active.publicId}`)}><Copy size={16}/>{t('Copy Deal Link')}</button><DealQrCode deal={active}/></>}</aside></div>
       </section>}
-      {view==='deal'&&active&&dealPrimaryAction&&<div className="deal-primary-dock" role="region" aria-live="polite" aria-label={t('Primary deal action')}><div><small>{t('Next step')}</small><strong>{t(dealPrimaryAction.label)}</strong><span>{t(dealPrimaryAction.detail)}</span></div><em>{dealPrice(active)}</em><button type="button" onClick={runDealPrimaryAction}>{t(dealPrimaryAction.label)}<ArrowRight size={17}/></button></div>}
+      {view==='deal'&&active&&dealPrimaryAction&&<div className="deal-primary-dock" role="region" aria-live="polite" aria-label={t('Primary deal action')}><div><small>{t('Next step')}</small><strong>{t(dealPrimaryAction.label)}</strong><span>{t(dealPrimaryAction.detail)}</span></div><em>{dealPrice(active)}</em><button type="button" className="primary" onClick={runDealPrimaryAction}>{t(dealPrimaryAction.label)}<ArrowRight size={17}/></button></div>}
     </main><footer><div><strong>DealSafe U.S. beta</strong><span>{t('English (US) · U.S. dollars · United States only')}</span></div><nav aria-label={t('Legal and protection')}><a href={publicInfoPaths['buyer-protection']} onClick={event=>{event.preventDefault();openInfo('buyer-protection')}}>{t('Buyer protection')}</a><a href={publicInfoPaths['seller-protection']} onClick={event=>{event.preventDefault();openInfo('seller-protection')}}>{t('Seller protection')}</a><a href={publicInfoPaths.fees} onClick={event=>{event.preventDefault();openInfo('fees')}}>{t('Fees')}</a><a href={publicInfoPaths.disputes} onClick={event=>{event.preventDefault();openInfo('disputes')}}>{t('Disputes')}</a><a href={verifyPath} onClick={event=>{event.preventDefault();openVerify()}}>{t('Verify agreement')}</a><a href={publicInfoPaths.terms} onClick={event=>{event.preventDefault();openInfo('terms')}}>{t('Terms')}</a><a href={publicInfoPaths.privacy} onClick={event=>{event.preventDefault();openInfo('privacy')}}>{t('Privacy')}</a></nav></footer>
   </div>
 }
