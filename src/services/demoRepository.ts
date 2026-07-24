@@ -7,8 +7,10 @@ export interface DealRepository {
   accept(publicId: string, buyerName: string): Promise<Deal>;
 }
 
+export const DEMO_DEAL_PUBLIC_ID = 'DS-7K4M2Q';
+
 const seed: Deal[] = [{
-  id: '1', publicId: 'DS-7K4M2Q', title: 'iPhone 15 Pro · 256 GB',
+  id: '1', publicId: DEMO_DEAL_PUBLIC_ID, title: 'iPhone 15 Pro · 256 GB',
   description: 'Natural Titanium. Unlocked. Minor wear on lower edge; cameras and Face ID work.',
   priceCents: 78000, currency: 'USD', condition: 'Good', serialNumber: '•••• 7NQ2',
   deliveryMethod: 'Meet in person', status: 'published', sellerName: 'Alex Morgan',
