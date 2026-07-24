@@ -773,10 +773,10 @@ function GlobalHome({onCreate,onInfo}:{onCreate:()=>void;onInfo:(view:PublicInfo
         <article><ShieldCheck/><div><h3>{t('Evidence before release')}</h3><p>{t('Shipping, inspection, and disputes use the same deal history.')}</p></div></article>
       </div>
       <div className="protection-links" aria-label={t('Learn about protection')}>
-        <button type="button" onClick={()=>onInfo('buyer-protection')}>{t('Buyer protection')}<ArrowRight size={15}/></button>
-        <button type="button" onClick={()=>onInfo('seller-protection')}>{t('Seller protection')}<ArrowRight size={15}/></button>
-        <button type="button" onClick={()=>onInfo('disputes')}>{t('Disputes and refunds')}<ArrowRight size={15}/></button>
-        <button type="button" onClick={()=>onInfo('fees')}>{t('Fees and availability')}<ArrowRight size={15}/></button>
+        <a href={publicInfoPaths['buyer-protection']} onClick={event=>{event.preventDefault();onInfo('buyer-protection')}}>{t('Buyer protection')}<ArrowRight size={15}/></a>
+        <a href={publicInfoPaths['seller-protection']} onClick={event=>{event.preventDefault();onInfo('seller-protection')}}>{t('Seller protection')}<ArrowRight size={15}/></a>
+        <a href={publicInfoPaths.disputes} onClick={event=>{event.preventDefault();onInfo('disputes')}}>{t('Disputes and refunds')}<ArrowRight size={15}/></a>
+        <a href={publicInfoPaths.fees} onClick={event=>{event.preventDefault();onInfo('fees')}}>{t('Fees and availability')}<ArrowRight size={15}/></a>
       </div>
     </section>
 
@@ -844,6 +844,60 @@ const publicInfoContent:Record<PublicInfoView,{eyebrow:string;title:string;intro
   }
 };
 
+type PageMetadata={label:string;title:string;description:string;path:string;indexable:boolean};
+const siteOrigin='https://dealsafe-mvp.vercel.app';
+const privateViewLabels:Partial<Record<View,string>>={
+  auth:'DealSafe account',create:'Create a protected deal',deal:'Deal record',profile:'Trust profile',
+  passport:'Digital Trust Passport',admin:'Admin',forgot:'Reset password',reset:'Choose a new password','link-error':'Deal Link unavailable'
+};
+const getPageMetadata=(view:View,activeDeal?:Deal):PageMetadata=>{
+  if(view==='home')return {
+    label:'Home',
+    title:'DealSafe — Safer Private Deals',
+    description:'Create one trusted record for the agreement, payment state, evidence, delivery, and handoff.',
+    path:'/',
+    indexable:true
+  };
+  if(Object.prototype.hasOwnProperty.call(publicInfoContent,view)){
+    const content=publicInfoContent[view as PublicInfoView];
+    return {label:content.title,title:`DealSafe — ${content.title}`,description:content.intro,path:publicInfoPaths[view as PublicInfoView],indexable:true};
+  }
+  const label=view==='deal'&&activeDeal?.title?activeDeal.title:(privateViewLabels[view]||'Private workspace');
+  return {
+    label,
+    title:`${label} — DealSafe`,
+    description:'Private DealSafe workspace for protected transaction records.',
+    path:'/',
+    indexable:false
+  };
+};
+const upsertNamedMeta=(name:string,content:string)=>{
+  let element=document.head.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
+  if(!element){element=document.createElement('meta');element.name=name;document.head.append(element)}
+  element.content=content;
+};
+const upsertPropertyMeta=(property:string,content:string)=>{
+  let element=document.head.querySelector<HTMLMetaElement>(`meta[property="${property}"]`);
+  if(!element){element=document.createElement('meta');element.setAttribute('property',property);document.head.append(element)}
+  element.content=content;
+};
+const applyPageMetadata=(metadata:PageMetadata)=>{
+  const title=t(metadata.title);
+  const description=t(metadata.description);
+  const canonicalUrl=`${siteOrigin}${metadata.path}`;
+  document.title=title;
+  upsertNamedMeta('description',description);
+  upsertNamedMeta('robots',metadata.indexable?'index,follow,max-image-preview:large':'noindex,nofollow,noarchive');
+  upsertNamedMeta('twitter:title',title);
+  upsertNamedMeta('twitter:description',description);
+  upsertPropertyMeta('og:title',title);
+  upsertPropertyMeta('og:description',description);
+  upsertPropertyMeta('og:url',canonicalUrl);
+  let canonical=document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  if(!canonical){canonical=document.createElement('link');canonical.rel='canonical';document.head.append(canonical)}
+  canonical.href=canonicalUrl;
+};
+
 function PublicInfoPage({view,onBack,onCreate}:{view:PublicInfoView;onBack:()=>void;onCreate:()=>void}){
   const content=publicInfoContent[view];
   return <section className="public-info-page">
@@ -891,7 +945,15 @@ function App() {
   const [notifications,setNotifications]=useState<DealNotification[]>([]);
   const [isAdmin,setIsAdmin]=useState(false);
   const [clock,setClock]=useState(Date.now());
+  const previousViewRef=useRef<View>(view);
   useEffect(()=>{void setAppLanguage(language)},[language]);
+  useEffect(()=>{applyPageMetadata(getPageMetadata(view,active))},[view,language,active?.title]);
+  useEffect(()=>{
+    if(previousViewRef.current===view)return;
+    previousViewRef.current=view;
+    const frame=window.requestAnimationFrame(()=>document.getElementById('main-content')?.focus({preventScroll:true}));
+    return()=>window.cancelAnimationFrame(frame);
+  },[view]);
   useEffect(()=>{const onPopState=()=>setView(viewFromPath());window.addEventListener('popstate',onPopState);return()=>window.removeEventListener('popstate',onPopState)},[]);
   useEffect(()=>{const timer=window.setInterval(()=>setClock(Date.now()),60_000);return()=>window.clearInterval(timer)},[]);
   useEffect(()=>{const updated=(event:Event)=>setSession((event as CustomEvent<StoredSession>).detail);const expired=()=>{setSession(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')};window.addEventListener(sessionUpdatedEvent,updated);window.addEventListener(sessionExpiredEvent,expired);return()=>{window.removeEventListener(sessionUpdatedEvent,updated);window.removeEventListener(sessionExpiredEvent,expired)}},[]);
@@ -922,8 +984,11 @@ function App() {
   const activeExpired=active?isDealExpired(active,clock):false;
   const goHomeSection=(id?:string)=>{if(location.pathname!=='/')history.pushState({},'',`/${location.search}`);setView('home');setMobileMenuOpen(false);if(id)window.setTimeout(()=>document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'}),0)};
   const openInfo=(next:PublicInfoView)=>{history.pushState({},'',publicInfoPaths[next]);setView(next);setMobileMenuOpen(false);window.scrollTo({top:0,behavior:'smooth'})};
+  const currentPageLabel=getPageMetadata(view,active).label;
 
   return <div className={`app view-${view}`}>
+    <a className="skip-link" href="#main-content">{t('Skip to main content')}</a>
+    <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{t(currentPageLabel)}</div>
     <header className="site-header"><div className="header-inner">
       <div className="header-brand-group"><button className="brand" onClick={()=>goHomeSection()}><span><ShieldCheck size={21}/></span>DealSafe</button><span className="beta">{t('Private beta')}</span></div>
       <nav className="site-nav" aria-label={t('Primary navigation')}><button onClick={()=>goHomeSection()}>{t(user?'Dashboard':'Home')}</button><button onClick={()=>goHomeSection('how-it-works')}>{t('How it works')}</button><button onClick={()=>goHomeSection('protection')}>{t('Protection')}</button></nav>
@@ -937,7 +1002,7 @@ function App() {
       <button onClick={()=>openInfo('disputes')}>{t('Disputes')}</button>
       {!user&&<><button className="mobile-signin" onClick={()=>{setAuthMode('signin');setReturnAfterAuth('home');setView('auth');setMobileMenuOpen(false)}}>{t('Sign in')}</button><button className="mobile-signup" onClick={()=>{setAuthMode('signup');setReturnAfterAuth('home');setView('auth');setMobileMenuOpen(false)}}>{t('Create account')}</button></>}
     </nav>}
-    <main>
+    <main id="main-content" tabIndex={-1}>
       {view==='auth'&&<div className="forgot-entry"><button onClick={()=>setView('forgot')}>{t('Forgot password?')}</button></div>}
       {view==='forgot'&&<ForgotPassword onBack={()=>setView('auth')}/>}
       {view==='reset'&&recoveryToken&&<ResetPassword token={recoveryToken} onDone={()=>setView('auth')}/>}
@@ -1006,7 +1071,7 @@ function App() {
         <button className="back" onClick={()=>setView('home')}>← {t('Dashboard')}</button>
         <div className="deal-grid"><div><div className={`safe ${active.sellerContactVerified?'':'pending'}`}>{active.sellerContactVerified?<MailCheck/>:<Clock3/>} {t(active.sellerContactVerified?'Seller contact verified':'Seller contact verification pending')}</div><p className="eyebrow">{t('Deal')} {active.publicId}</p><h1>{active.title}</h1><div className="price">{dealPrice(active)}</div><DealMedia deal={active}/><h2>{t('Item details')}</h2><p>{active.description}</p><div className="facts"><div><span>{t('Condition')}</span><b>{t(active.condition)}</b></div><div><span>{t('Handoff')}</span><b>{t(active.deliveryMethod)}</b></div><div><span>{t('Serial')}</span><b>{active.serialNumber||t('Not provided')}</b></div></div></div><aside><div className="agreement"><FileSignature/><h2>{t(active.status==='draft'?'Private draft':'Deal agreement')}</h2>{active.status==='draft'?<div className="draft-agreement-notice"><LockKeyhole/><div><b>{t('Not published')}</b><span>{t('This draft is not shared through a Deal Link until you publish it.')}</span></div></div>:<><p>{t('Version')} {active.agreementVersion} · {t('The buyer agrees to the stated price, condition disclosures, and handoff method.')}</p>{active.status==='published'&&!activeExpired?(active.viewerRole==='seller'?<><ul><li><Check/>{t('Item and defects reviewed')}</li><li><Check/>{t('Price confirmed')}</li><li><Check/>{t('Handoff terms confirmed')}</li></ul><div className="waiting-buyer"><Clock3/><div><b>{t('Waiting for buyer')}</b><span>{t('The buyer must review and accept this agreement from their own account.')}</span></div></div></>:<><p className="agreement-instruction">{t('Review agreement')}</p><ul className="agreement-confirm-list"><li className={agreementChecks.item?'checked':''}><label><input type="checkbox" checked={agreementChecks.item} onChange={event=>setAgreementChecks(current=>({...current,item:event.target.checked}))}/><span>{t('Item and defects reviewed')}</span></label></li><li className={agreementChecks.price?'checked':''}><label><input type="checkbox" checked={agreementChecks.price} onChange={event=>setAgreementChecks(current=>({...current,price:event.target.checked}))}/><span>{t('Price confirmed')}</span></label></li><li className={agreementChecks.handoff?'checked':''}><label><input type="checkbox" checked={agreementChecks.handoff} onChange={event=>setAgreementChecks(current=>({...current,handoff:event.target.checked}))}/><span>{t('Handoff terms confirmed')}</span></label></li></ul><label>{t('Your full name')}<input placeholder={t('Buyer name')} value={buyer} onChange={e=>setBuyer(e.target.value)}/></label>{authMessage&&<div className="notice">{t(authMessage)}</div>}<button className="primary full" disabled={!agreementConfirmed||!buyer.trim()} onClick={accept}>{t('Accept these terms')}</button><small>{t('Typing your name records consent for this prototype. Production language requires legal review.')}</small></>):activeExpired?<AgreementExpiredNotice/>:<><ul><li><Check/>{t('Item and defects reviewed')}</li><li><Check/>{t('Price confirmed')}</li><li><Check/>{t('Handoff terms confirmed')}</li></ul><div className="accepted"><BadgeCheck/><div><b>{t('Terms accepted')}</b><span>{active.buyerName||t('Buyer')} · {t('verification pending')}</span></div></div></>}</>}</div>{active.status!=='draft'&&<><button className="copy" onClick={()=>navigator.clipboard?.writeText(`${location.origin}/?deal=${active.publicId}`)}><Copy size={16}/>{t('Copy Deal Link')}</button><DealQrCode deal={active}/></>}<div className="rating"><Star/><span><b>{t('Ratings unlock after completion')}</b><small>{t('One rating per party, tied to this deal.')}</small></span></div></aside></div>
       </section>}
-    </main><footer><div><strong>DealSafe beta</strong><span>{t('Facts, consent, and a clearer handoff.')}</span></div><nav aria-label={t('Legal and protection')}><button onClick={()=>openInfo('buyer-protection')}>{t('Buyer protection')}</button><button onClick={()=>openInfo('seller-protection')}>{t('Seller protection')}</button><button onClick={()=>openInfo('fees')}>{t('Fees')}</button><button onClick={()=>openInfo('disputes')}>{t('Disputes')}</button><button onClick={()=>openInfo('terms')}>{t('Terms')}</button><button onClick={()=>openInfo('privacy')}>{t('Privacy')}</button></nav></footer>
+    </main><footer><div><strong>DealSafe beta</strong><span>{t('Facts, consent, and a clearer handoff.')}</span></div><nav aria-label={t('Legal and protection')}><a href={publicInfoPaths['buyer-protection']} onClick={event=>{event.preventDefault();openInfo('buyer-protection')}}>{t('Buyer protection')}</a><a href={publicInfoPaths['seller-protection']} onClick={event=>{event.preventDefault();openInfo('seller-protection')}}>{t('Seller protection')}</a><a href={publicInfoPaths.fees} onClick={event=>{event.preventDefault();openInfo('fees')}}>{t('Fees')}</a><a href={publicInfoPaths.disputes} onClick={event=>{event.preventDefault();openInfo('disputes')}}>{t('Disputes')}</a><a href={publicInfoPaths.terms} onClick={event=>{event.preventDefault();openInfo('terms')}}>{t('Terms')}</a><a href={publicInfoPaths.privacy} onClick={event=>{event.preventDefault();openInfo('privacy')}}>{t('Privacy')}</a></nav></footer>
   </div>
 }
 const renderApp=()=>createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
