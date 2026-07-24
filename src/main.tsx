@@ -6,6 +6,7 @@ import './styles.css';
 import './home.css';
 import './global-redesign.css';
 import './workspace-redesign.css';
+import './verification-polish.css';
 
 const root = createRoot(document.getElementById('root')!);
 

@@ -435,9 +435,52 @@ function AgreementHistory({deal}:{deal:Deal}){
 }
 
 function AgreementVerifier(){
-  const [dealId,setDealId]=useState('');const [code,setCode]=useState('');const [result,setResult]=useState<AgreementVerificationResult|false|null>(null);const [message,setMessage]=useState('');const [checking,setChecking]=useState(false);
-  const submit=async(event:React.FormEvent)=>{event.preventDefault();const cleanId=dealId.replace(/^deal\s+/i,'').trim();const cleanCode=code.replace(/\s/g,'').trim();setMessage('');setResult(null);if(cleanId.length<4||!/^[a-f0-9]{64}$/i.test(cleanCode)){setMessage('Enter Deal ID and the full 64-character code.');return}setChecking(true);try{const match=await verifyAgreementRecord(cleanId,cleanCode);setResult(match||false)}catch(error){setMessage(error instanceof Error?error.message:'Agreement verification is unavailable')}finally{setChecking(false)}};
-  return <section className="agreement-verifier"><div className="agreement-verifier-copy"><Fingerprint/><div><p className="eyebrow">{t('Independent check')}</p><h2>{t('Check agreement code')}</h2><p>{t('Compare a saved DealSafe agreement without signing in.')}</p></div></div><form onSubmit={submit}><label>{t('Deal ID')}<input required minLength={4} maxLength={30} autoCapitalize="characters" spellCheck={false} value={dealId} onChange={event=>setDealId(event.target.value.toUpperCase())} placeholder="1089BDF0"/></label><label>{t('Agreement code')}<input className="agreement-verifier-code" required minLength={64} maxLength={80} autoCapitalize="none" spellCheck={false} value={code} onChange={event=>setCode(event.target.value)} placeholder="SHA-256"/></label><button className="primary" disabled={checking}>{t(checking?'Checking…':'Check code')}</button>{result&&<div className={`agreement-verifier-result ${result.is_current?'success':'warning'}`}>{result.is_current?<BadgeCheck/>:<Clock3/>}<div><b>{t(result.is_current?'Match confirmed':'Matches a previous version')}</b><span>{t('Version')} {result.version} · {formatDateTime(result.created_at)}</span><a href={`/?deal=${encodeURIComponent(result.public_id)}`}>{t('Open Deal Link')} →</a></div></div>}{result===false&&<div className="agreement-verifier-result error"><X/><div><b>{t('No match found')}</b></div></div>}{message&&<div className="agreement-verifier-result error"><ShieldAlert/><div><b>{t(message)}</b></div></div>}<small className="agreement-verifier-note"><LockKeyhole size={15}/>{t('A match confirms only the stored agreement record, not the item or payment.')}</small></form></section>;
+  const [dealId,setDealId]=useState('');
+  const [code,setCode]=useState('');
+  const [result,setResult]=useState<AgreementVerificationResult|false|null>(null);
+  const [message,setMessage]=useState('');
+  const [checking,setChecking]=useState(false);
+  const cleanId=dealId.replace(/^deal\s+/i,'').trim();
+  const cleanCode=code.replace(/\s/g,'').trim();
+  const validationVisible=message==='Review the highlighted fields.';
+  const dealIdInvalid=validationVisible&&cleanId.length<4;
+  const codeInvalid=validationVisible&&!/^[a-f0-9]{64}$/i.test(cleanCode);
+  const submit=async(event:React.FormEvent)=>{
+    event.preventDefault();
+    setMessage('');
+    setResult(null);
+    if(cleanId.length<4||!/^[a-f0-9]{64}$/i.test(cleanCode)){
+      setMessage('Review the highlighted fields.');
+      return;
+    }
+    setChecking(true);
+    try{
+      const match=await verifyAgreementRecord(cleanId,cleanCode);
+      setResult(match||false);
+    }catch(error){
+      setMessage(error instanceof Error?error.message:'Agreement verification is unavailable');
+    }finally{
+      setChecking(false);
+    }
+  };
+  return <section className="agreement-verifier">
+    <div className="agreement-verifier-copy"><Fingerprint/><div><p className="eyebrow">{t('Independent check')}</p><h2>{t('Check agreement code')}</h2><p>{t('Compare a saved DealSafe agreement without signing in.')}</p></div></div>
+    <form onSubmit={submit} noValidate>
+      <label>{t('Deal ID')}
+        <input required minLength={4} maxLength={30} autoCapitalize="characters" spellCheck={false} value={dealId} onChange={event=>setDealId(event.target.value.toUpperCase())} placeholder="1089BDF0" aria-invalid={dealIdInvalid} aria-describedby={dealIdInvalid?'deal-id-error':undefined}/>
+        {dealIdInvalid&&<small id="deal-id-error" className="agreement-verifier-field-error">{t('Enter at least 4 characters from the Deal ID.')}</small>}
+      </label>
+      <label>{t('Agreement code')}
+        <input className="agreement-verifier-code" required minLength={64} maxLength={80} autoCapitalize="none" spellCheck={false} value={code} onChange={event=>setCode(event.target.value)} placeholder="SHA-256" aria-invalid={codeInvalid} aria-describedby={codeInvalid?'agreement-code-error':undefined}/>
+        {codeInvalid&&<small id="agreement-code-error" className="agreement-verifier-field-error">{t('Enter the full 64-character SHA-256 code.')}</small>}
+      </label>
+      <button className="primary" disabled={checking}>{t(checking?'Checking…':'Check code')}</button>
+      {result&&<div className={`agreement-verifier-result ${result.is_current?'success':'warning'}`}>{result.is_current?<BadgeCheck/>:<Clock3/>}<div><b>{t(result.is_current?'Match confirmed':'Matches a previous version')}</b><span>{t('Version')} {result.version} · {formatDateTime(result.created_at)}</span><a href={`/?deal=${encodeURIComponent(result.public_id)}`}>{t('Open Deal Link')} →</a></div></div>}
+      {result===false&&<div className="agreement-verifier-result error" role="alert"><X/><div><b>{t('No match found')}</b></div></div>}
+      {message&&<div className="agreement-verifier-result error" role="alert"><ShieldAlert/><div><b>{t(message)}</b></div></div>}
+      <small className="agreement-verifier-note"><LockKeyhole size={15}/>{t('A match confirms only the stored agreement record, not the item or payment.')}</small>
+    </form>
+  </section>;
 }
 function DealQrCode({deal}:{deal:Deal}){const [open,setOpen]=useState(false);const [image,setImage]=useState('');const url=`${location.origin}/?deal=${deal.publicId}`;useEffect(()=>{if(!open||image)return;let current=true;void import('qrcode').then(({default:QRCode})=>QRCode.toDataURL(url,{width:360,margin:2,errorCorrectionLevel:'M',color:{dark:'#15221d',light:'#ffffff'}})).then(result=>{if(current)setImage(result)}).catch(()=>{if(current)setImage('')});return()=>{current=false}},[open,image,url]);return <div className="deal-qr"><button className="copy no-print" onClick={()=>setOpen(value=>!value)}><QrCode size={17}/>{t(open?'Hide QR Code':'Show QR Code')}</button>{open&&<div className="qr-panel no-print">{image?<><img src={image} alt={`${t('QR code for deal')} ${deal.publicId}`}/><p>{t('Scan to open this Deal Link on another phone.')}</p><a className="secondary" href={image} download={`DealSafe-${deal.publicId}-QR.png`}>{t('Download QR')}</a></>:<p>{t('Preparing QR Code…')}</p>}</div>}{image&&<div className="print-qr"><img src={image} alt={t('Deal Link QR code')}/><div><b>{t('Live Deal Link')}</b><small>{t('Scan to open the current DealSafe record.')}</small><span>{deal.publicId}</span></div></div>}</div>}
 
@@ -1119,7 +1162,8 @@ export function App() {
   const applyDealActionPlan=(dealId:string,plan:DealActionPlan)=>{setActive(current=>current?.id===dealId?{...current,status:plan.deal_status,viewerRole:plan.viewer_role}:current);setDeals(items=>items.map(item=>item.id===dealId?{...item,status:plan.deal_status,viewerRole:plan.viewer_role}:item))};
   const activeExpired=active?isDealExpired(active,clock):false;
   const isDemoActive=Boolean(active?.publicId===DEMO_DEAL_PUBLIC_ID&&!user);
-  const agreementActionReady=agreementConfirmed&&Boolean(buyer.trim());
+  const demoFlowCompleted=isDemoActive&&authMessage.startsWith('Demo complete');
+  const agreementActionReady=agreementConfirmed&&Boolean(buyer.trim())&&!demoFlowCompleted;
   const scrollToAgreement=()=>{
     const agreement=document.querySelector<HTMLElement>('.deal-grid aside');
     agreement?.scrollIntoView({behavior:'smooth',block:'start'});
@@ -1141,7 +1185,6 @@ export function App() {
     :active.status==='accepted'?'Follow payment and handoff steps'
     :active.status==='completed'?'Deal completed':'Review the current deal status';
   const activePaymentReady=Boolean(active&&paymentReadyByDeal[active.id]);
-  const demoFlowCompleted=isDemoActive&&authMessage.startsWith('Demo complete');
   const dealPrimaryAction=active
     ? demoFlowCompleted
       ? {label:'Start a deal',detail:'Create your own private Deal Link.',targetId:'deal-overview',kind:'create' as const}
