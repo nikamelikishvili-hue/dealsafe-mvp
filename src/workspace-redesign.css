@@ -9,32 +9,42 @@ html[lang="ka"] :where(h1,h2,h3,h4,.brand,.price,strong,.deal-icon){font-family:
 
 .global-hero{
   min-height:520px;
-  grid-template-columns:minmax(0,1fr) minmax(440px,.9fr);
-  gap:54px;
-  padding-top:46px;
-  padding-bottom:60px;
+  grid-template-columns:minmax(0,.95fr) minmax(480px,1.05fr);
+  gap:68px;
+  padding-top:58px;
+  padding-bottom:72px;
 }
-.global-hero-copy{max-width:650px}
+.global-hero-copy{max-width:620px}
 .global-kicker{margin-bottom:18px;padding:7px 11px}
-.global-hero h1{font-size:clamp(38px,3.9vw,52px);line-height:1.08}
+.global-hero h1{font-size:clamp(40px,4vw,56px);line-height:1.06}
 html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
-.global-lede{max-width:620px;margin-top:20px;font-size:16px;line-height:1.6}
+.global-lede{max-width:590px;margin-top:22px;font-size:17px;line-height:1.65}
 .global-hero-actions{margin-top:26px}
-.global-hero-actions .global-primary,.global-hero-actions .global-secondary{padding:0 16px;font-size:13px}
+.global-hero-actions .global-primary,.global-hero-actions .global-secondary{padding:0 18px;font-size:14px}
 .global-proof{margin-top:25px}
 .beta-payment-note{margin-top:14px}
 
-.network-stage{min-height:405px}
+.network-stage{
+  min-width:0;
+  min-height:410px;
+  display:flex;
+  align-items:center;
+  padding:12px 0;
+}
 .home-product-preview{
-  position:absolute;
-  inset:24px 8px 24px 38px;
+  position:relative;
+  inset:auto;
   z-index:2;
+  width:100%;
+  min-width:0;
   overflow:hidden;
   border:1px solid rgba(127,181,247,.25);
-  border-radius:22px;
+  border-radius:24px;
   color:#eaf3ff;
-  background:linear-gradient(155deg,rgba(16,43,78,.98),rgba(5,19,37,.98));
-  box-shadow:0 34px 80px rgba(0,4,14,.44),inset 0 1px rgba(255,255,255,.06);
+  background:
+    radial-gradient(circle at 82% 8%,rgba(64,111,221,.2),transparent 30%),
+    linear-gradient(155deg,rgba(16,43,78,.98),rgba(5,19,37,.98));
+  box-shadow:0 34px 80px rgba(0,4,14,.42),inset 0 1px rgba(255,255,255,.07);
 }
 .home-product-preview>header{
   width:100%;
@@ -79,10 +89,6 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .home-product-preview>footer{width:100%;max-width:none;display:flex;flex-wrap:wrap;gap:8px 18px;margin:0;padding:15px 18px;border-top:0;color:#8ea3ba;font-size:10px;font-weight:700}
 .home-product-preview>footer span{display:flex;align-items:center;gap:6px}
 .home-product-preview>footer svg{width:13px;color:#6bb3ff}
-.network-stage .signal-card{min-width:190px}
-.network-stage .signal-agreement{top:0;left:0}
-.network-stage .signal-payment{right:-10px;top:auto;bottom:0}
-
 .home-capability-strip{
   position:relative;
   z-index:6;
@@ -286,7 +292,7 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 @media(max-width:960px){
   .global-hero{grid-template-columns:1fr;padding-top:48px}
   .global-hero-copy{max-width:720px}
-  .network-stage{width:min(650px,100%);margin:8px auto 0}
+  .network-stage{width:min(700px,100%);min-height:0;margin:18px auto 0;padding:0}
   .home-capability-strip{grid-template-columns:1fr 1fr}
   .view-deal .deal-grid{grid-template-columns:minmax(0,1fr) 340px}
   .view-create #main-content{grid-template-columns:minmax(0,1fr) 300px}
@@ -296,9 +302,8 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .global-hero{padding:38px 18px 50px}
   .global-hero h1{font-size:35px}
   .global-lede{font-size:15px}
-  .network-stage{min-height:350px}
-  .home-product-preview{inset:18px 0 18px 0}
-  .network-stage .signal-card{display:none}
+  .network-stage{min-height:0}
+  .home-product-preview{inset:auto}
   .preview-progress{margin-left:16px;margin-right:16px}
   .home-capability-strip{width:calc(100% - 28px);margin:-26px auto 42px}
   .home-capability-strip article{min-height:96px;padding:17px}
@@ -356,7 +361,7 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 @media(max-width:520px){
   .global-hero h1{font-size:33px}
   .global-proof{grid-template-columns:1fr}
-  .network-stage{min-height:366px}
+  .network-stage{min-height:0}
   .home-product-preview>header{padding:14px}
   .preview-live{display:none}
   .preview-item{grid-template-columns:48px minmax(0,1fr);margin:14px;padding:13px}
