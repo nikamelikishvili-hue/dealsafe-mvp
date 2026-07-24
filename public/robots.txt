@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://dealsafe-mvp.vercel.app/sitemap.xml
