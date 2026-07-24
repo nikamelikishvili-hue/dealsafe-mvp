@@ -175,6 +175,24 @@ body{background:var(--ds-surface);color:var(--ds-ink)}
   line-height:1.65;
 }
 .global-hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:34px}
+.demo-deal-banner{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  gap:18px;
+  align-items:center;
+  margin:8px 0 30px;
+  padding:20px 22px;
+  border:1px solid #c9ded2;
+  border-radius:18px;
+  background:linear-gradient(135deg,#eef8f2,#fffdf6);
+  box-shadow:0 12px 34px rgba(24,70,49,.08);
+}
+.demo-deal-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:14px;background:var(--green);color:white}
+.demo-deal-icon svg{width:22px}
+.demo-deal-banner .eyebrow{margin:0 0 4px}
+.demo-deal-banner h2{margin:0;font-size:21px}
+.demo-deal-banner p:not(.eyebrow){margin:5px 0 0;color:#5e6c65;line-height:1.5}
+.demo-deal-banner .primary{white-space:nowrap}
 .global-primary,.global-secondary{
   min-height:50px;
   display:inline-flex;
@@ -540,7 +558,7 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(39,120,245,.12);b
   .site-header .account>button:not(.header-signup):not(.admin-link){display:none}
   .site-header .account .admin-link{font-size:0;padding:8px}
   .site-header .account .admin-link svg{margin:0}
-  .site-header .header-signup{display:none}
+  .site-header .account .header-signup{display:none}
   .site-header .mobile-menu-toggle{width:40px;height:40px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.16);border-radius:10px;color:#fff;background:rgba(255,255,255,.06)}
   .mobile-menu-toggle svg{width:20px}
   .mobile-menu{position:sticky;top:64px;z-index:79;display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:12px 14px;border-bottom:1px solid #d8e3f0;background:#fff;box-shadow:0 14px 28px rgba(15,35,61,.12)}
@@ -553,6 +571,8 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(39,120,245,.12);b
   .global-lede{font-size:16px}
   .global-hero-actions{display:grid}
   .global-hero-actions button{width:100%}
+  .demo-deal-banner{grid-template-columns:auto minmax(0,1fr);padding:18px}
+  .demo-deal-banner .primary{grid-column:1/-1;width:100%}
   .global-proof{display:grid;grid-template-columns:1fr 1fr;gap:11px}
   .network-stage{min-height:350px;margin-top:18px}
   .network-orb{width:310px}
