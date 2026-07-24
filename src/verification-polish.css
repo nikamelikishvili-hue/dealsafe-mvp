@@ -1,0 +1,20 @@
+.agreement-verifier input[aria-invalid="true"]{
+  border-color:#c75a50;
+  background:#fff8f7;
+  box-shadow:0 0 0 3px rgba(199,90,80,.12);
+}
+
+.agreement-verifier-field-error{
+  display:block;
+  margin-top:6px;
+  color:#9d352d;
+  font-size:12px;
+  font-weight:700;
+  line-height:1.4;
+}
+
+.agreement .primary:disabled{
+  cursor:not-allowed;
+  box-shadow:none;
+  opacity:.58;
+}
