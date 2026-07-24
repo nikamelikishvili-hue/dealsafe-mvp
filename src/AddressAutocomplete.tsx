@@ -17,6 +17,7 @@ type GooglePlaceAutocompleteElement=HTMLElement&{
   requestedLanguage:string;
   value:string;
   includedPrimaryTypes?:string[];
+  includedRegionCodes?:string[];
 };
 
 type PlaceLibrary={
@@ -54,7 +55,13 @@ function loadGoogleMaps(apiKey:string){
   return mapsLoader;
 }
 
-export type AddressParts={streetAddress?:string;city?:string;country?:string};
+export type AddressParts={
+  streetAddress?:string;
+  city?:string;
+  state?:string;
+  postalCode?:string;
+  country?:string;
+};
 
 export function AddressAutocomplete({value,onChange,placeholder,onAddressParts,streetAddressOnly=false}:{value:string;onChange:(value:string)=>void;placeholder:string;onAddressParts?:(parts:AddressParts)=>void;streetAddressOnly?:boolean}){
   const apiKey=(import.meta.env.VITE_GOOGLE_MAPS_API_KEY||'').trim();
@@ -80,17 +87,20 @@ export function AddressAutocomplete({value,onChange,placeholder,onAddressParts,s
       const selected=place.formattedAddress||place.displayName||autocomplete?.value||'';
       const components=place.addressComponents||[];
       const component=(...types:string[])=>{const item=components.find(entry=>types.some(type=>entry.types?.includes(type)));return item?.longText||item?.shortText||''};
+      const shortComponent=(...types:string[])=>{const item=components.find(entry=>types.some(type=>entry.types?.includes(type)));return item?.shortText||item?.longText||''};
       const selectedStreetPart=selected.split(',')[0]?.trim()||selected;
       const leadingNumber=(text:string)=>text.match(/^\s*(\d+[A-Za-z]?(?:\s*[-/]\s*\d+[A-Za-z]?)?)(?:\s|$)/)?.[1]||'';
       const streetNumber=component('street_number')||leadingNumber(selectedStreetPart)||leadingNumber(inputValueRef.current);
       const route=component('route');
       const streetAddress=route?[streetNumber,route].filter(Boolean).join(' ').trim():selectedStreetPart;
       const city=component('locality','postal_town','sublocality_level_1','administrative_area_level_2');
+      const state=shortComponent('administrative_area_level_1');
+      const postalCode=component('postal_code');
       const country=component('country');
       if(autocomplete)autocomplete.value=streetAddress;
       inputValueRef.current=streetAddress;
       onChangeRef.current(streetAddress);
-      onAddressPartsRef.current?.({streetAddress,city,country});
+      onAddressPartsRef.current?.({streetAddress,city,state,postalCode,country});
     };
     loadGoogleMaps(apiKey).then(async()=>{
       if(!active||!hostRef.current||!window.google)return;
@@ -100,9 +110,11 @@ export function AddressAutocomplete({value,onChange,placeholder,onAddressParts,s
       autocomplete.name='meeting-address';
       autocomplete.placeholder=placeholder;
       autocomplete.requestedLanguage=getAppLanguage();
+      autocomplete.includedRegionCodes=['us'];
       if(streetAddressOnly)autocomplete.includedPrimaryTypes=['street_address'];
       autocomplete.value=value;
       autocomplete.setAttribute('aria-label',placeholder);
+      autocomplete.setAttribute('autocomplete',streetAddressOnly?'address-line1':'street-address');
       autocomplete.addEventListener('input',handleInput);
       autocomplete.addEventListener('change',handleInput);
       autocomplete.addEventListener('gmp-select',handleSelect);
@@ -124,6 +136,6 @@ export function AddressAutocomplete({value,onChange,placeholder,onAddressParts,s
 
   useEffect(()=>{inputValueRef.current=value;if(elementRef.current&&elementRef.current.value!==value)elementRef.current.value=value},[value]);
 
-  if(!apiKey||googleFailed)return <input required placeholder={placeholder} value={value} onChange={event=>onChange(event.target.value)}/>;
-  return <div className={`google-address-autocomplete ${googleReady?'ready':'loading'}`}><div ref={hostRef}/>{!googleReady&&<input required placeholder={placeholder} value={value} onChange={event=>onChange(event.target.value)}/>}</div>;
+  if(!apiKey||googleFailed)return <input required autoComplete={streetAddressOnly?'address-line1':'street-address'} placeholder={placeholder} value={value} onChange={event=>onChange(event.target.value)}/>;
+  return <div className={`google-address-autocomplete ${googleReady?'ready':'loading'}`}><div ref={hostRef}/>{!googleReady&&<input required autoComplete={streetAddressOnly?'address-line1':'street-address'} placeholder={placeholder} value={value} onChange={event=>onChange(event.target.value)}/>}</div>;
 }
