@@ -69,7 +69,6 @@ import './evidence.css';
 import './global-redesign.css';
 import './workspace-redesign.css';
 import './deal-workflow-modern.css';
-import './deal-sections-compact.css';
 
 type PublicInfoView='buyer-protection'|'seller-protection'|'fees'|'disputes'|'terms'|'privacy';
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset' | 'link-error' | 'verify' | PublicInfoView;
@@ -193,38 +192,7 @@ function DealReadiness({deal,onOpenProfile,onEditDetails}:{deal:Deal;onOpenProfi
   const riskScore=Math.min(100,(contactVerified?0:10)+(sellerVerified?0:15)+(deal.mediaUrls?.length?0:20)+(deal.description.trim().length>=20?0:15)+(deal.serialNumber?0:5)+(deal.agreementVersion>=1?0:15)+(['draft','published'].includes(deal.status)?10:0)+(isDealExpired(deal)?35:0)+(deal.status==='disputed'?35:0)+(deal.status==='cancelled'?15:0));
   const riskLevel=riskScore<=20?'Low concern':riskScore<=45?'Review recommended':'Caution';
   const riskClass=riskScore<=20?'low':riskScore<=45?'review':'caution';
-  return <section className="deal-readiness no-print">
-    <div className="readiness-heading">
-      <span className="workflow-icon"><ShieldCheck/></span>
-      <div>
-        <p className="eyebrow">{t('Safety controls')}</p>
-        <h2>{t('Deal safety check')}</h2>
-        <span className="readiness-summary">{completed}/{checks.length} {t('checks recorded')}</span>
-      </div>
-      <div className={`readiness-score risk-${riskClass}`}>
-        <strong>{riskScore}</strong>
-        <small>{t('Risk score')}</small>
-      </div>
-    </div>
-    <div className="readiness-status-row">
-      <span className={`risk-level ${riskClass}`}>{t(riskLevel)}</span>
-      <div className="readiness-progress" role="progressbar" aria-label={t('Deal safety check')} aria-valuemin={0} aria-valuemax={checks.length} aria-valuenow={completed}><span style={{width:`${percentage}%`}}/></div>
-      <strong>{percentage}%</strong>
-    </div>
-    {(!contactVerified||!sellerVerified||!descriptionReady)&&<div className="readiness-guidance">
-      {!contactVerified&&<article><p><MailCheck/>{t('Confirm the email address from the message sent during account registration.')}</p>{onOpenProfile&&<button type="button" onClick={onOpenProfile}>{t('Open verification center')}</button>}</article>}
-      {!sellerVerified&&<article><p><BadgeCheck/>{t('Complete identity verification from Profile → Verification & Security Center.')}</p>{onOpenProfile&&<button type="button" onClick={onOpenProfile}>{t('Open verification center')}</button>}</article>}
-      {!descriptionReady&&<article><p><Pencil/><span>{t('Description progress')}: {descriptionCharacters}/20 · {t('Describe wear, repairs, or defects.')}</span></p>{onEditDetails&&<button type="button" onClick={onEditDetails}>{t('Edit description')}</button>}</article>}
-    </div>}
-    <details className="readiness-details">
-      <summary><span>{t('Review all safety signals')}</span><ChevronDown/></summary>
-      <div className="readiness-grid">{checks.map(check=><article key={check.label} className={check.complete?'complete':''}>{check.complete?<Check/>:<Clock3/>}<span>{t(check.label)}</span><small>{t(check.status)}</small></article>)}</div>
-      <div className="readiness-notes">
-        <p className="readiness-note"><ShieldCheck/>{t('This automated check uses only the details in this DealSafe record. It is not an accusation, guarantee, or market-price check.')}</p>
-        <p className="readiness-note"><LockKeyhole/>{t('DealSafe does not hold or insure payments in this beta. Never send deposits outside the agreed process.')}</p>
-      </div>
-    </details>
-  </section>
+  return <section className="deal-readiness no-print"><div className="readiness-heading"><ShieldCheck/><div><p className="eyebrow">{t('Safety controls')}</p><h2>{t('Deal safety check')}</h2><span className={`risk-level ${riskClass}`}>{t(riskLevel)}</span></div><div className={`readiness-score risk-${riskClass}`}><strong>{riskScore}/100</strong><small>{t('Risk score')}</small></div></div><div className="readiness-progress" role="progressbar" aria-label={t('Deal safety check')} aria-valuemin={0} aria-valuemax={checks.length} aria-valuenow={completed}><span style={{width:`${percentage}%`}}/></div><div className="readiness-grid">{checks.map(check=><article key={check.label} className={check.complete?'complete':''}>{check.complete?<Check/>:<Clock3/>}<span>{t(check.label)}</span><small>{t(check.status)}</small></article>)}</div>{(!contactVerified||!sellerVerified||!descriptionReady)&&<div className="readiness-guidance">{!contactVerified&&<article><p><MailCheck/>{t('Confirm the email address from the message sent during account registration.')}</p>{onOpenProfile&&<button type="button" onClick={onOpenProfile}>{t('Open verification center')}</button>}</article>}{!sellerVerified&&<article><p><BadgeCheck/>{t('Complete identity verification from Profile → Verification & Security Center.')}</p>{onOpenProfile&&<button type="button" onClick={onOpenProfile}>{t('Open verification center')}</button>}</article>}{!descriptionReady&&<article><p><Pencil/><span>{t('Description progress')}: {descriptionCharacters}/20 · {t('Describe wear, repairs, or defects.')}</span></p>{onEditDetails&&<button type="button" onClick={onEditDetails}>{t('Edit description')}</button>}</article>}</div>}<p className="readiness-note"><ShieldCheck/>{t('This automated check uses only the details in this DealSafe record. It is not an accusation, guarantee, or market-price check.')}</p><p className="readiness-note"><LockKeyhole/>{t('DealSafe does not hold or insure payments in this beta. Never send deposits outside the agreed process.')}</p></section>
 }
 
 function SecurityCenter({email,status,message,onRequest}:{email:string;status:ProfileSummary['verification_status'];message:string;onRequest:()=>void}){
@@ -419,18 +387,7 @@ function DealParticipantsCard({deal,session,onLoaded}:{deal:Deal;session:StoredS
   if(!participants)return null;
   const verification=(status:DealParticipants['seller_verification'])=>status==='verified'?'Identity verified':status==='pending'?'Verification pending':status==='failed'?'Verification failed':'Not verified';
   const card=(role:'Seller'|'Buyer',name:string,status:DealParticipants['seller_verification'])=><article className="participant-card"><span className="participant-avatar">{name.slice(0,1)||'?'}</span><div><span className="participant-role">{t(role)}{participants.viewer_role===role.toLowerCase()?` · ${t('You')}`:''}</span><strong>{name}</strong><span className={`participant-verification ${status}`}><BadgeCheck size={16}/>{t(verification(status))}</span></div></article>;
-  return <section className="deal-participants">
-    <div className="participant-heading">
-      <span className="workflow-icon"><ShieldCheck/></span>
-      <div><p className="eyebrow">{t('Verified parties')}</p><h2>{t('Deal participants')}</h2></div>
-      <span className="participant-private"><LockKeyhole size={14}/>{t('Private')}</span>
-    </div>
-    <div className="participant-grid">{card('Seller',participants.seller_name,participants.seller_verification)}{card('Buyer',participants.buyer_name,participants.buyer_verification)}</div>
-    <div className="participant-meta">
-      {participants.accepted_at&&<span><Clock3 size={15}/>{t('Accepted on')} {formatDateTime(participants.accepted_at)}</span>}
-      <span><ShieldCheck size={15}/>{t('Identity details stay private')}</span>
-    </div>
-  </section>;
+  return <section className="deal-participants"><div className="participant-heading"><ShieldCheck/><div><p className="eyebrow">{t('Verified parties')}</p><h2>{t('Deal participants')}</h2><p>{t('Only the buyer and seller can view this participant record.')}</p></div></div><div className="participant-grid">{card('Seller',participants.seller_name,participants.seller_verification)}{card('Buyer',participants.buyer_name,participants.buyer_verification)}</div><div className="participant-meta">{participants.accepted_at&&<span><Clock3 size={16}/>{t('Accepted on')} {formatDateTime(participants.accepted_at)}</span>}<span><LockKeyhole size={16}/>{t('Private participant record')}</span></div><p className="participant-privacy"><ShieldCheck size={17}/>{t('Names and verification status are shown; contact and identity details stay private.')}</p></section>;
 }
 
 function DealActionPlanCard({deal,session,onSync}:{deal:Deal;session:StoredSession;onSync:(plan:DealActionPlan)=>void}){
@@ -591,63 +548,8 @@ function ProtectedPaymentPanel({deal,session,onChanged}:{deal:Deal;session:Store
   const checkout=async()=>{setBusy('checkout');setMessage('');try{const result=await createProtectedCheckout(session,deal.id);window.location.assign(result.url)}catch(error){setMessage(error instanceof Error?error.message:'Could not open secure checkout');setBusy('')}};
   const release=async()=>{if(!window.confirm(t('Release the secured funds to the seller after confirming delivery?')))return;setBusy('release');setMessage('');try{await releaseProtectedPayment(session,deal.id);setMessage('Funds released to the seller.');await load()}catch(error){setMessage(error instanceof Error?error.message:'Could not release payment')}finally{setBusy('')}};
   if(!loaded)return null;
-  const state=payment?.status||'not_started';
-  const ready=Boolean(payment?.seller_payouts_ready||connect?.ready);
-  const secured=['funds_secured','release_pending','released'].includes(state);
-  const terminal=['failed','expired','cancelled','refunded','disputed','release_failed'].includes(state);
-  const released=state==='released';
-  const shipped=deal.deliveryMethod==='Meet in person'?plan?.meeting_status==='confirmed':Boolean(plan?.shipment_status);
-  const tracking=deal.deliveryMethod==='Meet in person'?Boolean(plan?.inspection_recorded):plan?.shipment_status==='delivered'||Boolean(plan?.inspection_recorded);
-  const buyerConfirmed=deal.status==='completed'||plan?.deal_status==='completed';
-  const paymentMilestones=[
-    {label:'Payment',detail:payment?.paid_at?formatDateTime(payment.paid_at):t(protectedPaymentLabels[state]),done:secured},
-    {label:deal.deliveryMethod==='Meet in person'?'Handoff':'Delivery',detail:shipped?t('Recorded'):t('Next'),done:shipped},
-    {label:'Buyer approval',detail:buyerConfirmed?t('Confirmed'):t('Waiting'),done:buyerConfirmed},
-    {label:'Seller payout',detail:released?t('Released'):t('Pending'),done:released},
-  ];
-  const paymentFlow=[
-    {label:'Buyer pays',detail:state==='not_started'?t('Waiting to start'):t('Checkout started'),done:secured},
-    {label:'Stripe Checkout',detail:state==='not_started'?t('Not started'):t('Card payment'),done:state!=='not_started'},
-    {label:'Payment confirmed',detail:payment?.paid_at?formatDateTime(payment.paid_at):t('Waiting for Stripe'),done:secured},
-    {label:deal.deliveryMethod==='Meet in person'?'Seller meets buyer':'Seller ships',detail:shipped?t('Recorded'):t('Waiting for next step'),done:shipped},
-    {label:deal.deliveryMethod==='Meet in person'?'Handoff verification':'Tracking verification',detail:tracking?t('Recorded'):t('Waiting for confirmation'),done:tracking},
-    {label:'Buyer confirmation',detail:buyerConfirmed?t('Deal completed'):t('Waiting for buyer'),done:buyerConfirmed},
-    {label:'Stripe releases funds',detail:released?t('Transfer created'):t('After confirmation'),done:released},
-    {label:'Seller paid',detail:released?t('Transfer complete'):t('Pending release'),done:released},
-    {label:'DealSafe commission',detail:payment?.platform_fee_cents?formatMoney(Number(payment.platform_fee_cents),payment.currency,getAppLanguage()):t('Configured at checkout'),done:released},
-  ];
-  return <section className="payment-status no-print" id="payment-status-panel">
-    <div className="payment-status-heading">
-      <span className="workflow-icon"><BadgeDollarSign/></span>
-      <div><p className="eyebrow">{t('Stripe payment')}</p><h2>{t('Payment status')}</h2><p>{t('A clear record from checkout to seller payout.')}</p></div>
-      <strong className="payment-amount">{dealPrice(deal)}</strong>
-    </div>
-    <div className={`protected-payment-state ${secured?'success':terminal?'warning':''}`}>
-      <span><i aria-hidden="true"/>{t(protectedPaymentLabels[state])}</span>
-      {payment?.paid_at&&<small>{formatDateTime(payment.paid_at)}</small>}
-    </div>
-    <ol className="payment-milestones" aria-label={t('Payment progress')}>
-      {paymentMilestones.map((step,index)=><li className={step.done?'done':index===paymentMilestones.findIndex(item=>!item.done)?'current':''} key={step.label}>
-        <span>{step.done?<Check size={15}/>:index+1}</span>
-        <div><b>{t(step.label)}</b><small>{step.detail}</small></div>
-      </li>)}
-    </ol>
-    {deal.viewerRole==='seller'&&!ready&&state==='not_started'&&<div className="payment-next-step"><ShieldCheck/><div><b>{t('Connect Stripe payouts')}</b><span>{t('Complete Stripe onboarding before a buyer can pay this deal.')}</span></div><button className="primary" disabled={busy==='connect'} onClick={startOnboarding}>{t(busy==='connect'?'Opening…':'Connect Stripe')}</button></div>}
-    {deal.viewerRole==='seller'&&ready&&state==='not_started'&&<div className="payment-wait"><Clock3/>{t('Stripe payouts are connected. Waiting for the buyer to pay.')}</div>}
-    {deal.viewerRole==='buyer'&&state==='not_started'&&!ready&&<div className="payment-wait"><Clock3/>{t('Waiting for the seller to finish Stripe payout setup.')}</div>}
-    {deal.viewerRole==='buyer'&&state==='not_started'&&ready&&deal.status==='accepted'&&<div className="payment-actions"><button className="primary" disabled={busy==='checkout'} onClick={checkout}><BadgeDollarSign size={17}/>{t(busy==='checkout'?'Opening Stripe Sandbox…':'Open Stripe Sandbox checkout')}</button></div>}
-    {state==='checkout_created'&&deal.viewerRole==='buyer'&&<div className="payment-actions"><button className="primary" disabled={busy==='checkout'} onClick={checkout}>{t('Continue Stripe Sandbox checkout')}</button></div>}
-    {state==='processing'&&<div className="payment-wait"><Clock3/>{t('Stripe is processing the payment. This page will update automatically.')}</div>}
-    {state==='funds_secured'&&deal.viewerRole==='buyer'&&deal.status==='completed'&&<div className="payment-actions"><button className="primary" disabled={busy==='release'} onClick={release}>{t(busy==='release'?'Releasing…':'Release funds to seller')}</button></div>}
-    {state==='released'&&<div className="payment-wait"><Check/>{t('Payment has been released to the seller.')}</div>}
-    {payment?.failure_message&&<div className="notice">{t(payment.failure_message)}</div>}
-    {message&&<div className="notice">{t(message)}</div>}
-    <details className="payment-details">
-      <summary><span>{t('Payment events and fee details')}</span><ChevronDown/></summary>
-      <div className="payment-flow" aria-label={t('Payment flow')}>{paymentFlow.map(step=><article className={`payment-flow-step ${step.done?'done':''}`} key={step.label}>{step.done?<Check size={17}/>:<Clock3 size={17}/>}<span><b>{t(step.label)}</b><small>{step.detail}</small></span></article>)}</div>
-      <p className="payment-disclaimer"><ShieldCheck/>{t('Payments are processed in Stripe Sandbox. DealSafe never stores card or bank details. This beta is not legal escrow.')}</p>
-    </details>
-  </section>;
+  const state=payment?.status||'not_started';const ready=Boolean(payment?.seller_payouts_ready||connect?.ready);const secured=['funds_secured','release_pending','released'].includes(state);const terminal=['failed','expired','cancelled','refunded','disputed','release_failed'].includes(state);const released=state==='released';const shipped=deal.deliveryMethod==='Meet in person'?plan?.meeting_status==='confirmed':Boolean(plan?.shipment_status);const tracking=deal.deliveryMethod==='Meet in person'?Boolean(plan?.inspection_recorded):plan?.shipment_status==='delivered'||Boolean(plan?.inspection_recorded);const buyerConfirmed=deal.status==='completed'||plan?.deal_status==='completed';const paymentFlow=[{label:'Buyer pays',detail:state==='not_started'?t('Waiting to start'):t('Checkout started'),done:secured},{label:'Stripe Checkout',detail:state==='not_started'?t('Not started'):t('Card payment'),done:state!=='not_started'},{label:'Payment confirmed',detail:payment?.paid_at?formatDateTime(payment.paid_at):t('Waiting for Stripe'),done:secured},{label:deal.deliveryMethod==='Meet in person'?'Seller meets buyer':'Seller ships',detail:shipped?t('Recorded'):t('Waiting for next step'),done:shipped},{label:deal.deliveryMethod==='Meet in person'?'Handoff verification':'Tracking verification',detail:tracking?t('Recorded'):t('Waiting for confirmation'),done:tracking},{label:'Buyer confirmation',detail:buyerConfirmed?t('Deal completed'):t('Waiting for buyer'),done:buyerConfirmed},{label:'Stripe releases funds',detail:released?t('Transfer created'):t('After confirmation'),done:released},{label:'Seller paid',detail:released?t('Transfer complete'):t('Pending release'),done:released},{label:'DealSafe commission',detail:payment?.platform_fee_cents?formatMoney(Number(payment.platform_fee_cents),payment.currency,getAppLanguage()):t('Configured at checkout'),done:released}];
+  return <section className="payment-status no-print" id="payment-status-panel"><div className="payment-status-heading"><BadgeDollarSign/><div><p className="eyebrow">{t('Stripe payment')}</p><h2>{t('Payment status')}</h2><p>{t('Pay by card through Stripe Sandbox. Both parties can follow the recorded payment state.')}</p></div><strong className="payment-amount">{dealPrice(deal)}</strong></div><div className={`protected-payment-state ${secured?'success':terminal?'warning':''}`}><span>{t(protectedPaymentLabels[state])}</span>{payment?.paid_at&&<small>{formatDateTime(payment.paid_at)}</small>}</div><div className="payment-flow" aria-label={t('Payment flow')}>{paymentFlow.map(step=><article className={`payment-flow-step ${step.done?'done':''}`} key={step.label}>{step.done?<Check size={17}/>:<Clock3 size={17}/>}<span><b>{t(step.label)}</b><small>{step.detail}</small></span></article>)}</div>{deal.viewerRole==='seller'&&!ready&&state==='not_started'&&<div className="payment-next-step"><ShieldCheck/><div><b>{t('Connect Stripe payouts')}</b><span>{t('Complete Stripe onboarding before a buyer can pay this deal.')}</span></div><button className="primary" disabled={busy==='connect'} onClick={startOnboarding}>{t(busy==='connect'?'Opening…':'Connect Stripe')}</button></div>}{deal.viewerRole==='seller'&&ready&&state==='not_started'&&<div className="payment-wait"><Clock3/>{t('Stripe payouts are connected. Waiting for the buyer to pay.')}</div>}{deal.viewerRole==='buyer'&&state==='not_started'&&!ready&&<div className="payment-wait"><Clock3/>{t('Waiting for the seller to finish Stripe payout setup.')}</div>}{deal.viewerRole==='buyer'&&state==='not_started'&&ready&&deal.status==='accepted'&&<div className="payment-actions"><button className="primary" disabled={busy==='checkout'} onClick={checkout}><BadgeDollarSign size={17}/>{t(busy==='checkout'?'Opening Stripe Sandbox…':'Open Stripe Sandbox checkout')}</button></div>}{state==='checkout_created'&&deal.viewerRole==='buyer'&&<div className="payment-actions"><button className="primary" disabled={busy==='checkout'} onClick={checkout}>{t('Continue Stripe Sandbox checkout')}</button></div>}{state==='processing'&&<div className="payment-wait"><Clock3/>{t('Stripe is processing the payment. This page will update automatically.')}</div>}{secured&&state!=='released'&&<div className="payment-progress"><article className="done"><Check/><span><b>{t('Payment confirmed')}</b><small>{payment?.paid_at?formatDateTime(payment.paid_at):t('Confirmed by Stripe')}</small></span></article><article className={deal.status==='completed'?'done':''}>{deal.status==='completed'?<Check/>:<Clock3/>}<span><b>{t('Deal completion')}</b><small>{deal.status==='completed'?t('Completed'):t('Waiting for delivery or handoff')}</small></span></article></div>}{state==='funds_secured'&&deal.viewerRole==='buyer'&&deal.status==='completed'&&<div className="payment-actions"><button className="primary" disabled={busy==='release'} onClick={release}>{t(busy==='release'?'Releasing…':'Release funds to seller')}</button></div>}{state==='released'&&<div className="payment-wait"><Check/>{t('Payment has been released to the seller.')}</div>}{payment?.failure_message&&<div className="notice">{t(payment.failure_message)}</div>}{message&&<div className="notice">{t(message)}</div>}<p className="payment-disclaimer"><ShieldCheck/>{t('Payments are processed in Stripe Sandbox. DealSafe never stores card or bank details. This beta is not legal escrow.')}</p></section>;
 }
 
 function ProtectedPaymentReceipt({deal,session}:{deal:Deal;session:StoredSession}){
@@ -709,13 +611,8 @@ function ShippingPanel({deal,session,paymentReady,evidenceRevision,onDelivered}:
   const delivered=async()=>{if(!confirm(t('Confirm that you received and inspected this item?')))return;setMessage('');try{await confirmShipmentDelivery(session,deal.id);setMessage('Delivery confirmed. Deal completed.');await loadShipment();await loadDelivery();onDelivered()}catch(error){setMessage(error instanceof Error?error.message:'Could not confirm delivery')}};
   const streetNumberMissing=address.streetAddress.trim().length>0&&!/\d/.test(address.streetAddress);
   const addressIncomplete=address.recipientName.trim().length<2||address.streetAddress.trim().length<3||streetNumberMissing||address.city.trim().length<2||!address.state||!isUsPostalCode(address.postalCode);
-  const shippingState=shipment?.status==='delivered'?'Delivered':shipment?'In transit':readyToShip?'Ready to ship':delivery?'Preparing shipment':'Address needed';
   return <section className="shipping-panel no-print">
-    <div className="shipping-heading">
-      <span className="workflow-icon"><Truck/></span>
-      <div><p className="eyebrow">{t('Tracked delivery')}</p><h2>{t('Shipping & receipt')}</h2><span>{t('Address, tracking, inspection, and receipt in one place.')}</span></div>
-      <strong className={`shipping-state ${shipment?.status==='delivered'?'complete':''}`}>{t(shippingState)}</strong>
-    </div>
+    <div className="shipping-heading"><span className="workflow-icon"><Truck/></span><div><p className="eyebrow">{t('Tracked delivery')}</p><h2>{t('Shipping & receipt')}</h2></div></div>
     <div className="delivery-address-section">
       <div className="delivery-address-heading"><span className="workflow-icon"><MapPinned/></span><div><p className="eyebrow">{t('Protected delivery')}</p><h3>{t('Delivery address')}</h3><span>{t('Only the buyer and seller can view this address.')}</span></div></div>
       {delivery&&!editingAddress&&<div className="delivery-address-card"><div><span>{t('Recipient name')}</span><strong>{delivery.recipient_name}</strong><address>{delivery.full_address}<br/>{delivery.country}</address>{delivery.instructions&&<small>{t('Delivery instructions')}: {delivery.instructions}</small>}</div><div className="delivery-address-actions">{delivery.locked&&<em><LockKeyhole size={14}/>{t('Locked after shipping')}</em>}<button className="secondary" onClick={copyAddress}><Copy size={16}/>{t('Copy address')}</button>{deal.viewerRole==='buyer'&&!delivery.locked&&<button className="secondary" onClick={()=>setEditingAddress(true)}>{t('Edit address')}</button>}</div></div>}
@@ -733,20 +630,7 @@ function ShippingPanel({deal,session,paymentReady,evidenceRevision,onDelivered}:
       {deal.viewerRole==='seller'&&!delivery&&<div className="shipping-wait">{t('Waiting for the buyer to add a delivery address.')}</div>}
       <p className="delivery-privacy"><LockKeyhole size={15}/>{t('This address is used only for this deal and is never shown on the public Deal Link.')}</p>
     </div>
-    {deal.viewerRole==='seller'&&!shipment&&<details className={`shipping-readiness ${readyToShip?'is-ready':''}`} aria-busy={checkingReadiness}>
-      <summary className="shipping-readiness-heading">
-        <span className="shipping-readiness-icon">{readyToShip?<Check/>:<ShieldCheck/>}</span>
-        <div><p className="eyebrow">{t('Shipping readiness')}</p><h3>{t(readyToShip?'Ready to ship':'Complete shipping checks')}</h3><span>{completedReadinessSteps}/{readinessSteps.length} {t('steps complete')}</span></div>
-        <ChevronDown className="shipping-readiness-chevron"/>
-      </summary>
-      <div className="shipping-readiness-body">
-        <div className="shipping-readiness-progress"><span style={{width:`${completedReadinessSteps/readinessSteps.length*100}%`}}/></div>
-        <div className="shipping-readiness-list">{readinessSteps.map(step=><div key={step.label} className={step.ready?'complete':'missing'}>{step.ready?<Check/>:<Clock3/>}<span>{t(step.label)}</span><em>{t(step.optional?'Not required':step.ready?'Ready':'Missing')}</em></div>)}</div>
-        {checkingReadiness&&<div className="shipping-readiness-status">{t('Checking shipping readiness…')}</div>}
-        {readinessError&&<div className="notice">{t(readinessError)}</div>}
-        {!readyToShip&&<button type="button" className="secondary shipping-evidence-link" onClick={()=>document.getElementById('deal-evidence-vault')?.scrollIntoView({behavior:'smooth',block:'center'})}><ShieldCheck size={17}/>{t('Upload required evidence')}</button>}
-      </div>
-    </details>}
+    {deal.viewerRole==='seller'&&!shipment&&<div className={`shipping-readiness ${readyToShip?'is-ready':''}`} aria-busy={checkingReadiness}><div className="shipping-readiness-heading"><ShieldCheck/><div><p className="eyebrow">{t('Shipping readiness')}</p><h3>{t(readyToShip?'Ready to ship':'Seller evidence is required before shipping.')}</h3><span>{t('Complete these checks before you mark the package as shipped.')}</span></div><strong>{completedReadinessSteps}/{readinessSteps.length} {t('steps complete')}</strong></div><div className="shipping-readiness-progress"><span style={{width:`${completedReadinessSteps/readinessSteps.length*100}%`}}/></div><div className="shipping-readiness-list">{readinessSteps.map(step=><div key={step.label} className={step.ready?'complete':'missing'}>{step.ready?<Check/>:<Clock3/>}<span>{t(step.label)}</span><em>{t(step.optional?'Not required':step.ready?'Ready':'Missing')}</em></div>)}</div>{checkingReadiness&&<div className="shipping-readiness-status">{t('Checking shipping readiness…')}</div>}{readinessError&&<div className="notice">{t(readinessError)}</div>}{!readyToShip&&<button type="button" className="secondary shipping-evidence-link" onClick={()=>document.getElementById('deal-evidence-vault')?.scrollIntoView({behavior:'smooth',block:'center'})}><ShieldCheck size={17}/>{t('Upload required evidence')}</button>}</div>}
     {shipment?<div className="shipment-card"><PackageCheck/><div><b>{shipment.carrier}</b><span>{t('Tracking number:')} {shipment.tracking_number}</span><small>{t(shipment.status==='delivered'?'Delivered':'Shipped')} · {formatDateTime(shipment.shipped_at)}</small></div></div>:deal.viewerRole==='seller'&&delivery?<form onSubmit={saveShipment}><label>{t('Carrier')}<input required minLength={2} value={carrier} onChange={e=>setCarrier(e.target.value)} placeholder={t('UPS, FedEx, USPS…')}/></label><label>{t('Tracking number')}<input required minLength={4} value={tracking} onChange={e=>setTracking(e.target.value)} placeholder={t('Enter tracking number')}/></label><button className="primary" disabled={!readyToShip||carrier.trim().length<2||tracking.trim().length<4}>{t('Mark as shipped')}</button></form>:deal.viewerRole==='buyer'&&delivery?<div className="shipping-wait">{t('Waiting for the seller to add tracking information.')}</div>:null}
     {shipment?.status==='shipped'&&deal.status==='accepted'&&<InspectionRecorder deal={deal} session={session} onRecorded={setInspectionRecorded}/>}
     {shipment?.status==='shipped'&&deal.viewerRole==='buyer'&&deal.status==='accepted'&&<button className="primary confirm-delivery" disabled={!inspectionRecorded} onClick={delivered}><PackageCheck size={18}/>{t('Confirm delivery')}</button>}
