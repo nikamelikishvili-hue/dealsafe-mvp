@@ -1,0 +1,429 @@
+/* Compact transaction sections: one visual language for high-frequency deal work. */
+.view-deal :is(.deal-readiness,.deal-participants,.payment-status,.shipping-panel){
+  --deal-blue:#246fd5;
+  --deal-indigo:#5666df;
+  --deal-ink:#172b45;
+  --deal-muted:#687b92;
+  --deal-line:#dbe6f2;
+  --deal-soft:#f6f9fd;
+  max-width:none;
+  margin:0;
+  padding:20px;
+  border:1px solid var(--deal-line);
+  border-radius:17px;
+  color:var(--deal-ink);
+  background:#fff;
+  box-shadow:0 8px 24px rgba(32,68,112,.045);
+}
+
+.view-deal :is(.readiness-heading,.participant-heading,.payment-status-heading,.shipping-heading){
+  display:grid;
+  grid-template-columns:40px minmax(0,1fr) auto;
+  align-items:center;
+  gap:12px;
+  margin:0;
+}
+
+.view-deal :is(.readiness-heading,.participant-heading,.payment-status-heading,.shipping-heading) .workflow-icon{
+  width:40px;
+  height:40px;
+  display:grid;
+  place-items:center;
+  margin:0;
+  border:1px solid #cfe1f7;
+  border-radius:12px;
+  color:var(--deal-blue);
+  background:linear-gradient(145deg,#eaf4ff,#f0efff);
+}
+
+.view-deal :is(.readiness-heading,.participant-heading,.payment-status-heading,.shipping-heading) .workflow-icon svg{
+  width:20px;
+  height:20px;
+}
+
+.view-deal :is(.readiness-heading,.participant-heading,.payment-status-heading,.shipping-heading) .eyebrow{
+  margin:0 0 2px;
+  color:var(--deal-blue);
+  font-size:9px;
+  letter-spacing:.12em;
+}
+
+.view-deal :is(.readiness-heading,.participant-heading,.payment-status-heading,.shipping-heading) h2{
+  margin:0;
+  color:var(--deal-ink);
+  font:800 20px/1.2 Manrope,sans-serif;
+  letter-spacing:-.025em;
+}
+
+.view-deal :is(.readiness-summary,.payment-status-heading p:last-child,.shipping-heading>div>span){
+  display:block;
+  margin:3px 0 0;
+  color:var(--deal-muted);
+  font-size:12px;
+  line-height:1.4;
+}
+
+/* Safety overview */
+.view-deal .readiness-score{
+  min-width:70px;
+  display:grid;
+  grid-template-columns:auto;
+  place-items:center;
+  gap:0;
+  padding:7px 10px;
+  border:1px solid #d7e4f2;
+  border-radius:11px;
+  color:#315f99;
+  background:#f2f7fd;
+}
+
+.view-deal .readiness-score strong{font:850 19px/1 Manrope,sans-serif}
+.view-deal .readiness-score small{margin-top:3px;font-size:8px;letter-spacing:.09em}
+.view-deal .readiness-score.risk-low{border-color:#cfe5da;color:#257151;background:#eef8f3}
+.view-deal .readiness-score.risk-review{border-color:#ecdba5;color:#8a6518;background:#fff9e7}
+.view-deal .readiness-score.risk-caution{border-color:#efd1ca;color:#a04437;background:#fff2ef}
+
+.view-deal .readiness-status-row{
+  display:grid;
+  grid-template-columns:auto minmax(120px,1fr) auto;
+  align-items:center;
+  gap:11px;
+  margin-top:13px;
+}
+
+.view-deal .readiness-status-row .risk-level{margin:0;white-space:nowrap}
+.view-deal .readiness-status-row .readiness-progress{height:6px;margin:0;background:#e8eef6}
+.view-deal .readiness-status-row .readiness-progress span{background:linear-gradient(90deg,var(--deal-blue),var(--deal-indigo))}
+.view-deal .readiness-status-row>strong{color:#5f738b;font-size:11px}
+
+.view-deal .readiness-guidance{
+  gap:6px;
+  margin-top:12px;
+  padding:10px;
+  border-color:#ebd89a;
+  border-radius:11px;
+  background:#fffae9;
+}
+
+.view-deal .readiness-guidance article{min-height:34px}
+.view-deal .readiness-guidance p{font-size:11px}
+.view-deal .readiness-guidance button{padding:7px 9px}
+
+.view-deal :is(.readiness-details,.payment-details){
+  margin-top:12px;
+  border-top:1px solid #e3eaf3;
+}
+
+.view-deal :is(.readiness-details,.payment-details)>summary{
+  min-height:42px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 2px 0;
+  color:#416181;
+  cursor:pointer;
+  list-style:none;
+  font-size:12px;
+  font-weight:800;
+}
+
+.view-deal :is(.readiness-details,.payment-details)>summary::-webkit-details-marker{display:none}
+.view-deal :is(.readiness-details,.payment-details)>summary svg{width:17px;transition:transform .2s ease}
+.view-deal :is(.readiness-details,.payment-details)[open]>summary svg{transform:rotate(180deg)}
+.view-deal .readiness-grid{gap:7px;margin-top:10px}
+.view-deal .readiness-grid article{min-height:46px;padding:9px 11px;border:1px solid #e2e9f1;background:#f7f9fc}
+.view-deal .readiness-grid article.complete{border-color:#d3e5f8;color:#2869b7;background:#f0f6fd}
+.view-deal .readiness-grid span{font-size:12px}
+.view-deal .readiness-grid small{font-size:10px}
+.view-deal .readiness-notes{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+.view-deal .readiness-note{margin:0;padding:9px;border-radius:9px;color:#697b90;background:#f7f9fc;font-size:10px}
+.view-deal .readiness-note+.readiness-note{margin-top:0}
+
+/* Participants */
+.view-deal .participant-private{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:6px 9px;
+  border:1px solid #d8e5f3;
+  border-radius:999px;
+  color:#52708f;
+  background:#f7faff;
+  font-size:10px;
+  font-weight:800;
+}
+
+.view-deal .participant-grid{gap:10px;margin-top:14px}
+.view-deal .participant-card{
+  min-height:68px;
+  gap:11px;
+  padding:11px 13px;
+  border-color:#dde7f2;
+  border-radius:13px;
+  background:#f9fbfe;
+}
+
+.view-deal .participant-avatar{
+  width:40px;
+  height:40px;
+  flex-basis:40px;
+  border-radius:11px;
+  color:#276dcc;
+  background:linear-gradient(145deg,#e5f1ff,#eeedff);
+  font-size:1rem;
+}
+
+.view-deal .participant-card>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 10px;width:100%}
+.view-deal .participant-role{grid-column:1/-1;color:#6d8096;font-size:9px}
+.view-deal .participant-card strong{font-size:14px}
+.view-deal .participant-verification{justify-self:end;color:#887020;font-size:10px;white-space:nowrap}
+.view-deal .participant-verification.verified{color:#237553}
+.view-deal .participant-meta{
+  justify-content:flex-start;
+  gap:8px 18px;
+  margin-top:12px;
+  padding-top:11px;
+  border-color:#e4ebf3;
+  color:#687c93;
+  font-size:10px;
+}
+
+/* Payment overview */
+.view-deal .payment-amount{
+  margin:0;
+  padding:8px 11px;
+  border:1px solid #d4e4f7;
+  border-radius:10px;
+  color:#205fae;
+  background:#f0f6ff;
+  font-size:14px;
+}
+
+.view-deal .protected-payment-state{
+  min-height:42px;
+  margin-top:13px;
+  padding:9px 11px;
+  border-radius:11px;
+  font-size:12px;
+}
+
+.view-deal .protected-payment-state span{display:inline-flex;align-items:center;gap:8px}
+.view-deal .protected-payment-state span i{width:7px;height:7px;border-radius:50%;background:#6e89a6;box-shadow:0 0 0 4px rgba(91,125,163,.1)}
+.view-deal .protected-payment-state.success span i{background:#238258;box-shadow:0 0 0 4px rgba(35,130,88,.11)}
+.view-deal .protected-payment-state.warning span i{background:#b98218;box-shadow:0 0 0 4px rgba(185,130,24,.1)}
+
+.view-deal .payment-milestones{
+  position:relative;
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:0;
+  margin:14px 0 0;
+  padding:0;
+  list-style:none;
+}
+
+.view-deal .payment-milestones::before{
+  position:absolute;
+  top:15px;
+  right:11%;
+  left:11%;
+  height:2px;
+  background:#e2e9f2;
+  content:"";
+}
+
+.view-deal .payment-milestones li{
+  position:relative;
+  z-index:1;
+  min-width:0;
+  display:grid;
+  grid-template-columns:31px minmax(0,1fr);
+  align-items:start;
+  gap:7px;
+  padding-right:8px;
+}
+
+.view-deal .payment-milestones li>span{
+  width:31px;
+  height:31px;
+  display:grid;
+  place-items:center;
+  border:2px solid #dce5ef;
+  border-radius:50%;
+  color:#7b8da2;
+  background:#fff;
+  font-size:10px;
+  font-weight:900;
+}
+
+.view-deal .payment-milestones li.done>span{border-color:#2d78db;color:#fff;background:#2d78db}
+.view-deal .payment-milestones li.current>span{border-color:#4f6cde;color:#4b65d3;box-shadow:0 0 0 4px rgba(76,102,216,.1)}
+.view-deal .payment-milestones li div{min-width:0;padding-top:1px}
+.view-deal .payment-milestones b,.view-deal .payment-milestones small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.view-deal .payment-milestones b{color:#334c69;font-size:10px}
+.view-deal .payment-milestones small{margin-top:2px;color:#7b8da1;font-size:9px}
+
+.view-deal .payment-next-step{
+  min-height:58px;
+  margin-top:13px;
+  padding:10px 12px;
+  border-radius:12px;
+}
+
+.view-deal .payment-next-step span{font-size:11px}
+.view-deal .payment-next-step button{min-height:40px}
+.view-deal .payment-actions{margin-top:12px}
+.view-deal .payment-wait{min-height:43px;margin-top:12px;padding:10px 12px;font-size:11px}
+.view-deal .payment-details .payment-flow{margin-top:10px}
+.view-deal .payment-flow-step{min-height:54px;padding:9px}
+.view-deal .payment-flow-step b{font-size:11px}
+.view-deal .payment-flow-step small{font-size:9px}
+.view-deal .payment-details .payment-disclaimer{margin-top:10px;padding:9px;border-radius:9px;background:#f6f9fd;font-size:10px}
+
+/* Shipping overview */
+.view-deal .shipping-state{
+  padding:7px 10px;
+  border:1px solid #d4e3f4;
+  border-radius:999px;
+  color:#326aa9;
+  background:#f2f7fd;
+  font-size:10px;
+  white-space:nowrap;
+}
+
+.view-deal .shipping-state.complete{border-color:#cce5d9;color:#237354;background:#edf8f3}
+.view-deal .delivery-address-section{
+  margin:14px 0 0;
+  padding:14px;
+  border-color:#dce7f3;
+  border-radius:14px;
+  background:#f8fbff;
+}
+
+.view-deal .delivery-address-heading{
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr);
+  gap:10px;
+  margin-bottom:11px;
+}
+
+.view-deal .delivery-address-heading .workflow-icon{
+  width:34px;
+  height:34px;
+  border-radius:10px;
+  color:#2b73ce;
+  background:#eaf3ff;
+}
+
+.view-deal .delivery-address-heading .workflow-icon svg{width:17px}
+.view-deal .delivery-address-heading h3{margin:0;font-size:15px}
+.view-deal .delivery-address-heading .eyebrow{margin:0 0 1px;font-size:8px}
+.view-deal .delivery-address-heading span{font-size:10px}
+.view-deal .delivery-address-card{gap:14px;padding:12px 13px;border-radius:12px;box-shadow:none}
+.view-deal .delivery-address-card>div:first-child{display:grid;grid-template-columns:auto 1fr;align-items:baseline;gap:2px 10px}
+.view-deal .delivery-address-card>div:first-child>span{font-size:8px}
+.view-deal .delivery-address-card>div:first-child>strong{font-size:12px}
+.view-deal .delivery-address-card address{grid-column:1/-1;margin:3px 0 0;font-size:11px;line-height:1.45}
+.view-deal .delivery-address-card small{grid-column:1/-1;margin-top:2px;font-size:10px}
+.view-deal .delivery-address-actions{align-items:flex-end;gap:6px}
+.view-deal .delivery-address-actions button{min-height:34px;padding:0 10px;font-size:10px}
+.view-deal .delivery-address-actions em{font-size:9px}
+.view-deal .delivery-privacy{margin:10px 0 0;padding-top:9px;font-size:9px}
+
+.view-deal .delivery-address-form{gap:10px!important}
+.view-deal .delivery-address-form label{gap:5px;font-size:11px}
+.view-deal .delivery-address-form :is(input,select,textarea){min-height:42px}
+.view-deal .delivery-address-form textarea{min-height:72px}
+.view-deal .address-field-line-two{padding:9px 10px;border-radius:11px}
+.view-deal .delivery-form-actions button{min-height:40px}
+
+.view-deal .shipping-readiness{
+  margin:12px 0 0;
+  padding:0;
+  overflow:hidden;
+  border:1px solid #dbe6f2;
+  border-radius:12px;
+  background:#fff;
+}
+
+.view-deal .shipping-readiness.is-ready{border-color:#cfe1f5;background:#f8fbff}
+.view-deal .shipping-readiness>summary{
+  min-height:60px;
+  display:grid;
+  grid-template-columns:34px minmax(0,1fr) 18px;
+  align-items:center;
+  gap:10px;
+  padding:10px 12px;
+  cursor:pointer;
+  list-style:none;
+}
+
+.view-deal .shipping-readiness>summary::-webkit-details-marker{display:none}
+.view-deal .shipping-readiness-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;color:#2a73d0;background:#eaf3ff}
+.view-deal .shipping-readiness-icon svg{width:17px}
+.view-deal .shipping-readiness-heading h3{margin:0;font-size:13px}
+.view-deal .shipping-readiness-heading span{font-size:10px}
+.view-deal .shipping-readiness-chevron{width:17px;color:#71849a;transition:transform .2s ease}
+.view-deal .shipping-readiness[open] .shipping-readiness-chevron{transform:rotate(180deg)}
+.view-deal .shipping-readiness-body{padding:0 12px 12px;border-top:1px solid #e5ecf4}
+.view-deal .shipping-readiness-progress{margin:11px 0 9px}
+.view-deal .shipping-readiness-list{gap:6px}
+.view-deal .shipping-readiness-list>div{min-height:38px;padding:7px 9px;border:1px solid #e2e9f1;border-radius:9px;background:#f7f9fc;font-size:10px}
+.view-deal .shipping-readiness-list>div.complete{border-color:#d4e5f8;color:#2869b7;background:#f0f6fd}
+.view-deal .shipping-readiness-list em{font-size:9px}
+.view-deal .shipping-evidence-link{min-height:38px;margin-top:9px}
+
+.view-deal .shipping-panel>form{
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;
+  gap:9px;
+  margin:12px 0 0;
+}
+
+.view-deal .shipping-panel>form label{font-size:11px}
+.view-deal .shipping-panel>form input{min-height:42px}
+.view-deal .shipping-panel>form button{min-height:42px}
+.view-deal .shipment-card{min-height:58px;margin:12px 0 0;padding:11px 12px;border-radius:12px}
+.view-deal .shipment-card>svg{width:23px;height:23px;color:#2d73ce}
+.view-deal .shipment-card b{font-size:12px}
+.view-deal .shipment-card span,.view-deal .shipment-card small{margin-top:2px;font-size:10px}
+.view-deal .shipping-note{margin-top:10px;padding-top:9px;border-top:1px solid #e4ebf3;font-size:9px}
+
+@media(max-width:720px){
+  .view-deal :is(.deal-readiness,.deal-participants,.payment-status,.shipping-panel){padding:15px}
+  .view-deal :is(.readiness-heading,.participant-heading,.payment-status-heading,.shipping-heading){grid-template-columns:36px minmax(0,1fr) auto;gap:9px}
+  .view-deal :is(.readiness-heading,.participant-heading,.payment-status-heading,.shipping-heading) .workflow-icon{width:36px;height:36px}
+  .view-deal :is(.readiness-heading,.participant-heading,.payment-status-heading,.shipping-heading) h2{font-size:17px}
+  .view-deal :is(.readiness-summary,.payment-status-heading p:last-child,.shipping-heading>div>span){display:none}
+  .view-deal .readiness-score{grid-column:auto;min-width:56px;padding:6px 7px}
+  .view-deal .readiness-score strong{font-size:16px}
+  .view-deal .readiness-status-row{grid-template-columns:auto 1fr}
+  .view-deal .readiness-status-row>strong{display:none}
+  .view-deal .readiness-notes{grid-template-columns:1fr}
+  .view-deal .participant-grid{grid-template-columns:1fr}
+  .view-deal .participant-card{min-height:60px}
+  .view-deal .participant-meta{display:grid}
+  .view-deal .payment-milestones{grid-template-columns:repeat(4,1fr)}
+  .view-deal .payment-milestones::before{right:9%;left:9%}
+  .view-deal .payment-milestones li{grid-template-columns:1fr;justify-items:center;padding:0 2px;text-align:center}
+  .view-deal .payment-milestones li div{width:100%}
+  .view-deal .payment-milestones b{font-size:9px}
+  .view-deal .payment-milestones small{font-size:8px}
+  .view-deal .payment-next-step{align-items:stretch;flex-direction:column}
+  .view-deal .payment-next-step button{width:100%}
+  .view-deal .payment-flow{grid-template-columns:1fr 1fr}
+  .view-deal .delivery-address-card{flex-direction:column}
+  .view-deal .delivery-address-actions{align-items:stretch;flex-direction:row;flex-wrap:wrap}
+  .view-deal .delivery-address-actions button{width:auto}
+  .view-deal .shipping-panel>form{grid-template-columns:1fr}
+  .view-deal .shipping-panel>form button{width:100%}
+}
+
+@media(max-width:480px){
+  .view-deal .participant-private{font-size:0}
+  .view-deal .participant-private svg{width:15px}
+  .view-deal .payment-amount{padding:7px 8px;font-size:12px}
+  .view-deal .shipping-state{max-width:92px;overflow:hidden;text-overflow:ellipsis}
+  .view-deal .payment-flow{grid-template-columns:1fr}
+  .view-deal .readiness-grid{grid-template-columns:1fr}
+}
