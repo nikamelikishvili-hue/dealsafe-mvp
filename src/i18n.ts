@@ -19,59 +19,29 @@ export const supportedLanguages = [
 
 export type AppLanguage = (typeof supportedLanguages)[number]['code'];
 
-const languageKey = 'dealsafe_language';
-const languageCodes = new Set<string>(supportedLanguages.map(language => language.code));
-const resolveLanguage = (value: string | null): AppLanguage => {
-  const normalized = (value || '').toLowerCase();
-  const exact = supportedLanguages.find(language => language.code === normalized);
-  if (exact) return exact.code;
-  const base = normalized.split('-')[0];
-  return languageCodes.has(base) ? (base as AppLanguage) : 'en';
+const launchLocale = 'en-US';
+
+const applyLaunchLanguage = () => {
+  document.documentElement.lang = launchLocale;
+  document.documentElement.dir = 'ltr';
 };
 
-const storedLanguage = localStorage.getItem(languageKey);
-let activeLanguage: AppLanguage =
-  storedLanguage && languageCodes.has(storedLanguage)
-    ? (storedLanguage as AppLanguage)
-    : resolveLanguage(navigator.languages?.[0] || navigator.language);
+applyLaunchLanguage();
 
-let translate: (text: string) => string = text => text;
-let fullTranslations: Promise<typeof import('./i18nFull')> | null = null;
-
-const applyDocumentLanguage = (language: AppLanguage) => {
-  document.documentElement.lang = language;
-  document.documentElement.dir = language === 'ar' || language === 'he' ? 'rtl' : 'ltr';
-};
-
-const loadTranslations = async (language: AppLanguage) => {
-  if (language === 'en') {
-    translate = text => text;
-    return;
-  }
-
-  fullTranslations ??= import('./i18nFull');
-  const module = await fullTranslations;
-  module.setAppLanguage(language);
-  translate = module.t;
-};
-
-applyDocumentLanguage(activeLanguage);
-
+// Translation files stay in the codebase for a future international launch,
+// but the first public release is intentionally English-only.
 export async function initializeI18n() {
-  await loadTranslations(activeLanguage);
+  applyLaunchLanguage();
 }
 
 export function getAppLanguage() {
-  return activeLanguage;
+  return launchLocale;
 }
 
-export async function setAppLanguage(language: AppLanguage) {
-  activeLanguage = language;
-  localStorage.setItem(languageKey, language);
-  applyDocumentLanguage(language);
-  await loadTranslations(language);
+export async function setAppLanguage(_language: AppLanguage) {
+  applyLaunchLanguage();
 }
 
 export function t(text: string) {
-  return translate(text);
+  return text;
 }

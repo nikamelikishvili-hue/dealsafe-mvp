@@ -1,9 +1,11 @@
-export const supportedCurrencies = [
+export const currencyCodes = [
   'USD', 'EUR', 'GBP', 'GEL', 'TRY', 'ILS', 'CNY', 'JPY', 'KRW', 'INR',
   'CAD', 'AUD', 'CHF', 'AED', 'SAR',
 ] as const;
 
-export type CurrencyCode = typeof supportedCurrencies[number];
+export const supportedCurrencies = ['USD'] as const;
+
+export type CurrencyCode = typeof currencyCodes[number];
 
 const zeroDecimalCurrencies = new Set<CurrencyCode>(['JPY', 'KRW']);
 
