@@ -28,6 +28,7 @@ create table if not exists public.protected_payments (
   payment_intent_id text unique,
   charge_id text unique,
   transfer_id text unique,
+  refund_id text unique,
   transfer_group text not null,
   checkout_url text,
   checkout_expires_at timestamptz,
@@ -122,4 +123,3 @@ revoke all on function public.get_my_stripe_connect_status() from public;
 revoke all on function public.get_protected_payment_status(uuid) from public;
 grant execute on function public.get_my_stripe_connect_status() to authenticated;
 grant execute on function public.get_protected_payment_status(uuid) to authenticated;
-
