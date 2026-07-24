@@ -71,7 +71,7 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
       <div className="header-inner">
         <div className="header-brand-group">
           <button className="brand" onClick={() => openSection()}><span><ShieldCheck size={21} /></span>DealSafe</button>
-          <span className="beta">U.S. private beta</span>
+          <span className="beta">Launching in the U.S.</span>
         </div>
         <nav className="site-nav" aria-label="Primary navigation">
           <button onClick={() => openSection()}>Home</button>
@@ -108,9 +108,9 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
     <main id="main-content" tabIndex={-1}>
       <section className="global-hero">
         <div className="global-hero-copy">
-          <p className="global-kicker"><ShieldCheck size={17} />Built for private deals in the United States</p>
-          <h1>Private deals,<br /><span>handled with clarity.</span></h1>
-          <p className="global-lede">Agree on the terms, follow the payment status, and document the handoff in one private Deal Link.</p>
+          <p className="global-kicker"><ShieldCheck size={17} />One Deal Room from agreement to handoff</p>
+          <h1>Make every private deal<br /><span>clear from the start.</span></h1>
+          <p className="global-lede">Agree on the terms, follow the payment status, and keep delivery evidence together in one private transaction record.</p>
           <div className="global-hero-actions">
             <button type="button" className="global-primary" onClick={() => launch('create')}><Plus size={18} />Start a deal<ArrowRight size={18} /></button>
             <button type="button" className="global-secondary" onClick={() => launch('demo')}><Eye size={18} />See a sample</button>
@@ -145,8 +145,6 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
             </div>
             <footer><span><BadgeCheck />Seller contact verified</span><span><Fingerprint />Agreement version recorded</span></footer>
           </article>
-          <article className="signal-card signal-agreement"><span><FileSignature /></span><div><small>AGREEMENT</small><b>Terms accepted</b></div><BadgeCheck /></article>
-          <article className="signal-card signal-payment"><span><BadgeDollarSign /></span><div><small>PAYMENT</small><b>Status visible</b></div><BadgeCheck /></article>
         </div>
       </section>
 
@@ -242,7 +240,7 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
     </main>
 
     <footer>
-      <div><strong>DealSafe U.S. beta</strong><span>English (US) · U.S. dollars · United States only</span></div>
+      <div><strong>DealSafe</strong><span>Global vision · U.S. launch · English (US) · USD</span></div>
       <nav aria-label="Legal and protection">
         <a href="/buyer-protection" onClick={event => { event.preventDefault(); launch('buyer-protection'); }}>Buyer protection</a>
         <a href="/seller-protection" onClick={event => { event.preventDefault(); launch('seller-protection'); }}>Seller protection</a>
