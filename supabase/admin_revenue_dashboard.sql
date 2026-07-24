@@ -51,3 +51,47 @@ $$;
 
 revoke all on function public.get_admin_revenue_summary() from public, anon;
 grant execute on function public.get_admin_revenue_summary() to authenticated;
+
+drop function if exists public.get_admin_revenue_transactions(integer);
+create function public.get_admin_revenue_transactions(p_limit integer default 100)
+returns table(
+  transaction_id uuid,
+  deal_id uuid,
+  public_id text,
+  title text,
+  status text,
+  currency text,
+  item_amount_cents bigint,
+  platform_fee_cents bigint,
+  seller_amount_cents bigint,
+  seller_name text,
+  buyer_name text,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public, auth, pg_temp
+as $$
+begin
+  if not public.is_dealsafe_admin() then
+    raise exception 'Admin access required';
+  end if;
+
+  return query
+  select payment.id, deal.id, deal.public_id, deal.title, payment.status,
+         payment.currency, payment.item_amount_cents, payment.platform_fee_cents,
+         payment.seller_amount_cents,
+         coalesce(seller.display_name,'Unknown'), coalesce(buyer.display_name,'Unknown'),
+         payment.created_at, payment.updated_at
+  from public.protected_payments payment
+  join public.deals deal on deal.id=payment.deal_id
+  left join public.profiles seller on seller.id=payment.seller_id
+  left join public.profiles buyer on buyer.id=payment.buyer_id
+  order by payment.created_at desc
+  limit greatest(1, least(coalesce(p_limit,100),200));
+end;
+$$;
+
+revoke all on function public.get_admin_revenue_transactions(integer) from public, anon;
+grant execute on function public.get_admin_revenue_transactions(integer) to authenticated;
