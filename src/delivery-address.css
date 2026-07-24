@@ -16,6 +16,8 @@
 .delivery-address-form input[readonly]{background:#edf2f8;color:#51657d}
 .delivery-address-form textarea{min-height:94px}
 .address-field-wide,.address-field-country,.delivery-form-actions{grid-column:1/-1}
+.address-field-line-two{padding:13px 14px;border:1px solid #dce7f4;border-radius:14px;background:#f8fbff}
+.address-field-line-two .field-help{color:#6a7b91;font-size:.79rem;font-weight:500;line-height:1.35}
 .address-validation{color:#a14b2d;font-size:.82rem;line-height:1.35}
 .delivery-form-actions{display:flex;justify-content:flex-end;gap:10px}
 .delivery-privacy{display:flex;align-items:flex-start;gap:7px;margin:17px 0 0;padding-top:15px;border-top:1px solid #dfe8f2;color:#63758b;font-size:.83rem;line-height:1.45}
