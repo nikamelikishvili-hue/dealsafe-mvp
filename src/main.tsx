@@ -69,6 +69,7 @@ import './payment-status.css';
 import './payment-receipt.css';
 import './evidence.css';
 import './global-redesign.css';
+import './workspace-redesign.css';
 
 type PublicInfoView='buyer-protection'|'seller-protection'|'fees'|'disputes'|'terms'|'privacy';
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset' | 'link-error' | PublicInfoView;
@@ -737,15 +738,41 @@ function GlobalHome({onCreate,onDemo,onInfo}:{onCreate:()=>void;onDemo:()=>void;
         <p className="beta-payment-note"><ShieldAlert size={16}/>{t('Beta notice: payments use Stripe Sandbox. DealSafe is not legal escrow and does not store card or bank details.')}</p>
       </div>
       <div className="network-stage" aria-label={t('DealSafe protected transaction flow')}>
-        <div className="network-orb" aria-hidden="true">
-          <i className="orbit orbit-one"></i><i className="orbit orbit-two"></i><i className="orbit orbit-three"></i>
-          <i className="network-node node-one"></i><i className="network-node node-two"></i><i className="network-node node-three"></i><i className="network-node node-four"></i><i className="network-node node-five"></i>
-          <div className="orb-shield"><ShieldCheck/></div>
-        </div>
+        <article className="home-product-preview">
+          <header>
+            <div><span className="preview-mark"><ShieldCheck/></span><div><small>{t('DEAL ROOM')}</small><b>{t('One place for the whole transaction')}</b></div></div>
+            <span className="preview-live"><i></i>{t('Protected workflow')}</span>
+          </header>
+          <div className="preview-item">
+            <span className="preview-item-icon"><Laptop/></span>
+            <div><small>{t('ACTIVE DEAL')}</small><strong>MacBook Pro 14 · M3</strong><p>{t('Like new')} · {t('Ship to buyer')}</p></div>
+            <b>{formatMoney(145000,'USD',getAppLanguage())}</b>
+          </div>
+          <div className="preview-progress" role="group" aria-label={t('Deal progress')}>
+            <div className="done"><span><Check/></span><small>{t('Agreement')}</small></div>
+            <i></i>
+            <div className="active"><span><LockKeyhole/></span><small>{t('Payment')}</small></div>
+            <i></i>
+            <div><span><Truck/></span><small>{t('Delivery')}</small></div>
+            <i></i>
+            <div><span><PackageCheck/></span><small>{t('Complete')}</small></div>
+          </div>
+          <div className="preview-next">
+            <div><small>{t('NEXT STEP')}</small><b>{t('Buyer reviews and confirms the shared terms')}</b></div>
+            <button type="button" onClick={onDemo}>{t('Open sample')}<ArrowRight/></button>
+          </div>
+          <footer><span><BadgeCheck/>{t('Seller contact verified')}</span><span><Fingerprint/>{t('Agreement version recorded')}</span></footer>
+        </article>
         <article className="signal-card signal-agreement"><span><FileSignature/></span><div><small>{t('AGREEMENT')}</small><b>{t('Terms accepted')}</b></div><BadgeCheck/></article>
         <article className="signal-card signal-payment"><span><BadgeDollarSign/></span><div><small>{t('PAYMENT')}</small><b>{t('Funds secured')}</b></div><LockKeyhole/></article>
-        <article className="signal-card signal-handoff"><span><PackageCheck/></span><div><small>{t('HANDOFF')}</small><b>{t('Evidence recorded')}</b></div><Check/></article>
       </div>
+    </section>
+
+    <section className="home-capability-strip" aria-label={t('What DealSafe keeps together')}>
+      <article><FileSignature/><div><b>{t('Clear agreement')}</b><span>{t('Price, condition, and handoff terms in one version.')}</span></div></article>
+      <article><BadgeDollarSign/><div><b>{t('Visible payment state')}</b><span>{t('Both parties can see what is ready and what comes next.')}</span></div></article>
+      <article><PackageCheck/><div><b>{t('Proof of delivery')}</b><span>{t('Photos, inspection, and handoff stay with the deal.')}</span></div></article>
+      <article><Scale/><div><b>{t('Dispute record')}</b><span>{t('Problems and evidence remain tied to the same timeline.')}</span></div></article>
     </section>
 
     <section className="deal-flow" id="how-it-works">
@@ -983,7 +1010,15 @@ function App() {
   const applyDealActionPlan=(dealId:string,plan:DealActionPlan)=>{setActive(current=>current?.id===dealId?{...current,status:plan.deal_status,viewerRole:plan.viewer_role}:current);setDeals(items=>items.map(item=>item.id===dealId?{...item,status:plan.deal_status,viewerRole:plan.viewer_role}:item))};
   const activeExpired=active?isDealExpired(active,clock):false;
   const isDemoActive=Boolean(active?.publicId===DEMO_DEAL_PUBLIC_ID&&!user);
-  const goHomeSection=(id?:string)=>{if(location.pathname!=='/')history.pushState({},'',`/${location.search}`);setView('home');setMobileMenuOpen(false);if(id)window.setTimeout(()=>document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'}),0)};
+  const goHomeSection=(id?:string)=>{
+    if(location.pathname!=='/'||location.search||location.hash)history.pushState({},'','/');
+    setView('home');
+    setMobileMenuOpen(false);
+    setAuthMessage('');
+    window.setTimeout(()=>id
+      ?document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'})
+      :window.scrollTo({top:0,behavior:'smooth'}),0);
+  };
   const openInfo=(next:PublicInfoView)=>{history.pushState({},'',publicInfoPaths[next]);setView(next);setMobileMenuOpen(false);window.scrollTo({top:0,behavior:'smooth'})};
   const currentPageLabel=getPageMetadata(view,active).label;
 
@@ -1007,7 +1042,7 @@ function App() {
       {view==='auth'&&<div className="forgot-entry"><button onClick={()=>setView('forgot')}>{t('Forgot password?')}</button></div>}
       {view==='forgot'&&<ForgotPassword onBack={()=>setView('auth')}/>}
       {view==='reset'&&recoveryToken&&<ResetPassword token={recoveryToken} onDone={()=>setView('auth')}/>}
-      {view==='link-error'&&<DealLinkError message={authMessage} onBack={()=>{history.replaceState({},'',location.pathname);setAuthMessage('');setView('home')}}/>}
+      {view==='link-error'&&<DealLinkError message={authMessage} onBack={()=>goHomeSection()}/>}
       {Object.prototype.hasOwnProperty.call(publicInfoPaths,view)&&<PublicInfoPage view={view as PublicInfoView} onBack={()=>goHomeSection()} onCreate={openCreate}/>}
       {view==='home'&&<InstallApp/>}
       {view==='admin'&&session&&isAdmin&&<><AdminRevenueCenter session={session} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/><AdminDisputeCenter session={session}/><AdminReportCenter session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/></>}
@@ -1049,7 +1084,7 @@ function App() {
       {view==='profile'&&profile&&<SecurityCenter email={user?.email||''} status={profile.verification_status} message={verificationMessage} onRequest={requestVerification}/>}
       {view==='profile'&&session&&<TrustPassportControls session={session}/>}
       {view==='profile'&&profile&&session&&<AccountSettings session={session} displayName={profile.display_name} onNameUpdated={name=>setProfile({...profile,display_name:name})}/>}
-      {view==='passport'&&<PublicTrustPassportPage profile={publicPassport} message={passportMessage} onBack={()=>{history.replaceState({},'',location.pathname);setView('home')}}/>}
+      {view==='passport'&&<PublicTrustPassportPage profile={publicPassport} message={passportMessage} onBack={()=>goHomeSection()}/>}
       {view==='create'&&!reviewingDraft&&<DealTemplatePicker selected={dealTemplate} onSelect={setDealTemplate}/>}
       {view==='create'&&!reviewingDraft&&<section className="media-picker"><label>{t('Item photos or video')}<input className="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,video/mp4,video/webm" multiple onChange={e=>{const added=Array.from(e.target.files||[]);setPhotos(previous=>{const combined=[...previous,...added].filter((file,index,all)=>all.findIndex(other=>other.name===file.name&&other.size===file.size)===index).slice(0,6);let videoSeen=false;return combined.filter(file=>!isVideoFile(file)||(!videoSeen&&(videoSeen=true)))});e.currentTarget.value=''}}/><small>{t('Choose photos together or add them one at a time')} · {photos.length} {t('of 6')} {t('selected')}</small></label><p className="media-privacy"><ShieldCheck/>{t('Photo privacy: location and camera metadata are removed before upload.')}</p>{photos.length>0&&<div className="photo-previews">{photos.map((file,index)=><div key={`${file.name}-${index}`}><FilePreview file={file} alt={`${t('Preview')} ${index+1}`}/><span>{t(isVideoFile(file)?'Item video':index===0?'Main photo':'Photo')} {index>0&&!isVideoFile(file)?index+1:''}</span></div>)}</div>}</section>}
       {view==='create'&&!reviewingDraft&&<DealPhotoGuide template={selectedDealTemplate} count={photos.filter(file=>!file.type.startsWith('video/')).length}/>}
@@ -1069,7 +1104,14 @@ function App() {
       {view==='create'&&!reviewingDraft&&<section className="form-wrap"><button className="back" onClick={()=>setView('home')}>← {t('Dashboard')}</button><p className="eyebrow">{t('New Deal Link')}</p><h1>{t('Describe what you’re selling')}</h1><p className="lede small">{t('You can review every detail before the link is published.')}</p><form onSubmit={reviewDraft}><label>{t('Item title')}<input required minLength={3} maxLength={120} placeholder={selectedDealTemplate.titlePlaceholder} value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})}/><small>{t('Item title must contain 3 to 120 characters.')}</small></label><div className="two"><label>{t('Price')}<span className="price-currency-controls"><input required min={currencyStep(draft.currency)} step={currencyStep(draft.currency)} type="number" placeholder="780" value={draft.price} onChange={e=>setDraft({...draft,price:e.target.value})}/><select aria-label={t('Currency')} value={draft.currency} onChange={e=>setDraft({...draft,currency:e.target.value as DealDraft['currency']})}>{supportedCurrencies.map(currency=><option key={currency} value={currency}>{currency}</option>)}</select></span></label><label>{t('Condition')}<select value={draft.condition} onChange={e=>setDraft({...draft,condition:e.target.value as DealDraft['condition']})}><option value="Like new">{t('Like new')}</option><option value="Good">{t('Good')}</option><option value="Fair">{t('Fair')}</option></select></label></div><label>{t('Known condition and defects')}<textarea required minLength={20} placeholder={t(selectedDealTemplate.descriptionPrompt)} value={draft.description} onChange={e=>setDraft({...draft,description:e.target.value})}/><small>{draft.description.trim().length}/20 · {t('Describe wear, repairs, or defects.')}</small></label><label>{t(selectedDealTemplate.identifierLabel)}<input maxLength={40} pattern={selectedDealTemplate.identifierPattern} title={t(selectedDealTemplate.identifierHelp)} placeholder={t(selectedDealTemplate.identifierPlaceholder)} spellCheck={false} aria-invalid={identifierEntered&&!identifierValid} value={draft.serialNumber} onChange={e=>setDraft({...draft,serialNumber:dealTemplate==='vehicle'?e.target.value.toUpperCase():e.target.value})}/><small className={`identifier-feedback ${identifierEntered?(identifierValid?'valid':'invalid'):''}`}>{t(identifierEntered?(identifierValid?'Format looks correct. This checks format only, not ownership or authenticity.':selectedDealTemplate.identifierHelp):'Stored privately; only last characters shown')}</small></label><div className="two"><label>{t('Handoff')}<select value={draft.deliveryMethod} onChange={e=>setDraft({...draft,deliveryMethod:e.target.value as DealDraft['deliveryMethod']})}><option value="Meet in person">{t('Meet in person')}</option><option value="Ship to buyer">{t('Ship to buyer')}</option></select></label><label>{t('Offer valid for')}<select value={draft.expiresInDays||7} onChange={e=>setDraft({...draft,expiresInDays:Number(e.target.value)})}><option value={1}>{t('1 day')}</option><option value={3}>{t('3 days')}</option><option value={7}>{t('7 days')}</option><option value={14}>{t('14 days')}</option><option value={30}>{t('30 days')}</option></select></label></div><div className="notice"><ShieldCheck/><span>{t('The Deal Link is not public until you confirm.')}</span></div><button className="primary full">{t('Review deal')} <ArrowRight size={18}/></button></form></section>}
       {view==='create'&&reviewingDraft&&<CreateDealReview draft={draft} photos={photos} creating={creating} onEdit={()=>setReviewingDraft(false)} onSaveDraft={saveDraft} onPublish={create}/>}
       {view==='deal'&&active&&<section className="deal-page">
-        <button className="back" onClick={()=>setView('home')}>← {t('Dashboard')}</button>
+        <div className="deal-workspace-bar">
+          <button className="back" onClick={()=>goHomeSection()}>← {t(user?'Dashboard':'Home')}</button>
+          <div className="deal-workspace-id"><span className={`status ${activeExpired?'expired':active.status}`}>{t(activeExpired?'expired':active.status)}</span><b>{active.publicId}</b></div>
+          <nav aria-label={t('Deal page navigation')}>
+            <button type="button" onClick={()=>document.querySelector('.deal-grid>div')?.scrollIntoView({behavior:'smooth',block:'start'})}>{t('Item details')}</button>
+            <button type="button" className="deal-action-link" onClick={()=>document.querySelector('.deal-grid aside')?.scrollIntoView({behavior:'smooth',block:'start'})}>{t('Agreement and action')}<ArrowRight size={15}/></button>
+          </nav>
+        </div>
         {isDemoActive&&<section className="demo-deal-banner" aria-label={t('Interactive sample deal')}>
           <span className="demo-deal-icon"><Eye/></span>
           <div><p className="eyebrow">{t('INTERACTIVE SAMPLE')}</p><h2>{t('Explore a complete Deal Link before you sign up.')}</h2><p>{t('This is not a real item or payment. Review the agreement, trust signals, and handoff details safely.')}</p></div>
