@@ -211,7 +211,15 @@
   .agreement-print-code>span{width:31px;height:31px;display:grid;place-items:center;border-radius:8px;color:#1765dd;background:#e5efff}
   .agreement-print-code svg{width:17px;height:17px}
   .agreement-print-code>div{min-width:0;display:grid;gap:3px}
-  .agreement-print-code code{overflow-wrap:anywhere;color:#1a3655;font:700 6.6pt/1.35 "Courier New",monospace}
+  .agreement-print-code code{
+    display:block;
+    min-width:0;
+    max-width:100%;
+    overflow-wrap:anywhere;
+    word-break:break-all;
+    color:#1a3655;
+    font:700 6.6pt/1.35 "Courier New",monospace;
+  }
   .agreement-print-link{display:grid;gap:3px;margin-top:7px}
   .agreement-print-link span{color:#3e5d7d;font-size:7pt;overflow-wrap:anywhere}
   .agreement-print-notice{
