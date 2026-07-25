@@ -2,6 +2,8 @@ node_modules/
 .npm-cache/
 .pnpm-store/
 dist/
+tmp/
+output/
 .env
 .env.local
 *.log

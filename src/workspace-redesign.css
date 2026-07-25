@@ -144,6 +144,8 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .deal-workspace-bar nav{display:flex;align-items:center;gap:6px;margin-left:auto}
 .deal-workspace-bar nav button{min-height:40px;display:flex;align-items:center;gap:6px;border:0;border-radius:9px;padding:0 11px;color:#53657b;background:transparent;font-size:12px;font-weight:800}
 .deal-workspace-bar nav button:hover{color:#1765dd;background:#eef5ff}
+.deal-workspace-bar nav .deal-nav-protection{color:#244f82;background:#f2f7fd}
+.deal-workspace-bar nav .deal-nav-protection:hover{color:#1257c2;background:#e6f0ff}
 .deal-workspace-bar nav .deal-action-link{color:#fff;background:#1765dd}
 .deal-workspace-bar nav .deal-action-link:hover{color:#fff;background:#1257c2}
 .view-deal .demo-deal-banner{margin:0 0 18px;padding:16px 18px}
@@ -227,6 +229,36 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 }
 .view-deal #main-content>section:not(.deal-page) h2{font-size:clamp(19px,2.5vw,24px)}
 .view-deal #main-content>section:not(.deal-page) p{line-height:1.55}
+.deal-shipping-protection{
+  display:grid;
+  gap:12px;
+  padding:14px;
+  border:1px solid #cdddf0;
+  border-radius:17px;
+  background:#f7faff;
+}
+.deal-shipping-protection-intro{
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr);
+  gap:12px;
+  align-items:start;
+  padding:2px 2px 0;
+}
+.deal-shipping-protection-intro>span{
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  border-radius:12px;
+  color:#1765dd;
+  background:#e2edff;
+}
+.deal-shipping-protection-intro svg{width:21px;height:21px}
+.deal-shipping-protection-intro .eyebrow{margin:1px 0 4px;color:#4f78aa}
+.deal-shipping-protection-intro h2{margin:0!important;color:#173452;font-size:18px!important}
+.deal-shipping-protection-intro p:last-child{margin:5px 0 0;color:#60758c;font-size:12px;line-height:1.5}
+.deal-shipping-protection>.evidence-panel{margin:0;border-color:#d5e1ef;background:#fff;box-shadow:none}
+#deal-evidence-vault{scroll-margin-top:150px}
 
 .deal-progress-strip{
   display:grid;
@@ -407,6 +439,9 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .deal-workspace-group-copy em{font-size:11px}
   .deal-workspace-group-content{padding:10px}
   .deal-workspace-bar .deal-nav-records{display:none}
+  .deal-shipping-protection{padding:10px}
+  .deal-shipping-protection-intro{grid-template-columns:36px minmax(0,1fr);gap:10px}
+  .deal-shipping-protection-intro>span{width:36px;height:36px}
 
   .view-create #main-content{width:calc(100% - 24px);grid-template-columns:1fr;margin:14px auto 54px}
   .view-create #main-content>.deal-template-picker,
@@ -443,6 +478,8 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .home-capability-strip b{font-size:13px}
   .home-capability-strip span{font-size:11px}
   .deal-workspace-bar nav .deal-action-link{font-size:11px}
+  .deal-workspace-bar .deal-nav-protection span{display:none}
+  .deal-workspace-bar nav .deal-nav-protection{width:40px;padding:0;justify-content:center}
 }
 
 /* U.S.-only launch refinements */
