@@ -981,8 +981,11 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .auth-journey li>span{margin:auto}
   .auth-journey strong{display:flex;min-height:30px;align-items:center;justify-content:center}
   .auth-journey small{display:none}
-  .site-header .mobile-menu-toggle{display:grid}
   .site-header .account .header-signup{display:none}
+}
+
+@media(max-width:860px){
+  .site-header .mobile-menu-toggle{display:grid}
 }
 
 @media(max-width:520px){
