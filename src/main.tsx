@@ -7,6 +7,7 @@ import './home.css';
 import './global-redesign.css';
 import './workspace-redesign.css';
 import './verification-polish.css';
+import './dealivra-brand.css';
 
 const root = createRoot(document.getElementById('root')!);
 
@@ -22,7 +23,7 @@ const destinationPath: Record<Exclude<LandingDestination, 'create' | 'signin' | 
 
 const loadFullApp = async (destination?: LandingDestination) => {
   if (destination === 'demo') {
-    history.pushState({}, '', '/?deal=DS-7K4M2Q');
+    history.pushState({}, '', '/?deal=DV-7K4M2Q');
   } else if (destination === 'create' || destination === 'signin' || destination === 'signup') {
     history.pushState({}, '', `/?start=${destination}`);
   } else if (destination) {

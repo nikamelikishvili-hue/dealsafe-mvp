@@ -1,6 +1,6 @@
 # Google მისამართების ავტომატური შევსება
 
-DealSafe-ში შეხვედრის მისამართის ველი Google Places-ის შემოთავაზებებს აჩვენებს, როდესაც `VITE_GOOGLE_MAPS_API_KEY` არის დაყენებული. გასაღების გარეშე ველი ჩვეულებრივ ტექსტურ ველად რჩება.
+Dealivra-ში შეხვედრის მისამართის ველი Google Places-ის შემოთავაზებებს აჩვენებს, როდესაც `VITE_GOOGLE_MAPS_API_KEY` არის დაყენებული. გასაღების გარეშე ველი ჩვეულებრივ ტექსტურ ველად რჩება.
 
 ## Google Cloud
 
@@ -19,7 +19,7 @@ DealSafe-ში შეხვედრის მისამართის ვ�
 
 ## Vercel
 
-1. გახსენი DealSafe პროექტი.
+1. გახსენი Dealivra პროექტი.
 2. გადადი `Settings` → `Environment Variables`.
 3. შექმენი ცვლადი:
    - Name: `VITE_GOOGLE_MAPS_API_KEY`

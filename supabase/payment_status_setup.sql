@@ -1,7 +1,7 @@
 -- Private payment acknowledgements for accepted deals. Safe to rerun.
 -- Run after completion_setup.sql, inspection_receipt_setup.sql,
 -- delivery_details_setup.sql, and deal_action_plan_setup.sql.
--- This records participant statements only; DealSafe does not move or verify money.
+-- This records participant statements only; Dealivra does not move or verify money.
 -- New deals are electronic-payment only. cash_at_handoff remains in the table
 -- constraint solely so historical beta records continue to load.
 
@@ -33,7 +33,7 @@ begin
     raise exception 'Only the seller can record a payment method for an accepted deal';
   end if;
   if p_method not in ('bank_transfer','payment_app','card_invoice') then
-    raise exception 'DealSafe accepts only electronic payment methods';
+    raise exception 'Dealivra accepts only electronic payment methods';
   end if;
   select * into v_existing from public.deal_payment_records where deal_id=p_deal_id;
   if found and (v_existing.buyer_confirmed_at is not null

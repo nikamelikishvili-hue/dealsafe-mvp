@@ -1,4 +1,4 @@
-# DealSafe MVP
+# Dealivra MVP
 
 A mobile-first proof of concept for creating a trusted transaction record and sharing it through a Deal Link.
 

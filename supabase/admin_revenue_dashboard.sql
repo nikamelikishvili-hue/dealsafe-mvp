@@ -1,4 +1,4 @@
--- DealSafe administrator revenue summary. Safe to rerun.
+-- Dealivra administrator revenue summary. Safe to rerun.
 -- Run this in the Supabase SQL Editor after admin_reporting_setup.sql and
 -- stripe_protected_payments_setup.sql.
 

@@ -22,6 +22,7 @@ import {
   Watch,
   X,
 } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 
 export type LandingDestination =
   | 'create'
@@ -70,7 +71,7 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
     <header className="site-header">
       <div className="header-inner">
         <div className="header-brand-group">
-          <button className="brand" onClick={() => openSection()}><span><ShieldCheck size={21} /></span>DealSafe</button>
+          <button className="brand" onClick={() => openSection()}><BrandLogo /></button>
           <span className="beta">Launching in the U.S.</span>
         </div>
         <nav className="site-nav" aria-label="Primary navigation">
@@ -120,9 +121,9 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
             <span><BadgeDollarSign size={18} />Visible payment status</span>
             <span><PackageCheck size={18} />Recorded handoff</span>
           </div>
-          <p className="beta-payment-note"><ShieldAlert size={16} />Sandbox demo — no real money is transferred. DealSafe is not legal escrow.</p>
+          <p className="beta-payment-note"><ShieldAlert size={16} />Sandbox demo — no real money is transferred. Dealivra is not legal escrow.</p>
         </div>
-        <div className="network-stage" aria-label="DealSafe protected transaction flow">
+        <div className="network-stage" aria-label="Dealivra protected transaction flow">
           <article className="home-product-preview">
             <header>
               <div><span className="preview-mark"><ShieldCheck /></span><div><small>DEAL ROOM</small><b>One place for the whole transaction</b></div></div>
@@ -148,7 +149,7 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
         </div>
       </section>
 
-      <section className="home-capability-strip" aria-label="What DealSafe keeps together">
+      <section className="home-capability-strip" aria-label="What Dealivra keeps together">
         <article><FileSignature /><div><b>Clear agreement</b><span>Price, condition, and handoff terms in one version.</span></div></article>
         <article><BadgeDollarSign /><div><b>Visible payment state</b><span>Both parties can see what is ready and what comes next.</span></div></article>
         <article><PackageCheck /><div><b>Proof of delivery</b><span>Photos, inspection, and handoff stay with the deal.</span></div></article>
@@ -157,7 +158,7 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
 
       <section className="deal-flow deferred-home-section" id="how-it-works">
         <div className="global-section-heading">
-          <p className="eyebrow">HOW DEALSAFE WORKS</p>
+          <p className="eyebrow">HOW DEALIVRA WORKS</p>
           <h2>A clear path from agreement to completion.</h2>
           <p>The essential steps stay visible to both sides, without the clutter of a traditional marketplace.</p>
         </div>
@@ -168,7 +169,7 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
         <div className="global-section-heading">
           <p className="eyebrow">BUILT FOR PRIVATE SALES</p>
           <h2 id="use-cases-title">Useful when the item matters and the buyer is not beside you.</h2>
-          <p>DealSafe is focused on higher-trust private transactions, not an endless public marketplace feed.</p>
+          <p>Dealivra is focused on higher-trust private transactions, not an endless public marketplace feed.</p>
         </div>
         <div className="use-case-grid">
           <article><Laptop /><div><h3>Electronics</h3><p>Record condition, serial details, photos, shipping, and inspection expectations.</p></div></article>
@@ -181,7 +182,7 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
         <div className="money-flow-copy">
           <p className="eyebrow">PAYMENT CLARITY</p>
           <h2 id="money-flow-title">Know what the beta does before you continue.</h2>
-          <p>The current product demonstrates a Stripe Sandbox payment workflow. It does not transfer real money and DealSafe is not a licensed escrow service.</p>
+          <p>The current product demonstrates a Stripe Sandbox payment workflow. It does not transfer real money and Dealivra is not a licensed escrow service.</p>
           <ol>
             <li><span>1</span><div><strong>Agree to one version</strong><small>Both parties review the same item, price, disclosures, and handoff terms.</small></div></li>
             <li><span>2</span><div><strong>Open Stripe Sandbox</strong><small>The buyer tests checkout without a real charge or live card transfer.</small></div></li>
@@ -194,7 +195,7 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
           <h3>Every charge must be visible before payment.</h3>
           <dl>
             <div><dt>Item price</dt><dd>Set by seller</dd></div>
-            <div><dt>DealSafe service fee</dt><dd>Shown before payment</dd></div>
+            <div><dt>Dealivra service fee</dt><dd>Shown before payment</dd></div>
             <div><dt>Processing, shipping, and tax</dt><dd>Itemized separately</dd></div>
             <div className="fee-total"><dt>Final amount</dt><dd>One U.S. dollar total</dd></div>
           </dl>
@@ -207,7 +208,7 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
         <div className="global-protection-copy">
           <p className="eyebrow">BUILT FOR TRUST</p>
           <h2>Protection both parties can understand.</h2>
-          <p>DealSafe keeps the agreement, payment status, evidence, and handoff history in one private transaction record.</p>
+          <p>Dealivra keeps the agreement, payment status, evidence, and handoff history in one private transaction record.</p>
           <button type="button" className="global-secondary light" onClick={() => launch('create')}>Start a deal<ArrowRight size={17} /></button>
         </div>
         <div className="protection-grid">
@@ -226,8 +227,8 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
       <section className="home-faq deferred-home-section" aria-labelledby="faq-title">
         <div className="global-section-heading"><p className="eyebrow">BEFORE YOU START</p><h2 id="faq-title">Straight answers about the U.S. beta.</h2></div>
         <div className="faq-list">
-          <details><summary>Is DealSafe a legal escrow service?<ChevronDown /></summary><p>No. The current beta records agreements, Sandbox payment status, evidence, and handoff activity. A licensed payment or escrow partner and legal review are required before a live-money launch.</p></details>
-          <details><summary>Does DealSafe store card or bank details?<ChevronDown /></summary><p>No. Payment credentials belong in the payment provider flow, not in DealSafe messages, forms, or evidence uploads.</p></details>
+          <details><summary>Is Dealivra a legal escrow service?<ChevronDown /></summary><p>No. The current beta records agreements, Sandbox payment status, evidence, and handoff activity. A licensed payment or escrow partner and legal review are required before a live-money launch.</p></details>
+          <details><summary>Does Dealivra store card or bank details?<ChevronDown /></summary><p>No. Payment credentials belong in the payment provider flow, not in Dealivra messages, forms, or evidence uploads.</p></details>
           <details><summary>Where is the first release available?<ChevronDown /></summary><p>The first release is planned for the United States in English (US) and U.S. dollars. Provider approval and applicable law may limit availability by state.</p></details>
           <details><summary>What happens if something goes wrong?<ChevronDown /></summary><p>A dispute keeps the reason, messages, delivery evidence, and inspection details in the deal record. Final refund and release rights must follow the published terms and payment-provider rules.</p></details>
         </div>
@@ -240,7 +241,7 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
     </main>
 
     <footer>
-      <div><strong>DealSafe</strong><span>Global vision · U.S. launch · English (US) · USD</span></div>
+      <div><BrandLogo className="footer-brand-logo" /><span>Global vision · U.S. launch · English (US) · USD</span></div>
       <nav aria-label="Legal and protection">
         <a href="/buyer-protection" onClick={event => { event.preventDefault(); launch('buyer-protection'); }}>Buyer protection</a>
         <a href="/seller-protection" onClick={event => { event.preventDefault(); launch('seller-protection'); }}>Seller protection</a>

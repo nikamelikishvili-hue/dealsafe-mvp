@@ -180,7 +180,7 @@ Deno.serve(async (request) => {
       params.set("destination", payment.seller_stripe_account_id);
       params.set("source_transaction", chargeId);
       params.set("transfer_group", payment.transfer_group);
-      params.set("description", `DealSafe ${deal.public_id}`);
+      params.set("description", `Dealivra ${deal.public_id}`);
       params.set("metadata[deal_id]", deal.id);
       params.set("metadata[dispute_id]", dispute.id);
       params.set("metadata[dealsafe_payment_id]", payment.id);

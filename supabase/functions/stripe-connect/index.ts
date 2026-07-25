@@ -29,7 +29,7 @@ Deno.serve(async (request) => {
       .select("stripe_account_id")
       .eq("id", user.id)
       .single();
-    if (profileError) throw new Error("DealSafe profile was not found");
+    if (profileError) throw new Error("Dealivra profile was not found");
 
     let accountId = profile?.stripe_account_id as string | null;
     let account: StripeAccount | null = null;
@@ -55,7 +55,7 @@ Deno.serve(async (request) => {
       params.set("country", "US");
       if (user.email) params.set("email", user.email);
       params.set("capabilities[transfers][requested]", "true");
-      params.set("business_profile[product_description]", "Private-sale proceeds through DealSafe");
+      params.set("business_profile[product_description]", "Private-sale proceeds through Dealivra");
       params.set("metadata[dealsafe_user_id]", user.id);
       account = await stripeRequest<StripeAccount>("/v1/accounts", {
         params,

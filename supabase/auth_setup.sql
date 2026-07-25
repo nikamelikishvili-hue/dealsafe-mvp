@@ -1,5 +1,5 @@
 -- Run once in Supabase SQL Editor after schema.sql.
--- Creates a DealSafe profile whenever a new Auth user signs up.
+-- Creates a Dealivra profile whenever a new Auth user signs up.
 
 create or replace function public.handle_new_user()
 returns trigger

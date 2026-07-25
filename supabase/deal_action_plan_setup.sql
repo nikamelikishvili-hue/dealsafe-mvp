@@ -1,4 +1,4 @@
--- Private, role-aware progress summary for accepted DealSafe transactions.
+-- Private, role-aware progress summary for accepted Dealivra transactions.
 -- Run after meeting_setup.sql, completion_setup.sql, shipping_setup.sql,
 -- inspection_receipt_setup.sql, and deal_participants_setup.sql.
 
