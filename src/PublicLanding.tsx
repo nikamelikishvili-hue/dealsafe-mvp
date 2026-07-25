@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
@@ -49,16 +49,36 @@ const scrollToSection = (id?: string) => {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
+const isPlainNavigation = (event: MouseEvent<HTMLAnchorElement>) =>
+  event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+
 export function PublicLanding({ onLaunch }: PublicLandingProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const openSection = (id?: string) => {
     setMobileMenuOpen(false);
+    const destination = id ? `/#${id}` : '/';
+    const current = `${location.pathname}${location.search}${location.hash}`;
+    if (current !== destination) history.pushState({}, '', destination);
     scrollToSection(id);
+  };
+  const followSectionLink = (event: MouseEvent<HTMLAnchorElement>, id?: string) => {
+    if (!isPlainNavigation(event)) return;
+    event.preventDefault();
+    openSection(id);
   };
   const launch = (destination: LandingDestination) => {
     setMobileMenuOpen(false);
     onLaunch(destination);
   };
+  useEffect(() => {
+    const syncSection = () => {
+      const id = location.hash.slice(1);
+      window.requestAnimationFrame(() => scrollToSection(id || undefined));
+    };
+    syncSection();
+    window.addEventListener('popstate', syncSection);
+    return () => window.removeEventListener('popstate', syncSection);
+  }, []);
   const steps = [
     { icon: <FileSignature />, number: '01', title: 'Create one secure record', body: 'Add the item, price, condition, photos, and handoff terms.' },
     { icon: <Link2 />, number: '02', title: 'Share the Deal Link', body: 'Both parties review the same version and keep the conversation together.' },
@@ -71,14 +91,14 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
     <header className="site-header">
       <div className="header-inner">
         <div className="header-brand-group">
-          <button className="brand" onClick={() => openSection()}><BrandLogo /></button>
+          <a className="brand" href="/" aria-label="Dealivra home" onClick={event => followSectionLink(event)}><BrandLogo /></a>
           <span className="beta">Launching in the U.S.</span>
         </div>
         <nav className="site-nav" aria-label="Primary navigation">
-          <button onClick={() => openSection()}>Home</button>
-          <button onClick={() => openSection('how-it-works')}>How it works</button>
-          <button onClick={() => openSection('protection')}>Protection</button>
-          <button onClick={() => launch('fees')}>Fees</button>
+          <a href="/" onClick={event => followSectionLink(event)}>Home</a>
+          <a href="/#how-it-works" onClick={event => followSectionLink(event, 'how-it-works')}>How it works</a>
+          <a href="/#protection" onClick={event => followSectionLink(event, 'protection')}>Protection</a>
+          <a href="/fees" onClick={event => { if (!isPlainNavigation(event)) return; event.preventDefault(); launch('fees'); }}>Fees</a>
         </nav>
         <div className="header-actions">
           <div className="account">
@@ -97,11 +117,11 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
       </div>
     </header>
     {mobileMenuOpen && <nav className="mobile-menu" aria-label="Mobile navigation">
-      <button onClick={() => openSection()}>Home</button>
-      <button onClick={() => openSection('how-it-works')}>How it works</button>
-      <button onClick={() => openSection('protection')}>Protection</button>
-      <button onClick={() => launch('fees')}>Fees</button>
-      <button onClick={() => launch('disputes')}>Disputes</button>
+      <a href="/" onClick={event => followSectionLink(event)}>Home</a>
+      <a href="/#how-it-works" onClick={event => followSectionLink(event, 'how-it-works')}>How it works</a>
+      <a href="/#protection" onClick={event => followSectionLink(event, 'protection')}>Protection</a>
+      <a href="/fees" onClick={event => { if (!isPlainNavigation(event)) return; event.preventDefault(); launch('fees'); }}>Fees</a>
+      <a href="/disputes" onClick={event => { if (!isPlainNavigation(event)) return; event.preventDefault(); launch('disputes'); }}>Disputes</a>
       <button className="mobile-signin" onClick={() => launch('signin')}>Sign in</button>
       <button className="mobile-signup" onClick={() => launch('signup')}>Create account</button>
     </nav>}

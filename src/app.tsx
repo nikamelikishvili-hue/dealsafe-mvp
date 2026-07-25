@@ -1570,7 +1570,23 @@ export function App() {
     });
     return()=>window.cancelAnimationFrame(frame);
   },[view]);
-  useEffect(()=>{const onPopState=()=>setView(viewFromPath());window.addEventListener('popstate',onPopState);return()=>window.removeEventListener('popstate',onPopState)},[]);
+  useEffect(()=>{
+    const scrollToLocation=()=>{
+      const id=location.hash.slice(1);
+      window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>id
+        ?document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'})
+        :window.scrollTo({top:0,behavior:'smooth'})));
+    };
+    const onPopState=()=>{
+      const nextView=viewFromPath();
+      setView(nextView);
+      setMobileMenuOpen(false);
+      if(nextView==='home')scrollToLocation();
+    };
+    if(entryView==='home'&&location.hash)scrollToLocation();
+    window.addEventListener('popstate',onPopState);
+    return()=>window.removeEventListener('popstate',onPopState);
+  },[]);
   useEffect(()=>{const timer=window.setInterval(()=>setClock(Date.now()),60_000);return()=>window.clearInterval(timer)},[]);
   useEffect(()=>{const updated=(event:Event)=>setSession((event as CustomEvent<StoredSession>).detail);const expired=()=>{setSession(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')};window.addEventListener(sessionUpdatedEvent,updated);window.addEventListener(sessionExpiredEvent,expired);return()=>{window.removeEventListener(sessionUpdatedEvent,updated);window.removeEventListener(sessionExpiredEvent,expired)}},[]);
   useEffect(()=>{if(session){listUserDeals(session).then(setDeals).catch(()=>setDeals([]))}else{demoRepository.list().then(setDeals)}},[session]);
@@ -1688,13 +1704,24 @@ export function App() {
     scrollToDealSection(dealPrimaryAction.targetId);
   };
   const goHomeSection=(id?:string)=>{
-    if(location.pathname!=='/'||location.search||location.hash)history.pushState({},'','/');
+    const destination=id?`/#${id}`:'/';
+    if(`${location.pathname}${location.search}${location.hash}`!==destination)history.pushState({},'',destination);
     setView('home');
     setMobileMenuOpen(false);
     setAuthMessage('');
     window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>id
       ?document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'})
       :window.scrollTo({top:0,behavior:'smooth'})));
+  };
+  const followHomeLink=(event:React.MouseEvent<HTMLAnchorElement>,id?:string)=>{
+    if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+    event.preventDefault();
+    goHomeSection(id);
+  };
+  const followInfoLink=(event:React.MouseEvent<HTMLAnchorElement>,next:PublicInfoView)=>{
+    if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+    event.preventDefault();
+    openInfo(next);
   };
   const openInfo=(next:PublicInfoView)=>{history.pushState({},'',publicInfoPaths[next]);setView(next);setMobileMenuOpen(false);window.scrollTo({top:0,behavior:'smooth'})};
   const openVerify=()=>{history.pushState({},'',verifyPath);setView('verify');setMobileMenuOpen(false);window.scrollTo({top:0,behavior:'smooth'})};
@@ -1705,16 +1732,16 @@ export function App() {
     <a className="skip-link" href="#main-content">{t('Skip to main content')}</a>
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{t(currentPageLabel)}</div>
     <header className="site-header"><div className="header-inner">
-      <div className="header-brand-group"><button className="brand" onClick={()=>goHomeSection()}><BrandLogo/></button><span className="beta">Launching in the U.S.</span></div>
-      <nav className="site-nav" aria-label={t('Primary navigation')}><button onClick={()=>goHomeSection()}>{t(user?'Dashboard':'Home')}</button><button onClick={()=>goHomeSection('how-it-works')}>{t('How it works')}</button><button onClick={()=>goHomeSection('protection')}>{t('Protection')}</button><button onClick={()=>openInfo('fees')}>{t('Fees')}</button></nav>
+      <div className="header-brand-group"><a className="brand" href="/" aria-label="Dealivra home" onClick={event=>followHomeLink(event)}><BrandLogo/></a><span className="beta">Launching in the U.S.</span></div>
+      <nav className="site-nav" aria-label={t('Primary navigation')}><a href="/" onClick={event=>followHomeLink(event)}>{t(user?'Dashboard':'Home')}</a><a href="/#how-it-works" onClick={event=>followHomeLink(event,'how-it-works')}>{t('How it works')}</a><a href="/#protection" onClick={event=>followHomeLink(event,'protection')}>{t('Protection')}</a><a href={publicInfoPaths.fees} onClick={event=>followInfoLink(event,'fees')}>{t('Fees')}</a></nav>
       <div className="header-actions">{user&&<button className="header-create" onClick={openCreate}><Plus size={16}/><span>{t('New deal')}</span></button>}<div className="account">{user?<>{isAdmin&&<button className="admin-link" onClick={()=>setView('admin')}><ShieldCheck size={15}/>{t('Admin')}</button>}<button onClick={openProfile}>{user.displayName}</button><button onClick={logout}>{t('Sign out')}</button></>:<><button onClick={()=>{setAuthMode('signin');setReturnAfterAuth('home');setView('auth')}}>{t('Sign in')}</button><button className="header-signup" onClick={()=>{setAuthMode('signup');setReturnAfterAuth('home');setView('auth')}}>{t('Create account')}</button></>}</div><button className="mobile-menu-toggle" aria-label={t(mobileMenuOpen?'Close menu':'Open menu')} aria-expanded={mobileMenuOpen} onClick={()=>setMobileMenuOpen(open=>!open)}>{mobileMenuOpen?<X/>:<Menu/>}</button></div>
     </div></header>
     {mobileMenuOpen&&<nav className="mobile-menu" aria-label={t('Mobile navigation')}>
-      <button onClick={()=>goHomeSection()}>{t(user?'Dashboard':'Home')}</button>
-      <button onClick={()=>goHomeSection('how-it-works')}>{t('How it works')}</button>
-      <button onClick={()=>goHomeSection('protection')}>{t('Protection')}</button>
-      <button onClick={()=>openInfo('fees')}>{t('Fees')}</button>
-      <button onClick={()=>openInfo('disputes')}>{t('Disputes')}</button>
+      <a href="/" onClick={event=>followHomeLink(event)}>{t(user?'Dashboard':'Home')}</a>
+      <a href="/#how-it-works" onClick={event=>followHomeLink(event,'how-it-works')}>{t('How it works')}</a>
+      <a href="/#protection" onClick={event=>followHomeLink(event,'protection')}>{t('Protection')}</a>
+      <a href={publicInfoPaths.fees} onClick={event=>followInfoLink(event,'fees')}>{t('Fees')}</a>
+      <a href={publicInfoPaths.disputes} onClick={event=>followInfoLink(event,'disputes')}>{t('Disputes')}</a>
       {!user&&<><button className="mobile-signin" onClick={()=>{setAuthMode('signin');setReturnAfterAuth('home');setView('auth');setMobileMenuOpen(false)}}>{t('Sign in')}</button><button className="mobile-signup" onClick={()=>{setAuthMode('signup');setReturnAfterAuth('home');setView('auth');setMobileMenuOpen(false)}}>{t('Create account')}</button></>}
     </nav>}
     <main id="main-content" tabIndex={-1}>

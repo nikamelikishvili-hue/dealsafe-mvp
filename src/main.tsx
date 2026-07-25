@@ -35,7 +35,9 @@ const loadFullApp = async (destination?: LandingDestination) => {
 };
 
 const hasStoredSession = Boolean(localStorage.getItem('dealsafe_session'));
-const needsFullApp = hasStoredSession || location.pathname !== '/' || Boolean(location.search) || Boolean(location.hash);
+const hashParams = new URLSearchParams(location.hash.slice(1));
+const hasRecoveryHash = hashParams.get('type') === 'recovery' && Boolean(hashParams.get('access_token'));
+const needsFullApp = hasStoredSession || location.pathname !== '/' || Boolean(location.search) || hasRecoveryHash;
 
 void initializeI18n()
   .catch(() => {})
@@ -48,5 +50,13 @@ void initializeI18n()
   });
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+  window.addEventListener('load', () => {
+    if (import.meta.env.PROD) {
+      void navigator.serviceWorker.register('/sw.js').catch(() => {});
+      return;
+    }
+    void navigator.serviceWorker.getRegistrations()
+      .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+      .catch(() => {});
+  });
 }
