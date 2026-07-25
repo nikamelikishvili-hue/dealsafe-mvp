@@ -167,6 +167,10 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   background:#fff;
   box-shadow:0 18px 42px rgba(29,69,120,.11);
 }
+.demo-completion-aside:focus{outline:none}
+.demo-completion-aside:focus-visible .agreement{box-shadow:0 0 0 3px rgba(23,101,221,.16),0 18px 42px rgba(29,69,120,.11)}
+.view-deal .deal-grid>aside:focus{outline:none}
+.view-deal .deal-grid>aside:focus-visible .agreement{box-shadow:0 0 0 3px rgba(23,101,221,.14),0 18px 42px rgba(29,69,120,.1)}
 .demo-agreement-complete{display:grid;gap:16px;padding:22px}
 .demo-complete-heading{display:grid;grid-template-columns:44px minmax(0,1fr);gap:12px;align-items:start}
 .demo-complete-heading>span{
@@ -959,6 +963,13 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 }
 
 @media(max-width:430px){
+  .view-deal .demo-deal-banner{
+    grid-template-columns:32px minmax(0,1fr);
+  }
+  .view-deal .demo-deal-banner .primary{
+    grid-column:1/-1;
+    width:100%;
+  }
   .view-deal .demo-deal-banner .eyebrow{display:none}
   .view-deal .demo-deal-banner .primary svg{display:none}
   .mobile-deal-action{grid-template-columns:minmax(0,1fr) 132px}
@@ -1012,9 +1023,14 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 }
 
 @media(max-width:760px){
+  .view-deal,.view-deal main,.view-deal .deal-page,.view-deal .deal-grid,.view-deal .deal-grid>*{min-width:0;max-width:100%}
   .demo-agreement-complete{padding:18px}
   .demo-complete-heading{grid-template-columns:40px minmax(0,1fr)}
   .demo-complete-heading>span{width:40px;height:40px}
   .demo-complete-heading h3{font-size:17px}
+  .demo-complete-actions .primary{display:none}
+  .demo-complete-actions .secondary{min-height:40px}
+  .demo-flow-complete .demo-deal-banner .primary{display:none}
+  .copy-deal-link-action,.copy-deal-link-action .copy{width:100%}
 }
 
