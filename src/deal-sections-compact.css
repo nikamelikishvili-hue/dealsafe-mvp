@@ -1,4 +1,33 @@
 /* Compact transaction sections: one visual language for high-frequency deal work. */
+.view-deal .deal-workspace-sections{
+  width:min(1320px,calc(100% - 44px));
+}
+
+.view-deal .deal-trust-grid,
+.view-deal .deal-fulfillment-grid{
+  display:grid;
+  align-items:start;
+  gap:14px;
+  min-width:0;
+}
+
+.view-deal .deal-trust-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+
+.view-deal .deal-fulfillment-grid.has-shipping{
+  grid-template-columns:minmax(390px,.9fr) minmax(470px,1.1fr);
+}
+
+.view-deal .deal-fulfillment-grid.is-single{
+  grid-template-columns:minmax(0,1fr);
+}
+
+.view-deal .deal-fulfillment-grid>#shipping-panel,
+.view-deal .deal-fulfillment-grid>.payment-status{
+  min-width:0;
+}
+
 .view-deal :is(.deal-readiness,.deal-participants,.payment-status,.shipping-panel){
   --deal-blue:#246fd5;
   --deal-indigo:#5666df;
@@ -155,6 +184,7 @@
 }
 
 .view-deal .participant-grid{gap:10px;margin-top:14px}
+.view-deal .deal-trust-grid .participant-grid{grid-template-columns:1fr}
 .view-deal .participant-card{
   min-height:68px;
   gap:11px;
@@ -187,6 +217,17 @@
   border-color:#e4ebf3;
   color:#687c93;
   font-size:10px;
+}
+
+.view-deal .deal-trust-grid .participant-meta{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:7px 12px;
+}
+
+.view-deal .deal-trust-grid .participant-meta span{
+  min-width:0;
+  line-height:1.35;
 }
 
 /* Payment overview */
@@ -389,7 +430,18 @@
 .view-deal .shipment-card span,.view-deal .shipment-card small{margin-top:2px;font-size:10px}
 .view-deal .shipping-note{margin-top:10px;padding-top:9px;border-top:1px solid #e4ebf3;font-size:9px}
 
+@media(max-width:1180px){
+  .view-deal .deal-fulfillment-grid.has-shipping{grid-template-columns:1fr}
+}
+
+@media(max-width:980px){
+  .view-deal .deal-trust-grid{grid-template-columns:1fr}
+  .view-deal .deal-trust-grid .participant-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
 @media(max-width:720px){
+  .view-deal .deal-workspace-sections{width:calc(100% - 24px)}
+  .view-deal :is(.deal-trust-grid,.deal-fulfillment-grid){gap:11px}
   .view-deal :is(.deal-readiness,.deal-participants,.payment-status,.shipping-panel){padding:15px}
   .view-deal :is(.readiness-heading,.participant-heading,.payment-status-heading,.shipping-heading){grid-template-columns:36px minmax(0,1fr) auto;gap:9px}
   .view-deal :is(.readiness-heading,.participant-heading,.payment-status-heading,.shipping-heading) .workflow-icon{width:36px;height:36px}
@@ -401,6 +453,8 @@
   .view-deal .readiness-status-row>strong{display:none}
   .view-deal .readiness-notes{grid-template-columns:1fr}
   .view-deal .participant-grid{grid-template-columns:1fr}
+  .view-deal .deal-trust-grid .participant-grid{grid-template-columns:1fr}
+  .view-deal .deal-trust-grid .participant-meta{grid-template-columns:1fr}
   .view-deal .participant-card{min-height:60px}
   .view-deal .participant-meta{display:grid}
   .view-deal .payment-milestones{grid-template-columns:repeat(4,1fr)}
