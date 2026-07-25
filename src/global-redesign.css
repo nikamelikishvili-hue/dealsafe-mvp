@@ -608,6 +608,12 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(39,120,245,.12);b
   .header-actions{margin-left:auto}
   .header-create span{display:none}
   .site-header .language-select select{min-width:94px}
+  .site-header .mobile-menu-toggle{width:40px;height:40px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.16);border-radius:10px;color:#fff;background:rgba(255,255,255,.06)}
+  .mobile-menu-toggle svg{width:20px}
+  .mobile-menu{position:sticky;top:68px;z-index:79;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:12px 14px;border-bottom:1px solid #d8e3f0;background:#fff;box-shadow:0 14px 28px rgba(15,35,61,.12)}
+  .mobile-menu a,.mobile-menu button{min-height:43px;display:flex;align-items:center;justify-content:center;border:1px solid #dbe5f1;border-radius:9px;color:#19314f;background:#f7faff;font-weight:800;text-decoration:none}
+  .mobile-menu .mobile-signin{color:#fff;background:#1765dd}
+  .mobile-menu .mobile-signup{color:#1765dd;border-color:#8eb9f5;background:#edf5ff}
   .global-hero{grid-template-columns:1fr;padding:62px 28px 72px}
   .global-hero-copy{max-width:680px}
   .network-stage{min-height:430px;max-width:620px;width:100%;margin:12px auto 0}
@@ -628,12 +634,7 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(39,120,245,.12);b
   .site-header .account .admin-link{font-size:0;padding:8px}
   .site-header .account .admin-link svg{margin:0}
   .site-header .account .header-signup{display:none}
-  .site-header .mobile-menu-toggle{width:40px;height:40px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.16);border-radius:10px;color:#fff;background:rgba(255,255,255,.06)}
-  .mobile-menu-toggle svg{width:20px}
-  .mobile-menu{position:sticky;top:64px;z-index:79;display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:12px 14px;border-bottom:1px solid #d8e3f0;background:#fff;box-shadow:0 14px 28px rgba(15,35,61,.12)}
-  .mobile-menu a,.mobile-menu button{min-height:43px;display:flex;align-items:center;justify-content:center;border:1px solid #dbe5f1;border-radius:9px;color:#19314f;background:#f7faff;font-weight:800;text-decoration:none}
-  .mobile-menu .mobile-signin{color:#fff;background:#1765dd}
-  .mobile-menu .mobile-signup{color:#1765dd;border-color:#8eb9f5;background:#edf5ff}
+  .mobile-menu{top:64px}
   .header-create{padding:9px!important}
   .global-hero{min-height:auto;padding:48px 21px 58px}
   .global-hero h1{font-size:43px}

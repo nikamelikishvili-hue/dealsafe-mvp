@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
@@ -54,6 +54,7 @@ const isPlainNavigation = (event: MouseEvent<HTMLAnchorElement>) =>
 
 export function PublicLanding({ onLaunch }: PublicLandingProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const openSection = (id?: string) => {
     setMobileMenuOpen(false);
     const destination = id ? `/#${id}` : '/';
@@ -79,6 +80,23 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
     window.addEventListener('popstate', syncSection);
     return () => window.removeEventListener('popstate', syncSection);
   }, []);
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMobileMenuOpen(false);
+      window.requestAnimationFrame(() => mobileMenuButtonRef.current?.focus());
+    };
+    const closeAboveTablet = () => {
+      if (window.innerWidth > 860) setMobileMenuOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    window.addEventListener('resize', closeAboveTablet);
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+      window.removeEventListener('resize', closeAboveTablet);
+    };
+  }, [mobileMenuOpen]);
   const steps = [
     { icon: <FileSignature />, number: '01', title: 'Create one secure record', body: 'Add the item, price, condition, photos, and handoff terms.' },
     { icon: <Link2 />, number: '02', title: 'Share the Deal Link', body: 'Both parties review the same version and keep the conversation together.' },
@@ -106,9 +124,11 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
             <button className="header-signup" onClick={() => launch('signup')}>Create account</button>
           </div>
           <button
+            ref={mobileMenuButtonRef}
             className="mobile-menu-toggle"
             aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-navigation"
             onClick={() => setMobileMenuOpen(open => !open)}
           >
             {mobileMenuOpen ? <X /> : <Menu />}
@@ -116,7 +136,7 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
         </div>
       </div>
     </header>
-    {mobileMenuOpen && <nav className="mobile-menu" aria-label="Mobile navigation">
+    {mobileMenuOpen && <nav className="mobile-menu" id="mobile-navigation" aria-label="Mobile navigation">
       <a href="/" onClick={event => followSectionLink(event)}>Home</a>
       <a href="/#how-it-works" onClick={event => followSectionLink(event, 'how-it-works')}>How it works</a>
       <a href="/#protection" onClick={event => followSectionLink(event, 'protection')}>Protection</a>
