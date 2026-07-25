@@ -666,7 +666,47 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .agreement-verifier-page>.lede{max-width:680px;margin:0 0 24px;color:var(--ink-muted)}
 .agreement-verifier-page>.agreement-verifier{width:100%;margin:0}
 
-.auth-market-note{margin:8px 0 18px;color:#6b7d91;font-size:13px;font-weight:700}
+.auth-market-note{max-width:590px;margin:8px 0 18px;color:#60748b;font-size:14px;font-weight:600;line-height:1.55}
+.auth-journey{
+  width:min(620px,100%);
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px;
+  margin:0 auto 14px;
+  padding:0;
+  list-style:none;
+}
+.auth-journey li{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:11px 12px;
+  list-style:none;
+  border:1px solid #dbe4ef;
+  border-radius:12px;
+  color:#60748b;
+  background:#f7f9fc;
+}
+.auth-journey li>span{
+  width:28px;
+  height:28px;
+  flex:0 0 auto;
+  display:grid;
+  place-items:center;
+  border:1px solid #cdd8e6;
+  border-radius:50%;
+  color:#496079;
+  background:#fff;
+  font:800 11px Manrope,sans-serif;
+}
+.auth-journey li>div{min-width:0}
+.auth-journey strong,.auth-journey small{display:block}
+.auth-journey strong{color:#223750;font:800 12px/1.25 Manrope,sans-serif}
+.auth-journey small{margin-top:2px;color:#718399;font-size:10px;line-height:1.3}
+.auth-journey .is-current{border-color:#aac5ff;color:#244eaa;background:#eef4ff}
+.auth-journey .is-current>span{border-color:#4a74df;color:#fff;background:#4a74df;box-shadow:0 6px 14px rgba(64,104,208,.22)}
+.auth-journey .is-current strong{color:#173f9a}
 .policy-consent a{color:#1765dd;text-decoration-thickness:1px;text-underline-offset:2px}
 .currency-label{
   min-width:72px;
@@ -771,6 +811,11 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 }
 
 @media(max-width:640px){
+  .auth-journey{gap:6px;margin-bottom:12px}
+  .auth-journey li{display:grid;grid-template-rows:28px minmax(30px,auto);align-content:start;gap:6px;padding:9px 6px;text-align:center}
+  .auth-journey li>span{margin:auto}
+  .auth-journey strong{display:flex;min-height:30px;align-items:center;justify-content:center}
+  .auth-journey small{display:none}
   .site-header .mobile-menu-toggle{display:grid}
   .site-header .account .header-signup{display:none}
 }
