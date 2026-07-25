@@ -1077,6 +1077,27 @@ function DealLinkError({message,onBack}:{message:string;onBack:()=>void}){
   </section>
 }
 
+function DemoAgreementComplete({buyerName,onStart,onReviewAgain}:{buyerName:string;onStart:()=>void;onReviewAgain:()=>void}){
+  return <section className="demo-agreement-complete" role="status" aria-live="polite">
+    <div className="demo-complete-heading">
+      <span><BadgeCheck/></span>
+      <div><p className="eyebrow">{t('Sample complete')}</p><h3>{t('You completed the buyer review.')}</h3><p>{t(`${buyerName||'Buyer'} reviewed the shared terms. No agreement, payment, or account was created.`)}</p></div>
+    </div>
+    <div className="demo-complete-next" aria-label={t('What happens next in a live deal')}>
+      <p>{t('In a live deal, both parties continue in the same private record:')}</p>
+      <ul>
+        <li><CreditCard/><span><b>{t('Payment status')}</b><small>{t('Both sides see when payment is ready.')}</small></span></li>
+        <li><Truck/><span><b>{t('Delivery evidence')}</b><small>{t('Shipping or handoff proof stays with the deal.')}</small></span></li>
+        <li><PackageCheck/><span><b>{t('Completion record')}</b><small>{t('Inspection and receipt close the transaction.')}</small></span></li>
+      </ul>
+    </div>
+    <div className="demo-complete-actions">
+      <button type="button" className="primary" onClick={onStart}>{t('Start your own deal')}<ArrowRight size={16}/></button>
+      <button type="button" className="secondary" onClick={onReviewAgain}>{t('Review sample again')}</button>
+    </div>
+  </section>
+}
+
 function DealProgressStrip({deal,paymentReady}:{deal:Deal;paymentReady:boolean}){
   const complete=deal.status==='completed';
   const currentStage=complete?3:deal.status==='accepted'&&paymentReady?2:(['accepted','disputed'] as Deal['status'][]).includes(deal.status)?1:0;
@@ -1418,6 +1439,7 @@ export function App() {
   const [photos,setPhotos]=useState<File[]>([]);
   const [dealTemplate,setDealTemplate]=useState<DealTemplateId>('phone');
   const [agreementChecks,setAgreementChecks]=useState({item:false,price:false,handoff:false});
+  const [demoCompleted,setDemoCompleted]=useState(false);
   const [acceptanceProtected,setAcceptanceProtected]=useState(false);
   const [buyerAccessCode,setBuyerAccessCode]=useState('');
   const [paymentReadyByDeal,setPaymentReadyByDeal]=useState<Record<string,boolean>>({});
@@ -1458,7 +1480,7 @@ export function App() {
   useEffect(()=>{if(view!=='deal'||!active||!session)return;setNotifications(items=>items.map(item=>item.deal_id===active.id?{...item,is_read:true}:item));void markDealNotificationsRead(session,active.id).catch(()=>{})},[view,active?.id,session?.accessToken]);
   useEffect(()=>{if(session)getAdminAccess(session).then(setIsAdmin).catch(()=>setIsAdmin(false));else setIsAdmin(false)},[session]);
    useEffect(()=>{const params=new URLSearchParams(location.search);const trustId=params.get('trust');const publicId=params.get('deal');if(trustId){setView('passport');setPassportMessage('');getPublicTrustPassport(trustId).then(passport=>{if(passport)setPublicPassport(passport);else setPassportMessage('Passport unavailable')}).catch(error=>setPassportMessage(error instanceof Error?error.message:'Passport unavailable'))}else if(publicId){const loadDeal=publicId===DEMO_DEAL_PUBLIC_ID?demoRepository.list().then(items=>{const deal=items.find(item=>item.publicId===publicId);if(!deal)throw new Error('Deal Link unavailable');return {...deal,viewerRole:'visitor' as const}}):getPublicDeal(publicId);loadDeal.then(deal=>{setActive(deal);setView('deal')}).catch(error=>{setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable');setView('link-error')})}},[]);
-  useEffect(()=>{setBuyer('');setBuyerAccessCode('');setAgreementChecks({item:false,price:false,handoff:false})},[active?.publicId,active?.agreementVersion]);
+  useEffect(()=>{setBuyer('');setBuyerAccessCode('');setAgreementChecks({item:false,price:false,handoff:false});setDemoCompleted(false)},[active?.publicId,active?.agreementVersion]);
   useEffect(()=>{let current=true;setAcceptanceProtected(false);if(!active||active.status!=='published')return;getDealAcceptanceProtection(active.publicId).then(enabled=>{if(current)setAcceptanceProtected(enabled)}).catch(()=>{});return()=>{current=false}},[active?.publicId,active?.status]);
   useEffect(()=>{
     if(!active||!session||active.viewerRole!=='seller'||active.status!=='accepted'||active.deliveryMethod!=='Ship to buyer')return;
@@ -1475,9 +1497,9 @@ export function App() {
   const saveDraft=async()=>{if(!session||creating)return;setCreating(true);setAuthMessage('');try{let deal=await saveUserDealDraft(session,draft);setDeals(items=>[deal,...items]);setActive(deal);setDraft(initial);setDealTemplate('phone');setReviewingDraft(false);setView('deal');if(photos.length){try{const mediaUrls=await uploadDealPhotos(session,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Draft saved, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}setPhotos([])}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save draft')}finally{setCreating(false)}};
   const open=(d:Deal)=>{setActive(d);setView('deal')};
   const agreementConfirmed=Object.values(agreementChecks).every(Boolean);
-  const accept=async()=>{if(!active||!buyer.trim()||!agreementConfirmed)return;if(active.publicId===DEMO_DEAL_PUBLIC_ID&&!session){setAuthMessage('Demo complete — no real agreement or payment was created. Create your own deal when you are ready.');return}if(isDealExpired(active)){setAuthMessage('This Deal Link can no longer be accepted.');return}if(acceptanceProtected&&!/^[0-9]{6}$/.test(buyerAccessCode)){setAuthMessage('Enter the 6-digit buyer code.');return}if(!session){setAuthMessage('Sign in or create an account to accept this deal.');setReturnAfterAuth('deal');setView('auth');return}try{await acceptPublicDeal(session,active.publicId,buyer.trim(),buyerAccessCode);const deal={...active,status:'accepted' as const,buyerName:buyer.trim(),buyerVerification:'not_started' as const,viewerRole:'buyer' as const};setActive(deal);setAcceptanceProtected(false);setDeals(x=>x.map(d=>d.id===deal.id?deal:d))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not accept this deal')}};
+  const accept=async()=>{if(!active||!buyer.trim()||!agreementConfirmed)return;if(active.publicId===DEMO_DEAL_PUBLIC_ID&&!session){setDemoCompleted(true);setAuthMessage('');window.requestAnimationFrame(()=>window.requestAnimationFrame(scrollToAgreement));return}if(isDealExpired(active)){setAuthMessage('This Deal Link can no longer be accepted.');return}if(acceptanceProtected&&!/^[0-9]{6}$/.test(buyerAccessCode)){setAuthMessage('Enter the 6-digit buyer code.');return}if(!session){setAuthMessage('Sign in or create an account to accept this deal.');setReturnAfterAuth('deal');setView('auth');return}try{await acceptPublicDeal(session,active.publicId,buyer.trim(),buyerAccessCode);const deal={...active,status:'accepted' as const,buyerName:buyer.trim(),buyerVerification:'not_started' as const,viewerRole:'buyer' as const};setActive(deal);setAcceptanceProtected(false);setDeals(x=>x.map(d=>d.id===deal.id?deal:d))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not accept this deal')}};
   const openCreate=()=>{setAuthMessage('');if(!user){setReturnAfterAuth('create');setView('auth');return}setDealTemplate('phone');setReviewingDraft(false);setView('create')};
-  const openDemo=async()=>{const sample=deals.find(deal=>deal.publicId===DEMO_DEAL_PUBLIC_ID)||(await demoRepository.list())[0];if(!sample)return;setAuthMessage('');setBuyer('');setAgreementChecks({item:false,price:false,handoff:false});setActive({...sample,viewerRole:'visitor'});setView('deal');window.scrollTo({top:0,behavior:'smooth'})};
+  const openDemo=async()=>{const sample=deals.find(deal=>deal.publicId===DEMO_DEAL_PUBLIC_ID)||(await demoRepository.list())[0];if(!sample)return;setAuthMessage('');setBuyer('');setAgreementChecks({item:false,price:false,handoff:false});setDemoCompleted(false);setActive({...sample,viewerRole:'visitor'});setView('deal');window.scrollTo({top:0,behavior:'smooth'})};
   const submitAuth=async(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');try{if(authMode==='signup'){const result=await signUp(authForm.email,authForm.password,authForm.displayName);if(result.session){setSession(result.session);setView(returnAfterAuth)}else setAuthMessage('Check your email to confirm your account, then sign in.')}else{const nextSession=await signIn(authForm.email,authForm.password);setSession(nextSession);setView(returnAfterAuth)}}catch(error){setAuthMessage(error instanceof Error?error.message:'Something went wrong')}};
   const logout=()=>{signOut();setSession(null);setIsAdmin(false);setView('home')};
   const openProfile=async()=>{if(!session)return;setAuthMessage('');setView('profile');try{setProfile(await getMyProfileSummary(session))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not load profile')}};
@@ -1500,7 +1522,7 @@ export function App() {
   };
   const activeExpired=active?isDealExpired(active,clock):false;
   const isDemoActive=Boolean(active?.publicId===DEMO_DEAL_PUBLIC_ID&&!user);
-  const demoFlowCompleted=isDemoActive&&authMessage.startsWith('Demo complete');
+  const demoFlowCompleted=isDemoActive&&demoCompleted;
   const agreementActionReady=agreementConfirmed&&Boolean(buyer.trim())&&!demoFlowCompleted;
   const scrollToAgreement=()=>{
     const agreement=document.querySelector<HTMLElement>('.deal-grid aside');
@@ -1521,6 +1543,13 @@ export function App() {
       section.classList.add('deal-target-highlight');
       window.setTimeout(()=>section.classList.remove('deal-target-highlight'),1400);
     }));
+  };
+  const resetDemoFlow=()=>{
+    setAgreementChecks({item:false,price:false,handoff:false});
+    setBuyer('');
+    setAuthMessage('');
+    setDemoCompleted(false);
+    window.requestAnimationFrame(()=>window.requestAnimationFrame(scrollToAgreement));
   };
   const activePaymentReady=Boolean(active&&paymentReadyByDeal[active.id]);
   const activeActionPlan=active?actionPlanByDeal[active.id]:undefined;
@@ -1571,7 +1600,7 @@ export function App() {
   const currentPageLabel=getPageMetadata(view,active).label;
   const agreementDocumentMode=view==='deal'&&new URLSearchParams(location.search).get('document')==='1';
 
-  return <div className={`app view-${view}${agreementDocumentMode?' agreement-document-view':''}`}>
+  return <div className={`app view-${view}${agreementDocumentMode?' agreement-document-view':''}${demoFlowCompleted?' demo-flow-complete':''}`}>
     <a className="skip-link" href="#main-content">{t('Skip to main content')}</a>
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{t(currentPageLabel)}</div>
     <header className="site-header"><div className="header-inner">
@@ -1726,6 +1755,7 @@ export function App() {
               </div>
             </div>
           </div>
+          {demoFlowCompleted&&<aside className="demo-completion-aside"><div className="agreement"><DemoAgreementComplete buyerName={buyer.trim()} onStart={openCreate} onReviewAgain={resetDemoFlow}/></div></aside>}
           <aside><div className="agreement"><FileSignature/><h2>{t(active.status==='draft'?'Private draft':'Deal agreement')}</h2>{active.status==='draft'?<div className="draft-agreement-notice"><LockKeyhole/><div><b>{t('Not published')}</b><span>{t('This draft is not shared through a Deal Link until you publish it.')}</span></div></div>:<><p>{t('Version')} {active.agreementVersion} · {t('The buyer agrees to the stated price, condition disclosures, and handoff method.')}</p>{active.status==='published'&&!activeExpired?(active.viewerRole==='seller'?<><ul><li><Check/>{t('Item and defects reviewed')}</li><li><Check/>{t('Price confirmed')}</li><li><Check/>{t('Handoff terms confirmed')}</li></ul><div className="waiting-buyer"><Clock3/><div><b>{t('Waiting for buyer')}</b><span>{t('The buyer must review and accept this agreement from their own account.')}</span></div></div></>:<><p className="agreement-instruction">{t('Review agreement')}</p><ul className="agreement-confirm-list"><li className={agreementChecks.item?'checked':''}><label><input type="checkbox" checked={agreementChecks.item} onChange={event=>setAgreementChecks(current=>({...current,item:event.target.checked}))}/><span>{t('Item and defects reviewed')}</span></label></li><li className={agreementChecks.price?'checked':''}><label><input type="checkbox" checked={agreementChecks.price} onChange={event=>setAgreementChecks(current=>({...current,price:event.target.checked}))}/><span>{t('Price confirmed')}</span></label></li><li className={agreementChecks.handoff?'checked':''}><label><input type="checkbox" checked={agreementChecks.handoff} onChange={event=>setAgreementChecks(current=>({...current,handoff:event.target.checked}))}/><span>{t('Handoff terms confirmed')}</span></label></li></ul><label>{t('Your full name')}<input placeholder={t('Buyer name')} value={buyer} onChange={e=>setBuyer(e.target.value)}/></label>{authMessage&&<div className="notice">{t(authMessage)}</div>}<button className="primary full" disabled={!agreementActionReady} onClick={accept}>{t('Accept these terms')}</button><small>{t(agreementActionReady?'Your name records consent to this agreement version.':'Complete all three confirmations and enter your full name.')}</small></>):activeExpired?<AgreementExpiredNotice/>:<><ul><li><Check/>{t('Item and defects reviewed')}</li><li><Check/>{t('Price confirmed')}</li><li><Check/>{t('Handoff terms confirmed')}</li></ul><div className="accepted"><BadgeCheck/><div><b>{t('Terms accepted')}</b><span>{active.buyerName||t('Buyer')} · {t('verification pending')}</span></div></div></>}</>}</div>{active.status!=='draft'&&!isDemoActive&&<><button className="copy" onClick={()=>navigator.clipboard?.writeText(`${location.origin}/?deal=${active.publicId}`)}><Copy size={16}/>{t('Copy Deal Link')}</button><DealQrCode deal={active}/></>}</aside>
         </div>
         {active.status!=='draft'&&<AgreementPrintDocument deal={active}/>}
@@ -1734,3 +1764,4 @@ export function App() {
     </main><footer><div><strong>DealSafe</strong><span>Global vision · U.S. launch · English (US) · USD</span></div><nav aria-label={t('Legal and protection')}><a href={publicInfoPaths['buyer-protection']} onClick={event=>{event.preventDefault();openInfo('buyer-protection')}}>{t('Buyer protection')}</a><a href={publicInfoPaths['seller-protection']} onClick={event=>{event.preventDefault();openInfo('seller-protection')}}>{t('Seller protection')}</a><a href={publicInfoPaths.fees} onClick={event=>{event.preventDefault();openInfo('fees')}}>{t('Fees')}</a><a href={publicInfoPaths.disputes} onClick={event=>{event.preventDefault();openInfo('disputes')}}>{t('Disputes')}</a><a href={verifyPath} onClick={event=>{event.preventDefault();openVerify()}}>{t('Verify agreement')}</a><a href={publicInfoPaths.terms} onClick={event=>{event.preventDefault();openInfo('terms')}}>{t('Terms')}</a><a href={publicInfoPaths.privacy} onClick={event=>{event.preventDefault();openInfo('privacy')}}>{t('Privacy')}</a></nav></footer>
   </div>
 }
+
