@@ -548,6 +548,28 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .create-flow-heading>.back{margin-bottom:8px}
 .create-flow-heading>h1{margin:6px 0 8px;font-size:clamp(32px,4vw,44px);line-height:1.08;letter-spacing:-.045em}
 .create-flow-heading>.lede{max-width:670px;margin:0;color:#60748b}
+.create-draft-recovery{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:12px;
+  padding:13px 15px;
+  border:1px solid #cbdcf7;
+  border-radius:16px;
+  color:#26435f;
+  background:linear-gradient(135deg,#f7faff,#eef5ff);
+  box-shadow:0 10px 28px rgba(44,84,145,.07)
+}
+.create-draft-recovery.is-recovered{border-color:#a9c6f4;background:linear-gradient(135deg,#f2f7ff,#e8f2ff)}
+.create-draft-recovery-icon{display:grid;width:36px;height:36px;place-items:center;border-radius:11px;color:#2459b5;background:#fff;box-shadow:0 4px 12px rgba(38,86,163,.12)}
+.create-draft-recovery-icon svg{width:18px}
+.create-draft-recovery>div{min-width:0}
+.create-draft-recovery strong,.create-draft-recovery span,.create-draft-recovery small{display:block}
+.create-draft-recovery strong{font:800 13px Manrope,sans-serif}
+.create-draft-recovery span{margin-top:2px;color:#54708d;font-size:11px}
+.create-draft-recovery small{margin-top:3px;color:#75889c;font-size:9px}
+.create-draft-recovery button{display:inline-flex;min-height:36px;align-items:center;gap:6px;padding:0 11px;border:1px solid #c7d4e4;border-radius:10px;color:#405a74;font:800 10px Manrope,sans-serif;background:#fff}
+.create-draft-recovery button:hover{border-color:#9fb6d1;color:#173f76}
 .create-step-layout{
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(320px,.78fr);
@@ -654,6 +676,9 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .create-flow-progress strong{margin:0;font-size:10px;white-space:normal}
   .create-flow-heading{width:100%;padding:2px 4px 0}
   .create-flow-heading>h1{font-size:30px}
+  .create-draft-recovery{grid-template-columns:auto minmax(0,1fr);padding:11px 12px}
+  .create-draft-recovery small{display:none}
+  .create-draft-recovery>button{grid-column:2;justify-self:start}
   .create-step-layout,.create-media-step{grid-template-columns:1fr}
   .create-step-layout>.deal-template-picker{padding:18px}
   .create-step-layout .deal-template-grid{grid-template-columns:repeat(2,minmax(0,1fr))}

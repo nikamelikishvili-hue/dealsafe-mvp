@@ -1131,6 +1131,66 @@ function FilePreview({file,alt}:{file:File;alt:string}){const source=URL.createO
 
 type SellerDeclarations={authority:boolean;lawful:boolean;disclosure:boolean};
 const emptySellerDeclarations:SellerDeclarations={authority:false,lawful:false,disclosure:false};
+type GuestCreateDraftRecovery={
+  version:1;
+  savedAt:number;
+  draft:DealDraft;
+  dealTemplate:DealTemplateId;
+  createStep:CreateFlowStep;
+  reviewingDraft:boolean;
+};
+const guestCreateDraftKey='dealivra:guest-create-draft:v1';
+const guestCreateDraftLifetime=7*24*60*60*1000;
+const isCreateDraftMeaningful=(draft:DealDraft,template:DealTemplateId)=>Boolean(
+  draft.title.trim()||
+  draft.description.trim()||
+  draft.price.trim()||
+  template!=='phone'||
+  draft.condition!=='Good'||
+  draft.deliveryMethod!=='Meet in person'||
+  draft.expiresInDays!==7
+);
+const clearGuestCreateDraft=()=>{
+  try{window.localStorage.removeItem(guestCreateDraftKey)}catch{}
+};
+const readGuestCreateDraft=():GuestCreateDraftRecovery|null=>{
+  try{
+    const raw=window.localStorage.getItem(guestCreateDraftKey);
+    if(!raw)return null;
+    const stored=JSON.parse(raw) as Partial<GuestCreateDraftRecovery>;
+    if(stored.version!==1||typeof stored.savedAt!=='number'||Date.now()-stored.savedAt>guestCreateDraftLifetime||!stored.draft){
+      clearGuestCreateDraft();
+      return null;
+    }
+    const template=dealTemplates.some(item=>item.id===stored.dealTemplate)?stored.dealTemplate!:'phone';
+    const step=([1,2,3,4] as CreateFlowStep[]).includes(stored.createStep as CreateFlowStep)?stored.createStep as CreateFlowStep:1;
+    const condition=(['Like new','Good','Fair'] as DealDraft['condition'][]).includes(stored.draft.condition as DealDraft['condition'])?stored.draft.condition as DealDraft['condition']:'Good';
+    const deliveryMethod=(['Meet in person','Ship to buyer'] as DealDraft['deliveryMethod'][]).includes(stored.draft.deliveryMethod as DealDraft['deliveryMethod'])?stored.draft.deliveryMethod as DealDraft['deliveryMethod']:'Meet in person';
+    const expiresInDays=([1,3,7,14,30] as number[]).includes(stored.draft.expiresInDays as number)?stored.draft.expiresInDays as number:7;
+    const draft:DealDraft={
+      title:typeof stored.draft.title==='string'?stored.draft.title:'',
+      description:typeof stored.draft.description==='string'?stored.draft.description:'',
+      price:typeof stored.draft.price==='string'?stored.draft.price:'',
+      currency:'USD',
+      condition,
+      serialNumber:'',
+      deliveryMethod,
+      expiresInDays
+    };
+    if(!isCreateDraftMeaningful(draft,template)){
+      clearGuestCreateDraft();
+      return null;
+    }
+    const reviewingDraft=Boolean(stored.reviewingDraft&&draft.title.trim().length>=3&&Number(draft.price)>0&&draft.description.trim().length>=20);
+    return {version:1,savedAt:stored.savedAt,draft,dealTemplate:template,createStep:step,reviewingDraft};
+  }catch{
+    clearGuestCreateDraft();
+    return null;
+  }
+};
+const writeGuestCreateDraft=(recovery:GuestCreateDraftRecovery)=>{
+  try{window.localStorage.setItem(guestCreateDraftKey,JSON.stringify(recovery))}catch{}
+};
 function SellerDeclarationChecklist({value,onChange,id}:{value:SellerDeclarations;onChange:(next:SellerDeclarations)=>void;id?:string}){
   const items=[{key:'authority' as const,label:'I confirm I own this item or have authority to sell it.'},{key:'lawful' as const,label:'I confirm this item is not stolen, counterfeit, or prohibited by law.'},{key:'disclosure' as const,label:'I confirm the description includes all known defects and material facts.'}];
   return <fieldset id={id} className="seller-declarations"><legend><ShieldCheck/>{t('Seller declaration')}</legend>{items.map(item=><label key={item.key} className={value[item.key]?'checked':''}><input type="checkbox" checked={value[item.key]} onChange={event=>onChange({...value,[item.key]:event.target.checked})}/><span>{t(item.label)}</span></label>)}<small><LockKeyhole/>{t('These confirmations are recorded when the Deal Link is published.')}</small></fieldset>;
@@ -1588,10 +1648,11 @@ function PublicInfoPage({view,onBack,onCreate}:{view:PublicInfoView;onBack:()=>v
 
 export function App() {
   const initialSession=getStoredSession();
+  const [recoveredCreateDraft]=useState(()=>initialSession?null:readGuestCreateDraft());
   const entryIntent=new URLSearchParams(location.search).get('start');
   const recoveryParams=new URLSearchParams(location.hash.slice(1));const recoveryToken=recoveryParams.get('type')==='recovery'?recoveryParams.get('access_token')||'':'';
   const entryView:View=recoveryToken?'reset':entryIntent==='create'?'create':entryIntent==='signin'||entryIntent==='signup'?'auth':viewFromPath();
-  const [view,setView]=useState<View>(entryView); const [deals,setDeals]=useState<Deal[]>([]); const [active,setActive]=useState<Deal>(); const [draft,setDraft]=useState(initial); const [buyer,setBuyer]=useState('');
+  const [view,setView]=useState<View>(entryView); const [deals,setDeals]=useState<Deal[]>([]); const [active,setActive]=useState<Deal>(); const [draft,setDraft]=useState<DealDraft>(()=>recoveredCreateDraft?.draft||{...initial}); const [buyer,setBuyer]=useState('');
   const [session,setSession]=useState<StoredSession|null>(initialSession);
   const user=session?.user??null;
   const [authMode,setAuthMode]=useState<'signin'|'signup'>(entryIntent==='signin'?'signin':'signup');
@@ -1602,7 +1663,7 @@ export function App() {
   const [authForm,setAuthForm]=useState({displayName:'',email:'',password:''});
   const [authMessage,setAuthMessage]=useState('');
   const [photos,setPhotos]=useState<File[]>([]);
-  const [dealTemplate,setDealTemplate]=useState<DealTemplateId>('phone');
+  const [dealTemplate,setDealTemplate]=useState<DealTemplateId>(()=>recoveredCreateDraft?.dealTemplate||'phone');
   const [agreementChecks,setAgreementChecks]=useState({item:false,price:false,handoff:false});
   const [demoCompleted,setDemoCompleted]=useState(false);
   const [acceptanceProtected,setAcceptanceProtected]=useState(false);
@@ -1612,10 +1673,12 @@ export function App() {
   const [shippingReadinessByDeal,setShippingReadinessByDeal]=useState<Record<string,ShippingNavigationReadiness>>({});
   const [evidenceRevision,setEvidenceRevision]=useState(0);
   const [creating,setCreating]=useState(false);
-  const [createStep,setCreateStep]=useState<CreateFlowStep>(1);
-  const [reviewingDraft,setReviewingDraft]=useState(false);
+  const [createStep,setCreateStep]=useState<CreateFlowStep>(()=>recoveredCreateDraft?.createStep||1);
+  const [reviewingDraft,setReviewingDraft]=useState(()=>Boolean(recoveredCreateDraft?.reviewingDraft));
   const [sellerDeclarations,setSellerDeclarations]=useState<SellerDeclarations>(emptySellerDeclarations);
   const [pendingCreateAction,setPendingCreateAction]=useState<'save'|'publish'|null>(null);
+  const [draftRecovered,setDraftRecovered]=useState(Boolean(recoveredCreateDraft));
+  const [draftSavedAt,setDraftSavedAt]=useState<number|null>(recoveredCreateDraft?.savedAt||null);
   const selectedDealTemplate=dealTemplates.find(item=>item.id===dealTemplate)||dealTemplates[0];
   const identifierEntered=Boolean(draft.serialNumber.trim());
   const identifierValid=!identifierEntered||new RegExp(`^(?:${selectedDealTemplate.identifierPattern})$`,'i').test(draft.serialNumber.trim());
@@ -1662,6 +1725,31 @@ export function App() {
   useEffect(()=>{const updated=(event:Event)=>setSession((event as CustomEvent<StoredSession>).detail);const expired=()=>{setSession(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')};window.addEventListener(sessionUpdatedEvent,updated);window.addEventListener(sessionExpiredEvent,expired);return()=>{window.removeEventListener(sessionUpdatedEvent,updated);window.removeEventListener(sessionExpiredEvent,expired)}},[]);
   useEffect(()=>{if(session){listUserDeals(session).then(setDeals).catch(()=>setDeals([]))}else{demoRepository.list().then(setDeals)}},[session]);
   useEffect(()=>{if(session)getMySavedDeals(session).then(setSavedDeals).catch(()=>setSavedDeals([]));else setSavedDeals([])},[session]);
+  useEffect(()=>{
+    if(session){
+      clearGuestCreateDraft();
+      setDraftSavedAt(null);
+      return;
+    }
+    if(!isCreateDraftMeaningful(draft,dealTemplate)){
+      clearGuestCreateDraft();
+      setDraftSavedAt(null);
+      return;
+    }
+    const timer=window.setTimeout(()=>{
+      const savedAt=Date.now();
+      writeGuestCreateDraft({
+        version:1,
+        savedAt,
+        draft:{...draft,serialNumber:''},
+        dealTemplate,
+        createStep,
+        reviewingDraft
+      });
+      setDraftSavedAt(savedAt);
+    },450);
+    return()=>window.clearTimeout(timer);
+  },[draft,dealTemplate,createStep,reviewingDraft,session]);
   useEffect(()=>{if(!session?.refreshToken)return;const renew=()=>{if(!session.expiresAt||session.expiresAt-Date.now()<10*60*1000)refreshSession(session).then(setSession).catch(()=>{signOut();setSession(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')})};renew();const timer=setInterval(renew,5*60*1000);return()=>clearInterval(timer)},[session?.refreshToken,session?.expiresAt]);
   useEffect(()=>{if(!session){setNotifications([]);return}const load=()=>getMyNotifications(session).then(setNotifications).catch(()=>setNotifications([]));void load();const timer=window.setInterval(()=>void load(),30_000);return()=>window.clearInterval(timer)},[session?.accessToken]);
   useEffect(()=>{if(view!=='deal'||!active||!session)return;setNotifications(items=>items.map(item=>item.deal_id===active.id?{...item,is_read:true}:item));void markDealNotificationsRead(session,active.id).catch(()=>{})},[view,active?.id,session?.accessToken]);
@@ -1681,7 +1769,7 @@ export function App() {
   },[active?.id,active?.viewerRole,active?.status,active?.deliveryMethod,session?.accessToken,evidenceRevision]);
   const goToCreateStep=(step:CreateFlowStep)=>{if(step>createAvailableStep)return;setAuthMessage('');setReviewingDraft(step===4);if(step<4)setCreateStep(step);window.requestAnimationFrame(()=>document.getElementById('create-deal-flow')?.scrollIntoView({behavior:'smooth',block:'start'}))};
   const reviewDraft=(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');if(!createItemReady){setCreateStep(1);return}if(!createTermsReady){setCreateStep(2);return}setReviewingDraft(true);window.scrollTo({top:0,behavior:'smooth'})};
-  const resetCreateFlow=()=>{setDraft(initial);setPhotos([]);setDealTemplate('phone');setCreateStep(1);setReviewingDraft(false);setSellerDeclarations(emptySellerDeclarations);setPendingCreateAction(null)};
+  const resetCreateFlow=()=>{clearGuestCreateDraft();setDraft({...initial});setPhotos([]);setDealTemplate('phone');setCreateStep(1);setReviewingDraft(false);setSellerDeclarations(emptySellerDeclarations);setPendingCreateAction(null);setDraftRecovered(false);setDraftSavedAt(null)};
   const publishDraft=async(activeSession:StoredSession)=>{if(creating)return;setCreating(true);setAuthMessage('');try{let deal=await createUserDeal(activeSession,draft);setDeals(x=>[deal,...x]);setActive(deal);if(photos.length){try{const mediaUrls=await uploadDealPhotos(activeSession,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Deal created, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}resetCreateFlow();setActive(deal);setView('published')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save this deal');setView('create')}finally{setCreating(false)}};
   const saveDraftForSession=async(activeSession:StoredSession)=>{if(creating)return;setCreating(true);setAuthMessage('');try{let deal=await saveUserDealDraft(activeSession,draft);setDeals(items=>[deal,...items]);setActive(deal);if(photos.length){try{const mediaUrls=await uploadDealPhotos(activeSession,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Draft saved, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}resetCreateFlow();setView('deal')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save draft');setView('create')}finally{setCreating(false)}};
   const requestCreateAction=(action:'save'|'publish')=>{
@@ -1695,7 +1783,7 @@ export function App() {
   const open=(d:Deal)=>{setActive(d);setView('deal')};
   const agreementConfirmed=Object.values(agreementChecks).every(Boolean);
   const accept=async()=>{if(!active||!buyer.trim()||!agreementConfirmed)return;if(active.publicId===DEMO_DEAL_PUBLIC_ID&&!session){setDemoCompleted(true);setAuthMessage('');window.requestAnimationFrame(()=>window.requestAnimationFrame(scrollToAgreement));return}if(isDealExpired(active)){setAuthMessage('This Deal Link can no longer be accepted.');return}if(acceptanceProtected&&!/^[0-9]{6}$/.test(buyerAccessCode)){setAuthMessage('Enter the 6-digit buyer code.');return}if(!session){setAuthMessage('Sign in or create an account to accept this deal.');setReturnAfterAuth('deal');setView('auth');return}try{await acceptPublicDeal(session,active.publicId,buyer.trim(),buyerAccessCode);const deal={...active,status:'accepted' as const,buyerName:buyer.trim(),buyerVerification:'not_started' as const,viewerRole:'buyer' as const};setActive(deal);setAcceptanceProtected(false);setDeals(x=>x.map(d=>d.id===deal.id?deal:d))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not accept this deal')}};
-  const openCreate=()=>{setAuthMessage('');resetCreateFlow();setView('create')};
+  const openCreate=()=>{setAuthMessage('');if(session||!isCreateDraftMeaningful(draft,dealTemplate))resetCreateFlow();setView('create')};
   const openDemo=async()=>{const sample=deals.find(deal=>deal.publicId===DEMO_DEAL_PUBLIC_ID)||(await demoRepository.list())[0];if(!sample)return;setAuthMessage('');setBuyer('');setAgreementChecks({item:false,price:false,handoff:false});setDemoCompleted(false);setActive({...sample,viewerRole:'visitor'});setView('deal');window.scrollTo({top:0,behavior:'smooth'})};
   const finishAuthentication=async(nextSession:StoredSession)=>{
     setSession(nextSession);
@@ -1823,6 +1911,8 @@ export function App() {
   const pendingAuthAction=authMode==='signup'
     ? pendingCreateAction==='save'?'Create account & save':'Create account & publish'
     : pendingCreateAction==='save'?'Sign in & save':'Sign in & publish';
+  const createDraftRecoveryVisible=!session&&isCreateDraftMeaningful(draft,dealTemplate);
+  const createDraftRecoveryTime=draftSavedAt?new Date(draftSavedAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}):'Saving…';
 
   return <div className={`app view-${view}${agreementDocumentMode?' agreement-document-view':''}${demoFlowCompleted?' demo-flow-complete':''}`}>
     <a className="skip-link" href="#main-content">{t('Skip to main content')}</a>
@@ -1937,6 +2027,11 @@ export function App() {
       {view==='auth'&&<section className="form-wrap auth-wrap"><button className="back" onClick={()=>{if(returnAfterAuth==='create'){setPendingCreateAction(null);setView('create');return}setView('home')}}>← {t(returnAfterAuth==='create'?'Back to draft':'Back')}</button><p className="eyebrow">{pendingCreateAction?'FINAL STEP · ACCOUNT':authMode==='signup'?'START YOUR PRIVATE DEAL':'DEALIVRA ACCOUNT'}</p><h1>{t(pendingCreateAction?pendingAuthTitle:(authMode==='signup'?'Create your account to start a deal.':'Welcome back'))}</h1><p className="auth-market-note">{pendingCreateAction?'Your completed draft is ready. Sign in or create an account, and Dealivra will finish the action you selected.':authMode==='signup'?'Save the item, terms, and handoff details in one private record. Setup takes about a minute.':'Sign in to continue your active deals and saved records.'}</p>{authMode==='signup'&&<ol className="auth-journey" aria-label="Deal setup progress"><li className={pendingCreateAction?'is-complete':'is-current'}><span>{pendingCreateAction?<Check size={15}/>:1}</span><div><strong>{pendingCreateAction?'Draft ready':'Account'}</strong><small>{pendingCreateAction?'Item and terms completed':'Create your secure profile'}</small></div></li><li className={pendingCreateAction?'is-current':''}><span>2</span><div><strong>{pendingCreateAction?'Account':'Deal details'}</strong><small>{pendingCreateAction?'Secure your private record':'Add item and terms'}</small></div></li><li><span>3</span><div><strong>Share link</strong><small>Invite the other party</small></div></li></ol>}<form onSubmit={submitAuth}>{authMode==='signup'&&<label>{t('Your name')}<input required autoComplete="name" placeholder="Alex Morgan" value={authForm.displayName} onChange={e=>setAuthForm({...authForm,displayName:e.target.value})}/></label>}<label>{t('Email')}<input required type="email" autoComplete="email" placeholder="you@example.com" value={authForm.email} onChange={e=>setAuthForm({...authForm,email:e.target.value})}/></label><label>{t('Password')}<span className="password-field"><input required minLength={8} type={passwordVisible?'text':'password'} autoComplete={authMode==='signup'?'new-password':'current-password'} placeholder={t('At least 8 characters')} value={authForm.password} onChange={e=>setAuthForm({...authForm,password:e.target.value})}/><button type="button" aria-label={t(passwordVisible?'Hide password':'Show password')} onClick={()=>setPasswordVisible(visible=>!visible)}>{passwordVisible?<EyeOff/>:<Eye/>}</button></span><small>{t('Use at least 8 characters. A longer, unique password is safer.')}</small></label>{authMode==='signup'&&<label className="policy-consent"><input required type="checkbox" checked={acceptedPolicies} onChange={event=>setAcceptedPolicies(event.target.checked)}/><span>I agree to the beta <a href={publicInfoPaths.terms} onClick={event=>{event.preventDefault();event.stopPropagation();openInfo('terms')}}>Terms</a> and acknowledge the <a href={publicInfoPaths.privacy} onClick={event=>{event.preventDefault();event.stopPropagation();openInfo('privacy')}}>Privacy notice</a>.</span></label>}{authMessage&&<div className="notice" role="status">{t(authMessage)}</div>}<button className="primary full" disabled={authMode==='signup'&&!acceptedPolicies}>{t(pendingCreateAction?pendingAuthAction:(authMode==='signup'?'Create account & continue':'Sign in'))}</button><button type="button" className="switch-auth" onClick={()=>{setAuthMode(authMode==='signup'?'signin':'signup');setAuthMessage('');setPasswordVisible(false);setAcceptedPolicies(false)}}>{t(authMode==='signup'?'Already have an account? Sign in':'New to Dealivra? Create account')}</button></form></section>}
       {view==='create'&&<section id="create-deal-flow" className="create-flow-shell">
         <CreateDealProgress current={reviewingDraft?4:createStep} available={createAvailableStep} onSelect={goToCreateStep}/>
+        {createDraftRecoveryVisible&&<section className={`create-draft-recovery ${draftRecovered?'is-recovered':''}`} aria-label={t('Draft recovery')}>
+          <span className="create-draft-recovery-icon"><Clock3/></span>
+          <div><strong>{t(draftRecovered?'Draft recovered':'Draft recovery is on')}</strong><span aria-live="polite">{t(draftRecovered?'Your item and terms were restored from this device. Review them before publishing.':`Saved privately on this device · ${createDraftRecoveryTime}`)}</span><small>{t('Photos, files, identifiers, and seller confirmations are never stored in browser recovery.')}</small></div>
+          <button type="button" onClick={resetCreateFlow}><Trash2 size={15}/>{t('Start over')}</button>
+        </section>}
         {!reviewingDraft&&<header className="create-flow-heading"><button className="back" onClick={()=>setView('home')}>← {t('Dashboard')}</button><p className="eyebrow">{t(createStepMeta[createStep].eyebrow)}</p><h1>{t(createStepMeta[createStep].title)}</h1><p className="lede small">{t(createStepMeta[createStep].description)}</p></header>}
         {!reviewingDraft&&createStep===1&&<div className="create-step-layout">
           <DealTemplatePicker selected={dealTemplate} onSelect={setDealTemplate}/>
