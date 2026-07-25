@@ -625,6 +625,14 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .view-create #main-content{grid-template-columns:minmax(0,1fr) 300px}
 }
 
+@media(max-width:900px){
+  .view-deal .deal-grid{grid-template-columns:1fr;gap:14px}
+  .view-deal .deal-grid>aside{order:-1}
+  .view-deal .agreement{position:static}
+  .view-deal .deal-workspace-next{display:none}
+  .view-deal .deal-workspace-bar nav{margin-left:auto}
+}
+
 @media(max-width:760px){
   .create-flow-shell{gap:14px}
   .create-flow-progress{top:67px;gap:4px;padding:6px;border-radius:14px}
