@@ -70,9 +70,10 @@ import './global-redesign.css';
 import './workspace-redesign.css';
 import './deal-workflow-modern.css';
 import './deal-sections-compact.css';
+import './published-success.css';
 
 type PublicInfoView='buyer-protection'|'seller-protection'|'fees'|'disputes'|'terms'|'privacy';
-type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset' | 'link-error' | 'verify' | PublicInfoView;
+type View = 'home' | 'create' | 'published' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset' | 'link-error' | 'verify' | PublicInfoView;
 type DealPrimaryAction={
   label:string;
   detail:string;
@@ -559,6 +560,80 @@ function AgreementPrintDocument({deal}:{deal:Deal}){
 }
 
 function BuyerInvitePanel({deal}:{deal:Deal}){const [notice,setNotice]=useState('');const link=`${location.origin}/?deal=${deal.publicId}`;const message=`${t('Review agreement')}: ${deal.title} · ${dealPrice(deal)} · ${link}`;const flash=(text:string)=>{setNotice(text);window.setTimeout(()=>setNotice(''),2200)};const copyText=async(text:string)=>{try{await navigator.clipboard?.writeText(text)}catch{}};const copy=async()=>{await copyText(link);flash('Deal Link copied.')};const sms=async()=>{await copyText(message);flash('Message copied. Paste it into SMS if needed.');window.location.href=/Android/i.test(navigator.userAgent)?`sms:?body=${encodeURIComponent(message)}`:'sms:'};const more=async()=>{try{if(!navigator.share)throw new Error('share-unavailable');await navigator.share({title:`DealSafe · ${deal.title}`,text:message,url:link})}catch(error){if(error instanceof Error&&error.name==='AbortError')return;await copyText(message);flash('Sharing is not available. Message copied.')}};return <section className="buyer-invite no-print"><div className="invite-heading"><Send/><div><p className="eyebrow">{t('Share')}</p><h2>{t('Invite buyer')}</h2><p>{t('Share this secure Deal Link with the buyer.')}</p></div></div><div className="invite-actions"><button className="secondary" onClick={copy}><Copy size={16}/>{t('Copy Deal Link')}</button><a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">WhatsApp</a><a href={`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(`${t('Review agreement')}: ${deal.title}`)}`} target="_blank" rel="noreferrer">Telegram</a><a href={`mailto:?subject=${encodeURIComponent(`DealSafe · ${deal.title}`)}&body=${encodeURIComponent(message)}`}>{t('Email')}</a><button className="secondary" onClick={sms}><MessageCircle size={16}/>{t('SMS')}</button><button className="secondary invite-more" onClick={more}><Share2 size={16}/>{t('More apps')}</button></div>{notice&&<div className="notice">{t(notice)}</div>}</section>}
+
+function PublishedDealSuccess({deal,warning,onOpen,onDashboard,onCreateAnother}:{deal:Deal;warning:string;onOpen:()=>void;onDashboard:()=>void;onCreateAnother:()=>void}){
+  const [notice,setNotice]=useState('');
+  const noticeTimer=useRef<number|undefined>(undefined);
+  const link=`${location.origin}/?deal=${deal.publicId}`;
+  const message=`Review this DealSafe agreement: ${deal.title} · ${dealPrice(deal)} · ${link}`;
+  useEffect(()=>()=>window.clearTimeout(noticeTimer.current),[]);
+  const flash=(text:string)=>{window.clearTimeout(noticeTimer.current);setNotice(text);noticeTimer.current=window.setTimeout(()=>setNotice(''),2200)};
+  const copy=async(value=link)=>{
+    try{
+      await navigator.clipboard.writeText(value);
+      flash(value===link?'Deal Link copied.':'Invitation message copied.');
+    }catch{
+      flash('Could not copy automatically. Select the link and copy it.');
+    }
+  };
+  const share=async()=>{
+    try{
+      if(!navigator.share)throw new Error('share-unavailable');
+      await navigator.share({title:`DealSafe · ${deal.title}`,text:message,url:link});
+    }catch(error){
+      if(error instanceof Error&&error.name==='AbortError')return;
+      await copy(message);
+    }
+  };
+  return <section className="published-success" aria-labelledby="published-success-title">
+    <div className="published-success-hero">
+      <span className="published-success-mark"><CircleCheckBig/></span>
+      <p className="eyebrow">{t('DEAL PUBLISHED')}</p>
+      <h1 id="published-success-title">{t('Your Deal Link is ready.')}</h1>
+      <p>{t('Send this private link to the buyer. They can review the item, price, disclosures, and handoff terms before accepting.')}</p>
+    </div>
+
+    {warning&&<div className="published-success-warning notice" role="alert"><ShieldAlert/><span>{t(warning)}</span></div>}
+
+    <div className="published-success-layout">
+      <section className="published-share-card" aria-labelledby="published-share-title">
+        <div className="published-deal-summary">
+          <span><Package/></span>
+          <div><small>{t('Deal')} {deal.publicId}</small><h2>{deal.title}</h2><p>{t(deal.condition)} · {t(deal.deliveryMethod)}</p></div>
+          <strong>{dealPrice(deal)}</strong>
+        </div>
+        <div className="published-link-block">
+          <label id="published-share-title" htmlFor="published-deal-link">{t('Private Deal Link')}</label>
+          <div><input id="published-deal-link" value={link} readOnly onFocus={event=>event.currentTarget.select()}/><button type="button" className="primary" onClick={()=>void copy()}><Copy size={18}/>{t('Copy link')}</button></div>
+          <small><LockKeyhole/>{t('Only share this link with the intended buyer.')}</small>
+        </div>
+        <div className="published-share-actions" aria-label={t('Share Deal Link')}>
+          <a href={`mailto:?subject=${encodeURIComponent(`DealSafe · ${deal.title}`)}&body=${encodeURIComponent(message)}`}><Send size={17}/>{t('Email')}</a>
+          <a href={`sms:?&body=${encodeURIComponent(message)}`}><MessageCircle size={17}/>{t('Text message')}</a>
+          <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer"><MessageCircle size={17}/>WhatsApp</a>
+          <button type="button" onClick={()=>void share()}><Share2 size={17}/>{t('More apps')}</button>
+        </div>
+        {notice&&<div className="published-copy-notice" role="status"><Check/>{t(notice)}</div>}
+      </section>
+
+      <aside className="published-next-card">
+        <div className="published-qr"><DealQrCode deal={deal}/></div>
+        <p className="eyebrow">{t('WHAT HAPPENS NEXT')}</p>
+        <ol>
+          <li><span>1</span><div><b>{t('Share the Deal Link')}</b><small>{t('Send it directly to the intended buyer.')}</small></div></li>
+          <li><span>2</span><div><b>{t('Buyer reviews and accepts')}</b><small>{t('Both parties work from the same agreement version.')}</small></div></li>
+          <li><span>3</span><div><b>{t('Continue in the Deal Room')}</b><small>{t('Follow payment, delivery, evidence, and completion in one place.')}</small></div></li>
+        </ol>
+      </aside>
+    </div>
+
+    <div className="published-success-actions">
+      <button type="button" className="primary" onClick={onOpen}>{t('Open Deal Room')}<ArrowRight size={18}/></button>
+      <button type="button" className="secondary" onClick={onDashboard}>{t('Back to dashboard')}</button>
+      <button type="button" className="published-create-another" onClick={onCreateAnother}><Plus size={17}/>{t('Create another deal')}</button>
+    </div>
+  </section>;
+}
 
 function BuyerAccessCodeManager({deal,session,enabled,onChanged}:{deal:Deal;session:StoredSession;enabled:boolean;onChanged:(enabled:boolean)=>void}){
   const [code,setCode]=useState('');const [message,setMessage]=useState('');const [busy,setBusy]=useState(false);const [copied,setCopied]=useState(false);
@@ -1368,7 +1443,7 @@ const publicInfoContent:Record<PublicInfoView,{eyebrow:string;title:string;intro
 type PageMetadata={label:string;title:string;description:string;path:string;indexable:boolean};
 const siteOrigin='https://dealsafe-mvp.vercel.app';
 const privateViewLabels:Partial<Record<View,string>>={
-  auth:'DealSafe account',create:'Start a deal',deal:'Deal record',profile:'Trust profile',
+  auth:'DealSafe account',create:'Start a deal',published:'Deal Link ready',deal:'Deal record',profile:'Trust profile',
   passport:'Digital Trust Passport',admin:'Admin',forgot:'Reset password',reset:'Choose a new password','link-error':'Deal Link unavailable',
   verify:'Verify an agreement'
 };
@@ -1517,7 +1592,7 @@ export function App() {
   },[active?.id,active?.viewerRole,active?.status,active?.deliveryMethod,session?.accessToken,evidenceRevision]);
   const goToCreateStep=(step:CreateFlowStep)=>{if(step>createAvailableStep)return;setAuthMessage('');setReviewingDraft(step===4);if(step<4)setCreateStep(step);window.requestAnimationFrame(()=>document.getElementById('create-deal-flow')?.scrollIntoView({behavior:'smooth',block:'start'}))};
   const reviewDraft=(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');if(!createItemReady){setCreateStep(1);return}if(!createTermsReady){setCreateStep(2);return}setReviewingDraft(true);window.scrollTo({top:0,behavior:'smooth'})};
-  const create=async()=>{if(!session||creating)return;setCreating(true);setAuthMessage('');try{let deal=await createUserDeal(session,draft);setDeals(x=>[deal,...x]);setActive(deal);setDraft(initial);setDealTemplate('phone');setCreateStep(1);setReviewingDraft(false);setView('deal');if(photos.length){try{const mediaUrls=await uploadDealPhotos(session,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Deal created, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}setPhotos([])}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save this deal')}finally{setCreating(false)}};
+  const create=async()=>{if(!session||creating)return;setCreating(true);setAuthMessage('');try{let deal=await createUserDeal(session,draft);setDeals(x=>[deal,...x]);setActive(deal);setDraft(initial);setDealTemplate('phone');setCreateStep(1);setReviewingDraft(false);if(photos.length){try{const mediaUrls=await uploadDealPhotos(session,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Deal created, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}setPhotos([]);setActive(deal);setView('published')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save this deal')}finally{setCreating(false)}};
   const saveDraft=async()=>{if(!session||creating)return;setCreating(true);setAuthMessage('');try{let deal=await saveUserDealDraft(session,draft);setDeals(items=>[deal,...items]);setActive(deal);setDraft(initial);setDealTemplate('phone');setCreateStep(1);setReviewingDraft(false);setView('deal');if(photos.length){try{const mediaUrls=await uploadDealPhotos(session,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Draft saved, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}setPhotos([])}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save draft')}finally{setCreating(false)}};
   const open=(d:Deal)=>{setActive(d);setView('deal')};
   const agreementConfirmed=Object.values(agreementChecks).every(Boolean);
@@ -1649,6 +1724,7 @@ export function App() {
       {Object.prototype.hasOwnProperty.call(publicInfoPaths,view)&&<PublicInfoPage view={view as PublicInfoView} onBack={()=>goHomeSection()} onCreate={openCreate}/>}
       {view==='home'&&<InstallApp/>}
       {view==='admin'&&session&&isAdmin&&<><AdminRevenueCenter session={session} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/><AdminDisputeCenter session={session}/><AdminReportCenter session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/></>}
+      {view==='published'&&active&&<PublishedDealSuccess deal={active} warning={authMessage} onOpen={()=>{setAuthMessage('');setView('deal')}} onDashboard={()=>goHomeSection()} onCreateAnother={openCreate}/>}
       {view==='create'&&authMessage&&<div className="creation-error notice">{t(authMessage)}</div>}
       {view==='create'&&creating&&<div className="creation-progress notice">{t('Creating your Deal Link…')}</div>}
       {view==='deal'&&active&&!isDemoActive&&<div className="deal-workspace-sections">
@@ -1794,4 +1870,3 @@ export function App() {
     </main><footer><div><strong>DealSafe</strong><span>Global vision · U.S. launch · English (US) · USD</span></div><nav aria-label={t('Legal and protection')}><a href={publicInfoPaths['buyer-protection']} onClick={event=>{event.preventDefault();openInfo('buyer-protection')}}>{t('Buyer protection')}</a><a href={publicInfoPaths['seller-protection']} onClick={event=>{event.preventDefault();openInfo('seller-protection')}}>{t('Seller protection')}</a><a href={publicInfoPaths.fees} onClick={event=>{event.preventDefault();openInfo('fees')}}>{t('Fees')}</a><a href={publicInfoPaths.disputes} onClick={event=>{event.preventDefault();openInfo('disputes')}}>{t('Disputes')}</a><a href={verifyPath} onClick={event=>{event.preventDefault();openVerify()}}>{t('Verify agreement')}</a><a href={publicInfoPaths.terms} onClick={event=>{event.preventDefault();openInfo('terms')}}>{t('Terms')}</a><a href={publicInfoPaths.privacy} onClick={event=>{event.preventDefault();openInfo('privacy')}}>{t('Privacy')}</a></nav></footer>
   </div>
 }
-
