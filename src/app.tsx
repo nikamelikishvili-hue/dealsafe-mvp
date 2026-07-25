@@ -1554,14 +1554,28 @@ export function App() {
           {active.viewerRole!=='seller'&&active.status==='published'&&!activeExpired&&acceptanceProtected&&<BuyerAccessCodeEntry value={buyerAccessCode} onChange={setBuyerAccessCode}/>}
           {active.status==='published'&&<DealInquiries deal={active} session={session} onSignIn={()=>{setReturnAfterAuth('deal');setView('auth')}}/>}
           {session&&active.status==='published'&&!activeExpired&&<OfferPanel deal={active} session={session} onAccepted={amount=>{const updated={...active,priceCents:amount,status:'accepted' as const};setActive(updated);setDeals(items=>items.map(item=>item.id===active.id?updated:item))}}/>}
-          {session&&active.viewerRole!=='visitor'&&(['accepted','completed','disputed','cancelled'] as Deal['status'][]).includes(active.status)&&<div className={`deal-fulfillment-grid ${active.deliveryMethod==='Ship to buyer'&&(['accepted','completed'] as Deal['status'][]).includes(active.status)?'has-shipping':'is-single'}`}>
+          {session&&active.viewerRole!=='visitor'&&(['accepted','completed','disputed','cancelled'] as Deal['status'][]).includes(active.status)&&<div className="deal-fulfillment-grid is-single">
             <ProtectedPaymentPanel deal={active} session={session} onChanged={ready=>setPaymentReadyByDeal(current=>({...current,[active.id]:ready}))}/>
-            {active.deliveryMethod==='Ship to buyer'&&(['accepted','completed'] as Deal['status'][]).includes(active.status)&&<div id="shipping-panel"><ShippingPanel deal={active} session={session} paymentReady={Boolean(paymentReadyByDeal[active.id])} evidenceRevision={evidenceRevision} onDelivered={()=>{const updated={...active,status:'completed' as const};setActive(updated);setDeals(items=>items.map(item=>item.id===active.id?updated:item))}}/></div>}
           </div>}
-          {session&&active.viewerRole!=='visitor'&&active.deliveryMethod==='Ship to buyer'&&(['accepted','completed','disputed'] as Deal['status'][]).includes(active.status)&&<div className="deal-shipping-protection">
+          {session&&active.viewerRole==='seller'&&active.deliveryMethod==='Ship to buyer'&&(['accepted','completed'] as Deal['status'][]).includes(active.status)&&<div className="deal-shipping-protection is-prerequisite">
+            <div className="deal-shipping-protection-intro">
+              <span className="shipping-sequence-number" aria-hidden="true">1</span>
+              <div><p className="eyebrow">{t('Step 1 · Required before shipping')}</p><h2>{t('Prepare the protected shipping record')}</h2><p>{t('Document the condition, packing, weight, and serial number first. Shipping unlocks automatically when the required evidence is saved.')}</p></div>
+            </div>
+            <EvidencePanel deal={active} session={session} onChanged={()=>setEvidenceRevision(value=>value+1)}/>
+          </div>}
+          {session&&active.viewerRole!=='visitor'&&active.deliveryMethod==='Ship to buyer'&&(['accepted','completed'] as Deal['status'][]).includes(active.status)&&<div className={`deal-shipping-stage ${active.viewerRole==='seller'?'follows-evidence':''}`}>
+            {active.viewerRole==='seller'&&<div className="deal-shipping-stage-marker">
+              <span aria-hidden="true">2</span>
+              <div><p className="eyebrow">{t('Step 2 · Shipping')}</p><strong>{t('Add carrier and tracking')}</strong><small>{t('This step becomes available as soon as the required package evidence is complete.')}</small></div>
+              <ArrowRight aria-hidden="true"/>
+            </div>}
+            <div id="shipping-panel"><ShippingPanel deal={active} session={session} paymentReady={Boolean(paymentReadyByDeal[active.id])} evidenceRevision={evidenceRevision} onDelivered={()=>{const updated={...active,status:'completed' as const};setActive(updated);setDeals(items=>items.map(item=>item.id===active.id?updated:item))}}/></div>
+          </div>}
+          {session&&active.viewerRole!=='visitor'&&active.deliveryMethod==='Ship to buyer'&&(active.viewerRole!=='seller'||active.status==='disputed')&&(['accepted','completed','disputed'] as Deal['status'][]).includes(active.status)&&<div className="deal-shipping-protection is-arrival-evidence">
             <div className="deal-shipping-protection-intro">
               <span><ShieldCheck/></span>
-              <div><p className="eyebrow">{t('Required before shipping')}</p><h2>{t('Protection evidence')}</h2><p>{t('Add the condition, packing, weight, and serial evidence here. Shipping unlocks automatically when the required files are saved.')}</p></div>
+              <div><p className="eyebrow">{t(active.status==='disputed'?'Issue evidence':'After delivery')}</p><h2>{t(active.status==='disputed'?'Add evidence to the deal record':'Document the item on arrival')}</h2><p>{t(active.status==='disputed'?'Keep photos, videos, and supporting proof tied to this transaction.':'Record the delivery, packaging, and unboxing before using the item.')}</p></div>
             </div>
             <EvidencePanel deal={active} session={session} onChanged={()=>setEvidenceRevision(value=>value+1)}/>
           </div>}
