@@ -170,6 +170,56 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .view-deal .agreement h2{margin:10px 0 7px;font-size:20px}
 .view-deal .agreement p{font-size:13px}
 .view-deal .agreement-confirm-list label{padding:9px 10px}
+.deal-item-heading{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:end;
+  gap:5px 20px;
+}
+.deal-item-heading>.safe{
+  grid-column:1/-1;
+  width:max-content;
+  max-width:100%;
+  min-height:30px;
+  padding:6px 10px;
+  border-radius:999px;
+  color:#236a4d;
+  background:#edf7f1;
+}
+.deal-item-heading>.safe.pending{color:#8c6720;background:#fff7df}
+.deal-item-title{min-width:0}
+.deal-item-title .eyebrow{margin:4px 0 0}
+.view-deal .deal-item-title h1{margin:6px 0 0}
+.deal-item-heading>.price{
+  padding-bottom:4px;
+  color:#172b45;
+  white-space:nowrap;
+}
+.deal-item-body{
+  display:grid;
+  grid-template-columns:minmax(230px,.82fr) minmax(0,1.18fr);
+  align-items:start;
+  gap:24px;
+  margin-top:18px;
+  padding-top:18px;
+  border-top:1px solid #e4eaf1;
+}
+.deal-item-body>.product-art,
+.deal-item-body>.screen-media-gallery{min-width:0;margin:0}
+.deal-item-body .product-art{height:178px;margin:0}
+.deal-item-body .product-art-empty{padding:18px}
+.deal-item-body .product-art-empty>svg{width:46px;height:46px}
+.deal-item-body .product-art-empty>span{display:none}
+.deal-item-body .product-art-empty>small{font-size:9px}
+.deal-item-body .product-media{height:210px;margin:0}
+.deal-item-body .supporting-gallery{margin:9px 0 0}
+.deal-item-details{min-width:0}
+.view-deal .deal-item-details h2{margin:0 0 8px;font-size:18px}
+.deal-item-details>p{margin:0;color:#586b80;font-size:13px;line-height:1.6}
+.deal-item-details .facts{margin-top:13px}
+.deal-item-details .facts div{gap:12px;padding:10px 0}
+.deal-item-details .facts span{color:#708197}
+.deal-item-details .facts b{text-align:right}
 .view-deal #main-content>section:not(.deal-page){
   width:min(960px,calc(100% - 44px));
   max-width:960px;
@@ -330,6 +380,20 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .view-deal .deal-grid>aside{scroll-margin-top:126px}
   .view-deal .deal-page h1{font-size:28px}
   .view-deal .product-art{height:210px}
+  .deal-item-heading{display:block}
+  .deal-item-heading>.safe{margin:0}
+  .deal-item-heading .deal-item-title,
+  .deal-item-heading>.price{display:none}
+  .deal-item-body{grid-template-columns:1fr;gap:14px;margin-top:12px;padding-top:12px}
+  .deal-item-body.no-media{grid-template-columns:104px minmax(0,1fr);align-items:stretch}
+  .deal-item-body .product-art{height:190px}
+  .deal-item-body.no-media .product-art{height:auto;min-height:118px;padding:12px}
+  .deal-item-body.no-media .product-art-empty>svg{width:34px;height:34px}
+  .deal-item-body .product-media{height:205px}
+  .view-deal .deal-item-details h2{font-size:17px}
+  .deal-item-details>p{font-size:12px;line-height:1.55}
+  .deal-item-details .facts{margin-top:8px}
+  .deal-item-details .facts div{padding:7px 0;font-size:11px}
   .view-deal #main-content>section:not(.deal-page){width:calc(100% - 24px);margin:7px auto}
   .deal-progress-strip{gap:5px;margin-bottom:12px}
   .deal-progress-strip li{gap:6px;padding:8px 7px}
