@@ -475,6 +475,134 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .view-create .creation-error,.view-create .creation-progress{order:-40;grid-column:1/-1;width:100%;max-width:none;margin:0}
 .view-create .draft-review{grid-column:1/-1;width:100%;max-width:none;margin:0;padding:0}
 
+/* Short, guided deal creation keeps one decision and one primary action on screen. */
+.create-flow-shell{
+  grid-column:1/-1;
+  min-width:0;
+  display:grid;
+  gap:18px;
+}
+.create-flow-progress{
+  position:sticky;
+  top:82px;
+  z-index:45;
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:6px;
+  padding:8px;
+  border:1px solid #d9e3ee;
+  border-radius:17px;
+  background:rgba(255,255,255,.96);
+  box-shadow:0 14px 36px rgba(26,55,91,.11);
+  backdrop-filter:blur(16px);
+}
+.create-flow-progress button{
+  min-width:0;
+  display:grid;
+  grid-template-columns:36px minmax(0,1fr);
+  align-items:center;
+  gap:10px;
+  padding:9px 10px;
+  border:0;
+  border-radius:12px;
+  color:#61758b;
+  background:transparent;
+  text-align:left;
+  cursor:pointer;
+}
+.create-flow-progress button:disabled{opacity:.48;cursor:not-allowed}
+.create-flow-progress button:not(:disabled):hover{background:#f3f7fb}
+.create-flow-progress button.is-current{color:#17499e;background:#edf4ff;box-shadow:inset 0 0 0 1px #b7cefb}
+.create-flow-progress button.is-complete{color:#1d6a51;background:#f1f8f5}
+.create-flow-step-icon{
+  width:36px;
+  height:36px;
+  display:grid;
+  place-items:center;
+  border:1px solid #d7e1ec;
+  border-radius:11px;
+  color:#60768f;
+  background:#fff;
+}
+.create-flow-step-icon svg{width:17px}
+.create-flow-progress .is-current .create-flow-step-icon{border-color:#4a74df;color:#fff;background:#4a74df;box-shadow:0 7px 16px rgba(64,104,208,.22)}
+.create-flow-progress .is-complete .create-flow-step-icon{border-color:#b9ddce;color:#1d6a51;background:#fff}
+.create-flow-progress button>span:last-child{min-width:0}
+.create-flow-progress small,.create-flow-progress strong,.create-flow-progress em{display:block}
+.create-flow-progress small{color:inherit;font-size:8px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+.create-flow-progress strong{overflow:hidden;margin-top:2px;color:#233c58;font:800 13px/1.25 Manrope,sans-serif;text-overflow:ellipsis;white-space:nowrap}
+.create-flow-progress em{overflow:hidden;margin-top:2px;color:#7b8c9f;font-size:9px;font-style:normal;text-overflow:ellipsis;white-space:nowrap}
+.create-flow-progress .is-current strong{color:#17499e}
+.create-flow-progress .is-complete strong{color:#1d6a51}
+.create-flow-heading{
+  max-width:760px;
+  margin:0 auto;
+  padding:4px 2px 0;
+}
+.create-flow-heading>.back{margin-bottom:8px}
+.create-flow-heading>h1{margin:6px 0 8px;font-size:clamp(32px,4vw,44px);line-height:1.08;letter-spacing:-.045em}
+.create-flow-heading>.lede{max-width:670px;margin:0;color:#60748b}
+.create-step-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(320px,.78fr);
+  gap:18px;
+  align-items:start;
+}
+.create-step-layout>.deal-template-picker,
+.create-step-layout>.create-step-card,
+.create-flow-shell>.create-step-card,
+.create-media-step>.media-picker,
+.create-media-step>.deal-photo-guide{width:100%;max-width:none;margin:0}
+.create-step-layout>.deal-template-picker{padding:21px}
+.create-step-layout .deal-template-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.create-step-layout .deal-template-grid button{min-height:72px}
+.create-step-layout .deal-template-grid button:last-child{grid-column:auto}
+.create-step-card{
+  width:min(760px,100%);
+  max-width:none;
+  margin:0 auto;
+  padding:0;
+}
+.create-step-card form{margin:0!important;padding:24px!important}
+.create-step-guidance{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  margin-bottom:18px;
+  padding:13px 14px;
+  border:1px solid #d5e4f5;
+  border-radius:12px;
+  color:#38516e;
+  background:#f3f8fe;
+}
+.create-step-guidance>svg{width:19px;flex:none;color:#3373ce}
+.create-step-guidance b,.create-step-guidance span{display:block}
+.create-step-guidance b{font-size:12px}
+.create-step-guidance span{margin-top:2px;color:#657b93;font-size:11px;line-height:1.45}
+.create-media-step{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 330px;
+  gap:18px;
+  align-items:start;
+}
+.create-media-step>.media-picker,.create-media-step>.deal-photo-guide{padding:22px}
+.create-media-optional{
+  grid-column:1/-1;
+  display:flex;
+  align-items:center;
+  gap:11px;
+  margin:0;
+  padding:14px 16px;
+  border:1px solid #d8e3ef;
+  border-radius:13px;
+  color:#34506e;
+  background:#fff;
+}
+.create-media-optional>svg{width:20px;flex:none;color:#3373ce}
+.create-media-optional b,.create-media-optional small{display:block}
+.create-media-optional b{font-size:12px}
+.create-media-optional small{margin-top:2px;color:#718399;font-size:11px}
+
 /* Calmer typography across account, profile, policy, and administrative views. */
 .app:not(.view-home) :where(.form-wrap,.profile-page,.public-info-page,.trust-passport-page)>h1{
   font-size:clamp(30px,3.7vw,40px);
@@ -494,6 +622,32 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 }
 
 @media(max-width:760px){
+  .create-flow-shell{gap:14px}
+  .create-flow-progress{top:67px;gap:4px;padding:6px;border-radius:14px}
+  .create-flow-progress button{
+    min-height:70px;
+    display:grid;
+    grid-template-columns:1fr;
+    align-content:center;
+    justify-items:center;
+    gap:5px;
+    padding:7px 3px;
+    text-align:center;
+  }
+  .create-flow-step-icon{width:29px;height:29px;border-radius:9px}
+  .create-flow-step-icon svg{width:15px}
+  .create-flow-progress small,.create-flow-progress em{display:none}
+  .create-flow-progress strong{margin:0;font-size:10px;white-space:normal}
+  .create-flow-heading{width:100%;padding:2px 4px 0}
+  .create-flow-heading>h1{font-size:30px}
+  .create-step-layout,.create-media-step{grid-template-columns:1fr}
+  .create-step-layout>.deal-template-picker{padding:18px}
+  .create-step-layout .deal-template-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .create-step-layout .deal-template-grid button:last-child{grid-column:1/-1}
+  .create-step-card{width:100%}
+  .create-step-card form{padding:19px!important}
+  .create-media-step>.media-picker,.create-media-step>.deal-photo-guide{padding:18px}
+  .create-media-optional{align-items:flex-start;padding:13px 14px}
   .global-hero{padding:38px 18px 50px}
   .global-hero h1{font-size:35px}
   .global-lede{font-size:15px}
