@@ -73,6 +73,36 @@ import './deal-sections-compact.css';
 
 type PublicInfoView='buyer-protection'|'seller-protection'|'fees'|'disputes'|'terms'|'privacy';
 type View = 'home' | 'create' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset' | 'link-error' | 'verify' | PublicInfoView;
+type DealPrimaryAction={
+  label:string;
+  detail:string;
+  targetId:string;
+  kind:'scroll'|'create'|'accept'|'signin';
+};
+type ShippingNavigationReadiness={loaded:boolean;ready:boolean};
+
+function getShippingPrimaryAction(
+  deal:Deal,
+  plan:DealActionPlan|undefined,
+  readiness:ShippingNavigationReadiness|undefined
+):DealPrimaryAction{
+  if(deal.viewerRole==='seller'){
+    if(!plan)return {label:'Review delivery',detail:'Checking the latest payment and shipping status.',targetId:'deal-actions',kind:'scroll'};
+    if(!readiness?.loaded)return {label:'Check package evidence',detail:'Checking the required evidence before shipping.',targetId:'deal-evidence-vault',kind:'scroll'};
+    if(!readiness.ready)return {label:'Add package evidence',detail:'Step 1 of 2: document the item and sealed package.',targetId:'deal-evidence-vault',kind:'scroll'};
+    if(!plan.delivery_address_ready)return {label:'View address status',detail:'Package evidence is complete. The buyer must add a delivery address.',targetId:'shipping-panel',kind:'scroll'};
+    if(!plan.shipment_status)return {label:'Add tracking',detail:'Step 2 of 2: choose the carrier and save tracking.',targetId:'shipping-panel',kind:'scroll'};
+    if(plan.shipment_status==='shipped')return {label:'View shipment',detail:'Tracking is saved. Waiting for buyer inspection and receipt.',targetId:'shipping-panel',kind:'scroll'};
+    return {label:'Review receipt',detail:'Delivery is recorded. Review the completed transaction.',targetId:'shipping-panel',kind:'scroll'};
+  }
+  if(!plan)return {label:'Review delivery',detail:'Checking the latest delivery status.',targetId:'deal-actions',kind:'scroll'};
+  if(!plan.delivery_address_ready)return {label:'Add delivery address',detail:'Add the private address the seller should ship to.',targetId:'shipping-panel',kind:'scroll'};
+  if(!plan.shipment_status)return {label:'View delivery status',detail:'Your address is saved. Waiting for the seller to ship.',targetId:'shipping-panel',kind:'scroll'};
+  if(!plan.inspection_recorded)return {label:'Record inspection',detail:'Inspect the delivered item before confirming receipt.',targetId:'shipping-panel',kind:'scroll'};
+  if(plan.shipment_status==='shipped')return {label:'Confirm delivery',detail:'Your inspection is saved. Confirm that the item was received.',targetId:'shipping-panel',kind:'scroll'};
+  return {label:'Review receipt',detail:'Delivery is recorded. Review the completed transaction.',targetId:'shipping-panel',kind:'scroll'};
+}
+
 const publicInfoPaths:Record<PublicInfoView,string>={
   'buyer-protection':'/buyer-protection',
   'seller-protection':'/seller-protection',
@@ -572,7 +602,7 @@ function DealParticipantsCard({deal,session,onLoaded}:{deal:Deal;session:StoredS
 
 function DealActionPlanCard({deal,session,onSync}:{deal:Deal;session:StoredSession;onSync:(plan:DealActionPlan)=>void}){
   const [plan,setPlan]=useState<DealActionPlan|null>(null);
-  useEffect(()=>{let current=true;const load=()=>getDealActionPlan(session,deal.id).then(record=>{if(!current||!record)return;setPlan(record);if(record.deal_status!==deal.status||record.viewer_role!==deal.viewerRole)onSync(record)}).catch(()=>{});void load();const timer=window.setInterval(load,12_000);return()=>{current=false;window.clearInterval(timer)}},[deal.id,deal.status,deal.viewerRole,session.accessToken]);
+  useEffect(()=>{let current=true;const load=()=>getDealActionPlan(session,deal.id).then(record=>{if(!current||!record)return;setPlan(record);onSync(record)}).catch(()=>{});void load();const timer=window.setInterval(load,12_000);return()=>{current=false;window.clearInterval(timer)}},[deal.id,deal.status,deal.viewerRole,session.accessToken]);
   if(!plan)return null;
   const completed=plan.deal_status==='completed';
   const handoffReady=deal.deliveryMethod==='Meet in person'?plan.meeting_status==='confirmed':Boolean(plan.shipment_status);
@@ -585,7 +615,7 @@ function DealActionPlanCard({deal,session,onSync}:{deal:Deal;session:StoredSessi
     {label:'Rating submitted',done:plan.rating_submitted,icon:Star}
   ];
   const currentIndex=steps.findIndex(step=>!step.done);const doneCount=steps.filter(step=>step.done).length;
-  return <section className="deal-action-plan no-print"><div className="action-plan-heading"><div className="action-plan-title"><span className="workflow-icon"><Route/></span><div><p className="eyebrow">{t('Live deal status')}</p><h2>{t('Deal progress')}</h2><p>{t('Milestones update automatically from the shared record.')}</p></div></div><div className="action-plan-score" aria-label={`${doneCount} ${t('of')} ${steps.length} ${t('steps complete')}`}><strong>{doneCount}</strong><span>/ {steps.length}</span></div></div><div className="action-plan-progress" role="progressbar" aria-label={t('Deal progress')} aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={doneCount}><span style={{width:`${doneCount/steps.length*100}%`}}/></div><ol className="action-plan-steps">{steps.map((step,index)=>{const Icon=step.icon;const state=step.done?'done':index===currentIndex?'current':'upcoming';return <li key={step.label} className={state} aria-current={state==='current'?'step':undefined}><span className="action-plan-step-icon">{step.done?<Check size={18}/>:<Icon size={18}/>}</span><span><b>{t(step.label)}</b><small>{t(step.done?'Done':index===currentIndex?'In progress':'Upcoming')}</small></span></li>})}</ol><p className="action-plan-note"><ShieldCheck size={16}/>{t('Progress updates automatically from the protected deal record.')}</p></section>;
+  return <section id="deal-action-plan" className="deal-action-plan no-print"><div className="action-plan-heading"><div className="action-plan-title"><span className="workflow-icon"><Route/></span><div><p className="eyebrow">{t('Live deal status')}</p><h2>{t('Deal progress')}</h2><p>{t('Milestones update automatically from the shared record.')}</p></div></div><div className="action-plan-score" aria-label={`${doneCount} ${t('of')} ${steps.length} ${t('steps complete')}`}><strong>{doneCount}</strong><span>/ {steps.length}</span></div></div><div className="action-plan-progress" role="progressbar" aria-label={t('Deal progress')} aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={doneCount}><span style={{width:`${doneCount/steps.length*100}%`}}/></div><ol className="action-plan-steps">{steps.map((step,index)=>{const Icon=step.icon;const state=step.done?'done':index===currentIndex?'current':'upcoming';return <li key={step.label} className={state} aria-current={state==='current'?'step':undefined}><span className="action-plan-step-icon">{step.done?<Check size={18}/>:<Icon size={18}/>}</span><span><b>{t(step.label)}</b><small>{t(step.done?'Done':index===currentIndex?'In progress':'Upcoming')}</small></span></li>})}</ol><p className="action-plan-note"><ShieldCheck size={16}/>{t('Progress updates automatically from the protected deal record.')}</p></section>;
 }
 
 function SellerTrustProfile({deal}:{deal:Deal}){
@@ -823,13 +853,13 @@ function splitDeliveryAddress(value:string){
   return {streetAddress:lines[0]||'',addressLine2:lines.length>2?lines[1]||'':'',city:lines.length>2?lines.slice(2).join(' '):lines[1]||'',state:'',postalCode:''};
 }
 
-function ShippingPanel({deal,session,paymentReady,evidenceRevision,onDelivered}:{deal:Deal;session:StoredSession;paymentReady:boolean;evidenceRevision:number;onDelivered:()=>void}){
+function ShippingPanel({deal,session,paymentReady,evidenceRevision,onProgressChanged,onDelivered}:{deal:Deal;session:StoredSession;paymentReady:boolean;evidenceRevision:number;onProgressChanged?:()=>void;onDelivered:()=>void}){
   const [shipment,setShipment]=useState<DealShipment|null>(null);const [delivery,setDelivery]=useState<DealDeliveryDetails|null>(null);const [carrier,setCarrier]=useState('');const [tracking,setTracking]=useState('');const [message,setMessage]=useState('');const [inspectionRecorded,setInspectionRecorded]=useState(false);const [editingAddress,setEditingAddress]=useState(false);const [savingAddress,setSavingAddress]=useState(false);const [readiness,setReadiness]=useState<SellerShippingEvidenceReadiness|null>(null);const [checkingReadiness,setCheckingReadiness]=useState(false);const [readinessError,setReadinessError]=useState('');const [address,setAddress]=useState({recipientName:session.user.displayName,streetAddress:'',addressLine2:'',city:'',state:'',postalCode:'',country:'United States',instructions:''});
   const loadShipment=()=>getDealShipment(session,deal.id).then(setShipment).catch(()=>{});const loadDelivery=()=>getDealDeliveryDetails(session,deal.id).then(details=>{setDelivery(details);if(details){const parsed=splitDeliveryAddress(details.full_address);setAddress({recipientName:details.recipient_name,streetAddress:parsed.streetAddress,addressLine2:parsed.addressLine2,city:parsed.city,state:parsed.state,postalCode:parsed.postalCode,country:details.country||'United States',instructions:details.instructions||''})}}).catch(()=>{});
   const loadReadiness=async()=>{if(deal.viewerRole!=='seller')return;setCheckingReadiness(true);setReadinessError('');try{setReadiness(await getSellerShippingEvidenceReadiness(session,deal.id))}catch{setReadiness(null);setReadinessError('Shipping readiness could not be verified.')}finally{setCheckingReadiness(false)}};
   useEffect(()=>{void loadShipment();void loadDelivery()},[deal.id,session.accessToken]);
   useEffect(()=>{void loadReadiness()},[deal.id,session.accessToken,deal.viewerRole,evidenceRevision]);
-  const saveAddress=async(e:React.FormEvent)=>{e.preventDefault();if(!address.state||!isUsPostalCode(address.postalCode))return;setSavingAddress(true);setMessage('');try{const storedAddress=[address.streetAddress.trim(),address.addressLine2.trim(),`${address.city.trim()}, ${address.state} ${address.postalCode.trim()}`].filter(Boolean).join('\n');await saveDealDeliveryDetails(session,deal.id,address.recipientName,storedAddress,'United States',address.instructions);await loadDelivery();setEditingAddress(false);setMessage('Address saved. The seller can now prepare the shipment.')}catch(error){setMessage(error instanceof Error?error.message:'Could not save delivery address')}finally{setSavingAddress(false)}};
+  const saveAddress=async(e:React.FormEvent)=>{e.preventDefault();if(!address.state||!isUsPostalCode(address.postalCode))return;setSavingAddress(true);setMessage('');try{const storedAddress=[address.streetAddress.trim(),address.addressLine2.trim(),`${address.city.trim()}, ${address.state} ${address.postalCode.trim()}`].filter(Boolean).join('\n');await saveDealDeliveryDetails(session,deal.id,address.recipientName,storedAddress,'United States',address.instructions);await loadDelivery();onProgressChanged?.();setEditingAddress(false);setMessage('Address saved. The seller can now prepare the shipment.')}catch(error){setMessage(error instanceof Error?error.message:'Could not save delivery address')}finally{setSavingAddress(false)}};
   const copyAddress=async()=>{if(!delivery)return;await navigator.clipboard?.writeText(`${delivery.recipient_name}\n${delivery.full_address}\n${delivery.country}${delivery.instructions?`\n${delivery.instructions}`:''}`);setMessage('Address copied.')};
   const evidenceReady=readiness?.ready===true;const readyToShip=paymentReady&&Boolean(delivery)&&evidenceReady;
   const serialRequired=readiness?.serial_required??Boolean(deal.serialNumber);
@@ -842,8 +872,8 @@ function ShippingPanel({deal,session,paymentReady,evidenceRevision,onDelivered}:
     {label:'Serial / IMEI photo',ready:serialRequired?Boolean(readiness?.serial_photo_ready):true,optional:!serialRequired},
   ];
   const completedReadinessSteps=readinessSteps.filter(step=>step.ready).length;
-  const saveShipment=async(e:React.FormEvent)=>{e.preventDefault();setMessage('');if(!readyToShip){setMessage('Complete the shipping readiness checklist first.');return}try{await createDealShipment(session,deal.id,carrier,tracking);setMessage('Shipment details saved.');await loadShipment();await loadDelivery();await loadReadiness()}catch(error){setMessage(error instanceof Error?error.message:'Could not save shipment')}};
-  const delivered=async()=>{if(!confirm(t('Confirm that you received and inspected this item?')))return;setMessage('');try{await confirmShipmentDelivery(session,deal.id);setMessage('Delivery confirmed. Deal completed.');await loadShipment();await loadDelivery();onDelivered()}catch(error){setMessage(error instanceof Error?error.message:'Could not confirm delivery')}};
+  const saveShipment=async(e:React.FormEvent)=>{e.preventDefault();setMessage('');if(!readyToShip){setMessage('Complete the shipping readiness checklist first.');return}try{await createDealShipment(session,deal.id,carrier,tracking);setMessage('Shipment details saved.');await loadShipment();await loadDelivery();await loadReadiness();onProgressChanged?.()}catch(error){setMessage(error instanceof Error?error.message:'Could not save shipment')}};
+  const delivered=async()=>{if(!confirm(t('Confirm that you received and inspected this item?')))return;setMessage('');try{await confirmShipmentDelivery(session,deal.id);setMessage('Delivery confirmed. Deal completed.');await loadShipment();await loadDelivery();onProgressChanged?.();onDelivered()}catch(error){setMessage(error instanceof Error?error.message:'Could not confirm delivery')}};
   const streetNumberMissing=address.streetAddress.trim().length>0&&!/\d/.test(address.streetAddress);
   const addressIncomplete=address.recipientName.trim().length<2||address.streetAddress.trim().length<3||streetNumberMissing||address.city.trim().length<2||!address.state||!isUsPostalCode(address.postalCode);
   const shippingState=shipment?.status==='delivered'?'Delivered':shipment?'In transit':readyToShip?'Ready to ship':delivery?'Preparing shipment':'Address needed';
@@ -1391,6 +1421,8 @@ export function App() {
   const [acceptanceProtected,setAcceptanceProtected]=useState(false);
   const [buyerAccessCode,setBuyerAccessCode]=useState('');
   const [paymentReadyByDeal,setPaymentReadyByDeal]=useState<Record<string,boolean>>({});
+  const [actionPlanByDeal,setActionPlanByDeal]=useState<Record<string,DealActionPlan>>({});
+  const [shippingReadinessByDeal,setShippingReadinessByDeal]=useState<Record<string,ShippingNavigationReadiness>>({});
   const [evidenceRevision,setEvidenceRevision]=useState(0);
   const [creating,setCreating]=useState(false);
   const [reviewingDraft,setReviewingDraft]=useState(false);
@@ -1428,6 +1460,16 @@ export function App() {
    useEffect(()=>{const params=new URLSearchParams(location.search);const trustId=params.get('trust');const publicId=params.get('deal');if(trustId){setView('passport');setPassportMessage('');getPublicTrustPassport(trustId).then(passport=>{if(passport)setPublicPassport(passport);else setPassportMessage('Passport unavailable')}).catch(error=>setPassportMessage(error instanceof Error?error.message:'Passport unavailable'))}else if(publicId){const loadDeal=publicId===DEMO_DEAL_PUBLIC_ID?demoRepository.list().then(items=>{const deal=items.find(item=>item.publicId===publicId);if(!deal)throw new Error('Deal Link unavailable');return {...deal,viewerRole:'visitor' as const}}):getPublicDeal(publicId);loadDeal.then(deal=>{setActive(deal);setView('deal')}).catch(error=>{setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable');setView('link-error')})}},[]);
   useEffect(()=>{setBuyer('');setBuyerAccessCode('');setAgreementChecks({item:false,price:false,handoff:false})},[active?.publicId,active?.agreementVersion]);
   useEffect(()=>{let current=true;setAcceptanceProtected(false);if(!active||active.status!=='published')return;getDealAcceptanceProtection(active.publicId).then(enabled=>{if(current)setAcceptanceProtected(enabled)}).catch(()=>{});return()=>{current=false}},[active?.publicId,active?.status]);
+  useEffect(()=>{
+    if(!active||!session||active.viewerRole!=='seller'||active.status!=='accepted'||active.deliveryMethod!=='Ship to buyer')return;
+    let current=true;
+    const dealId=active.id;
+    setShippingReadinessByDeal(items=>({...items,[dealId]:{loaded:false,ready:false}}));
+    getSellerShippingEvidenceReadiness(session,dealId)
+      .then(readiness=>{if(current)setShippingReadinessByDeal(items=>({...items,[dealId]:{loaded:true,ready:Boolean(readiness?.ready)}}))})
+      .catch(()=>{if(current)setShippingReadinessByDeal(items=>({...items,[dealId]:{loaded:true,ready:false}}))});
+    return()=>{current=false};
+  },[active?.id,active?.viewerRole,active?.status,active?.deliveryMethod,session?.accessToken,evidenceRevision]);
   const reviewDraft=(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');setReviewingDraft(true);window.scrollTo({top:0,behavior:'smooth'})};
   const create=async()=>{if(!session||creating)return;setCreating(true);setAuthMessage('');try{let deal=await createUserDeal(session,draft);setDeals(x=>[deal,...x]);setActive(deal);setDraft(initial);setDealTemplate('phone');setReviewingDraft(false);setView('deal');if(photos.length){try{const mediaUrls=await uploadDealPhotos(session,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Deal created, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}setPhotos([])}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save this deal')}finally{setCreating(false)}};
   const saveDraft=async()=>{if(!session||creating)return;setCreating(true);setAuthMessage('');try{let deal=await saveUserDealDraft(session,draft);setDeals(items=>[deal,...items]);setActive(deal);setDraft(initial);setDealTemplate('phone');setReviewingDraft(false);setView('deal');if(photos.length){try{const mediaUrls=await uploadDealPhotos(session,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Draft saved, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}setPhotos([])}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save draft')}finally{setCreating(false)}};
@@ -1443,7 +1485,19 @@ export function App() {
   const refreshSavedDeals=()=>{if(session)getMySavedDeals(session).then(setSavedDeals).catch(()=>setSavedDeals([]))};
   const markAllActivityRead=()=>{if(!session)return;setNotifications(items=>items.map(item=>({...item,is_read:true})));void markAllNotificationsRead(session).catch(()=>getMyNotifications(session).then(setNotifications).catch(()=>{}))};
   const applyDealParticipants=(dealId:string,participants:DealParticipants)=>{const merge=(deal:Deal):Deal=>({...deal,sellerName:participants.seller_name,sellerVerification:participants.seller_verification,buyerName:participants.buyer_name,buyerVerification:participants.buyer_verification,viewerRole:participants.viewer_role});setActive(current=>current?.id===dealId?merge(current):current);setDeals(items=>items.map(item=>item.id===dealId?merge(item):item))};
-  const applyDealActionPlan=(dealId:string,plan:DealActionPlan)=>{setActive(current=>current?.id===dealId?{...current,status:plan.deal_status,viewerRole:plan.viewer_role}:current);setDeals(items=>items.map(item=>item.id===dealId?{...item,status:plan.deal_status,viewerRole:plan.viewer_role}:item))};
+  const applyDealActionPlan=(dealId:string,plan:DealActionPlan)=>{
+    setActionPlanByDeal(items=>{
+      const previous=items[dealId];
+      return previous&&JSON.stringify(previous)===JSON.stringify(plan)?items:{...items,[dealId]:plan};
+    });
+    setActive(current=>current?.id===dealId&&(current.status!==plan.deal_status||current.viewerRole!==plan.viewer_role)?{...current,status:plan.deal_status,viewerRole:plan.viewer_role}:current);
+    setDeals(items=>items.map(item=>item.id===dealId&&(item.status!==plan.deal_status||item.viewerRole!==plan.viewer_role)?{...item,status:plan.deal_status,viewerRole:plan.viewer_role}:item));
+  };
+  const refreshDealActionPlan=async(dealId:string)=>{
+    if(!session)return;
+    const plan=await getDealActionPlan(session,dealId).catch(()=>null);
+    if(plan)applyDealActionPlan(dealId,plan);
+  };
   const activeExpired=active?isDealExpired(active,clock):false;
   const isDemoActive=Boolean(active?.publicId===DEMO_DEAL_PUBLIC_ID&&!user);
   const demoFlowCompleted=isDemoActive&&authMessage.startsWith('Demo complete');
@@ -1455,43 +1509,46 @@ export function App() {
     agreement?.focus({preventScroll:true});
   };
   const scrollToDealSection=(id:string)=>{
-    const section=document.getElementById(id);
+    const section=document.getElementById(id)||document.getElementById('deal-actions');
+    if(!section)return;
     const expandable=section instanceof HTMLDetailsElement?section:section?.closest('details');
     if(expandable instanceof HTMLDetailsElement)expandable.open=true;
-    window.requestAnimationFrame(()=>{
-      section?.scrollIntoView({behavior:'smooth',block:'center'});
-      section?.setAttribute('tabindex','-1');
-      section?.focus({preventScroll:true});
-    });
+    section.classList.remove('deal-target-highlight');
+    window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>{
+      section.scrollIntoView({behavior:'smooth',block:'center'});
+      section.setAttribute('tabindex','-1');
+      section.focus({preventScroll:true});
+      section.classList.add('deal-target-highlight');
+      window.setTimeout(()=>section.classList.remove('deal-target-highlight'),1400);
+    }));
   };
-  const dealNextStep=!active?'Review the deal':active.status==='published'
-    ?active.viewerRole==='seller'?'Waiting for the buyer to accept':'Review and accept the agreement'
-    :active.status==='accepted'?'Follow payment and handoff steps'
-    :active.status==='completed'?'Deal completed':'Review the current deal status';
   const activePaymentReady=Boolean(active&&paymentReadyByDeal[active.id]);
-  const dealPrimaryAction=active
+  const activeActionPlan=active?actionPlanByDeal[active.id]:undefined;
+  const activeShippingReadiness=active?shippingReadinessByDeal[active.id]:undefined;
+  const dealPrimaryAction:DealPrimaryAction|null=active
     ? demoFlowCompleted
-      ? {label:'Start a deal',detail:'Create your own private Deal Link.',targetId:'deal-overview',kind:'create' as const}
+      ? {label:'Start a deal',detail:'Create your own private Deal Link.',targetId:'deal-overview',kind:'create'}
       : activeExpired
-      ? {label:'Review status',detail:'This offer has expired.',targetId:'deal-safety',kind:'scroll' as const}
+      ? {label:'Review status',detail:'This offer has expired.',targetId:'deal-safety',kind:'scroll'}
       : active.status==='draft'
-        ? {label:'Finish draft',detail:'Complete the details and publish when ready.',targetId:'deal-manage',kind:'scroll' as const}
+        ? {label:'Finish draft',detail:'Complete the details and publish when ready.',targetId:'deal-manage',kind:'scroll'}
         : active.status==='published'&&active.viewerRole!=='seller'
-          ? {label:agreementActionReady?'Accept terms':'Review agreement',detail:agreementActionReady?'Your confirmations are complete.':'Confirm the item, price, handoff, and your name.',targetId:'deal-agreement',kind:agreementActionReady?'accept' as const:'scroll' as const}
+          ? {label:agreementActionReady?'Accept terms':'Review agreement',detail:agreementActionReady?'Your confirmations are complete.':'Confirm the item, price, handoff, and your name.',targetId:'deal-agreement',kind:agreementActionReady?'accept':'scroll'}
           : active.status==='published'
-            ? {label:'Share with buyer',detail:'Copy the Deal Link or invite the buyer.',targetId:'deal-actions',kind:'scroll' as const}
+            ? {label:'Share with buyer',detail:'Copy the Deal Link or invite the buyer.',targetId:'deal-actions',kind:'scroll'}
             : active.status==='accepted'&&(!session||active.viewerRole==='visitor')
-              ? {label:'Sign in to continue',detail:'Sign in to access payment and delivery actions.',targetId:'deal-actions',kind:'signin' as const}
+              ? {label:'Sign in to continue',detail:'Sign in to access payment and delivery actions.',targetId:'deal-actions',kind:'signin'}
               : active.status==='accepted'&&!activePaymentReady
-                ? {label:active.viewerRole==='seller'?'Set up payment':'Continue payment',detail:active.viewerRole==='seller'?'Connect payouts so the buyer can pay.':'Open the Stripe Sandbox payment step.',targetId:'payment-status-panel',kind:'scroll' as const}
+                ? {label:active.viewerRole==='seller'?'Set up payment':'Continue payment',detail:active.viewerRole==='seller'?'Connect payouts so the buyer can pay.':'Open the Stripe Sandbox payment step.',targetId:'payment-status-panel',kind:'scroll'}
                 : active.status==='accepted'&&active.deliveryMethod==='Ship to buyer'
-                  ? {label:'Continue delivery',detail:'Complete the next shipping or receipt step.',targetId:'shipping-panel',kind:'scroll' as const}
+                  ? getShippingPrimaryAction(active,activeActionPlan,activeShippingReadiness)
                   : active.status==='accepted'
-                    ? {label:'Plan handoff',detail:'Arrange and complete the in-person exchange.',targetId:'meeting-panel',kind:'scroll' as const}
+                    ? {label:'Plan handoff',detail:'Arrange and complete the in-person exchange.',targetId:'meeting-panel',kind:'scroll'}
                     : active.status==='completed'&&session&&active.viewerRole!=='visitor'
-                      ? {label:'Finish deal',detail:'Review the receipt or rate the other party.',targetId:'rating-panel',kind:'scroll' as const}
-                      : {label:'Review status',detail:'See the current record and safety actions.',targetId:active.status==='disputed'||active.status==='cancelled'?'deal-safety':'deal-records',kind:'scroll' as const}
+                      ? {label:'Finish deal',detail:'Review the receipt or rate the other party.',targetId:'rating-panel',kind:'scroll'}
+                      : {label:'Review status',detail:'See the current record and safety actions.',targetId:active.status==='disputed'||active.status==='cancelled'?'deal-safety':'deal-records',kind:'scroll'}
     : null;
+  const dealNextStep=dealPrimaryAction?.detail||(!active?'Review the deal':active.status==='completed'?'Deal completed':'Review the current deal status');
   const runDealPrimaryAction=()=>{
     if(!dealPrimaryAction)return;
     if(dealPrimaryAction.kind==='create'){openCreate();return}
@@ -1570,7 +1627,7 @@ export function App() {
               <div><p className="eyebrow">{t('Step 2 · Shipping')}</p><strong>{t('Add carrier and tracking')}</strong><small>{t('This step becomes available as soon as the required package evidence is complete.')}</small></div>
               <ArrowRight aria-hidden="true"/>
             </div>}
-            <div id="shipping-panel"><ShippingPanel deal={active} session={session} paymentReady={Boolean(paymentReadyByDeal[active.id])} evidenceRevision={evidenceRevision} onDelivered={()=>{const updated={...active,status:'completed' as const};setActive(updated);setDeals(items=>items.map(item=>item.id===active.id?updated:item))}}/></div>
+            <div id="shipping-panel"><ShippingPanel deal={active} session={session} paymentReady={Boolean(paymentReadyByDeal[active.id])} evidenceRevision={evidenceRevision} onProgressChanged={()=>void refreshDealActionPlan(active.id)} onDelivered={()=>{const updated={...active,status:'completed' as const};setActive(updated);setDeals(items=>items.map(item=>item.id===active.id?updated:item))}}/></div>
           </div>}
           {session&&active.viewerRole!=='visitor'&&active.deliveryMethod==='Ship to buyer'&&(active.viewerRole!=='seller'||active.status==='disputed')&&(['accepted','completed','disputed'] as Deal['status'][]).includes(active.status)&&<div className="deal-shipping-protection is-arrival-evidence">
             <div className="deal-shipping-protection-intro">

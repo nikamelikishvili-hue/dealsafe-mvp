@@ -146,8 +146,16 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .deal-workspace-bar nav button:hover{color:#1765dd;background:#eef5ff}
 .deal-workspace-bar nav .deal-nav-protection{color:#244f82;background:#f2f7fd}
 .deal-workspace-bar nav .deal-nav-protection:hover{color:#1257c2;background:#e6f0ff}
-.deal-workspace-bar nav .deal-action-link{color:#fff;background:#1765dd}
+.deal-workspace-bar nav .deal-action-link{white-space:nowrap;color:#fff;background:#1765dd;box-shadow:0 8px 18px rgba(23,101,221,.2)}
 .deal-workspace-bar nav .deal-action-link:hover{color:#fff;background:#1257c2}
+.deal-workspace-bar nav .deal-action-link:focus-visible{outline:3px solid rgba(23,101,221,.28);outline-offset:3px}
+@keyframes deal-target-pulse{
+  0%{box-shadow:0 0 0 0 rgba(23,101,221,.35)}
+  45%{box-shadow:0 0 0 7px rgba(23,101,221,.12)}
+  100%{box-shadow:0 0 0 0 rgba(23,101,221,0)}
+}
+.deal-target-highlight{animation:deal-target-pulse 1.2s ease-out}
+@media (prefers-reduced-motion:reduce){.deal-target-highlight{animation:none;outline:3px solid rgba(23,101,221,.2);outline-offset:4px}}
 .view-deal .demo-deal-banner{margin:0 0 18px;padding:16px 18px}
 .view-deal .demo-deal-banner h2{font-size:18px}
 .view-deal .demo-deal-banner p:not(.eyebrow){font-size:13px}
