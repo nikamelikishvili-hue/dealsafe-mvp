@@ -539,6 +539,8 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .create-flow-progress .is-current strong{color:#17499e}
 .create-flow-progress .is-complete strong{color:#1d6a51}
 .create-flow-heading{
+  display:block;
+  height:auto;
   max-width:760px;
   margin:0 auto;
   padding:4px 2px 0;
@@ -873,6 +875,9 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .auth-journey .is-current{border-color:#aac5ff;color:#244eaa;background:#eef4ff}
 .auth-journey .is-current>span{border-color:#4a74df;color:#fff;background:#4a74df;box-shadow:0 6px 14px rgba(64,104,208,.22)}
 .auth-journey .is-current strong{color:#173f9a}
+.auth-journey .is-complete{border-color:#bfe3dc;background:#eef9f6}
+.auth-journey .is-complete>span{border-color:#0b8f80;color:#fff;background:#0b8f80}
+.auth-journey .is-complete strong{color:#0a6f65}
 .policy-consent a{color:#1765dd;text-decoration-thickness:1px;text-underline-offset:2px}
 .currency-label{
   min-width:72px;
