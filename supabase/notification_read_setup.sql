@@ -1,4 +1,4 @@
--- Durable per-user read state for DealSafe activity notifications.
+-- Durable per-user read state for Dealivra activity notifications.
 -- Run after inquiry_setup.sql. Safe to run more than once.
 
 create table if not exists public.deal_activity_reads(

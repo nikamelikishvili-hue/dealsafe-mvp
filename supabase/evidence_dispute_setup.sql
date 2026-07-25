@@ -1,4 +1,4 @@
--- DealSafe protection foundation: disputes and immutable evidence.
+-- Dealivra protection foundation: disputes and immutable evidence.
 -- Run once in Supabase SQL Editor after dispute_setup.sql.
 -- Safe to rerun.
 

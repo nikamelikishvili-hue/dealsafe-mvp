@@ -1,10 +1,10 @@
-# DealSafe MVP — editable product brief
+# Dealivra MVP — editable product brief
 
 ## Product promise
 
 **Create a clear, shareable record of a private sale in under three minutes.**
 
-The MVP is a trust record, not a marketplace and not an escrow provider. A seller creates a Deal Link, the buyer reviews the item and terms, both parties confirm their identity status and consent, and DealSafe preserves an auditable agreement record.
+The MVP is a trust record, not a marketplace and not an escrow provider. A seller creates a Deal Link, the buyer reviews the item and terms, both parties confirm their identity status and consent, and Dealivra preserves an auditable agreement record.
 
 ## Initial customer and category
 
@@ -54,7 +54,7 @@ flowchart LR
   C --> D[Review agreement version]
   D --> E[Type name and accept]
   E --> F[Seller receives confirmation]
-  F --> G[Complete handoff outside DealSafe]
+  F --> G[Complete handoff outside Dealivra]
 ```
 
 ### Completion and ratings
@@ -69,7 +69,7 @@ flowchart LR
 
 ## Agreement and evidence model
 
-Every acceptance points to an immutable `agreement_version`. Editing material terms creates a new version and invalidates prior pending acceptance. Evidence records store event type, actor, time, and request metadata. Sensitive identity documents should remain with the verification provider; DealSafe stores only the provider reference and result.
+Every acceptance points to an immutable `agreement_version`. Editing material terms creates a new version and invalidates prior pending acceptance. Evidence records store event type, actor, time, and request metadata. Sensitive identity documents should remain with the verification provider; Dealivra stores only the provider reference and result.
 
 Suggested agreement sections: parties; item and serial/IMEI disclosure; price; payment method (informational only); delivery/handoff; condition and defects; inspection opportunity; cancellation; prohibited goods; dispute contact; consent and privacy notice.
 

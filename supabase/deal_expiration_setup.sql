@@ -48,7 +48,7 @@ begin
   if v_deal.buyer_id is not null and v_deal.buyer_id<>auth.uid() then raise exception 'Deal already has a buyer';end if;
   select id into v_agreement_id from public.agreement_versions where deal_id=v_deal.id and version=greatest(v_deal.current_agreement_version,1);
   insert into public.agreement_acceptances(agreement_version_id,signer_id,typed_name,consent_text,user_agent)
-  values(v_agreement_id,auth.uid(),trim(p_typed_name),'I reviewed the item facts and accept this version of the DealSafe agreement.',null)
+  values(v_agreement_id,auth.uid(),trim(p_typed_name),'I reviewed the item facts and accept this version of the Dealivra agreement.',null)
   on conflict(agreement_version_id,signer_id) do nothing;
   update public.deals set buyer_id=auth.uid(),status='accepted',updated_at=now() where id=v_deal.id;
   insert into public.audit_events(deal_id,actor_id,event_type) values(v_deal.id,auth.uid(),'buyer_accepted');
@@ -115,10 +115,10 @@ begin
   values(v_deal.id,v_version,jsonb_build_object('title',v_deal.title,'description',v_deal.description,'price_cents',v_offer.amount_cents,'currency',v_deal.currency,'condition',v_deal.condition,'delivery_method',v_deal.delivery_method,'expires_at',v_deal.expires_at),encode(extensions.digest(concat_ws('|',v_deal.title,v_deal.description,v_offer.amount_cents,v_deal.currency,v_deal.condition,v_deal.delivery_method,v_deal.expires_at),'sha256'),'hex'),auth.uid())
   returning id into v_agreement_id;
   insert into public.agreement_acceptances(agreement_version_id,signer_id,typed_name,consent_text)
-  values(v_agreement_id,v_offer.buyer_id,v_offer.typed_name,'I offered this amount and accept this version of the DealSafe agreement.');
+  values(v_agreement_id,v_offer.buyer_id,v_offer.typed_name,'I offered this amount and accept this version of the Dealivra agreement.');
   select display_name into v_seller_name from public.profiles where id=auth.uid();
   insert into public.agreement_acceptances(agreement_version_id,signer_id,typed_name,consent_text)
-  values(v_agreement_id,auth.uid(),v_seller_name,'I accept this offer and this version of the DealSafe agreement.');
+  values(v_agreement_id,auth.uid(),v_seller_name,'I accept this offer and this version of the Dealivra agreement.');
   update public.deals set price_cents=v_offer.amount_cents,buyer_id=v_offer.buyer_id,status='accepted',current_agreement_version=v_version,updated_at=now() where id=v_deal.id;
   update public.deal_offers set status=case when id=p_offer_id then 'accepted' else 'declined' end,responded_at=now() where deal_id=v_deal.id and status='pending';
   insert into public.audit_events(deal_id,actor_id,event_type) values(v_deal.id,auth.uid(),'offer_accepted');

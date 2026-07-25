@@ -96,7 +96,7 @@ begin
     (agreement_version_id, signer_id, typed_name, consent_text, user_agent)
   values
     (v_agreement_id, auth.uid(), trim(p_typed_name),
-     'I reviewed the item facts and accept this version of the DealSafe agreement.', null)
+     'I reviewed the item facts and accept this version of the Dealivra agreement.', null)
   on conflict (agreement_version_id, signer_id) do nothing;
 
   update public.deals set buyer_id = auth.uid(), status = 'accepted', updated_at = now()

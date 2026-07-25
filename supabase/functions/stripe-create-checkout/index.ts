@@ -65,7 +65,7 @@ Deno.serve(async (request) => {
     params.set("line_items[0][price_data][currency]", "usd");
     params.set("line_items[0][price_data][unit_amount]", String(deal.price_cents));
     params.set("line_items[0][price_data][product_data][name]", deal.title.slice(0, 120));
-    params.set("line_items[0][price_data][product_data][description]", `DealSafe ${deal.public_id} · Agreement version ${Math.max(1, deal.current_agreement_version || 1)}`);
+    params.set("line_items[0][price_data][product_data][description]", `Dealivra ${deal.public_id} · Agreement version ${Math.max(1, deal.current_agreement_version || 1)}`);
     params.set("line_items[0][quantity]", "1");
     params.set("payment_intent_data[transfer_group]", transferGroup);
     params.set("payment_intent_data[metadata][deal_id]", deal.id);

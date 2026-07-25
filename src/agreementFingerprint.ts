@@ -7,7 +7,7 @@ type FingerprintDeal = Pick<Deal,
 
 export function serializeAgreement(deal: FingerprintDeal) {
   return JSON.stringify({
-    format: 'DealSafe-Agreement-v1',
+    format: 'Dealivra-Agreement-v1',
     publicId: deal.publicId,
     agreementVersion: deal.agreementVersion,
     title: deal.title,

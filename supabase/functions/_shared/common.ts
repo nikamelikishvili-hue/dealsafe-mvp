@@ -50,7 +50,7 @@ type StripeRequestOptions = {
 export async function stripeRequest<T>(path: string, options: StripeRequestOptions = {}): Promise<T> {
   const secretKey = requiredSecret("STRIPE_SECRET_KEY");
   if (!secretKey.startsWith("sk_test_")) {
-    throw new Error("DealSafe beta requires a Stripe Sandbox secret key");
+    throw new Error("Dealivra beta requires a Stripe Sandbox secret key");
   }
   const method = options.method || "POST";
   const headers = new Headers({ Authorization: `Bearer ${secretKey}` });

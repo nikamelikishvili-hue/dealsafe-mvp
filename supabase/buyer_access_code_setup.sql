@@ -118,7 +118,7 @@ begin
   select id into v_agreement_id from public.agreement_versions
   where deal_id=v_deal.id and version=greatest(v_deal.current_agreement_version,1);
   insert into public.agreement_acceptances(agreement_version_id,signer_id,typed_name,consent_text,user_agent)
-  values(v_agreement_id,auth.uid(),trim(p_typed_name),'I reviewed the item facts and accept this version of the DealSafe agreement.',null)
+  values(v_agreement_id,auth.uid(),trim(p_typed_name),'I reviewed the item facts and accept this version of the Dealivra agreement.',null)
   on conflict(agreement_version_id,signer_id) do nothing;
   update public.deals
   set buyer_id=auth.uid(),status='accepted',acceptance_code_hash=null,

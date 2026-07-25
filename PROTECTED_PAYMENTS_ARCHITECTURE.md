@@ -1,13 +1,13 @@
-# DealSafe protected payments — US launch architecture
+# Dealivra protected payments — US launch architecture
 
 ## Product decision
 
-DealSafe is electronic-payment only. Physical cash is not offered.
+Dealivra is electronic-payment only. Physical cash is not offered.
 
 - Card and eligible digital wallets for ordinary transactions.
 - ACH bank payment for larger transactions and lower processing cost.
 - A licensed payment provider stores payment credentials and moves money.
-- DealSafe never stores card numbers, bank account numbers, or security codes.
+- Dealivra never stores card numbers, bank account numbers, or security codes.
 - The customer-facing name is **Protected Payment**, not **Escrow**. Stripe states that delayed payouts are not legal escrow services.
 
 ## Recommended provider
@@ -29,12 +29,12 @@ Official references:
 ## Customer flow
 
 1. Seller completes Stripe Connect onboarding.
-2. Buyer accepts the current DealSafe agreement.
+2. Buyer accepts the current Dealivra agreement.
 3. Buyer chooses card/Link or ACH and completes Stripe-hosted Checkout.
 4. A verified webhook changes the deal to `funds_secured`.
 5. The seller ships the item or both parties attend the confirmed meeting.
 6. The buyer records inspection and confirms receipt.
-7. DealSafe requests release to the seller.
+7. Dealivra requests release to the seller.
 8. A verified Stripe webhook changes the payment to `released`.
 
 The seller must never ship when the status is only `processing`. Shipping becomes available only after `funds_secured`.

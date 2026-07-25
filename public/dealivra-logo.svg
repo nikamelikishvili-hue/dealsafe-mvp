@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 180" role="img" aria-labelledby="title desc">
+  <title id="title">Dealivra</title>
+  <desc id="desc">Dealivra wordmark with a navy and teal transaction mark.</desc>
+  <defs>
+    <linearGradient id="teal" x1="118" y1="34" x2="176" y2="148" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17d1bc"/>
+      <stop offset="1" stop-color="#049b8c"/>
+    </linearGradient>
+  </defs>
+  <path d="M76 30H38L6 90l39 60h47L51 90 76 30Z" fill="#082654"/>
+  <path d="M109 30h47l38 60-39 60h-47l17-27 20-33-36-60Z" fill="url(#teal)"/>
+  <text x="224" y="124" fill="#082654" font-family="Manrope, Arial, sans-serif" font-size="92" font-weight="800" letter-spacing="-5">Dealivra</text>
+</svg>
