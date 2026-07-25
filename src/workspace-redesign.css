@@ -259,6 +259,58 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .deal-shipping-protection-intro p:last-child{margin:5px 0 0;color:#60758c;font-size:12px;line-height:1.5}
 .deal-shipping-protection>.evidence-panel{margin:0;border-color:#d5e1ef;background:#fff;box-shadow:none}
 #deal-evidence-vault{scroll-margin-top:150px}
+.deal-shipping-protection.is-prerequisite{
+  position:relative;
+  border-color:#bfd5f2;
+  background:linear-gradient(145deg,#f5f9ff,#eef5ff);
+  box-shadow:0 12px 30px rgba(38,91,158,.07);
+}
+.deal-shipping-protection.is-prerequisite::after{
+  content:"";
+  position:absolute;
+  left:34px;
+  bottom:-18px;
+  width:2px;
+  height:18px;
+  background:linear-gradient(#b9d1ef,#d7e5f5);
+}
+.deal-shipping-protection-intro>.shipping-sequence-number,
+.deal-shipping-stage-marker>span{
+  color:#fff;
+  background:linear-gradient(145deg,#2a78e6,#5365dd);
+  box-shadow:0 8px 18px rgba(43,105,211,.22);
+  font:800 16px Manrope,sans-serif;
+}
+.deal-shipping-stage{
+  display:grid;
+  gap:10px;
+  min-width:0;
+}
+.deal-shipping-stage-marker{
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr) 34px;
+  gap:12px;
+  align-items:center;
+  padding:12px 14px;
+  border:1px solid #cdddf0;
+  border-radius:15px;
+  color:#173452;
+  background:linear-gradient(135deg,#f7faff,#eef5ff);
+}
+.deal-shipping-stage-marker>span{
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  border-radius:12px;
+}
+.deal-shipping-stage-marker .eyebrow{margin:0 0 2px;color:#4f78aa;font-size:9px}
+.deal-shipping-stage-marker strong{display:block;font:800 15px Manrope,sans-serif}
+.deal-shipping-stage-marker small{display:block;margin-top:2px;color:#60758c;font-size:11px;line-height:1.45}
+.deal-shipping-stage-marker>svg{width:20px;height:20px;color:#3b75c4}
+.deal-shipping-stage>#shipping-panel{min-width:0}
+.deal-shipping-stage .shipping-panel{width:100%}
+.deal-shipping-protection.is-arrival-evidence{border-color:#d9e4f0;background:#f8fafd}
 
 .deal-progress-strip{
   display:grid;
@@ -442,6 +494,10 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .deal-shipping-protection{padding:10px}
   .deal-shipping-protection-intro{grid-template-columns:36px minmax(0,1fr);gap:10px}
   .deal-shipping-protection-intro>span{width:36px;height:36px}
+  .deal-shipping-protection.is-prerequisite::after{left:27px;bottom:-16px;height:16px}
+  .deal-shipping-stage-marker{grid-template-columns:36px minmax(0,1fr);gap:10px;padding:10px}
+  .deal-shipping-stage-marker>span{width:36px;height:36px}
+  .deal-shipping-stage-marker>svg{display:none}
 
   .view-create #main-content{width:calc(100% - 24px);grid-template-columns:1fr;margin:14px auto 54px}
   .view-create #main-content>.deal-template-picker,
