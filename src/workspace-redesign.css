@@ -159,6 +159,59 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .view-deal .demo-deal-banner{margin:0 0 18px;padding:16px 18px}
 .view-deal .demo-deal-banner h2{font-size:18px}
 .view-deal .demo-deal-banner p:not(.eyebrow){font-size:13px}
+.demo-flow-complete .deal-grid>aside:not(.demo-completion-aside){display:none}
+.demo-completion-aside .agreement{
+  overflow:hidden;
+  padding:0;
+  border-color:#cbdcf3;
+  background:#fff;
+  box-shadow:0 18px 42px rgba(29,69,120,.11);
+}
+.demo-agreement-complete{display:grid;gap:16px;padding:22px}
+.demo-complete-heading{display:grid;grid-template-columns:44px minmax(0,1fr);gap:12px;align-items:start}
+.demo-complete-heading>span{
+  width:44px;
+  height:44px;
+  display:grid;
+  place-items:center;
+  border-radius:13px;
+  color:#fff;
+  background:linear-gradient(145deg,#2879e8,#5365dd);
+  box-shadow:0 9px 20px rgba(42,105,216,.23);
+}
+.demo-complete-heading svg{width:23px;height:23px}
+.demo-complete-heading .eyebrow{margin:1px 0 4px;color:#5279aa;font-size:10px}
+.demo-complete-heading h3{margin:0;color:#17324f;font:800 19px/1.25 Manrope,sans-serif;letter-spacing:-.02em}
+.demo-complete-heading p:last-child{margin:6px 0 0;color:#60738a;font-size:12px;line-height:1.5}
+.demo-complete-next{
+  padding:14px;
+  border:1px solid #dce7f4;
+  border-radius:14px;
+  background:#f7faff;
+}
+.demo-complete-next>p{margin:0 0 10px;color:#49627e;font-size:11px;font-weight:700;line-height:1.45}
+.demo-agreement-complete .demo-complete-next ul{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.demo-agreement-complete .demo-complete-next li{
+  display:grid;
+  grid-template-columns:30px minmax(0,1fr);
+  gap:9px;
+  align-items:start;
+  padding:0;
+}
+.demo-complete-next li>svg{
+  width:30px;
+  height:30px;
+  padding:7px;
+  border-radius:9px;
+  color:#1765dd;
+  background:#e6f0ff;
+}
+.demo-complete-next li span{display:grid;gap:1px}
+.demo-complete-next li b{color:#244260;font-size:12px}
+.demo-complete-next li small{color:#718298;font-size:10px;line-height:1.35}
+.demo-complete-actions{display:grid;gap:8px}
+.demo-complete-actions button{width:100%;min-height:43px;justify-content:center}
+.demo-complete-actions .secondary{color:#34516e;background:#f7f9fc}
 .view-deal .deal-grid{grid-template-columns:minmax(0,1fr) 380px;gap:26px;align-items:start}
 .view-deal .deal-grid>div{
   min-width:0;
@@ -758,3 +811,11 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .deal-primary-dock button{overflow:visible;padding:0 11px;font-size:11px;text-overflow:clip}
   .create-action-dock button,.create-review-dock button{overflow:hidden;padding:0 10px;font-size:11px;text-overflow:ellipsis}
 }
+
+@media(max-width:760px){
+  .demo-agreement-complete{padding:18px}
+  .demo-complete-heading{grid-template-columns:40px minmax(0,1fr)}
+  .demo-complete-heading>span{width:40px;height:40px}
+  .demo-complete-heading h3{font-size:17px}
+}
+
