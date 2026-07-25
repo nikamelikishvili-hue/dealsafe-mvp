@@ -84,6 +84,7 @@
   color:#9ce9df;
   background:rgba(7,164,149,.1);
 }
+.site-header .site-nav a:hover,
 .site-header .site-nav button:hover,
 .site-header .account button:hover{
   background:rgba(44,205,190,.09);
@@ -129,7 +130,9 @@
   background:linear-gradient(135deg,var(--dealivra-teal-dark),#1479a6);
   box-shadow:0 8px 22px rgba(4,145,132,.2);
 }
+.site-nav a:focus-visible,
 .site-nav button:focus-visible,
+.site-header .brand:focus-visible,
 .site-header button:focus-visible,
 .primary:focus-visible,
 .global-primary:focus-visible,
