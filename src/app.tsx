@@ -1251,6 +1251,31 @@ function CreateDealReview({
         {photos.length?<div className="draft-review-media">{photos.map((file,index)=><FilePreview key={`${file.name}-${file.size}-${index}`} file={file} alt={`${t('Preview')} ${index+1}`}/>)}</div>:<div className="draft-review-empty"><ImagePlus/><span>{t('No media selected')}</span></div>}
         <h2>{t('Item details')}</h2>
         <p className="draft-review-description">{draft.description.trim()}</p>
+        <section className="draft-publish-clarity" aria-labelledby="publish-clarity-title">
+          <div className="draft-publish-clarity-heading">
+            <Eye/>
+            <div><p className="eyebrow">{t('Before you publish')}</p><h2 id="publish-clarity-title">{t('Know exactly what happens next')}</h2></div>
+          </div>
+          <div className="draft-publish-clarity-grid">
+            <article>
+              <span className="draft-publish-clarity-icon"><Eye/></span>
+              <div><h3>{t('The buyer will see')}</h3><ul>
+                <li><Check/>{t('Item, price, condition, and disclosures')}</li>
+                <li><Check/>{t(photos.length?`${photos.length} selected ${photos.length===1?'media file':'media files'}`:'No media unless you add it')}</li>
+                <li><Check/>{t(`${draft.deliveryMethod} handoff terms`)}</li>
+              </ul></div>
+            </article>
+            <article>
+              <span className="draft-publish-clarity-icon"><Link2/></span>
+              <div><h3>{t('After publishing')}</h3><ul>
+                <li><Check/>{t('A unique Deal Link is created')}</li>
+                <li><Check/>{t('You choose who receives the link')}</li>
+                <li><Check/>{t('Buyer review continues in the Deal Room')}</li>
+              </ul></div>
+            </article>
+          </div>
+          <p className="draft-publish-clarity-note"><LockKeyhole/>{t('Publishing creates the deal record. It does not charge either party.')}</p>
+        </section>
       </div>
       <aside className="draft-review-summary">
         <strong>{formatMoney(toMinorUnits(draft.price,draft.currency),draft.currency,getAppLanguage())}</strong>
@@ -1261,7 +1286,7 @@ function CreateDealReview({
         <SellerDeclarationChecklist id="seller-declarations" value={declarations} onChange={onDeclarationsChange}/>
         <p><LockKeyhole/>{t(requiresAccount?'Your draft stays private. Create an account only when you are ready to save or publish.':'The Deal Link is not public until you confirm.')}</p>
         {!declarationsComplete&&<small className="declaration-required">{t('Confirm all declarations before publishing.')}</small>}
-        <div className="draft-review-actions"><button className="secondary" disabled={creating} onClick={onEdit}>{t('Edit details')}</button><button className="secondary" disabled={creating} onClick={onSaveDraft}>{t(requiresAccount?'Create account to save':'Save as draft')}</button><button className="primary" disabled={creating||!declarationsComplete} onClick={onPublish}>{t(creating?'Publishing…':requiresAccount?'Create account to publish':'Confirm and publish')}<ArrowRight size={18}/></button></div>
+        <div className="draft-review-save"><div><Bookmark/><span><b>{t('Save for later')}</b><small>{t(requiresAccount?'Create an account and keep this record private.':'Keep this record private until you are ready to publish.')}</small></span></div><button className="secondary" disabled={creating} onClick={onSaveDraft}>{t(requiresAccount?'Create account to save':'Save draft')}</button></div>
       </aside>
     </div>
     <div className="create-review-dock" role="region" aria-live="polite" aria-label={t('Publish deal actions')}>
@@ -2074,7 +2099,7 @@ export function App() {
           <div><strong>{t(draftRecovered?'Draft recovered':'Draft recovery is on')}</strong><span aria-live="polite">{t(draftRecovered?'Your item and terms were restored from this device. Review them before publishing.':`Saved privately on this device · ${createDraftRecoveryTime}`)}</span><small>{t('Photos, files, identifiers, and seller confirmations are never stored in browser recovery.')}</small></div>
           <button type="button" onClick={resetCreateFlow}><Trash2 size={15}/>{t('Start over')}</button>
         </section>}
-        {!reviewingDraft&&<header className="create-flow-heading"><button className="back" onClick={()=>setView('home')}>← {t('Dashboard')}</button><p className="eyebrow">{t(createStepMeta[createStep].eyebrow)}</p><h1>{t(createStepMeta[createStep].title)}</h1><p className="lede small">{t(createStepMeta[createStep].description)}</p></header>}
+        {!reviewingDraft&&<header className="create-flow-heading"><button className="back" onClick={()=>setView('home')}>← {t(user?'Dashboard':'Home')}</button><p className="eyebrow">{t(createStepMeta[createStep].eyebrow)}</p><h1>{t(createStepMeta[createStep].title)}</h1><p className="lede small">{t(createStepMeta[createStep].description)}</p></header>}
         {!reviewingDraft&&createErrors.length>0&&<CreateValidationSummary errors={createErrors} onSelect={focusCreateField}/>}
         {!reviewingDraft&&createStep===1&&<div className="create-step-layout">
           <DealTemplatePicker selected={dealTemplate} onSelect={setDealTemplate}/>
