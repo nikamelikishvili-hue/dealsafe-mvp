@@ -1644,7 +1644,7 @@ const publicInfoContent:Record<PublicInfoView,{eyebrow:string;title:string;intro
 };
 
 type PageMetadata={label:string;title:string;description:string;path:string;indexable:boolean};
-const siteOrigin='https://dealsafe-mvp.vercel.app';
+const siteOrigin='https://dealivra.com';
 const privateViewLabels:Partial<Record<View,string>>={
   auth:'Dealivra account',create:'Start a deal',published:'Deal Link ready',deal:'Deal record',profile:'Trust profile',
   passport:'Digital Trust Passport',admin:'Admin',forgot:'Reset password',reset:'Choose a new password','link-error':'Deal Link unavailable',

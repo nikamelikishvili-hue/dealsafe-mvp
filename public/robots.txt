@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://dealsafe-mvp.vercel.app/sitemap.xml
+Sitemap: https://dealivra.com/sitemap.xml

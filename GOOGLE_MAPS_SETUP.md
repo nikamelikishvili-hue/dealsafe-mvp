@@ -11,7 +11,7 @@ Dealivra-ში შეხვედრის მისამართის ვ�
    - Places API (New)
 4. `APIs & Services` → `Credentials` გვერდზე შექმენი API key.
 5. გასაღების `Application restrictions` ნაწილში აირჩიე `Websites` და დაამატე:
-   - `https://dealsafe-mvp.vercel.app/*`
+   - `https://dealivra.com/*`
    - `http://localhost:5173/*`
 6. `API restrictions` ნაწილში დატოვე მხოლოდ:
    - Maps JavaScript API

@@ -20,7 +20,7 @@ export function requiredSecret(name: string) {
 }
 
 export function siteUrl() {
-  const configured = Deno.env.get("SITE_URL") || "https://dealsafe-mvp.vercel.app";
+  const configured = Deno.env.get("SITE_URL") || "https://dealivra.com";
   return configured.replace(/\/$/, "");
 }
 
