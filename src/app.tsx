@@ -574,21 +574,40 @@ function AgreementPrintDocument({deal}:{deal:Deal}){
   </>;
 }
 
-function BuyerInvitePanel({deal}:{deal:Deal}){const [notice,setNotice]=useState('');const link=`${location.origin}/?deal=${deal.publicId}`;const message=`${t('Review agreement')}: ${deal.title} · ${dealPrice(deal)} · ${link}`;const flash=(text:string)=>{setNotice(text);window.setTimeout(()=>setNotice(''),2200)};const copyText=async(text:string)=>{try{await navigator.clipboard?.writeText(text)}catch{}};const copy=async()=>{await copyText(link);flash('Deal Link copied.')};const sms=async()=>{await copyText(message);flash('Message copied. Paste it into SMS if needed.');window.location.href=/Android/i.test(navigator.userAgent)?`sms:?body=${encodeURIComponent(message)}`:'sms:'};const more=async()=>{try{if(!navigator.share)throw new Error('share-unavailable');await navigator.share({title:`Dealivra · ${deal.title}`,text:message,url:link})}catch(error){if(error instanceof Error&&error.name==='AbortError')return;await copyText(message);flash('Sharing is not available. Message copied.')}};return <section className="buyer-invite no-print"><div className="invite-heading"><Send/><div><p className="eyebrow">{t('Share')}</p><h2>{t('Invite buyer')}</h2><p>{t('Share this secure Deal Link with the buyer.')}</p></div></div><div className="invite-actions"><button className="secondary" onClick={copy}><Copy size={16}/>{t('Copy Deal Link')}</button><a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">WhatsApp</a><a href={`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(`${t('Review agreement')}: ${deal.title}`)}`} target="_blank" rel="noreferrer">Telegram</a><a href={`mailto:?subject=${encodeURIComponent(`Dealivra · ${deal.title}`)}&body=${encodeURIComponent(message)}`}>{t('Email')}</a><button className="secondary" onClick={sms}><MessageCircle size={16}/>{t('SMS')}</button><button className="secondary invite-more" onClick={more}><Share2 size={16}/>{t('More apps')}</button></div>{notice&&<div className="notice">{t(notice)}</div>}</section>}
+function BuyerInvitePanel({deal}:{deal:Deal}){const [notice,setNotice]=useState('');const link=`${location.origin}/?deal=${deal.publicId}`;const message=`${t('Review agreement')}: ${deal.title} · ${dealPrice(deal)} · ${link}`;const flash=(text:string)=>{setNotice(text);window.setTimeout(()=>setNotice(''),2200)};const copyText=async(text:string)=>{try{await navigator.clipboard?.writeText(text)}catch{}};const copy=async()=>{await copyText(link);flash('Deal Link copied.')};const sms=async()=>{await copyText(message);flash('Message copied. Paste it into SMS if needed.');window.location.href=/Android/i.test(navigator.userAgent)?`sms:?body=${encodeURIComponent(message)}`:'sms:'};const more=async()=>{try{if(!navigator.share)throw new Error('share-unavailable');await navigator.share({title:`Dealivra · ${deal.title}`,text:message,url:link})}catch(error){if(error instanceof Error&&error.name==='AbortError')return;await copyText(message);flash('Sharing is not available. Message copied.')}};return <section className="buyer-invite no-print"><div className="invite-heading"><Send/><div><p className="eyebrow">{t('Share')}</p><h2>{t('Invite buyer')}</h2><p>{t('Share this Deal Link directly with the intended buyer.')}</p></div></div><div className="invite-actions"><button className="secondary" onClick={copy}><Copy size={16}/>{t('Copy Deal Link')}</button><a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">WhatsApp</a><a href={`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(`${t('Review agreement')}: ${deal.title}`)}`} target="_blank" rel="noreferrer">Telegram</a><a href={`mailto:?subject=${encodeURIComponent(`Dealivra · ${deal.title}`)}&body=${encodeURIComponent(message)}`}>{t('Email')}</a><button className="secondary" onClick={sms}><MessageCircle size={16}/>{t('SMS')}</button><button className="secondary invite-more" onClick={more}><Share2 size={16}/>{t('More apps')}</button></div>{notice&&<div className="notice">{t(notice)}</div>}</section>}
 
-function PublishedDealSuccess({deal,warning,onOpen,onDashboard,onCreateAnother}:{deal:Deal;warning:string;onOpen:()=>void;onDashboard:()=>void;onCreateAnother:()=>void}){
+function PublishedDealSuccess({deal,warning,session,acceptanceProtected,onProtectionChanged,onOpen,onDashboard,onCreateAnother}:{deal:Deal;warning:string;session:StoredSession|null;acceptanceProtected:boolean;onProtectionChanged:(enabled:boolean)=>void;onOpen:()=>void;onDashboard:()=>void;onCreateAnother:()=>void}){
   const [notice,setNotice]=useState('');
+  const [accessCode,setAccessCode]=useState('');
+  const [accessMessage,setAccessMessage]=useState('');
+  const [accessBusy,setAccessBusy]=useState(false);
   const noticeTimer=useRef<number|undefined>(undefined);
   const link=`${location.origin}/?deal=${deal.publicId}`;
   const message=`Review this Dealivra agreement: ${deal.title} · ${dealPrice(deal)} · ${link}`;
   useEffect(()=>()=>window.clearTimeout(noticeTimer.current),[]);
   const flash=(text:string)=>{window.clearTimeout(noticeTimer.current);setNotice(text);noticeTimer.current=window.setTimeout(()=>setNotice(''),2200)};
-  const copy=async(value=link)=>{
+  const copy=async(value=link,successMessage=value===link?'Deal Link copied.':'Invitation message copied.')=>{
     try{
       await navigator.clipboard.writeText(value);
-      flash(value===link?'Deal Link copied.':'Invitation message copied.');
+      flash(successMessage);
     }catch{
       flash('Could not copy automatically. Select the link and copy it.');
+    }
+  };
+  const protectAcceptance=async()=>{
+    if(!session){setAccessMessage('Sign in to protect buyer acceptance.');return}
+    setAccessBusy(true);
+    setAccessMessage('');
+    setAccessCode('');
+    try{
+      const code=await configureBuyerAccessCode(session,deal.id,true);
+      if(!code)throw new Error('Could not create a buyer access code.');
+      setAccessCode(code);
+      onProtectionChanged(true);
+    }catch(error){
+      setAccessMessage(error instanceof Error?error.message:'Could not create a buyer access code.');
+    }finally{
+      setAccessBusy(false);
     }
   };
   const share=async()=>{
@@ -605,7 +624,7 @@ function PublishedDealSuccess({deal,warning,onOpen,onDashboard,onCreateAnother}:
       <span className="published-success-mark"><CircleCheckBig/></span>
       <p className="eyebrow">{t('DEAL PUBLISHED')}</p>
       <h1 id="published-success-title">{t('Your Deal Link is ready.')}</h1>
-      <p>{t('Send this private link to the buyer. They can review the item, price, disclosures, and handoff terms before accepting.')}</p>
+      <p>{t('Send this Deal Link to the buyer. They can review the item, price, disclosures, and handoff terms before accepting.')}</p>
     </div>
 
     {warning&&<div className="published-success-warning notice" role="alert"><ShieldAlert/><span>{t(warning)}</span></div>}
@@ -618,10 +637,25 @@ function PublishedDealSuccess({deal,warning,onOpen,onDashboard,onCreateAnother}:
           <strong>{dealPrice(deal)}</strong>
         </div>
         <div className="published-link-block">
-          <label id="published-share-title" htmlFor="published-deal-link">{t('Private Deal Link')}</label>
+          <label id="published-share-title" htmlFor="published-deal-link">{t('Deal Link')}</label>
           <div><input id="published-deal-link" value={link} readOnly onFocus={event=>event.currentTarget.select()}/><button type="button" className="primary" onClick={()=>void copy()}><Copy size={18}/>{t('Copy link')}</button></div>
-          <small><LockKeyhole/>{t('Only share this link with the intended buyer.')}</small>
+          <small><LockKeyhole/>{t(acceptanceProtected?'Acceptance requires the private buyer code.':'Anyone with this link can view the deal. Share it only with the intended buyer.')}</small>
         </div>
+        <section className={`published-access-panel ${acceptanceProtected?'is-protected':''}`} aria-labelledby="published-access-title">
+          <div className="published-access-heading">
+            <span><LockKeyhole/></span>
+            <div><small>{t('ACCEPTANCE SECURITY')}</small><h3 id="published-access-title">{t(acceptanceProtected?'Buyer code required':'Link-only acceptance')}</h3></div>
+            <em>{t(acceptanceProtected?'Protected':'Optional')}</em>
+          </div>
+          {accessCode?<div className="published-access-code">
+            <div><small>{t('One-time buyer code')}</small><strong>{accessCode}</strong><p>{t('Send this code separately from the Deal Link. It is shown only once.')}</p></div>
+            <button type="button" className="secondary" onClick={()=>void copy(accessCode,'Buyer access code copied.')}><Copy size={16}/>{t('Copy code')}</button>
+          </div>:<div className="published-access-choice">
+            <p>{t(acceptanceProtected?'Acceptance protection is active. Generate a new code if the buyer no longer has the original.':'Add a 6-digit code when you want only the intended buyer to accept this deal.')}</p>
+            <button type="button" className="secondary" disabled={accessBusy} onClick={()=>void protectAcceptance()}><LockKeyhole size={16}/>{t(accessBusy?'Creating code…':acceptanceProtected?'Generate new code':'Require buyer code')}</button>
+          </div>}
+          {accessMessage&&<div className="published-access-message notice" role="status">{t(accessMessage)}</div>}
+        </section>
         <div className="published-share-actions" aria-label={t('Share Deal Link')}>
           <a href={`mailto:?subject=${encodeURIComponent(`Dealivra · ${deal.title}`)}&body=${encodeURIComponent(message)}`}><Send size={17}/>{t('Email')}</a>
           <a href={`sms:?&body=${encodeURIComponent(message)}`}><MessageCircle size={17}/>{t('Text message')}</a>
@@ -2006,7 +2040,7 @@ export function App() {
       {Object.prototype.hasOwnProperty.call(publicInfoPaths,view)&&<PublicInfoPage view={view as PublicInfoView} onBack={()=>goHomeSection()} onCreate={openCreate}/>}
       {view==='home'&&<InstallApp/>}
       {view==='admin'&&session&&isAdmin&&<><AdminRevenueCenter session={session} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/><AdminDisputeCenter session={session}/><AdminReportCenter session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/></>}
-      {view==='published'&&active&&<PublishedDealSuccess deal={active} warning={authMessage} onOpen={()=>{setAuthMessage('');setView('deal')}} onDashboard={()=>goHomeSection()} onCreateAnother={openCreate}/>}
+      {view==='published'&&active&&<PublishedDealSuccess deal={active} warning={authMessage} session={session} acceptanceProtected={acceptanceProtected} onProtectionChanged={setAcceptanceProtected} onOpen={()=>{setAuthMessage('');setView('deal')}} onDashboard={()=>goHomeSection()} onCreateAnother={openCreate}/>}
       {view==='create'&&authMessage&&<div className="creation-error notice">{t(authMessage)}</div>}
       {view==='create'&&creating&&<div className="creation-progress notice">{t('Creating your Deal Link…')}</div>}
       {view==='deal'&&active&&!isDemoActive&&<div className="deal-workspace-sections">
