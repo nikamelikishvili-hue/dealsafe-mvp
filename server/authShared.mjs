@@ -12,7 +12,7 @@ function configuredSupabase() {
     .trim()
     .replace(/\/+$/, '');
   const key = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '')
-    .trim();
+    .replace(/\s+/g, '');
   if (!url || !key) throw new Error('Authentication service is not configured.');
 
   try {
@@ -26,6 +26,24 @@ function configuredSupabase() {
   }
 
   return { url, key };
+}
+
+function providerFailureCode(error) {
+  const message = error instanceof Error ? error.message : '';
+  if (/invalid character|invalid header|header value|headers/i.test(message)) {
+    return 'INVALID_HEADER_VALUE';
+  }
+  if (/failed to parse url|invalid url|unsupported protocol/i.test(message)) {
+    return 'INVALID_ENDPOINT_URL';
+  }
+  if (/fetch is not defined|fetch is not a function/i.test(message)) {
+    return 'FETCH_UNAVAILABLE';
+  }
+  if (/fetch failed|network|socket|connect|timeout/i.test(message)) {
+    return 'NETWORK_REQUEST_FAILED';
+  }
+  if (error instanceof TypeError) return 'PROVIDER_TYPE_ERROR';
+  return 'PROVIDER_REQUEST_FAILED';
 }
 
 export function prepareResponse(response) {
@@ -109,7 +127,9 @@ export async function supabaseAuthRequest(path, init) {
       },
     });
   } catch (error) {
-    throw new Error('Authentication provider request failed.', { cause: error });
+    const providerError = new Error('Authentication provider request failed.', { cause: error });
+    providerError.code = providerFailureCode(error);
+    throw providerError;
   }
 }
 

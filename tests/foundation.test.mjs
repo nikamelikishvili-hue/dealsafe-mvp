@@ -161,7 +161,7 @@ test('auth handlers never return a refresh token to browser JavaScript', async (
   const originalUrl = process.env.SUPABASE_URL;
   const originalKey = process.env.SUPABASE_PUBLISHABLE_KEY;
   process.env.SUPABASE_URL = '  https://project.example.supabase.co/  ';
-  process.env.SUPABASE_PUBLISHABLE_KEY = '  sb_publishable_test  ';
+  process.env.SUPABASE_PUBLISHABLE_KEY = '  sb_publishable_\n test  ';
   let requestedUrl;
   let requestedApiKey;
 
