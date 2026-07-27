@@ -2,6 +2,31 @@ import type { CurrencyCode } from './currency';
 
 export type DealStatus = 'draft' | 'published' | 'accepted' | 'completed' | 'cancelled' | 'disputed';
 export type VerificationStatus = 'not_started' | 'pending' | 'verified' | 'failed';
+export type DealCategoryId =
+  | 'phone'
+  | 'tablet'
+  | 'laptop'
+  | 'vehicle'
+  | 'watch'
+  | 'camera'
+  | 'gaming'
+  | 'tools'
+  | 'business'
+  | 'jewelry'
+  | 'collectible'
+  | 'general';
+
+export interface DealCatalogIdentity {
+  categoryId: DealCategoryId;
+  catalogVersion: string;
+  brandId?: string;
+  brandLabel?: string;
+  modelId?: string;
+  modelLabel?: string;
+  modelYear?: number;
+  variantId?: string;
+  variantLabel?: string;
+}
 
 export interface Deal {
   id: string;
@@ -23,6 +48,7 @@ export interface Deal {
   createdAt: string;
   expiresAt?: string;
   mediaUrls?: string[];
+  catalog?: DealCatalogIdentity;
   viewerRole?: 'seller' | 'buyer' | 'visitor';
 }
 
@@ -31,4 +57,5 @@ export interface DealDraft extends Pick<Deal, 'title' | 'description' | 'conditi
   currency: CurrencyCode;
   serialNumber: string;
   expiresInDays?: number;
+  catalog?: DealCatalogIdentity;
 }
