@@ -9,6 +9,16 @@ import './workspace-redesign.css';
 import './verification-polish.css';
 import './dealivra-brand.css';
 
+const analyticsHost = location.hostname === 'dealivra.com'
+  || location.hostname === 'www.dealivra.com'
+  || location.hostname.endsWith('.vercel.app');
+if (analyticsHost) {
+  const analyticsScript = document.createElement('script');
+  analyticsScript.src = '/_vercel/insights/script.js';
+  analyticsScript.defer = true;
+  document.head.append(analyticsScript);
+}
+
 const root = createRoot(document.getElementById('root')!);
 
 const destinationPath: Record<Exclude<LandingDestination, 'create' | 'signin' | 'signup' | 'demo'>, string> = {

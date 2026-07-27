@@ -112,10 +112,90 @@
   color:inherit;
   font:800 11px/1.35 Manrope,sans-serif;
 }
+.smart-catalog-source,
+.vin-lookup-disclaimer{
+  display:flex;
+  align-items:flex-start;
+  gap:7px;
+  margin:9px 1px 0;
+  color:#667d97;
+  font:600 9px/1.45 Manrope,sans-serif;
+}
+.smart-catalog-source svg,
+.vin-lookup-disclaimer svg{
+  width:15px;
+  height:15px;
+  flex:none;
+  color:#3976bd;
+}
+.identifier-field{margin-bottom:19px}
+.identifier-field>label{
+  display:block;
+  margin:0;
+  color:#182d47;
+  font-size:14px;
+  font-weight:700;
+}
+.identifier-input-action{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:9px;
+  align-items:start;
+}
+.identifier-input-action input{min-width:0}
+.vin-check-button{
+  min-height:45px;
+  margin-top:8px;
+  padding:0 15px;
+  border:1px solid #97b8e5;
+  border-radius:10px;
+  color:#245fa9;
+  background:#f1f7ff;
+  font:800 11px Manrope,sans-serif;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+}
+.vin-check-button:hover:not(:disabled){border-color:#568ed8;background:#e7f1ff}
+.vin-check-button:focus-visible{outline:3px solid rgba(55,114,204,.2);outline-offset:2px}
+.vin-check-button:disabled{color:#8a9aae;border-color:#d8e1eb;background:#f3f5f7;cursor:not-allowed}
+.vin-check-button svg{width:17px;height:17px}
+.identifier-field>.identifier-feedback{
+  display:block;
+  margin-top:7px;
+  color:#79857f;
+  font-size:11px;
+  font-weight:500;
+}
+.vin-lookup-status{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  margin:-5px 0 13px;
+  padding:11px 12px;
+  border:1px solid #cfddec;
+  border-radius:11px;
+  color:#536b84;
+  background:#f7faff;
+}
+.vin-lookup-status>svg{width:19px;height:19px;flex:none}
+.vin-lookup-status span,
+.vin-lookup-status b,
+.vin-lookup-status small,
+.vin-lookup-status em{display:block}
+.vin-lookup-status b{font:800 11px Manrope,sans-serif}
+.vin-lookup-status small{margin-top:2px;font:550 10px/1.45 Manrope,sans-serif}
+.vin-lookup-status em{margin-top:3px;color:#71869d;font:650 9px Manrope,sans-serif;font-style:normal}
+.vin-lookup-status.is-success{border-color:#b8d9c8;color:#266347;background:#f2faf5}
+.vin-lookup-status.is-error{border-color:#e6c7c3;color:#9b3d35;background:#fff8f7}
+.vin-lookup-disclaimer{margin:-3px 1px 17px}
 
 @media(max-width:760px){
   .catalog-category-toggle{min-height:44px}
   .smart-catalog-fields{padding:14px}
   .smart-catalog-grid{grid-template-columns:1fr}
   .smart-catalog-grid select,.smart-catalog-grid input{min-height:46px;font-size:13px}
+  .identifier-input-action{grid-template-columns:1fr}
+  .vin-check-button{width:100%;min-height:46px;margin-top:0}
 }

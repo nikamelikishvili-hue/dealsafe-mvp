@@ -14,6 +14,16 @@ Dealivra must use separate configuration for Local, Preview, Staging, and Produc
 
 `VITE_` values are public by design and are included in the browser build. They must never contain a Supabase `service_role` JWT, an `sb_secret_` key, a Stripe secret, an email-provider key, or any other privileged credential.
 
+## Fixed external reference services
+
+The Smart Catalog VIN decoder uses the public NHTSA vPIC HTTPS API from a
+Dealivra server route. It requires no API key and must not be configured as a
+browser URL or called directly from browser code. The server fixes the provider
+origin, validates the VIN and optional model year, limits response size, applies
+a short timeout and bounded memory cache with a hashed key, and returns only
+reviewed vehicle fields. Provider failure must leave manual year/make/model
+entry available.
+
 ## Environment matrix
 
 | Environment | Data/provider boundary | Access | Required behavior |
@@ -32,6 +42,7 @@ Preview, Staging, and Production must not share a Supabase project, Stripe accou
 - Auth endpoints return generic user-facing errors and must never return configuration values.
 - Server diagnostics may name the failing configuration category but must not log URLs, keys, tokens, cookies, passwords, or submitted identity data.
 - Address autocomplete is optional. State, ZIP code, apartment/suite/unit, and the remaining address fields must continue to work without Google Maps.
+- NHTSA vPIC is optional at runtime. VIN decoding failure must not block manual vehicle entry or publishing.
 
 ## Change procedure
 

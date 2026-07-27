@@ -29,6 +29,7 @@ flowchart LR
     BFF --> Identity["Approved KYC provider"]
     BFF --> Sign["Approved e-sign/clickwrap provider"]
     BFF --> Notify["Email/SMS provider"]
+    BFF --> VehicleData["NHTSA vPIC vehicle data"]
     Stripe --> Events["Verified webhook processor"]
     Identity --> Events
     Sign --> Events
@@ -46,6 +47,7 @@ flowchart LR
 | Browser to Dealivra | All fields, URLs, files, tokens, and action requests | Schema validation, CSRF strategy, session check, rate limit, authorization, output encoding |
 | Dealivra to Supabase | User identity and requested record | Least privilege, RLS, explicit grants, server-only service role |
 | Dealivra to Stripe/KYC/e-sign | Provider IDs, amounts, redirect state | Server secrets, allowlisted callback URLs, idempotency, correlation IDs |
+| Dealivra to public reference-data providers | VIN or catalog lookup value | Fixed HTTPS endpoint, strict input/output schema, timeout, bounded response, server cache, safe manual fallback |
 | Provider webhook to Dealivra | Signed event body | Raw-body signature verification, timestamp tolerance, atomic deduplication, state-transition validation |
 | Storage upload | File bytes and metadata | MIME/extension validation, size limits, malware scan, private bucket, signed access, metadata stripping |
 | Admin interface | High-impact commands | Separate role, phishing-resistant MFA, step-up auth, reason, dual control for selected actions, audit |
@@ -97,6 +99,7 @@ The server or Supabase Edge Function must exclusively perform:
 - Signed URL issuance for private evidence.
 - Administrator moderation and support commands.
 - Notifications based on committed state.
+- Versioned catalog delivery and external reference-data lookups such as VIN decoding.
 
 The client may optimistically update presentation, but final state must come from the server.
 
