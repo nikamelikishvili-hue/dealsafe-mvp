@@ -1939,7 +1939,7 @@ export function App() {
     if(dealTemplate!=='vehicle'||!identifierEntered||!identifierValid||vehicleVinLookup.status==='loading')return;
     setVehicleVinLookup({status:'loading',message:'Checking manufacturer data…'});
     try{
-      const result=await decodeVehicleVin(draft.serialNumber,catalogSelectionRef.current.year);
+      const result=await decodeVehicleVin(draft.serialNumber);
       const matchedBrand=vehicleCatalog.find(item=>item.label.toLocaleLowerCase('en-US')===result.make.toLocaleLowerCase('en-US'));
       const matchedModel=matchedBrand?matchCatalogValue(matchedBrand.models,result.model):'';
       const matchedYear=matchCatalogValue(vehicleYears,result.modelYear);
