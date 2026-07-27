@@ -1,5 +1,10 @@
 # Implementation roadmap and $15,000 budget
 
+> Historical MVP estimate. This six-week plan predates the current production, security, payment,
+> operations, and global-readiness requirements. Use
+> [docs/production-readiness/README.md](docs/production-readiness/README.md) as the authoritative
+> delivery program and release-gate index.
+
 ## Recommended stack
 
 | Layer | Choice | Why it fits the MVP |

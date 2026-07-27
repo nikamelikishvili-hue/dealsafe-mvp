@@ -1,5 +1,10 @@
 # Dealivra protected payments — US launch architecture
 
+> Early payment architecture. The Sandbox safety boundary remains active. The complete target
+> workflow, operations model, reconciliation requirements, and live-mode gates are defined in
+> [docs/production-readiness/05_PAYMENTS_KYC_DISPUTES.md](docs/production-readiness/05_PAYMENTS_KYC_DISPUTES.md)
+> and [docs/production-readiness/07_TEST_RELEASE_GATES.md](docs/production-readiness/07_TEST_RELEASE_GATES.md).
+
 ## Product decision
 
 Dealivra is electronic-payment only. Physical cash is not offered.
