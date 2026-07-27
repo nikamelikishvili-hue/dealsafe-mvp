@@ -47,6 +47,8 @@ npm run verify
 This performs the TypeScript check, foundation/security configuration tests, a
 high-confidence repository secret scan, and a production build. Scanner output
 names only the affected file and credential category; it never prints the value.
+The final gate starts the built application and smoke-tests the home page, a
+deep-linked policy route, the sign-in entry, compiled JavaScript, and service worker.
 
 ## Production setup
 

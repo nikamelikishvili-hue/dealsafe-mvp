@@ -476,3 +476,14 @@ test('secret scanner recognizes high-risk credentials without returning their va
   assert.equal(JSON.stringify(matches).includes(fakeGitHubToken), false);
   assert.equal(JSON.stringify(matches).includes(fakeStripeSecret), false);
 });
+
+test('verification includes a production-preview navigation smoke test', () => {
+  const packageJson = readJson('package.json');
+  const smokeTest = readText('scripts/smoke-preview.mjs');
+
+  assert.match(packageJson.scripts.verify, /npm run smoke:preview/);
+  assert.equal(packageJson.scripts['smoke:preview'], 'node scripts/smoke-preview.mjs');
+  assert.match(smokeTest, /expectApplicationPage\('\/terms'\)/);
+  assert.match(smokeTest, /expectApplicationPage\('\/\?start=signin'\)/);
+  assert.match(smokeTest, /serviceWorkerResponse/);
+});

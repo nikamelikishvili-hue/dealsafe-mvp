@@ -142,3 +142,20 @@ This log records completed delivery evidence. A backlog item is not marked compl
 - Added a regression test proving representative credentials are classified
   without being returned by the scanner.
 
+## 2026-07-27 — Built Preview smoke gate
+
+### Implemented on the review branch
+
+- Added a CI-compatible smoke test that starts the production build with the
+  Vite Preview server and waits for readiness with a bounded timeout.
+- Verified the application shell at `/`, `/terms`, and `/?start=signin`.
+- Verified that the generated JavaScript entry asset and service worker are
+  reachable with the expected response type/status.
+- Added the smoke test to the required `npm run verify` sequence after build.
+
+### Remaining Preview evidence
+
+- The protected Vercel deployment still needs a remote smoke check because
+  Vercel rewrites, headers, Functions, and deployment protection do not run in
+  the local Vite Preview server.
+
