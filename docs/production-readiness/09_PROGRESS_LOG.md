@@ -153,9 +153,31 @@ This log records completed delivery evidence. A backlog item is not marked compl
   reachable with the expected response type/status.
 - Added the smoke test to the required `npm run verify` sequence after build.
 
-### Remaining Preview evidence
+### Protected Preview evidence
 
-- The protected Vercel deployment still needs a remote smoke check because
-  Vercel rewrites, headers, Functions, and deployment protection do not run in
-  the local Vite Preview server.
+- GitHub CI and the protected Vercel Preview passed for commit `514566a`.
+- The deployed home, Terms, and sign-in routes rendered without browser console
+  errors.
+- A non-existent test account received the expected generic
+  `Invalid email or password.` response from the deployed Auth Function.
+
+## 2026-07-27 — Final authentication boundary review
+
+### Implemented on the review branch
+
+- Corrected the `__Host-dealivra-refresh` cookie path to `/`, as required by
+  browser enforcement of the `__Host-` prefix.
+- Added regression assertions proving login and refresh responses use
+  `Path=/`, `HttpOnly`, `Secure`, and `SameSite=Strict`.
+- Extended the 16 KB authentication request boundary to parsed JSON objects
+  and UTF-8 byte length, not only raw string bodies.
+- Added an endpoint regression test proving oversized parsed input is rejected
+  before the authentication provider is contacted.
+
+### Verification evidence
+
+- TypeScript strict check: passed.
+- Authentication and foundation tests: 22 passed, 0 failed.
+- Repository secret scan: passed.
+- Production build and local Preview smoke test: passed.
 

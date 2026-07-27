@@ -1,6 +1,9 @@
 const refreshCookieName = '__Host-dealivra-refresh';
-const refreshCookiePath = '/api/auth';
+// The __Host- prefix is accepted by browsers only when Path is exactly "/"
+// and no Domain attribute is present.
+const refreshCookiePath = '/';
 const refreshMaxAgeSeconds = 8 * 60 * 60;
+const maxJsonBodyBytes = 16_384;
 
 function header(request, name) {
   const value = request.headers?.[name] ?? request.headers?.[name.toLowerCase()];
@@ -93,9 +96,22 @@ export function requireSameOrigin(request, response) {
 }
 
 export function readJsonBody(request) {
-  if (request.body && typeof request.body === 'object') return request.body;
-  if (typeof request.body === 'string' && request.body.length <= 16_384) {
+  const declaredLength = Number(header(request, 'content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maxJsonBodyBytes) return null;
+
+  if (request.body && typeof request.body === 'object') {
     try {
+      const serialized = JSON.stringify(request.body);
+      if (new TextEncoder().encode(serialized).byteLength > maxJsonBodyBytes) return null;
+      return request.body;
+    } catch {
+      return null;
+    }
+  }
+
+  if (typeof request.body === 'string') {
+    try {
+      if (new TextEncoder().encode(request.body).byteLength > maxJsonBodyBytes) return null;
       return JSON.parse(request.body);
     } catch {
       return null;

@@ -180,6 +180,7 @@ test('browser auth keeps the long-lived refresh secret in an HttpOnly cookie', (
   assert.match(authService, /fetch\('\/api\/auth\/refresh'/);
   assert.match(serverAuth, /__Host-dealivra-refresh/);
   assert.match(serverAuth, /HttpOnly; Secure; SameSite=Strict/);
+  assert.match(serverAuth, /const refreshCookiePath = '\/';/);
   assert.match(serverAuth, /Path=\$\{refreshCookiePath\}/);
   assert.match(loginFunction, /publicSession\(data\)/);
   assert.match(refreshFunction, /setRefreshCookie\(response, data\.refresh_token\)/);
@@ -238,6 +239,7 @@ test('auth handlers never return a refresh token to browser JavaScript', async (
   assert.equal(requestedUrl, 'https://project.example.supabase.co/auth/v1/token?grant_type=password');
   assert.equal(requestedApiKey, 'sb_publishable_test');
   assert.match(response.headers.get('set-cookie'), /HttpOnly; Secure; SameSite=Strict/);
+  assert.match(response.headers.get('set-cookie'), /Path=\/;/);
   assert.equal(JSON.stringify(response.payload).includes('server-only-refresh-secret'), false);
   assert.equal(response.payload.access_token.startsWith('header.'), true);
 });
@@ -279,6 +281,25 @@ test('signup validates password strength before contacting the auth provider', a
 
   assert.equal(response.statusCode, 400);
   assert.match(response.payload.error, /12\+ characters/);
+  assert.equal(providerCalled, false);
+});
+
+test('auth endpoints reject oversized parsed JSON before contacting the provider', async () => {
+  const { default: login } = await import('../api/auth/login.mjs');
+  const response = createResponse();
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, () => login(authRequest({
+    email: 'user@example.com',
+    password: 'ExamplePass123',
+    padding: 'x'.repeat(17_000),
+  }), response));
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.payload.error, 'Enter a valid email and password.');
   assert.equal(providerCalled, false);
 });
 
@@ -336,7 +357,7 @@ test('refresh rotates the HttpOnly cookie without exposing its secret', async ()
   assert.deepEqual(submittedBody, { refresh_token: 'old/refresh+secret' });
   assert.match(
     response.headers.get('set-cookie'),
-    /__Host-dealivra-refresh=new%2Frefresh%2Bsecret;.*HttpOnly; Secure; SameSite=Strict/,
+    /__Host-dealivra-refresh=new%2Frefresh%2Bsecret; Path=\/;.*HttpOnly; Secure; SameSite=Strict/,
   );
   assert.equal(JSON.stringify(response.payload).includes('new/refresh+secret'), false);
 });
