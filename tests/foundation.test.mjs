@@ -106,3 +106,101 @@ test('the production-readiness specification is complete and linked', () => {
   const repositoryReadme = readText('README.md');
   assert.match(repositoryReadme, /docs\/production-readiness\/README\.md/);
 });
+
+test('browser auth keeps the long-lived refresh secret in an HttpOnly cookie', () => {
+  const authService = readText('src/services/supabaseRest.ts');
+  const serverAuth = readText('server/authShared.mjs');
+  const loginFunction = readText('api/auth/login.mjs');
+  const refreshFunction = readText('api/auth/refresh.mjs');
+
+  assert.match(authService, /sessionStorage\.setItem\(sessionStorageKey/);
+  assert.doesNotMatch(authService, /localStorage\.setItem\(/);
+  assert.match(authService, /fetch\('\/api\/auth\/login'/);
+  assert.match(authService, /fetch\('\/api\/auth\/refresh'/);
+  assert.match(serverAuth, /__Host-dealivra-refresh/);
+  assert.match(serverAuth, /HttpOnly; Secure; SameSite=Strict/);
+  assert.match(serverAuth, /Path=\$\{refreshCookiePath\}/);
+  assert.match(loginFunction, /publicSession\(data\)/);
+  assert.match(refreshFunction, /setRefreshCookie\(response, data\.refresh_token\)/);
+});
+
+test('auth endpoints enforce same-origin POST requests and do not cache responses', () => {
+  const shared = readText('server/authShared.mjs');
+  const vercel = readJson('vercel.json');
+  const spaRewrite = vercel.rewrites.find(rule => rule.destination === '/index.html');
+
+  assert.match(shared, /request\.method === 'POST'/);
+  assert.match(shared, /new URL\(origin\)\.host !== host/);
+  assert.match(shared, /no-store, max-age=0/);
+  assert.ok(spaRewrite);
+  assert.match(spaRewrite.source, /api\//);
+});
+
+test('production database hardening is deny-by-default with narrow RPC allowlists', () => {
+  const migration = readText('supabase/production_auth_rbac_hardening.sql');
+  const schema = readText('supabase/schema.sql');
+  const anonymousBlock = migration.split('authenticated_api constant text[]')[0];
+
+  assert.match(migration, /revoke all privileges on all tables in schema public from anon, authenticated/i);
+  assert.match(migration, /revoke all privileges on all functions in schema public/i);
+  assert.match(migration, /app_role in \('member', 'support', 'compliance', 'admin'\)/);
+  assert.match(anonymousBlock, /'get_public_deal'/);
+  assert.match(anonymousBlock, /'verify_agreement_record'/);
+  assert.doesNotMatch(anonymousBlock, /'accept_deal'/);
+  assert.doesNotMatch(anonymousBlock, /'get_admin_reports'/);
+
+  assert.match(schema, /for select to authenticated/);
+  assert.match(schema, /for update to authenticated[\s\S]*with check \(auth\.uid\(\) = id\)/);
+  assert.match(schema, /seller inserts draft deals/);
+  assert.match(schema, /seller updates own draft deals/);
+});
+
+test('auth handlers never return a refresh token to browser JavaScript', async () => {
+  const { default: login } = await import('../api/auth/login.mjs');
+  const originalFetch = globalThis.fetch;
+  const originalUrl = process.env.SUPABASE_URL;
+  const originalKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+  process.env.SUPABASE_URL = 'https://project.example.supabase.co';
+  process.env.SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test';
+
+  const response = {
+    statusCode: 200,
+    headers: new Map(),
+    payload: undefined,
+    setHeader(name, value) { this.headers.set(name.toLowerCase(), value); },
+    status(code) { this.statusCode = code; return this; },
+    json(value) { this.payload = value; return this; },
+    end() { return this; },
+  };
+
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    access_token: 'header.eyJleHAiOjQxMDI0NDQ4MDB9.signature',
+    refresh_token: 'server-only-refresh-secret',
+    expires_in: 3600,
+    user: {
+      id: '00000000-0000-0000-0000-000000000001',
+      email: 'user@example.com',
+      email_confirmed_at: '2026-07-26T00:00:00Z',
+      user_metadata: { display_name: 'Test User' },
+    },
+  }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+  try {
+    await login({
+      method: 'POST',
+      headers: { origin: 'https://dealivra.test', host: 'dealivra.test' },
+      body: { email: 'user@example.com', password: 'ExamplePass123' },
+    }, response);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = originalUrl;
+    if (originalKey === undefined) delete process.env.SUPABASE_PUBLISHABLE_KEY;
+    else process.env.SUPABASE_PUBLISHABLE_KEY = originalKey;
+  }
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers.get('set-cookie'), /HttpOnly; Secure; SameSite=Strict/);
+  assert.equal(JSON.stringify(response.payload).includes('server-only-refresh-secret'), false);
+  assert.equal(response.payload.access_token.startsWith('header.'), true);
+});

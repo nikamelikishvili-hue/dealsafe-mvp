@@ -22,6 +22,10 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
+revoke all on function public.handle_new_user()
+from public, anon, authenticated;
+
 create policy "profiles self insert"
 on public.profiles for insert
-with check (auth.uid() = id);
+to authenticated
+with check (auth.uid() = id and app_role = 'member');

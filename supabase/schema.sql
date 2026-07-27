@@ -6,6 +6,8 @@ create type public.verification_status as enum ('not_started','pending','verifie
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null,
+  app_role text not null default 'member'
+    check (app_role in ('member','support','compliance','admin')),
   verification_status public.verification_status not null default 'not_started',
   verification_provider text,
   verification_reference text,
@@ -104,11 +106,22 @@ alter table public.ratings enable row level security;
 alter table public.audit_events enable row level security;
 alter table public.reports enable row level security;
 
-create policy "profiles self read" on public.profiles for select using (auth.uid() = id);
-create policy "profiles self update" on public.profiles for update using (auth.uid() = id);
-create policy "participants read deals" on public.deals for select using (seller_id = auth.uid() or buyer_id = auth.uid());
-create policy "seller inserts deals" on public.deals for insert with check (seller_id = auth.uid());
-create policy "seller updates deals" on public.deals for update using (seller_id = auth.uid());
+create policy "profiles self read" on public.profiles for select to authenticated using (auth.uid() = id);
+create policy "profiles self update" on public.profiles for update to authenticated
+  using (auth.uid() = id) with check (auth.uid() = id);
+create policy "participants read deals" on public.deals for select to authenticated
+  using (seller_id = auth.uid() or buyer_id = auth.uid());
+create policy "seller inserts draft deals" on public.deals for insert to authenticated
+  with check (
+    seller_id = auth.uid() and buyer_id is null and status = 'draft'
+    and current_agreement_version = 0 and published_at is null
+  );
+create policy "seller updates own draft deals" on public.deals for update to authenticated
+  using (seller_id = auth.uid() and status = 'draft')
+  with check (
+    seller_id = auth.uid() and buyer_id is null and status = 'draft'
+    and current_agreement_version = 0 and published_at is null
+  );
 
 -- Expose published deals through a security-definer RPC or a restricted public view.
 -- Do not grant anonymous access to the base table: it contains private participant and serial fields.
