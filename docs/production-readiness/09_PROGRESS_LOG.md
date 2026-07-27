@@ -130,3 +130,15 @@ This log records completed delivery evidence. A backlog item is not marked compl
 - Added regression checks preventing the Google Maps runtime from reintroducing
   the old brand and proving the canonical Dealivra identifiers are present.
 
+## 2026-07-27 — High-confidence repository secret gate
+
+### Implemented on the review branch
+
+- Added a dependency-free scanner for private keys and high-confidence GitHub,
+  OpenAI, Stripe, Supabase, AWS, and Slack credential formats.
+- Integrated the scanner into `npm run verify` before the production build.
+- Limited scanner output to the file path and credential category so a detected
+  value is never copied into CI or local logs.
+- Added a regression test proving representative credentials are classified
+  without being returned by the scanner.
+

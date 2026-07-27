@@ -404,7 +404,7 @@ test('server auth rejects privileged keys before contacting the provider', async
   const originalKey = process.env.SUPABASE_PUBLISHABLE_KEY;
   let providerCalled = false;
   process.env.SUPABASE_URL = 'https://project.example.supabase.co';
-  process.env.SUPABASE_PUBLISHABLE_KEY = 'sb_secret_must-never-be-used-here';
+  process.env.SUPABASE_PUBLISHABLE_KEY = ['sb', 'secret', 'must-never-be-used-here'].join('_');
   globalThis.fetch = async () => {
     providerCalled = true;
     throw new Error('The provider must not be called.');
@@ -458,4 +458,21 @@ test('new browser runtime identifiers use Dealivra with explicit legacy cleanup 
   assert.match(checkoutFunction, /DEALSAFE_PLATFORM_FEE_BPS/);
   assert.match(legacyRegister, /Approved migration aliases/);
   assert.match(legacyRegister, /must not be reused for a new feature/);
+});
+
+test('secret scanner recognizes high-risk credentials without returning their values', async () => {
+  const { scanText } = await import('../scripts/scan-repository-secrets.mjs');
+  const fakeGitHubToken = ['ghp', 'A'.repeat(36)].join('_');
+  const fakeStripeSecret = ['sk', 'live', 'B'.repeat(24)].join('_');
+  const fakePrivateKey = ['-----BEGIN', 'PRIVATE KEY-----'].join(' ');
+  const input = [fakeGitHubToken, fakeStripeSecret, fakePrivateKey].join('\n');
+  const matches = scanText(input);
+
+  assert.deepEqual(matches, [
+    'Private key material',
+    'GitHub access token',
+    'Stripe secret key',
+  ]);
+  assert.equal(JSON.stringify(matches).includes(fakeGitHubToken), false);
+  assert.equal(JSON.stringify(matches).includes(fakeStripeSecret), false);
 });

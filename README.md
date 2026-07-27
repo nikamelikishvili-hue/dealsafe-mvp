@@ -44,7 +44,9 @@ Before opening a pull request, run:
 npm run verify
 ```
 
-This performs the TypeScript check, foundation/security configuration tests, and a production build.
+This performs the TypeScript check, foundation/security configuration tests, a
+high-confidence repository secret scan, and a production build. Scanner output
+names only the affected file and credential category; it never prints the value.
 
 ## Production setup
 
