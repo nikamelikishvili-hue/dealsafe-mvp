@@ -1,5 +1,6 @@
 import {
   authPayload,
+  logAuthFailure,
   prepareResponse,
   publicSession,
   readJsonBody,
@@ -54,7 +55,8 @@ export default async function handler(request, response) {
       return;
     }
     response.status(202).json({ session: null, needsEmailConfirmation: true });
-  } catch {
+  } catch (error) {
+    logAuthFailure('signup', error);
     response.status(503).json({ error: 'Account creation is temporarily unavailable.' });
   }
 }

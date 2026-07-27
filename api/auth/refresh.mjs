@@ -1,6 +1,7 @@
 import {
   authPayload,
   clearRefreshCookie,
+  logAuthFailure,
   prepareResponse,
   publicSession,
   readRefreshToken,
@@ -35,7 +36,8 @@ export default async function handler(request, response) {
 
     setRefreshCookie(response, data.refresh_token);
     response.status(200).json(session);
-  } catch {
+  } catch (error) {
+    logAuthFailure('refresh', error);
     response.status(503).json({ error: 'Session refresh is temporarily unavailable.' });
   }
 }

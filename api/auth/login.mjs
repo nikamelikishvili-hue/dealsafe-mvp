@@ -1,5 +1,6 @@
 import {
   authPayload,
+  logAuthFailure,
   prepareResponse,
   publicSession,
   readJsonBody,
@@ -35,7 +36,8 @@ export default async function handler(request, response) {
 
     setRefreshCookie(response, data.refresh_token);
     response.status(200).json(session);
-  } catch {
+  } catch (error) {
+    logAuthFailure('login', error);
     response.status(503).json({ error: 'Authentication is temporarily unavailable.' });
   }
 }

@@ -115,3 +115,25 @@ export function publicSession(data) {
     },
   };
 }
+
+export function logAuthFailure(operation, error) {
+  const message = error instanceof Error ? error.message : '';
+  const safeMessage = message === 'Authentication service is not configured.'
+    ? message
+    : /invalid url|failed to parse url/i.test(message)
+      ? 'Authentication service URL is invalid.'
+      : /fetch failed|network/i.test(message)
+        ? 'Authentication provider request failed.'
+        : 'Unexpected authentication service error.';
+  const causeCode = error && typeof error === 'object'
+    && 'cause' in error && error.cause && typeof error.cause === 'object'
+    && 'code' in error.cause && typeof error.cause.code === 'string'
+    ? error.cause.code
+    : undefined;
+
+  console.error('[dealivra-auth]', {
+    operation,
+    error: safeMessage,
+    ...(causeCode ? { causeCode } : {}),
+  });
+}

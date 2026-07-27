@@ -1,6 +1,7 @@
 import {
   authPayload,
   clearRefreshCookie,
+  logAuthFailure,
   prepareResponse,
   requirePost,
   requireSameOrigin,
@@ -21,7 +22,8 @@ export default async function handler(request, response) {
         body: '{}',
       });
       await authPayload(upstream);
-    } catch {
+    } catch (error) {
+      logAuthFailure('logout', error);
       // The local cookie is still cleared. The access JWT remains short-lived.
     }
   }
