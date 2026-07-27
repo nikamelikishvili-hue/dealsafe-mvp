@@ -533,6 +533,43 @@ test('versioned catalog endpoint returns a bounded vehicle catalog with CDN cach
   assert.match(response.headers.get('vercel-cdn-cache-control'), /stale-while-revalidate=86400/);
 });
 
+test('guided catalog endpoint serves every reviewed category with a manual fallback path', async () => {
+  const { default: catalog } = await import('../api/catalog.mjs');
+  const catalogComponent = readText('src/SmartCatalogFields.tsx');
+  const expectedCategories = new Map([
+    ['phone', ['apple', 'iPhone 16 Pro']],
+    ['tablet', ['samsung', 'Galaxy Tab S11 Ultra']],
+    ['laptop', ['apple', 'MacBook Air 13-inch M5']],
+    ['vehicle', ['honda', 'Accord']],
+    ['watch', ['rolex', 'Submariner']],
+    ['camera', ['nikon', 'Z6III']],
+    ['gaming', ['sony', 'PlayStation 5 Pro']],
+    ['tools', ['milwaukee', 'M18 FUEL Hammer Drill']],
+  ]);
+
+  assert.match(catalogComponent, /OTHER_CATALOG_VALUE/);
+  assert.match(catalogComponent, /t\('Not listed'\)/);
+
+  for (const [category, [brandId, model]] of expectedCategories) {
+    const response = createResponse();
+    await catalog({
+      method: 'GET',
+      query: { category },
+      headers: {},
+    }, response);
+
+    assert.equal(response.statusCode, 200, `${category} should be available`);
+    assert.equal(response.payload.category, category);
+    assert.equal(response.payload.market, 'US');
+    assert.ok(
+      response.payload.brands.some(brand => brand.id === brandId && brand.models.includes(model)),
+      `${category} should include the reviewed ${model} option`,
+    );
+    assert.ok(response.payload.brands.length <= 100);
+    assert.ok(response.payload.brands.every(brand => brand.models.length <= 250));
+  }
+});
+
 test('catalog endpoint rejects unsupported categories and write methods', async () => {
   const { default: catalog } = await import('../api/catalog.mjs');
   const unsupportedResponse = createResponse();
