@@ -181,3 +181,38 @@ This log records completed delivery evidence. A backlog item is not marked compl
 - Repository secret scan: passed.
 - Production build and local Preview smoke test: passed.
 
+## 2026-07-27 — Smart Catalog creation foundation
+
+### Implemented on the review branch
+
+- Expanded the item-creation taxonomy from five templates to twelve governed
+  categories while keeping the initial choice to five popular categories.
+- Added a compact "More categories" control so the first step remains focused
+  on mobile and desktop.
+- Added guided Phone selection for brand, model, and optional storage.
+- Added guided Vehicle selection for year, make, and model.
+- Automatically builds an editable item title from selected catalog details.
+- Added "Not listed" fallbacks for both brand/make and model so the catalog
+  never blocks a legitimate listing.
+- Preserved guided selections in privacy-scoped guest draft recovery.
+- Kept the change compatible with the current database: no production
+  migration, table change, or external catalog request is included.
+
+### Verification evidence
+
+- TypeScript strict check: passed.
+- Foundation and authentication tests: 22 passed, 0 failed.
+- Repository secret scan: passed.
+- Production build and local Preview smoke test: passed.
+- Browser verification passed for category expansion, Phone title generation,
+  Vehicle title generation, custom-item fallback, and error-overlay checks.
+
+### Next catalog controls
+
+- Move the first curated data set behind a versioned server-side catalog API.
+- Add NHTSA vPIC-backed VIN/year/make/model validation through a cached server
+  boundary rather than direct browser requests.
+- Persist stable category and attribute IDs after a reviewed database migration.
+- Add structured search facets only after persistence and catalog-version rules
+  are approved.
+

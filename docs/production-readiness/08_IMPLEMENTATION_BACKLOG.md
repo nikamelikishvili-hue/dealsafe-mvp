@@ -123,6 +123,17 @@ This backlog turns the production specification into controlled delivery work. P
 | OBS-005 | P1 | Define incident response, status communication, and evidence preservation | Tabletop and technical drill pass |
 | OBS-006 | P1 | Run backup restore and provider event replay drill | RPO/RTO targets are met and documented |
 
+## Epic 11 — Smart Catalog and structured listing data
+
+| ID | Priority | Work | Acceptance |
+|---|---|---|---|
+| CAT-001 | P1 | Establish versioned category IDs, labels, required attributes, and fallback rules | Catalog updates do not invalidate existing deals and every category has an accessible manual fallback |
+| CAT-002 | P1 | Add guided Phone and Vehicle creation fields | Brand/model/storage and year/make/model generate an editable title without blocking not-listed items |
+| CAT-003 | P1 | Add a cached server-side NHTSA vPIC integration for VIN and vehicle reference data | Browser never depends directly on the provider; timeout, rate limit, invalid VIN, and provider outage fail safely |
+| CAT-004 | P2 | Persist category and structured attribute IDs through a reviewed migration | Existing deals backfill safely; public/private field boundaries and cross-user authorization tests pass |
+| CAT-005 | P2 | Add category-aware search facets and URL state | Filters are keyboard accessible, shareable, indexable where appropriate, and use structured values rather than title parsing |
+| CAT-006 | P2 | Add catalog governance, update cadence, analytics, and rollback | Every dataset version has a source, owner, release evidence, adoption metrics, and rollback path |
+
 ## Recommended delivery sequence
 
 ### Batch 1 — Measurable foundation
