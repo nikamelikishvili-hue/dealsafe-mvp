@@ -18,6 +18,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [07_TEST_RELEASE_GATES.md](07_TEST_RELEASE_GATES.md) | Required automated/manual tests and non-negotiable release evidence |
 | [08_IMPLEMENTATION_BACKLOG.md](08_IMPLEMENTATION_BACKLOG.md) | Ordered engineering and operations backlog with acceptance criteria |
 | [09_PROGRESS_LOG.md](09_PROGRESS_LOG.md) | Completed batches, verification evidence, partial items, and next work |
+| [10_ENVIRONMENT_CONFIGURATION.md](10_ENVIRONMENT_CONFIGURATION.md) | Required variables, environment isolation, safe failure, validation, and change control |
 
 ## Authority and change control
 

@@ -85,3 +85,33 @@ This log records completed delivery evidence. A backlog item is not marked compl
 - Build session inventory, logout-all, security notifications, and step-up MFA.
 - Obtain independent review before enabling public registration or real money.
 
+## 2026-07-27 — Authentication regression and environment safety
+
+### Implemented on the review branch
+
+- Added endpoint-level regression coverage for sign-up, sign-in, refresh-token
+  rotation, failed refresh, malformed cookies, logout, password validation, and
+  cross-origin rejection.
+- Made malformed refresh cookies fail as an expired session instead of causing
+  an unhandled server error.
+- Added strict client and server Supabase URL validation.
+- Blocked `sb_secret_` credentials from browser and Auth Function configuration.
+- Added a clear account-service unavailable state when required browser
+  configuration is missing or unsafe.
+- Added the Local/Preview/Staging/Production configuration inventory, isolation
+  rules, safe-failure behavior, change procedure, and release evidence.
+
+### Verification evidence
+
+- TypeScript strict check: passed.
+- Authentication and foundation tests: 18 passed, 0 failed.
+- Production build: passed.
+- Privileged-key rejection occurs before any provider request.
+
+### Still required
+
+- Confirm the new checks in GitHub CI and the protected Vercel Preview.
+- Verify each environment against the documented provider-isolation matrix.
+- Apply the reviewed authorization migration only to a non-production Supabase
+  branch and run the cross-user authorization matrix.
+

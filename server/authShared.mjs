@@ -14,12 +14,24 @@ function configuredSupabase() {
   const key = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '')
     .replace(/\s+/g, '');
   if (!url || !key) throw new Error('Authentication service is not configured.');
+  if (/^sb_secret_/i.test(key)) {
+    throw new Error('Authentication service publishable key is invalid.');
+  }
 
   try {
     const parsedUrl = new URL(url);
     const isLocalDevelopment = parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1';
     if (parsedUrl.protocol !== 'https:' && !(isLocalDevelopment && parsedUrl.protocol === 'http:')) {
       throw new Error('Unsupported authentication service protocol.');
+    }
+    if (
+      parsedUrl.username
+      || parsedUrl.password
+      || parsedUrl.search
+      || parsedUrl.hash
+      || (parsedUrl.pathname !== '' && parsedUrl.pathname !== '/')
+    ) {
+      throw new Error('Authentication service URL must contain only the project origin.');
     }
   } catch {
     throw new Error('Authentication service URL is invalid.');

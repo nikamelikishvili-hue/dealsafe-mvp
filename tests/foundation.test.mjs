@@ -152,6 +152,7 @@ test('the production-readiness specification is complete and linked', () => {
     '07_TEST_RELEASE_GATES.md',
     '08_IMPLEMENTATION_BACKLOG.md',
     '09_PROGRESS_LOG.md',
+    '10_ENVIRONMENT_CONFIGURATION.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -393,4 +394,48 @@ test('logout clears the refresh cookie even when provider revocation is unavaila
   assert.equal(response.statusCode, 204);
   assert.equal(response.ended, true);
   assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+});
+
+test('server auth rejects privileged keys before contacting the provider', async () => {
+  const { supabaseAuthRequest } = await import('../server/authShared.mjs');
+  const originalFetch = globalThis.fetch;
+  const originalUrl = process.env.SUPABASE_URL;
+  const originalKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+  let providerCalled = false;
+  process.env.SUPABASE_URL = 'https://project.example.supabase.co';
+  process.env.SUPABASE_PUBLISHABLE_KEY = 'sb_secret_must-never-be-used-here';
+  globalThis.fetch = async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  };
+
+  try {
+    await assert.rejects(
+      () => supabaseAuthRequest('token?grant_type=password', {
+        method: 'POST',
+        body: '{}',
+      }),
+      /publishable key is invalid/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = originalUrl;
+    if (originalKey === undefined) delete process.env.SUPABASE_PUBLISHABLE_KEY;
+    else process.env.SUPABASE_PUBLISHABLE_KEY = originalKey;
+  }
+
+  assert.equal(providerCalled, false);
+});
+
+test('runtime configuration has documented safe-failure and secret-boundary checks', () => {
+  const authService = readText('src/services/supabaseRest.ts');
+  const environmentStandard = readText('docs/production-readiness/10_ENVIRONMENT_CONFIGURATION.md');
+  const example = readText('.env.example');
+
+  assert.match(authService, /sb_secret_/);
+  assert.match(authService, /Account service is temporarily unavailable/);
+  assert.match(environmentStandard, /must never contain a Supabase `service_role` JWT/);
+  assert.match(environmentStandard, /Preview, Staging, and Production must not share/);
+  assert.match(example, /Never use sb_secret_ or service_role/);
 });

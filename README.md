@@ -54,6 +54,9 @@ This performs the TypeScript check, foundation/security configuration tests, and
 4. Copy `.env.example` to `.env` and add the project URL and publishable key. Configure both the `VITE_` and server-side names in Vercel; never place a Supabase service-role secret in this web project.
 5. Connect verification and e-sign providers through the interfaces in `src/services/providers.ts`.
 
+The authoritative Local/Preview/Staging/Production variable matrix and safe-failure rules are in
+[`docs/production-readiness/10_ENVIRONMENT_CONFIGURATION.md`](docs/production-readiness/10_ENVIRONMENT_CONFIGURATION.md).
+
 ## Important MVP boundary
 
 This build records consent and deal terms; it is not an escrow service and does not hold funds. “Verification” is a transparent placeholder until a compliant vendor is connected. Legal counsel should review the agreement wording, privacy policy, evidence retention, and marketplace/payment obligations before launch.

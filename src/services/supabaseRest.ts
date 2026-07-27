@@ -10,10 +10,39 @@ function readPublicEnv(name: string) {
   return raw?.split(/\r?\n/).map(value => value.trim()).find(Boolean);
 }
 
-const supabaseUrl = readPublicEnv('VITE_SUPABASE_URL')?.replace(/\/+$/, '');
-const publishableKey = readPublicEnv('VITE_SUPABASE_PUBLISHABLE_KEY');
+function normalizePublicServiceUrl(value: string | undefined) {
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value.replace(/\/+$/, ''));
+    const isLocalDevelopment = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    if (parsed.protocol !== 'https:' && !(isLocalDevelopment && parsed.protocol === 'http:')) {
+      return undefined;
+    }
+    if (
+      parsed.username
+      || parsed.password
+      || parsed.search
+      || parsed.hash
+      || (parsed.pathname !== '' && parsed.pathname !== '/')
+    ) {
+      return undefined;
+    }
+    return parsed.origin;
+  } catch {
+    return undefined;
+  }
+}
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && publishableKey);
+const supabaseUrl = normalizePublicServiceUrl(readPublicEnv('VITE_SUPABASE_URL'));
+const publishableKey = readPublicEnv('VITE_SUPABASE_PUBLISHABLE_KEY');
+const browserKeyIsSafe = Boolean(publishableKey && !/^sb_secret_/i.test(publishableKey));
+
+export const isSupabaseConfigured = Boolean(supabaseUrl && browserKeyIsSafe);
+const configurationUnavailableMessage = 'Account service is temporarily unavailable. Please try again later.';
+
+function requireSupabaseConfiguration() {
+  if (!isSupabaseConfigured) throw new Error(configurationUnavailableMessage);
+}
 
 export interface AuthUser {
   id: string;
@@ -229,6 +258,7 @@ export function markSessionActivity(){
 }
 
 export async function signUp(email: string, password: string, displayName: string) {
+  requireSupabaseConfiguration();
   validatePassword(password);
   const name=displayName.trim();
   if(name.length<2||name.length>80)throw new Error('Name must contain 2 to 80 characters.');
@@ -253,6 +283,7 @@ export async function signUp(email: string, password: string, displayName: strin
 }
 
 export async function signIn(email: string, password: string) {
+  requireSupabaseConfiguration();
   const response = await fetch('/api/auth/login', {
     method: 'POST', headers: {'Content-Type':'application/json'}, credentials:'same-origin',
     body: JSON.stringify({ email:email.trim().toLowerCase(), password }),
@@ -579,6 +610,7 @@ export async function getMySavedDeals(session:StoredSession){
 }
 
 export async function getPublicDeal(publicId: string) {
+  requireSupabaseConfiguration();
   // Deal IDs are generated and stored in uppercase. Normalize copied or
   // manually typed links so a lowercase query string still resolves.
   const normalizedPublicId = publicId.trim().toUpperCase();
