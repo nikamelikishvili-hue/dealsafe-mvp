@@ -256,3 +256,30 @@ This log records completed delivery evidence. A backlog item is not marked compl
   telemetry before public beta.
 - Build category-aware search facets after structured values are persisted.
 
+## 2026-07-27 — Guided catalog family expansion
+
+### Implemented on the review branch
+
+- Expanded the versioned U.S. launch catalog from Phone and Vehicle to eight
+  reviewed guided families: Phone, Tablet, Laptop, Vehicle, Watch, Camera,
+  Gaming, and Tools.
+- Added category-specific labels and optional variants such as storage, case
+  size, camera package, and tool package instead of presenting one generic form.
+- Added curated brand/model choices for common U.S. marketplace items while
+  preserving accessible "Not listed" brand and model paths in every family.
+- Generalized the same-origin catalog endpoint, embedded fallback, title
+  builder, and bounded response validation across all guided families.
+- Extracted the guided catalog interface from the central application file into
+  a focused React component with responsive fields and live suggested-title
+  feedback.
+- Kept Business equipment, Jewelry, Collectibles, and Other item on manual entry
+  until their attribute schemas can be reviewed without creating misleading
+  brand/model choices.
+
+### Release boundary
+
+- The additional catalog families improve data entry but do not by themselves
+  approve a category for the external paid beta.
+- Category availability must still follow the prohibited-items policy, provider
+  capability, support readiness, and an explicit release flag.
+
