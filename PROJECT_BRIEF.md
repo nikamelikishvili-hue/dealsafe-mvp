@@ -1,5 +1,9 @@
 # Dealivra MVP — editable product brief
 
+> Original product brief. The focused US launch boundary remains useful, but the authoritative
+> production plan, target architecture, security model, and release gates now live in
+> [docs/production-readiness/README.md](docs/production-readiness/README.md).
+
 ## Product promise
 
 **Create a clear, shareable record of a private sale in under three minutes.**
