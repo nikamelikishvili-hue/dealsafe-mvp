@@ -205,15 +205,35 @@ test('auth endpoints enforce same-origin POST requests and do not cache response
 test('production database hardening is deny-by-default with narrow RPC allowlists', () => {
   const migration = readText('supabase/production_auth_rbac_hardening.sql');
   const schema = readText('supabase/schema.sql');
+  const apiClient = readText('src/services/supabaseRest.ts');
   const anonymousBlock = migration.split('authenticated_api constant text[]')[0];
+  const allowedRpcs = new Set(
+    [...migration.matchAll(/'([a-z][a-z0-9_]+)'/g)].map(match => match[1]),
+  );
+  const clientRpcs = new Set(
+    [...apiClient.matchAll(/\/rest\/v1\/rpc\/([a-z][a-z0-9_]+)/g)].map(match => match[1]),
+  );
 
   assert.match(migration, /revoke all privileges on all tables in schema public from anon, authenticated/i);
   assert.match(migration, /revoke all privileges on all functions in schema public/i);
   assert.match(migration, /app_role in \('member', 'support', 'compliance', 'admin'\)/);
+  assert.match(migration, /drop policy if exists "seller inserts draft deals"/);
+  assert.match(migration, /drop policy if exists "seller updates own draft deals"/);
+  assert.match(migration, /seller_id = \(select auth\.uid\(\)\)/);
+  assert.match(migration, /create index if not exists deals_seller_id_idx/);
+  assert.match(migration, /create index if not exists deals_buyer_id_idx/);
   assert.match(anonymousBlock, /'get_public_deal'/);
   assert.match(anonymousBlock, /'verify_agreement_record'/);
   assert.doesNotMatch(anonymousBlock, /'accept_deal'/);
   assert.doesNotMatch(anonymousBlock, /'get_admin_reports'/);
+
+  for (const rpc of clientRpcs) {
+    assert.equal(
+      allowedRpcs.has(rpc),
+      true,
+      `Browser RPC ${rpc} must be present in the reviewed production allowlist`,
+    );
+  }
 
   assert.match(schema, /for select to authenticated/);
   assert.match(schema, /for update to authenticated[\s\S]*with check \(auth\.uid\(\) = id\)/);
