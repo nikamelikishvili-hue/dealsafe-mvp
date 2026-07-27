@@ -283,3 +283,51 @@ This log records completed delivery evidence. A backlog item is not marked compl
 - Category availability must still follow the prohibited-items policy, provider
   capability, support readiness, and an explicit release flag.
 
+## 2026-07-27 — Production database authorization closure
+
+### Production finding
+
+- A read-only Supabase review found that the prepared deny-by-default hardening
+  had not been recorded in the production migration history.
+- PostgreSQL's default function privilege left operational, mutation, trigger,
+  and administrator `SECURITY DEFINER` routines executable by the anonymous
+  role even though their internal authorization checks still rejected most
+  unauthenticated calls.
+- Direct `deals` column privileges and legacy PUBLIC policies were broader than
+  the reviewed browser workflow requires.
+
+### Applied control
+
+- Applied the tracked `harden_production_auth_and_rpc_access` migration through
+  Supabase's migration API.
+- Revoked anonymous and authenticated access to all public tables and functions,
+  then rebuilt explicit table/column grants and reviewed RPC allowlists.
+- Restored six browser RPCs that were present in the reviewed application but
+  missing from production: risk assessment, seller trust, Trust Passport
+  settings/public view, and administrator Deal Link visibility control.
+- Reasserted the deny-by-default RPC allowlist after restoring those functions,
+  because the database creator role assigned direct anonymous function grants
+  that a `PUBLIC`-only revoke did not remove.
+- Reduced anonymous function execution to exactly eight reviewed public
+  Deal Link read operations, with zero unexpected anonymous functions.
+- Replaced legacy PUBLIC deal/profile policies with authenticated-only,
+  owner/participant-scoped policies using cached `auth.uid()` evaluation.
+- Added seller and non-null buyer indexes used by participant RLS predicates.
+- Made the policy portion safe to rerun by removing both legacy and hardened
+  policy names before recreating them.
+
+### Verification evidence
+
+- Supabase migration history records the hardening, feature restoration, and
+  final allowlist migrations through
+  `20260727212800_reassert_production_rpc_allowlist`.
+- Anonymous execution count: 8 reviewed public read-only Deal Link functions;
+  unexpected anonymous execution count: 0.
+- All 66 browser RPC names now exist in production.
+- Trigger helpers, profile creation, agreement creation, and admin functions
+  are not executable by `anon`; admin functions remain authenticated-only.
+- Production `deals` and `profiles` policies now target only `authenticated`.
+- Seller and buyer ownership indexes are present.
+- Repository regression tests verify every browser RPC appears in the reviewed
+  allowlist and that mutation/admin RPCs are absent from the anonymous block.
+
