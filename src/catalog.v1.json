@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026-07-27.1",
+  "catalogVersion": "2026-07-27.2",
   "market": "US",
   "updatedAt": "2026-07-27",
   "source": "Dealivra curated U.S. launch catalog",
@@ -101,6 +101,179 @@
         }
       ]
     },
+    "tablet": {
+      "variants": ["32 GB", "64 GB", "128 GB", "256 GB", "512 GB", "1 TB", "2 TB"],
+      "brands": [
+        {
+          "id": "apple",
+          "label": "Apple",
+          "models": [
+            "iPad Pro 13-inch",
+            "iPad Pro 12.9-inch",
+            "iPad Pro 11-inch",
+            "iPad Air 13-inch",
+            "iPad Air 11-inch",
+            "iPad 11th generation",
+            "iPad 10th generation",
+            "iPad mini"
+          ]
+        },
+        {
+          "id": "samsung",
+          "label": "Samsung",
+          "models": [
+            "Galaxy Tab S11 Ultra",
+            "Galaxy Tab S11",
+            "Galaxy Tab S10 Ultra",
+            "Galaxy Tab S10+",
+            "Galaxy Tab S9 Ultra",
+            "Galaxy Tab S9+",
+            "Galaxy Tab S9",
+            "Galaxy Tab S9 FE+",
+            "Galaxy Tab S9 FE",
+            "Galaxy Tab A9+",
+            "Galaxy Tab Active5 Pro",
+            "Galaxy Tab Active5"
+          ]
+        },
+        {
+          "id": "microsoft",
+          "label": "Microsoft",
+          "models": [
+            "Surface Pro 13-inch",
+            "Surface Pro 12-inch",
+            "Surface Pro 11",
+            "Surface Pro 10",
+            "Surface Go 4",
+            "Surface Go 3"
+          ]
+        },
+        {
+          "id": "amazon",
+          "label": "Amazon",
+          "models": ["Fire Max 11", "Fire HD 10", "Fire HD 8", "Fire 7"]
+        },
+        {
+          "id": "google",
+          "label": "Google",
+          "models": ["Pixel Tablet"]
+        },
+        {
+          "id": "lenovo",
+          "label": "Lenovo",
+          "models": [
+            "Yoga Tab Plus",
+            "Tab P12",
+            "Tab P11 Pro",
+            "Legion Tab",
+            "Idea Tab Pro",
+            "Tab M11"
+          ]
+        }
+      ]
+    },
+    "laptop": {
+      "variants": ["128 GB", "256 GB", "512 GB", "1 TB", "2 TB", "4 TB", "8 TB"],
+      "brands": [
+        {
+          "id": "apple",
+          "label": "Apple",
+          "models": [
+            "MacBook Air 13-inch M5",
+            "MacBook Air 15-inch M5",
+            "MacBook Air 13-inch M4",
+            "MacBook Air 15-inch M4",
+            "MacBook Air 13-inch M3",
+            "MacBook Air 15-inch M3",
+            "MacBook Pro 14-inch M5",
+            "MacBook Pro 16-inch M5",
+            "MacBook Pro 14-inch M4",
+            "MacBook Pro 16-inch M4"
+          ]
+        },
+        {
+          "id": "dell",
+          "label": "Dell",
+          "models": [
+            "XPS 13",
+            "XPS 14",
+            "XPS 16",
+            "Dell 14 Plus",
+            "Dell 16 Plus",
+            "Latitude 5450",
+            "Latitude 7450",
+            "Precision 3591",
+            "Alienware m16"
+          ]
+        },
+        {
+          "id": "lenovo",
+          "label": "Lenovo",
+          "models": [
+            "ThinkPad X1 Carbon",
+            "ThinkPad X1 2-in-1",
+            "ThinkPad T14",
+            "ThinkPad T16",
+            "ThinkPad P1",
+            "Yoga 9i 2-in-1",
+            "Yoga Slim 9i",
+            "Legion Pro 7i",
+            "IdeaPad Slim 5"
+          ]
+        },
+        {
+          "id": "hp",
+          "label": "HP",
+          "models": [
+            "Spectre x360 14",
+            "OmniBook Ultra Flip 14",
+            "OmniBook X 14",
+            "Envy x360 14",
+            "EliteBook Ultra",
+            "EliteBook 840",
+            "ProBook 440",
+            "Omen 16"
+          ]
+        },
+        {
+          "id": "microsoft",
+          "label": "Microsoft",
+          "models": [
+            "Surface Laptop 13-inch",
+            "Surface Laptop 13.8-inch",
+            "Surface Laptop 15-inch",
+            "Surface Laptop Studio 2",
+            "Surface Laptop Go 3"
+          ]
+        },
+        {
+          "id": "asus",
+          "label": "ASUS",
+          "models": [
+            "Zenbook S 14",
+            "Zenbook 14 OLED",
+            "Vivobook S 15",
+            "ProArt P16",
+            "ROG Zephyrus G14",
+            "ROG Zephyrus G16",
+            "ROG Strix G16",
+            "TUF Gaming A15"
+          ]
+        },
+        {
+          "id": "acer",
+          "label": "Acer",
+          "models": [
+            "Swift 14 AI",
+            "Swift Go 14",
+            "Aspire 5",
+            "TravelMate P4",
+            "Predator Helios Neo 16",
+            "Nitro V 15"
+          ]
+        }
+      ]
+    },
     "vehicle": {
       "yearMin": 1981,
       "yearMax": 2027,
@@ -135,6 +308,311 @@
         {"id": "toyota", "label": "Toyota", "models": ["4Runner", "Camry", "Corolla", "Crown", "Grand Highlander", "Highlander", "Land Cruiser", "Prius", "RAV4", "Sequoia", "Sienna", "Tacoma", "Tundra", "Venza"]},
         {"id": "volkswagen", "label": "Volkswagen", "models": ["Arteon", "Atlas", "Golf GTI", "Golf R", "ID.4", "Jetta", "Taos", "Tiguan"]},
         {"id": "volvo", "label": "Volvo", "models": ["C40", "EX30", "EX90", "S60", "S90", "V60", "V90", "XC40", "XC60", "XC90"]}
+      ]
+    },
+    "watch": {
+      "variants": ["28 mm", "31 mm", "34 mm", "36 mm", "38 mm", "39 mm", "40 mm", "41 mm", "42 mm", "43 mm", "44 mm", "45 mm", "46 mm"],
+      "brands": [
+        {
+          "id": "rolex",
+          "label": "Rolex",
+          "models": [
+            "Submariner",
+            "Datejust",
+            "Lady-Datejust",
+            "GMT-Master II",
+            "Cosmograph Daytona",
+            "Oyster Perpetual",
+            "Explorer",
+            "Explorer II",
+            "Day-Date",
+            "Sea-Dweller",
+            "Sky-Dweller",
+            "Yacht-Master"
+          ]
+        },
+        {
+          "id": "omega",
+          "label": "Omega",
+          "models": [
+            "Speedmaster Moonwatch",
+            "Speedmaster 38",
+            "Seamaster Diver 300M",
+            "Seamaster Aqua Terra",
+            "Seamaster Planet Ocean",
+            "Constellation",
+            "De Ville"
+          ]
+        },
+        {
+          "id": "tudor",
+          "label": "Tudor",
+          "models": [
+            "Black Bay",
+            "Black Bay 58",
+            "Black Bay 54",
+            "Black Bay Chrono",
+            "Pelagos",
+            "Pelagos 39",
+            "Ranger",
+            "Royal"
+          ]
+        },
+        {
+          "id": "cartier",
+          "label": "Cartier",
+          "models": [
+            "Santos de Cartier",
+            "Tank Must",
+            "Tank Française",
+            "Tank Louis Cartier",
+            "Ballon Bleu de Cartier",
+            "Panthère de Cartier",
+            "Pasha de Cartier"
+          ]
+        },
+        {
+          "id": "tag-heuer",
+          "label": "TAG Heuer",
+          "models": ["Carrera", "Monaco", "Aquaracer", "Formula 1", "Autavia", "Connected"]
+        },
+        {
+          "id": "breitling",
+          "label": "Breitling",
+          "models": [
+            "Navitimer",
+            "Superocean",
+            "Superocean Heritage",
+            "Chronomat",
+            "Premier",
+            "Avenger"
+          ]
+        },
+        {
+          "id": "grand-seiko",
+          "label": "Grand Seiko",
+          "models": [
+            "Heritage Collection",
+            "Sport Collection",
+            "Elegance Collection",
+            "Evolution 9 Collection",
+            "Masterpiece Collection"
+          ]
+        }
+      ]
+    },
+    "camera": {
+      "variants": ["Body only", "Kit with one lens", "Kit with two lenses", "Camera with fixed lens"],
+      "brands": [
+        {
+          "id": "sony",
+          "label": "Sony",
+          "models": [
+            "Alpha 1 II",
+            "Alpha 9 III",
+            "Alpha 7R V",
+            "Alpha 7 IV",
+            "Alpha 7C II",
+            "Alpha 7CR",
+            "Alpha 6700",
+            "FX3",
+            "FX30",
+            "ZV-E1",
+            "ZV-E10 II"
+          ]
+        },
+        {
+          "id": "canon",
+          "label": "Canon",
+          "models": [
+            "EOS R1",
+            "EOS R5 Mark II",
+            "EOS R5",
+            "EOS R6 Mark II",
+            "EOS R8",
+            "EOS R7",
+            "EOS R10",
+            "EOS R50",
+            "EOS R100"
+          ]
+        },
+        {
+          "id": "nikon",
+          "label": "Nikon",
+          "models": [
+            "Z9",
+            "Z8",
+            "Z6III",
+            "Z5II",
+            "Zf",
+            "Z50II",
+            "Z30",
+            "ZR"
+          ]
+        },
+        {
+          "id": "fujifilm",
+          "label": "Fujifilm",
+          "models": [
+            "X-H2S",
+            "X-H2",
+            "X-T5",
+            "X-T50",
+            "X-S20",
+            "X-M5",
+            "X100VI",
+            "GFX100 II",
+            "GFX100S II"
+          ]
+        },
+        {
+          "id": "panasonic",
+          "label": "Panasonic",
+          "models": [
+            "Lumix S1R II",
+            "Lumix S5IIX",
+            "Lumix S5II",
+            "Lumix GH7",
+            "Lumix G9II",
+            "Lumix G100D"
+          ]
+        },
+        {
+          "id": "leica",
+          "label": "Leica",
+          "models": ["M11", "M11 Monochrom", "Q3", "Q3 43", "SL3", "SL3-S", "D-Lux 8"]
+        }
+      ]
+    },
+    "gaming": {
+      "variants": ["64 GB", "128 GB", "256 GB", "512 GB", "825 GB", "1 TB", "2 TB"],
+      "brands": [
+        {
+          "id": "sony",
+          "label": "Sony",
+          "models": [
+            "PlayStation 5 Pro",
+            "PlayStation 5 Disc Edition",
+            "PlayStation 5 Digital Edition",
+            "PlayStation Portal",
+            "PlayStation VR2"
+          ]
+        },
+        {
+          "id": "microsoft",
+          "label": "Microsoft",
+          "models": [
+            "Xbox Series X Disc Edition",
+            "Xbox Series X Digital Edition",
+            "Xbox Series S"
+          ]
+        },
+        {
+          "id": "nintendo",
+          "label": "Nintendo",
+          "models": ["Nintendo Switch 2", "Nintendo Switch OLED", "Nintendo Switch", "Nintendo Switch Lite"]
+        },
+        {
+          "id": "valve",
+          "label": "Valve",
+          "models": ["Steam Deck OLED", "Steam Deck LCD"]
+        },
+        {
+          "id": "asus",
+          "label": "ASUS",
+          "models": ["ROG Ally X", "ROG Ally"]
+        },
+        {
+          "id": "lenovo",
+          "label": "Lenovo",
+          "models": ["Legion Go S", "Legion Go"]
+        }
+      ]
+    },
+    "tools": {
+      "variants": ["Tool only", "Kit with battery and charger", "Combo kit", "Corded", "Gas powered", "Pneumatic"],
+      "brands": [
+        {
+          "id": "dewalt",
+          "label": "DEWALT",
+          "models": [
+            "20V MAX XR Drill/Driver",
+            "20V MAX XR Hammer Drill",
+            "20V MAX XR Impact Driver",
+            "20V MAX XR Impact Wrench",
+            "20V MAX XR Circular Saw",
+            "20V MAX XR Reciprocating Saw",
+            "20V MAX XR Grinder",
+            "60V MAX FLEXVOLT Circular Saw",
+            "60V MAX FLEXVOLT Miter Saw"
+          ]
+        },
+        {
+          "id": "milwaukee",
+          "label": "Milwaukee",
+          "models": [
+            "M12 FUEL Drill/Driver",
+            "M12 FUEL Impact Driver",
+            "M18 FUEL Hammer Drill",
+            "M18 FUEL Impact Driver",
+            "M18 FUEL Impact Wrench",
+            "M18 FUEL Circular Saw",
+            "M18 FUEL SAWZALL",
+            "M18 FUEL Grinder",
+            "MX FUEL Equipment"
+          ]
+        },
+        {
+          "id": "makita",
+          "label": "Makita",
+          "models": [
+            "18V LXT Drill/Driver",
+            "18V LXT Impact Driver",
+            "18V LXT Circular Saw",
+            "18V LXT Reciprocating Saw",
+            "18V LXT Grinder",
+            "40V max XGT Hammer Drill",
+            "40V max XGT Circular Saw",
+            "40V max XGT Miter Saw"
+          ]
+        },
+        {
+          "id": "bosch",
+          "label": "Bosch",
+          "models": [
+            "12V Max Drill/Driver",
+            "18V Brushless Hammer Drill",
+            "18V Brushless Impact Driver",
+            "18V Circular Saw",
+            "18V Reciprocating Saw",
+            "18V Grinder",
+            "SDS-plus Rotary Hammer"
+          ]
+        },
+        {
+          "id": "ryobi",
+          "label": "RYOBI",
+          "models": [
+            "18V ONE+ HP Drill/Driver",
+            "18V ONE+ HP Impact Driver",
+            "18V ONE+ HP Circular Saw",
+            "18V ONE+ HP Reciprocating Saw",
+            "18V ONE+ HP Grinder",
+            "40V HP Outdoor Power Equipment"
+          ]
+        },
+        {
+          "id": "hilti",
+          "label": "Hilti",
+          "models": [
+            "Nuron Drill Driver",
+            "Nuron Impact Driver",
+            "Nuron Rotary Hammer",
+            "Nuron Circular Saw",
+            "Nuron Reciprocating Saw",
+            "Nuron Angle Grinder"
+          ]
+        }
       ]
     }
   }
