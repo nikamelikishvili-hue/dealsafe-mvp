@@ -11,11 +11,12 @@ import { confirmDealPaymentMethod, createProtectedCheckout, getDealPaymentRecord
 import { getAppLanguage, t } from './i18n';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { BrandLogo } from './BrandLogo';
+import { SmartCatalogFields } from './SmartCatalogFields';
 import type { Deal, DealDraft } from './domain';
 import { amountForInput, currencyStep, formatMoney, toMinorUnits } from './currency';
 import { createAgreementFingerprint } from './agreementFingerprint';
-import { OTHER_CATALOG_VALUE, buildSmartCatalogTitle, emptySmartCatalogSelection, getCatalogModels, getEmbeddedCatalogSnapshot, matchCatalogValue, sanitizeSmartCatalogSelection, vehicleCatalog, vehicleYears, type SmartCatalogCategoryId, type SmartCatalogSelection } from './smartCatalog';
-import { decodeVehicleVin, loadSmartCatalogCategory, type VehicleVinResult } from './services/catalogService';
+import { OTHER_CATALOG_VALUE, buildSmartCatalogTitle, emptySmartCatalogSelection, isGuidedCatalogCategory, matchCatalogValue, sanitizeSmartCatalogSelection, vehicleCatalog, vehicleYears, type SmartCatalogCategoryId, type SmartCatalogSelection } from './smartCatalog';
+import { decodeVehicleVin, type VehicleVinResult } from './services/catalogService';
 import './styles.css';
 import './security.css';
 import './dashboard.css';
@@ -175,42 +176,6 @@ function DealTemplatePicker({selected,onSelect}:{selected:DealTemplateId;onSelec
   const template=dealTemplates.find(item=>item.id===selected)||dealTemplates[0];
   const visibleTemplates=expanded?dealTemplates:dealTemplates.filter(item=>featuredIds.includes(item.id)||item.id===selected);
   return <section className="deal-template-picker no-print"><div className="deal-template-heading"><PackageCheck/><div><p className="eyebrow">{t('Start with a template')}</p><h2>{t('Choose an item category')}</h2><p>{t('Select the closest category to get a safer description checklist.')}</p></div></div><div className="deal-template-grid">{visibleTemplates.map(item=>{const Icon=item.icon;return <button key={item.id} type="button" className={selected===item.id?'selected':''} aria-pressed={selected===item.id} onClick={()=>onSelect(item.id)}><Icon/><span>{t(item.label)}</span>{selected===item.id&&<Check/>}</button>})}</div><button type="button" className="catalog-category-toggle" aria-expanded={expanded} onClick={()=>setExpanded(value=>!value)}>{t(expanded?'Show fewer categories':'More categories')}<ChevronDown className={expanded?'is-open':''}/></button><div className="deal-template-guidance"><ShieldCheck/><div><b>{t('Include these details')}</b><span>{t(template.descriptionPrompt)}</span></div></div></section>;
-}
-
-function SmartCatalogFields({category,value,onChange}:{category:DealTemplateId;value:SmartCatalogSelection;onChange:(patch:Partial<SmartCatalogSelection>)=>void}){
-  const guidedCategory=category==='vehicle'?'vehicle':'phone';
-  const isGuided=category==='phone'||category==='vehicle';
-  const [snapshot,setSnapshot]=useState(()=>getEmbeddedCatalogSnapshot(guidedCategory));
-  useEffect(()=>{
-    if(!isGuided)return;
-    let current=true;
-    setSnapshot(getEmbeddedCatalogSnapshot(guidedCategory));
-    loadSmartCatalogCategory(guidedCategory).then(result=>{if(current)setSnapshot(result)});
-    return()=>{current=false};
-  },[guidedCategory,isGuided]);
-  if(!isGuided)return null;
-  const catalog=snapshot.brands;
-  const models=getCatalogModels(category,value.brand,catalog);
-  const update=(patch:Partial<SmartCatalogSelection>)=>onChange(patch);
-  const title=buildSmartCatalogTitle(category,value);
-  const changeBrand=(brand:string)=>update({brand,model:'',customBrand:'',customModel:''});
-  const changeModel=(model:string)=>update({model,customModel:''});
-  const isOtherBrand=value.brand===OTHER_CATALOG_VALUE;
-  const isOtherModel=value.model===OTHER_CATALOG_VALUE;
-
-  return <fieldset className="smart-catalog-fields">
-    <legend><ScanSearch/><span><b>{t(category==='phone'?'Find your phone':'Find your vehicle')}</b><small>{t('Choose known details and Dealivra will build the item title for you.')}</small></span></legend>
-    <div className={`smart-catalog-grid is-${category}`}>
-      {category==='vehicle'&&<label>{t('Year')}<select value={value.year} onChange={event=>update({year:event.target.value})}><option value="">{t('Choose year')}</option>{snapshot.years.map(year=><option key={year} value={year}>{year}</option>)}</select></label>}
-      <label>{t(category==='phone'?'Brand':'Make')}<select value={value.brand} onChange={event=>changeBrand(event.target.value)}><option value="">{t(category==='phone'?'Choose brand':'Choose make')}</option>{catalog.map(item=><option key={item.id} value={item.label}>{item.label}</option>)}<option value={OTHER_CATALOG_VALUE}>{t('Not listed')}</option></select></label>
-      {!isOtherBrand&&<label>{t('Model')}<select value={value.model} disabled={!value.brand} onChange={event=>changeModel(event.target.value)}><option value="">{t(value.brand?'Choose model':category==='phone'?'Choose a brand first':'Choose a make first')}</option>{models.map(model=><option key={model} value={model}>{model}</option>)}{value.brand&&<option value={OTHER_CATALOG_VALUE}>{t('Not listed')}</option>}</select></label>}
-      {category==='phone'&&<label>{t('Storage')} <span className="optional-label">{t('Optional')}</span><select value={value.variant} onChange={event=>update({variant:event.target.value})}><option value="">{t('Choose storage')}</option>{snapshot.variants.map(storage=><option key={storage} value={storage}>{storage}</option>)}</select></label>}
-      {isOtherBrand&&<><label>{t(category==='phone'?'Brand name':'Make name')}<input maxLength={60} placeholder={t(category==='phone'?'Enter brand':'Enter make')} value={value.customBrand} onChange={event=>update({customBrand:event.target.value})}/></label><label>{t('Model name')}<input maxLength={80} placeholder={t('Enter model')} value={value.customModel} onChange={event=>update({customModel:event.target.value})}/></label></>}
-      {isOtherModel&&<label>{t('Model name')}<input maxLength={80} placeholder={t('Enter model')} value={value.customModel} onChange={event=>update({customModel:event.target.value})}/></label>}
-    </div>
-    <p className={`smart-catalog-preview ${title?'has-title':''}`}><BadgeCheck/><span><small>{t('Suggested title')}</small><b>{title||t('Choose details above')}</b></span></p>
-    <p className="smart-catalog-source"><ShieldCheck/>{t('Curated for the U.S. launch. Manual entry is always available.')}</p>
-  </fieldset>;
 }
 
 function DealPhotoGuide({template,count}:{template:DealTemplate;count:number}){
@@ -2244,7 +2209,7 @@ export function App() {
         {!reviewingDraft&&createErrors.length>0&&<CreateValidationSummary errors={createErrors} onSelect={focusCreateField}/>}
         {!reviewingDraft&&createStep===1&&<div className="create-step-layout">
           <DealTemplatePicker selected={dealTemplate} onSelect={chooseDealTemplate}/>
-          <section className="form-wrap create-step-card"><form id="create-step-1" noValidate onSubmit={event=>{event.preventDefault();submitCreateStep(1)}}><SmartCatalogFields category={dealTemplate} value={catalogSelection} onChange={updateCatalogSelection}/><label>{t('Item title')}<input id="create-item-title" required minLength={3} maxLength={120} aria-invalid={createErrors.some(error=>error.fieldId==='create-item-title')} aria-describedby="create-item-title-help" placeholder={selectedDealTemplate.titlePlaceholder} value={draft.title} onChange={event=>setDraft({...draft,title:event.target.value})}/><small id="create-item-title-help" className={createErrors.some(error=>error.fieldId==='create-item-title')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-title')?.message||((dealTemplate==='phone'||dealTemplate==='vehicle')?'Auto-filled from your choices; edit it if needed.':'Use the brand, model, and one detail that helps identify the item.'))}</small></label><div className="two"><label>{t('Price')}<span className="price-currency-controls"><input id="create-item-price" required min={currencyStep(draft.currency)} step={currencyStep(draft.currency)} type="number" aria-invalid={createErrors.some(error=>error.fieldId==='create-item-price')} aria-describedby="create-item-price-help" placeholder="780" value={draft.price} onChange={event=>setDraft({...draft,price:event.target.value})}/><span className="currency-label">USD</span></span><small id="create-item-price-help" className={createErrors.some(error=>error.fieldId==='create-item-price')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-price')?.message||'Enter the agreed item price before fees or shipping.')}</small></label><label>{t('Condition')}<select value={draft.condition} onChange={event=>setDraft({...draft,condition:event.target.value as DealDraft['condition']})}><option value="Like new">{t('Like new')}</option><option value="Good">{t('Good')}</option><option value="Fair">{t('Fair')}</option></select></label></div></form></section>
+          <section className="form-wrap create-step-card"><form id="create-step-1" noValidate onSubmit={event=>{event.preventDefault();submitCreateStep(1)}}><SmartCatalogFields category={dealTemplate} value={catalogSelection} onChange={updateCatalogSelection}/><label>{t('Item title')}<input id="create-item-title" required minLength={3} maxLength={120} aria-invalid={createErrors.some(error=>error.fieldId==='create-item-title')} aria-describedby="create-item-title-help" placeholder={selectedDealTemplate.titlePlaceholder} value={draft.title} onChange={event=>setDraft({...draft,title:event.target.value})}/><small id="create-item-title-help" className={createErrors.some(error=>error.fieldId==='create-item-title')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-title')?.message||(isGuidedCatalogCategory(dealTemplate)?'Auto-filled from your choices; edit it if needed.':'Use the brand, model, and one detail that helps identify the item.'))}</small></label><div className="two"><label>{t('Price')}<span className="price-currency-controls"><input id="create-item-price" required min={currencyStep(draft.currency)} step={currencyStep(draft.currency)} type="number" aria-invalid={createErrors.some(error=>error.fieldId==='create-item-price')} aria-describedby="create-item-price-help" placeholder="780" value={draft.price} onChange={event=>setDraft({...draft,price:event.target.value})}/><span className="currency-label">USD</span></span><small id="create-item-price-help" className={createErrors.some(error=>error.fieldId==='create-item-price')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-price')?.message||'Enter the agreed item price before fees or shipping.')}</small></label><label>{t('Condition')}<select value={draft.condition} onChange={event=>setDraft({...draft,condition:event.target.value as DealDraft['condition']})}><option value="Like new">{t('Like new')}</option><option value="Good">{t('Good')}</option><option value="Fair">{t('Fair')}</option></select></label></div></form></section>
         </div>}
         {!reviewingDraft&&createStep===2&&<section className="form-wrap create-step-card">
           <form id="create-step-2" noValidate onSubmit={event=>{event.preventDefault();submitCreateStep(2)}}>
