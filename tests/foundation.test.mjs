@@ -895,3 +895,56 @@ test('private catalog filtering is rendered once for both dashboard and Watchlis
   assert.match(panel, /Choose category first/);
   assert.match(styles, /@media\(max-width:480px\)/);
 });
+
+test('active catalog release has verified ownership, evidence, source, metrics, and rollback controls', async () => {
+  const pointer = readJson('catalog/active-release.json');
+  const manifest = readJson(pointer.manifest);
+  const { validateCatalogRelease } = await import('../scripts/validate-catalog-release.mjs');
+  const report = validateCatalogRelease(rootPath);
+
+  assert.equal(pointer.catalogVersion, manifest.catalogVersion);
+  assert.equal(report.catalogVersion, pointer.catalogVersion);
+  assert.equal(report.categoryCount, 8);
+  assert.ok(report.brandCount > 0);
+  assert.ok(report.modelCount > report.brandCount);
+  assert.equal(report.sha256, manifest.dataset.sha256);
+  assert.equal(manifest.ownership.businessOwner, 'Product Operations');
+  assert.equal(manifest.ownership.technicalOwner, 'Engineering');
+  assert.equal(manifest.ownership.riskReviewer, 'Trust & Safety');
+  assert.equal(manifest.rollback.databaseRollbackRequired, false);
+  assert.equal(manifest.rollback.preserveHistoricalDeals, true);
+});
+
+test('catalog adoption metrics are aggregate, admin-only, and exclude participant identifiers', () => {
+  const migration = readText('supabase/catalog_governance_metrics.sql');
+  const client = readText('src/services/supabaseRest.ts');
+  const app = readText('src/app.tsx');
+
+  assert.match(migration, /if not public\.is_dealsafe_admin\(\)/);
+  assert.match(migration, /p_days not in \(7, 30, 90\)/);
+  assert.match(migration, /group by deal\.catalog_version, deal\.category_id/);
+  assert.match(migration, /revoke all on function public\.get_admin_catalog_adoption\(integer\) from public, anon/);
+  assert.match(migration, /grant execute on function public\.get_admin_catalog_adoption\(integer\) to authenticated/);
+  assert.doesNotMatch(migration, /returns table\([\s\S]*\bdeal_id\b/);
+  assert.doesNotMatch(migration, /returns table\([\s\S]*\buser_id\b/);
+  assert.doesNotMatch(migration, /returns table\([\s\S]*\bemail\b/);
+  assert.match(client, /getAdminCatalogAdoption/);
+  assert.match(app, /<AdminCatalogCenter session=\{session\}\/>/);
+  assert.match(app, /Only aggregate version and category counts are returned/);
+});
+
+test('catalog governance validation is part of the full release gate', () => {
+  const packageJson = readJson('package.json');
+  const governance = readText('docs/production-readiness/12_CATALOG_GOVERNANCE.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+  const adminStyles = readText('src/admin-catalog.css');
+
+  assert.equal(packageJson.scripts['catalog:verify'], 'node scripts/validate-catalog-release.mjs');
+  assert.match(packageJson.scripts.verify, /^npm run catalog:verify && /);
+  assert.match(readinessIndex, /12_CATALOG_GOVERNANCE\.md/);
+  assert.match(governance, /Rollback never rewrites `deals\.catalog_version`/);
+  assert.match(governance, /Every guided category keeps a keyboard-accessible \*\*Not listed\*\* path/);
+  assert.match(governance, /Deal ID, public ID, user ID, email, address/);
+  assert.match(adminStyles, /@media \(max-width: 700px\)/);
+  assert.match(adminStyles, /\.admin-catalog-grid\s*\{\s*grid-template-columns: 1fr;/);
+});

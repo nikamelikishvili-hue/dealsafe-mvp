@@ -83,6 +83,20 @@ export interface StripeConnectStatus { connected:boolean;detailsSubmitted:boolea
 export interface AdminReport { report_id:string;deal_id:string;public_id:string;title:string;reason:string;report_status:'open'|'reviewed'|'dismissed';moderation_status:'visible'|'hidden';created_at:string;reporter_name:string;seller_name:string;resolution_note:string|null }
 export interface AdminRevenueSummary { currency:CurrencyCode; total_payment_volume_cents:number; total_commission_earned_cents:number; total_released_to_sellers_cents:number; total_protected_cents:number; total_refunded_cents:number; payment_count:number; released_count:number; refunded_count:number; disputed_count:number }
 export interface AdminRevenueTransaction { transaction_id:string; deal_id:string; public_id:string; title:string; status:ProtectedPaymentState; currency:CurrencyCode; item_amount_cents:number; platform_fee_cents:number; seller_amount_cents:number; seller_name:string; buyer_name:string; created_at:string; updated_at:string }
+export interface AdminCatalogAdoption {
+  window_days:number;
+  catalog_version:string;
+  category_id:string;
+  deal_count:number;
+  structured_brand_count:number;
+  structured_model_count:number;
+  manual_fallback_count:number;
+  draft_count:number;
+  published_count:number;
+  accepted_count:number;
+  completed_count:number;
+  latest_deal_at:string;
+}
 export interface RiskAssessment { risk_score:number;risk_level:'low'|'medium'|'high';signals:string[] }
 export interface PublicTrustProfile { display_name:string;verification_status:'not_started'|'pending'|'verified'|'failed';member_since:string;completed_sales:number;rating_count:number;average_rating:number|null }
 export interface TrustPassportSettings { public_id:string;enabled:boolean }
@@ -560,6 +574,7 @@ export async function reportPublicDeal(session:StoredSession,publicId:string,cat
 export async function getAdminAccess(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/is_dealsafe_admin`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok)return false;return Boolean(await response.json())}
 export async function getAdminRevenueSummary(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_revenue_summary`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json().catch(()=>null);throw new Error(d?.message||'Could not load revenue summary')}const rows=await response.json() as AdminRevenueSummary[];if(!rows[0])throw new Error('Revenue summary is unavailable');return rows[0]}
 export async function getAdminRevenueTransactions(session:StoredSession,limit=100){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_revenue_transactions`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_limit:limit})});if(!response.ok){const d=await response.json().catch(()=>null);throw new Error(d?.message||'Could not load revenue transactions')}return await response.json() as AdminRevenueTransaction[]}
+export async function getAdminCatalogAdoption(session:StoredSession,days:7|30|90=30){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_catalog_adoption`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_days:days})});if(!response.ok){const d=await response.json().catch(()=>null);throw new Error(d?.message||'Could not load catalog adoption')}return await response.json() as AdminCatalogAdoption[]}
 export async function getAdminReports(session:StoredSession,status:'open'|'reviewed'|'dismissed'|'all'='open'){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_reports`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_status:status})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load report queue')}return await response.json() as AdminReport[]}
 export async function resolveAdminReport(session:StoredSession,reportId:string,decision:'reviewed'|'dismissed',note:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/resolve_deal_report`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_report_id:reportId,p_decision:decision,p_resolution_note:note.trim()})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not save report decision')}}
 export async function getAdminDisputes(session:StoredSession,status:'open'|'resolved'|'all'='open'){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_disputes`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_status:status})});if(!response.ok){const d=await response.json().catch(()=>null);throw new Error(d?.message||'Could not load dispute queue')}return await response.json() as AdminDispute[]}
