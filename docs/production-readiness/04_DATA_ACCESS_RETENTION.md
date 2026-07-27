@@ -120,3 +120,20 @@ Deleting a record requires coordinated cleanup of:
 
 Backups expire according to their own schedule; deleted data is not restored into active production during a recovery without rerunning the deletion ledger.
 
+## 10. Private search and URL state
+
+- Dashboard and Watchlist filters use the approved category, brand, model,
+  variant, year, and status fields already returned to the signed-in user.
+- Filter URLs contain only bounded search text and structured catalog IDs.
+  Participant IDs, addresses, serial numbers, access codes, evidence paths, and
+  payment data must never be written to search parameters.
+- The signed-in workspace is always `noindex`, `nofollow`, and `noarchive`.
+  Shareable filter URLs reproduce controls for the same authorized account;
+  they do not grant access to another person.
+- Search state is stored in browser history only. It is not an analytics event
+  or a new retained customer record unless a future reviewed feature explicitly
+  adds saved searches.
+- The first release filters the already-authorized Dashboard and Watchlist
+  collections. It does not create a public marketplace index or enumerate
+  private Deal Links.
+

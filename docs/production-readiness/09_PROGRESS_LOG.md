@@ -374,3 +374,36 @@ This log records completed delivery evidence. A backlog item is not marked compl
 - CAT-005 can now build category-aware, shareable search facets from structured
   columns without parsing listing titles.
 
+## 2026-07-27 — Category-aware private discovery
+
+### Implemented
+
+- Added one structured search surface for the signed-in Dashboard and private
+  Watchlist instead of duplicating controls across both sections.
+- Search matches item title, Deal ID, and saved catalog label snapshots while
+  category, brand/make, model, vehicle year, and status filters compare stable
+  structured values.
+- Brand options appear only after a category is chosen; model options depend on
+  the selected brand; vehicle year appears only for Vehicle records.
+- Facets are keyboard-accessible native controls, show available-result counts,
+  collapse responsively, and include a single clear-filters action.
+- Filter state is bounded and encoded in readable URL parameters so a user can
+  bookmark or reopen the same private workspace view.
+- The public landing page remains indexable, while an authenticated home view
+  is now explicitly `noindex`, `nofollow`, and `noarchive`.
+- Filtering does not create a public listing feed and never writes participant,
+  address, serial, access-code, evidence, or payment information to the URL.
+
+### Verification target
+
+- Pure tests cover URL parsing/serialization, unrelated navigation-parameter
+  preservation, exact structured matching, facet dependencies, and the rule
+  that a legacy title cannot impersonate a structured Vehicle record.
+- Full typecheck, repository tests, secret scan, production build, responsive
+  browser review, and Preview navigation smoke must pass before merge.
+
+### Next catalog control
+
+- CAT-006: define catalog ownership, release evidence, update cadence, adoption
+  metrics, and a tested rollback procedure before adding more external datasets.
+
