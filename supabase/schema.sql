@@ -27,6 +27,19 @@ create table public.deals (
   serial_last_four text,
   serial_ciphertext text,
   delivery_method text not null,
+  category_id text not null default 'general'
+    check (category_id in (
+      'phone','tablet','laptop','vehicle','watch','camera','gaming','tools',
+      'business','jewelry','collectible','general'
+    )),
+  catalog_version text not null default 'legacy',
+  catalog_brand_id text,
+  catalog_brand_label text,
+  catalog_model_id text,
+  catalog_model_label text,
+  model_year smallint,
+  catalog_variant_id text,
+  catalog_variant_label text,
   status public.deal_status not null default 'draft',
   current_agreement_version integer not null default 0,
   published_at timestamptz,
@@ -35,6 +48,10 @@ create table public.deals (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create index deals_catalog_facets_idx
+on public.deals (category_id, catalog_brand_id, catalog_model_id, model_year)
+where status in ('published','accepted','completed');
 
 create table public.deal_media (
   id uuid primary key default gen_random_uuid(),

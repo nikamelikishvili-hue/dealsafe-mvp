@@ -1,4 +1,5 @@
 import catalogData from './catalog.v1.json';
+import type { DealCatalogIdentity } from './domain';
 
 export type SmartCatalogCategoryId =
   | 'phone'
@@ -66,6 +67,15 @@ export interface CatalogCategorySnapshot {
 
 export const OTHER_CATALOG_VALUE = '__other__';
 export const smartCatalogVersion = catalogData.catalogVersion;
+
+export function toCatalogValueId(value: string): string {
+  return value
+    .normalize('NFKD')
+    .toLocaleLowerCase('en-US')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
 
 const smartCatalogGuides: Record<GuidedCatalogCategoryId, SmartCatalogGuide> = {
   phone: {
@@ -245,6 +255,41 @@ export function buildSmartCatalogTitle(
   }
 
   return '';
+}
+
+export function buildDealCatalogIdentity(
+  category: SmartCatalogCategoryId,
+  selection: SmartCatalogSelection,
+): DealCatalogIdentity {
+  const guided = isGuidedCatalogCategory(category);
+  const snapshot = guided ? getEmbeddedCatalogSnapshot(category) : null;
+  const selectedBrand = snapshot?.brands.find(item => item.label === selection.brand);
+  const brandLabel = selection.brand === OTHER_CATALOG_VALUE
+    ? selection.customBrand.trim()
+    : selection.brand.trim();
+  const modelLabel = selection.brand === OTHER_CATALOG_VALUE || selection.model === OTHER_CATALOG_VALUE
+    ? selection.customModel.trim()
+    : selection.model.trim();
+  const variantLabel = selection.variant.trim();
+  const parsedYear = /^\d{4}$/.test(selection.year) ? Number(selection.year) : undefined;
+
+  return {
+    categoryId: category,
+    catalogVersion: smartCatalogVersion,
+    brandId: brandLabel
+      ? (selection.brand === OTHER_CATALOG_VALUE ? 'other' : selectedBrand?.id || toCatalogValueId(brandLabel))
+      : undefined,
+    brandLabel: brandLabel || undefined,
+    modelId: modelLabel
+      ? (selection.model === OTHER_CATALOG_VALUE || selection.brand === OTHER_CATALOG_VALUE
+        ? 'other'
+        : toCatalogValueId(modelLabel))
+      : undefined,
+    modelLabel: modelLabel || undefined,
+    modelYear: parsedYear,
+    variantId: variantLabel ? toCatalogValueId(variantLabel) : undefined,
+    variantLabel: variantLabel || undefined,
+  };
 }
 
 export function sanitizeSmartCatalogSelection(value: unknown): SmartCatalogSelection {

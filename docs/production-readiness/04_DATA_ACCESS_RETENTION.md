@@ -16,7 +16,7 @@ Dealivra collects a field only when it has a documented product, safety, payment
 
 | Class | Examples | Default treatment |
 |---|---|---|
-| Public | Brand content, published policies, explicitly public seller summary | Cacheable only as approved |
+| Public | Brand content, published policies, explicitly public seller summary, approved listing category/brand/model/year/variant | Cacheable only as approved |
 | Participant-private | Deal terms, participant names, chat, agreement status | Seller and claimed buyer only |
 | Restricted personal | Address, meeting details, phone, full email, device/session metadata | Need-to-know, encrypted, never public |
 | Restricted evidence | Photos, videos, documents, serial/IMEI, dispute material | Private storage, signed access, logged |
