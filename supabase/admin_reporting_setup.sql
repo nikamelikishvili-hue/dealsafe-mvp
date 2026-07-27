@@ -14,7 +14,11 @@ stable
 security definer
 set search_path = public, auth
 as $$
-  select exists(select 1 from public.profiles where id=auth.uid() and is_admin=true);
+  select auth.uid() is not null
+    and exists(
+      select 1 from public.profiles
+      where id=auth.uid() and app_role='admin'
+    );
 $$;
 
 create or replace function public.get_admin_reports(p_status text default 'open')

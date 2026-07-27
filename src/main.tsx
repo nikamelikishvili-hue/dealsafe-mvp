@@ -34,7 +34,11 @@ const loadFullApp = async (destination?: LandingDestination) => {
   root.render(<React.StrictMode><App /></React.StrictMode>);
 };
 
-const hasStoredSession = Boolean(localStorage.getItem('dealsafe_session'));
+// Do not retain browser-readable refresh tokens created by pre-hardening builds.
+localStorage.removeItem('dealsafe_session');
+const hasStoredSession = Boolean(
+  sessionStorage.getItem('dealivra_session_v2'),
+);
 const hashParams = new URLSearchParams(location.hash.slice(1));
 const hasRecoveryHash = hashParams.get('type') === 'recovery' && Boolean(hashParams.get('access_token'));
 const needsFullApp = hasStoredSession || location.pathname !== '/' || Boolean(location.search) || hasRecoveryHash;

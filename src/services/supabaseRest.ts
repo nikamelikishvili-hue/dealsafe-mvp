@@ -10,18 +10,54 @@ function readPublicEnv(name: string) {
   return raw?.split(/\r?\n/).map(value => value.trim()).find(Boolean);
 }
 
-const supabaseUrl = readPublicEnv('VITE_SUPABASE_URL')?.replace(/\/+$/, '');
-const publishableKey = readPublicEnv('VITE_SUPABASE_PUBLISHABLE_KEY');
+function normalizePublicServiceUrl(value: string | undefined) {
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value.replace(/\/+$/, ''));
+    const isLocalDevelopment = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    if (parsed.protocol !== 'https:' && !(isLocalDevelopment && parsed.protocol === 'http:')) {
+      return undefined;
+    }
+    if (
+      parsed.username
+      || parsed.password
+      || parsed.search
+      || parsed.hash
+      || (parsed.pathname !== '' && parsed.pathname !== '/')
+    ) {
+      return undefined;
+    }
+    return parsed.origin;
+  } catch {
+    return undefined;
+  }
+}
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && publishableKey);
+const supabaseUrl = normalizePublicServiceUrl(readPublicEnv('VITE_SUPABASE_URL'));
+const publishableKey = readPublicEnv('VITE_SUPABASE_PUBLISHABLE_KEY');
+const browserKeyIsSafe = Boolean(publishableKey && !/^sb_secret_/i.test(publishableKey));
+
+export const isSupabaseConfigured = Boolean(supabaseUrl && browserKeyIsSafe);
+const configurationUnavailableMessage = 'Account service is temporarily unavailable. Please try again later.';
+
+function requireSupabaseConfiguration() {
+  if (!isSupabaseConfigured) throw new Error(configurationUnavailableMessage);
+}
 
 export interface AuthUser {
   id: string;
   email: string;
   displayName: string;
+  emailConfirmed: boolean;
 }
 
-export interface StoredSession { accessToken:string;refreshToken?:string;expiresAt?:number;user:AuthUser }
+export interface StoredSession {
+  accessToken:string;
+  expiresAt:number;
+  createdAt:number;
+  lastActivityAt:number;
+  user:AuthUser;
+}
 export interface ProfileSummary { display_name:string; verification_status:'not_started'|'pending'|'verified'|'failed'; member_since:string; completed_deals:number; rating_count:number; average_rating:number|null; recent_ratings:{stars:number;comment:string|null;created_at:string}[] }
 export interface TimelineEvent { id:string; event_type:string; created_at:string; is_mine:boolean }
 export interface DealNotification extends TimelineEvent { deal_id:string; public_id:string; title:string; is_read:boolean }
@@ -75,19 +111,109 @@ interface DealRow {
 
 interface AuthResponse {
   access_token?: string;
-  refresh_token?: string;
   expires_in?: number;
-  user?: { id: string; email?: string; user_metadata?: { display_name?: string } };
+  user?: {
+    id: string;
+    email?: string;
+    email_confirmed_at?: string | null;
+    user_metadata?: { display_name?: string };
+  };
   msg?: string;
   error_description?: string;
 }
 
-const sessionKey = 'dealsafe_session';
-export const sessionUpdatedEvent = 'dealsafe-session-updated';
-export const sessionExpiredEvent = 'dealsafe-session-expired';
+export const sessionStorageKey = 'dealivra_session_v2';
+export const legacySessionStorageKey = 'dealsafe_session';
+export const sessionUpdatedEvent = 'dealivra-session-updated';
+export const sessionExpiredEvent = 'dealivra-session-expired';
+export const sessionIdleTimeoutMs = 30 * 60 * 1000;
+export const sessionAbsoluteTimeoutMs = 8 * 60 * 60 * 1000;
+const activityWriteIntervalMs = 60 * 1000;
 let refreshPromise: Promise<StoredSession> | null = null;
 
-function storeSession(data:AuthResponse,user:AuthUser){const session:StoredSession={accessToken:data.access_token!,refreshToken:data.refresh_token,expiresAt:Date.now()+(data.expires_in||3600)*1000,user};localStorage.setItem(sessionKey,JSON.stringify(session));window.dispatchEvent(new CustomEvent<StoredSession>(sessionUpdatedEvent,{detail:session}));return session}
+function decodeJwtExpiry(token:string){
+  try{
+    const encoded=token.split('.')[1];
+    if(!encoded)return null;
+    const normalized=encoded.replace(/-/g,'+').replace(/_/g,'/');
+    const payload=JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length/4)*4,'='))) as {exp?:number};
+    return typeof payload.exp==='number'?payload.exp*1000:null;
+  }catch{return null}
+}
+
+function clearStoredSession(){
+  sessionStorage.removeItem(sessionStorageKey);
+  // Remove the legacy browser-readable refresh token if an older release left
+  // it behind. Legacy sessions are not migrated into the new architecture.
+  localStorage.removeItem(legacySessionStorageKey);
+}
+
+async function revokeServerSession(accessToken?:string){
+  await fetch('/api/auth/logout',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      ...(accessToken?{Authorization:`Bearer ${accessToken}`}:{})
+    },
+    credentials:'same-origin',
+    body:'{}',
+    keepalive:true,
+  }).catch(()=>{});
+}
+
+function normalizeSession(value:unknown):StoredSession|null{
+  if(!value||typeof value!=='object')return null;
+  const candidate=value as Partial<StoredSession>;
+  if(
+    typeof candidate.accessToken!=='string'
+    ||!candidate.user
+    ||typeof candidate.user.id!=='string'
+    ||typeof candidate.user.email!=='string'
+  )return null;
+  const now=Date.now();
+  const createdAt=typeof candidate.createdAt==='number'?candidate.createdAt:now;
+  const lastActivityAt=typeof candidate.lastActivityAt==='number'?candidate.lastActivityAt:now;
+  const tokenExpiry=decodeJwtExpiry(candidate.accessToken);
+  const expiresAt=tokenExpiry??(typeof candidate.expiresAt==='number'?candidate.expiresAt:now);
+  return {
+    accessToken:candidate.accessToken,
+    expiresAt,
+    createdAt,
+    lastActivityAt,
+    user:{
+      id:candidate.user.id,
+      email:candidate.user.email,
+      displayName:candidate.user.displayName||candidate.user.email.split('@')[0],
+      emailConfirmed:Boolean(candidate.user.emailConfirmed),
+    },
+  };
+}
+
+function readStoredSession(){
+  try{
+    const current=normalizeSession(JSON.parse(sessionStorage.getItem(sessionStorageKey)||'null'));
+    localStorage.removeItem(legacySessionStorageKey);
+    return current;
+  }catch{
+    clearStoredSession();
+    return null;
+  }
+}
+
+function storeSession(data:AuthResponse,user:AuthUser,previous?:StoredSession){
+  const now=Date.now();
+  const session:StoredSession={
+    accessToken:data.access_token!,
+    expiresAt:decodeJwtExpiry(data.access_token!)??now+(data.expires_in||3600)*1000,
+    createdAt:previous?.createdAt||now,
+    lastActivityAt:previous?.lastActivityAt||now,
+    user,
+  };
+  sessionStorage.setItem(sessionStorageKey,JSON.stringify(session));
+  localStorage.removeItem(legacySessionStorageKey);
+  window.dispatchEvent(new CustomEvent<StoredSession>(sessionUpdatedEvent,{detail:session}));
+  return session;
+}
 
 function headers(token?: string) {
   return {
@@ -102,80 +228,110 @@ function toUser(data: AuthResponse): AuthUser | null {
   return {
     id: data.user.id,
     email: data.user.email,
+    // Display metadata is presentation-only. Authorization is always decided
+    // by database roles and RLS, never by user-editable metadata.
     displayName: data.user.user_metadata?.display_name || data.user.email.split('@')[0],
+    emailConfirmed: Boolean(data.user.email_confirmed_at),
   };
 }
 
 export function getStoredSession(): StoredSession | null {
-  try {
-    const session=JSON.parse(localStorage.getItem(sessionKey) || 'null') as StoredSession|null;
-    if(!session?.accessToken||!session.refreshToken||!session.user?.id){
-      localStorage.removeItem(sessionKey);
-      return null;
-    }
-    return session;
-  } catch {
-    localStorage.removeItem(sessionKey);
+  const session=readStoredSession();
+  if(!session)return null;
+  const now=Date.now();
+  if(
+    now-session.lastActivityAt>sessionIdleTimeoutMs
+    ||now-session.createdAt>sessionAbsoluteTimeoutMs
+  ){
+    clearStoredSession();
+    void revokeServerSession(session.accessToken);
     return null;
   }
+  return session;
+}
+
+export function markSessionActivity(){
+  const session=getStoredSession();
+  if(!session||Date.now()-session.lastActivityAt<activityWriteIntervalMs)return;
+  const updated={...session,lastActivityAt:Date.now()};
+  sessionStorage.setItem(sessionStorageKey,JSON.stringify(updated));
 }
 
 export async function signUp(email: string, password: string, displayName: string) {
-  const response = await fetch(`${supabaseUrl}/auth/v1/signup`, {
-    method: 'POST', headers: headers(),
-    body: JSON.stringify({ email, password, data: { display_name: displayName } }),
+  requireSupabaseConfiguration();
+  validatePassword(password);
+  const name=displayName.trim();
+  if(name.length<2||name.length>80)throw new Error('Name must contain 2 to 80 characters.');
+  const response = await fetch('/api/auth/signup', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    credentials:'same-origin',
+    body: JSON.stringify({ email:email.trim().toLowerCase(), password, displayName:name }),
   });
-  const data = await response.json() as AuthResponse;
-  if (!response.ok) throw new Error(data.msg || data.error_description || 'Sign up failed');
-  const user = toUser(data);
-  if (data.access_token && user) {
-    const session = storeSession(data,user);
+  const result = await response.json() as {
+    session?:AuthResponse|null;
+    needsEmailConfirmation?:boolean;
+    error?:string;
+  };
+  if (!response.ok) throw new Error(result.error || 'Sign up failed');
+  if (result.session) {
+    const user=toUser(result.session);
+    if(!user)throw new Error('Account session could not be verified.');
+    const session = storeSession(result.session,user);
     return { session, needsEmailConfirmation: false };
   }
-  return { session: null, needsEmailConfirmation: true };
+  return { session: null, needsEmailConfirmation: result.needsEmailConfirmation!==false };
 }
 
 export async function signIn(email: string, password: string) {
-  const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-    method: 'POST', headers: headers(), body: JSON.stringify({ email, password }),
+  requireSupabaseConfiguration();
+  const response = await fetch('/api/auth/login', {
+    method: 'POST', headers: {'Content-Type':'application/json'}, credentials:'same-origin',
+    body: JSON.stringify({ email:email.trim().toLowerCase(), password }),
   });
-  const data = await response.json() as AuthResponse;
-  if (!response.ok) throw new Error(data.error_description || data.msg || 'Sign in failed');
+  const data = await response.json() as AuthResponse&{error?:string};
+  if (!response.ok) throw new Error(data.error || 'Invalid email or password.');
   const user = toUser(data);
   if (!data.access_token || !user) throw new Error('No session returned');
   return storeSession(data,user);
 }
 
 export async function refreshSession(session:StoredSession){
-  const current=getStoredSession()||session;
-  if(!current.refreshToken)throw new Error('Your session expired. Please sign in again.');
+  const current=getStoredSession();
+  if(!current||current.user.id!==session.user.id)throw new Error('Your session expired. Please sign in again.');
   if(refreshPromise)return refreshPromise;
   refreshPromise=(async()=>{
-    const response=await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:headers(),body:JSON.stringify({refresh_token:current.refreshToken})});
-    const data=await response.json() as AuthResponse;
-    if(!response.ok||!data.access_token)throw new Error(data.error_description||data.msg||'Your session expired. Please sign in again.');
-    return storeSession(data,toUser(data)||current.user);
+    const response=await fetch('/api/auth/refresh',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'same-origin',
+      body:'{}',
+    });
+    const data=await response.json() as AuthResponse&{error?:string};
+    if(!response.ok||!data.access_token)throw new Error(data.error||data.error_description||data.msg||'Your session expired. Please sign in again.');
+    return storeSession(data,toUser(data)||current.user,current);
   })();
   try{return await refreshPromise}finally{refreshPromise=null}
 }
 
 function expireSession(){
-  localStorage.removeItem(sessionKey);
+  const session=readStoredSession();
+  clearStoredSession();
+  void revokeServerSession(session?.accessToken);
   window.dispatchEvent(new Event(sessionExpiredEvent));
 }
 
 async function authenticatedFetch(session:StoredSession,input:RequestInfo|URL,init:RequestInit={}){
-  let current=getStoredSession()||session;
+  let current=getStoredSession();
+  if(!current||current.user.id!==session.user.id){
+    expireSession();
+    throw new Error('Your session expired. Please sign in again.');
+  }
   const renew=async()=>{
-    try{return await refreshSession(current)}catch(error){
+    try{return await refreshSession(current!)}catch(error){
       expireSession();
       throw error instanceof Error?error:new Error('Your session expired. Please sign in again.');
     }
   };
-  if(!current.refreshToken){
-    expireSession();
-    throw new Error('Your session expired. Please sign in again.');
-  }
   if(!current.expiresAt||current.expiresAt-Date.now()<60_000)current=await renew();
   const send=(token:string)=>{
     const requestHeaders=new Headers(init.headers);
@@ -191,8 +347,8 @@ async function authenticatedFetch(session:StoredSession,input:RequestInfo|URL,in
   return response;
 }
 
-export async function requestPasswordReset(email:string,redirectTo:string){const response=await fetch(`${supabaseUrl}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`,{method:'POST',headers:headers(),body:JSON.stringify({email})});if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not send reset email')}}
-export async function updateRecoveredPassword(accessToken:string,password:string){const response=await fetch(`${supabaseUrl}/auth/v1/user`,{method:'PUT',headers:headers(accessToken),body:JSON.stringify({password})});if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not update password')}}
+export async function requestPasswordReset(email:string,redirectTo:string){const response=await fetch(`${supabaseUrl}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`,{method:'POST',headers:headers(),body:JSON.stringify({email:email.trim().toLowerCase()})});if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not send reset email')}}
+export async function updateRecoveredPassword(accessToken:string,password:string){validatePassword(password);const response=await fetch(`${supabaseUrl}/auth/v1/user`,{method:'PUT',headers:headers(accessToken),body:JSON.stringify({password})});if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not update password')}}
 
 export async function updateAccountName(session:StoredSession,displayName:string){
   const name=displayName.trim();
@@ -203,18 +359,28 @@ export async function updateAccountName(session:StoredSession,displayName:string
   if(!profileResponse.ok){const data=await profileResponse.json();throw new Error(data?.message||'Could not update profile name')}
   const current=getStoredSession()||session;
   const updated:StoredSession={...current,user:{...current.user,displayName:name}};
-  localStorage.setItem(sessionKey,JSON.stringify(updated));
+  sessionStorage.setItem(sessionStorageKey,JSON.stringify(updated));
   window.dispatchEvent(new CustomEvent<StoredSession>(sessionUpdatedEvent,{detail:updated}));
   return updated;
 }
 
 export async function updateAccountPassword(session:StoredSession,password:string){
-  if(password.length<8)throw new Error('Password must contain at least 8 characters.');
+  validatePassword(password);
   const response=await authenticatedFetch(session,`${supabaseUrl}/auth/v1/user`,{method:'PUT',headers:headers(session.accessToken),body:JSON.stringify({password})});
   if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not update password')}
 }
 
-export function signOut() { localStorage.removeItem(sessionKey); }
+function validatePassword(password:string){
+  if(password.length<12)throw new Error('Password must contain at least 12 characters.');
+  if(!/[a-z]/.test(password)||!/[A-Z]/.test(password)||!/\d/.test(password)){
+    throw new Error('Password must include uppercase, lowercase, and a number.');
+  }
+}
+
+export async function signOut(session:StoredSession|null=getStoredSession()){
+  clearStoredSession();
+  await revokeServerSession(session?.accessToken);
+}
 
 async function accountEmailConfirmed(session:StoredSession){
   const response=await authenticatedFetch(session,`${supabaseUrl}/auth/v1/user`,{headers:headers(session.accessToken)});
@@ -444,6 +610,7 @@ export async function getMySavedDeals(session:StoredSession){
 }
 
 export async function getPublicDeal(publicId: string) {
+  requireSupabaseConfiguration();
   // Deal IDs are generated and stored in uppercase. Normalize copied or
   // manually typed links so a lowercase query string still resolves.
   const normalizedPublicId = publicId.trim().toUpperCase();
@@ -480,8 +647,10 @@ export async function checkSupabaseConnection(): Promise<boolean> {
   if (!supabaseUrl || !publishableKey) return false;
 
   try {
-    const response = await fetch(`${supabaseUrl}/rest/v1/deals?select=id&limit=1`, {
-      headers: headers(),
+    // Health checks must not require anonymous SELECT access to a private
+    // business table. The Auth health endpoint exposes no customer data.
+    const response = await fetch(`${supabaseUrl}/auth/v1/health`, {
+      headers: { apikey: publishableKey },
     });
     return response.ok;
   } catch {

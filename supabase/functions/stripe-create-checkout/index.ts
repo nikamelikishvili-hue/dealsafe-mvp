@@ -49,7 +49,10 @@ Deno.serve(async (request) => {
       return json({ url: existing.checkout_url, reused: true });
     }
 
-    const feeBps = Math.max(0, Math.min(2000, Number(Deno.env.get("DEALSAFE_PLATFORM_FEE_BPS") || "0")));
+    const configuredFeeBps = Deno.env.get("DEALIVRA_PLATFORM_FEE_BPS")
+      ?? Deno.env.get("DEALSAFE_PLATFORM_FEE_BPS")
+      ?? "0";
+    const feeBps = Math.max(0, Math.min(2000, Number(configuredFeeBps)));
     const platformFeeCents = Math.round(deal.price_cents * feeBps / 10_000);
     const sellerAmountCents = deal.price_cents - platformFeeCents;
     const transferGroup = `DS_${deal.id.replaceAll("-", "")}`;
@@ -106,4 +109,3 @@ Deno.serve(async (request) => {
     return errorResponse(error);
   }
 });
-

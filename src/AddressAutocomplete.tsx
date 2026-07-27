@@ -31,7 +31,7 @@ type GoogleMapsApi={
 declare global{
   interface Window{
     google?:GoogleMapsApi;
-    __dealsafeGoogleMapsReady?:()=>void;
+    __dealivraGoogleMapsReady?:()=>void;
   }
 }
 
@@ -41,14 +41,14 @@ function loadGoogleMaps(apiKey:string){
   if(window.google?.maps?.importLibrary)return Promise.resolve();
   if(mapsLoader)return mapsLoader;
   mapsLoader=new Promise<void>((resolve,reject)=>{
-    const existing=document.querySelector<HTMLScriptElement>('script[data-dealsafe-google-maps]');
+    const existing=document.querySelector<HTMLScriptElement>('script[data-dealivra-google-maps]');
     const finish=()=>window.google?.maps?.importLibrary?resolve():reject(new Error('Google Maps did not load'));
     if(existing){existing.addEventListener('load',finish,{once:true});existing.addEventListener('error',()=>reject(new Error('Google Maps did not load')),{once:true});return}
-    window.__dealsafeGoogleMapsReady=()=>{resolve();delete window.__dealsafeGoogleMapsReady};
+    window.__dealivraGoogleMapsReady=()=>{resolve();delete window.__dealivraGoogleMapsReady};
     const script=document.createElement('script');
-    script.dataset.dealsafeGoogleMaps='true';
+    script.dataset.dealivraGoogleMaps='true';
     script.async=true;
-    script.src=`https://maps.googleapis.com/maps/api/js?${new URLSearchParams({key:apiKey,v:'weekly',loading:'async',callback:'__dealsafeGoogleMapsReady'})}`;
+    script.src=`https://maps.googleapis.com/maps/api/js?${new URLSearchParams({key:apiKey,v:'weekly',loading:'async',callback:'__dealivraGoogleMapsReady'})}`;
     script.onerror=()=>{mapsLoader=null;reject(new Error('Google Maps did not load'))};
     document.head.appendChild(script);
   });
