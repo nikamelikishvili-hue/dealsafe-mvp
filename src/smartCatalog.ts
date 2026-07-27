@@ -14,7 +14,29 @@ export type SmartCatalogCategoryId =
   | 'collectible'
   | 'general';
 
-export type GuidedCatalogCategoryId = 'phone' | 'vehicle';
+export const guidedCatalogCategoryIds = [
+  'phone',
+  'tablet',
+  'laptop',
+  'vehicle',
+  'watch',
+  'camera',
+  'gaming',
+  'tools',
+] as const;
+
+export type GuidedCatalogCategoryId = typeof guidedCatalogCategoryIds[number];
+
+export interface SmartCatalogGuide {
+  finderTitle: string;
+  identityLabel: string;
+  identityNameLabel: string;
+  chooseIdentity: string;
+  enterIdentity: string;
+  chooseModelBeforeIdentity: string;
+  variantLabel: string;
+  chooseVariant: string;
+}
 
 export interface SmartCatalogSelection {
   brand: string;
@@ -45,6 +67,89 @@ export interface CatalogCategorySnapshot {
 export const OTHER_CATALOG_VALUE = '__other__';
 export const smartCatalogVersion = catalogData.catalogVersion;
 
+const smartCatalogGuides: Record<GuidedCatalogCategoryId, SmartCatalogGuide> = {
+  phone: {
+    finderTitle: 'Find your phone',
+    identityLabel: 'Brand',
+    identityNameLabel: 'Brand name',
+    chooseIdentity: 'Choose brand',
+    enterIdentity: 'Enter brand',
+    chooseModelBeforeIdentity: 'Choose a brand first',
+    variantLabel: 'Storage',
+    chooseVariant: 'Choose storage',
+  },
+  tablet: {
+    finderTitle: 'Find your tablet',
+    identityLabel: 'Brand',
+    identityNameLabel: 'Brand name',
+    chooseIdentity: 'Choose brand',
+    enterIdentity: 'Enter brand',
+    chooseModelBeforeIdentity: 'Choose a brand first',
+    variantLabel: 'Storage',
+    chooseVariant: 'Choose storage',
+  },
+  laptop: {
+    finderTitle: 'Find your laptop',
+    identityLabel: 'Brand',
+    identityNameLabel: 'Brand name',
+    chooseIdentity: 'Choose brand',
+    enterIdentity: 'Enter brand',
+    chooseModelBeforeIdentity: 'Choose a brand first',
+    variantLabel: 'Storage',
+    chooseVariant: 'Choose storage',
+  },
+  vehicle: {
+    finderTitle: 'Find your vehicle',
+    identityLabel: 'Make',
+    identityNameLabel: 'Make name',
+    chooseIdentity: 'Choose make',
+    enterIdentity: 'Enter make',
+    chooseModelBeforeIdentity: 'Choose a make first',
+    variantLabel: '',
+    chooseVariant: '',
+  },
+  watch: {
+    finderTitle: 'Find your watch',
+    identityLabel: 'Brand',
+    identityNameLabel: 'Brand name',
+    chooseIdentity: 'Choose brand',
+    enterIdentity: 'Enter brand',
+    chooseModelBeforeIdentity: 'Choose a brand first',
+    variantLabel: 'Case size',
+    chooseVariant: 'Choose case size',
+  },
+  camera: {
+    finderTitle: 'Find your camera',
+    identityLabel: 'Brand',
+    identityNameLabel: 'Brand name',
+    chooseIdentity: 'Choose brand',
+    enterIdentity: 'Enter brand',
+    chooseModelBeforeIdentity: 'Choose a brand first',
+    variantLabel: 'Package',
+    chooseVariant: 'Choose body or kit',
+  },
+  gaming: {
+    finderTitle: 'Find your gaming device',
+    identityLabel: 'Brand',
+    identityNameLabel: 'Brand name',
+    chooseIdentity: 'Choose brand',
+    enterIdentity: 'Enter brand',
+    chooseModelBeforeIdentity: 'Choose a brand first',
+    variantLabel: 'Storage',
+    chooseVariant: 'Choose storage',
+  },
+  tools: {
+    finderTitle: 'Find your tool or equipment',
+    identityLabel: 'Brand',
+    identityNameLabel: 'Brand name',
+    chooseIdentity: 'Choose brand',
+    enterIdentity: 'Enter brand',
+    chooseModelBeforeIdentity: 'Choose a brand first',
+    variantLabel: 'Package',
+    chooseVariant: 'Choose package type',
+  },
+};
+
 export const emptySmartCatalogSelection = (): SmartCatalogSelection => ({
   brand: '',
   model: '',
@@ -71,16 +176,38 @@ export const vehicleYears = yearsDescending(
   catalogData.categories.vehicle.yearMax,
 );
 
+interface RawCatalogCategory {
+  brands: readonly CatalogBrand[];
+  variants?: readonly string[];
+  yearMin?: number;
+  yearMax?: number;
+}
+
+const embeddedCategories = catalogData.categories as Record<GuidedCatalogCategoryId, RawCatalogCategory>;
+
+export function isGuidedCatalogCategory(
+  category: SmartCatalogCategoryId,
+): category is GuidedCatalogCategoryId {
+  return guidedCatalogCategoryIds.some(value => value === category);
+}
+
+export function getSmartCatalogGuide(category: GuidedCatalogCategoryId): SmartCatalogGuide {
+  return smartCatalogGuides[category];
+}
+
 export function getEmbeddedCatalogSnapshot(category: GuidedCatalogCategoryId): CatalogCategorySnapshot {
+  const source = embeddedCategories[category];
   return {
     category,
     version: catalogData.catalogVersion,
     market: catalogData.market,
     updatedAt: catalogData.updatedAt,
     source: catalogData.source,
-    brands: category === 'phone' ? phoneCatalog : vehicleCatalog,
-    variants: category === 'phone' ? phoneStorageOptions : [],
-    years: category === 'vehicle' ? vehicleYears : [],
+    brands: source.brands,
+    variants: source.variants ?? [],
+    years: typeof source.yearMin === 'number' && typeof source.yearMax === 'number'
+      ? yearsDescending(source.yearMin, source.yearMax)
+      : [],
   };
 }
 
@@ -89,7 +216,7 @@ export function getCatalogModels(
   brand: string,
   catalog?: readonly CatalogBrand[],
 ): readonly string[] {
-  const source = catalog ?? (category === 'phone' ? phoneCatalog : category === 'vehicle' ? vehicleCatalog : []);
+  const source = catalog ?? (isGuidedCatalogCategory(category) ? embeddedCategories[category].brands : []);
   return source.find(item => item.label === brand)?.models ?? [];
 }
 
@@ -107,13 +234,14 @@ export function buildSmartCatalogTitle(
     ? selection.customModel.trim()
     : selection.model;
 
-  if (category === 'phone') {
+  if (isGuidedCatalogCategory(category) && category !== 'vehicle') {
     const identity = [brand, model].filter(Boolean).join(' ');
-    return [identity, selection.variant].filter(Boolean).join(' · ');
+    return identity ? [identity, selection.variant].filter(Boolean).join(' · ') : '';
   }
 
   if (category === 'vehicle') {
-    return [selection.year, brand, model].filter(Boolean).join(' ');
+    const identity = [brand, model].filter(Boolean).join(' ');
+    return identity ? [selection.year, identity].filter(Boolean).join(' ') : '';
   }
 
   return '';

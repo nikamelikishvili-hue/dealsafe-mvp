@@ -1,6 +1,15 @@
 import catalogData from '../src/catalog.v1.json' with { type: 'json' };
 
-const supportedCategories = new Set(['phone', 'vehicle']);
+const supportedCategories = new Set([
+  'phone',
+  'tablet',
+  'laptop',
+  'vehicle',
+  'watch',
+  'camera',
+  'gaming',
+  'tools',
+]);
 const identifierPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function safeText(value, maximumLength) {
@@ -55,9 +64,11 @@ export function getCatalogCategory(category) {
     source: safeText(catalogData.source, 100),
     category,
     brands,
-    variants: category === 'phone' && Array.isArray(source.variants)
+    variants: Array.isArray(source.variants)
       ? source.variants.slice(0, 30).map(value => safeText(value, 40)).filter(Boolean)
       : [],
-    years: category === 'vehicle' ? yearsDescending(source.yearMin, source.yearMax) : [],
+    years: Number.isFinite(source.yearMin) && Number.isFinite(source.yearMax)
+      ? yearsDescending(source.yearMin, source.yearMax)
+      : [],
   };
 }
