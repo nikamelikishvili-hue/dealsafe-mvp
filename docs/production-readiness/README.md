@@ -21,6 +21,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [10_ENVIRONMENT_CONFIGURATION.md](10_ENVIRONMENT_CONFIGURATION.md) | Required variables, environment isolation, safe failure, validation, and change control |
 | [11_LEGACY_IDENTIFIER_REGISTER.md](11_LEGACY_IDENTIFIER_REGISTER.md) | Approved migration aliases and the rule that all new runtime identifiers use Dealivra |
 | [12_CATALOG_GOVERNANCE.md](12_CATALOG_GOVERNANCE.md) | Catalog ownership, release evidence, update cadence, privacy-safe adoption metrics, and rollback |
+| [13_SESSION_SECURITY.md](13_SESSION_SECURITY.md) | Session visibility, scoped revocation, privacy boundaries, verification evidence, and remaining immediate-revocation work |
 
 ## Authority and change control
 

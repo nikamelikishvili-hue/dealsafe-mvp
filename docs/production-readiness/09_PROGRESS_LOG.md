@@ -444,3 +444,38 @@ This log records completed delivery evidence. A backlog item is not marked compl
   Use the 30-day admin aggregates to prioritize real coverage gaps before
   adding another external dataset.
 
+## 2026-07-27 — SEC-002 scoped session controls
+
+### Implemented
+
+- Corrected ordinary **Sign out** to use the Auth provider's `local` scope
+  instead of its global default.
+- Added separate **Sign out other devices** (`others`) and confirmed
+  **Sign out everywhere** (`global`) controls.
+- Added a private signed-in-device inventory that returns only the current
+  user's bounded session metadata and excludes IP and refresh-token fields.
+- Added failure-safe behavior: remote revocation errors keep the current session
+  intact and are shown instead of reporting a false success.
+- Added responsive, accessible account-session UI with current-device labeling,
+  status feedback, reduced-motion support, and a compact mobile layout.
+
+### Verification evidence
+
+- Supabase migration `account_session_security` applied successfully.
+- Database inspection confirmed `SECURITY DEFINER`, `STABLE`, empty
+  `search_path`, owner filtering, no anonymous execution, authenticated-only
+  execution, and an IP/refresh-secret-free return shape.
+- Endpoint, migration, client, UI, and responsive regression coverage raised
+  the repository suite from 36 to 43 passing tests.
+- Browser review passed at desktop and 390 px: no framework overlay, console
+  warning, horizontal overflow, or overlapping session controls.
+- A visual review found and corrected a mobile collision caused by the shared
+  fixed-height `header` rule before release verification.
+
+### SEC-002 state
+
+**In progress.** Refresh sessions are revoked at the provider, but an
+already-issued short-lived access JWT can remain valid until expiry. Immediate
+active-session validation and cross-device negative authorization evidence are
+still required before SEC-002 is complete.
+

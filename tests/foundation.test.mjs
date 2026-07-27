@@ -158,6 +158,8 @@ test('the production-readiness specification is complete and linked', () => {
     '09_PROGRESS_LOG.md',
     '10_ENVIRONMENT_CONFIGURATION.md',
     '11_LEGACY_IDENTIFIER_REGISTER.md',
+    '12_CATALOG_GOVERNANCE.md',
+    '13_SESSION_SECURITY.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -440,6 +442,94 @@ test('logout clears the refresh cookie even when provider revocation is unavaila
   assert.equal(response.statusCode, 204);
   assert.equal(response.ended, true);
   assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+});
+
+test('ordinary logout revokes only the current session', async () => {
+  const { default: logout } = await import('../api/auth/logout.mjs');
+  const response = createResponse();
+  let requestedUrl = '';
+
+  await withAuthProvider(async input => {
+    requestedUrl = String(input);
+    return new Response(null, { status: 204 });
+  }, () => logout(authRequest({}, {
+    authorization: 'Bearer current-session-token',
+  }), response));
+
+  assert.equal(response.statusCode, 204);
+  assert.match(requestedUrl, /\/auth\/v1\/logout\?scope=local$/);
+  assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+});
+
+test('other-session logout keeps the current refresh cookie', async () => {
+  const { default: logout } = await import('../api/auth/logout.mjs');
+  const response = createResponse();
+  let requestedUrl = '';
+
+  await withAuthProvider(async input => {
+    requestedUrl = String(input);
+    return new Response(null, { status: 204 });
+  }, () => logout(authRequest({ scope: 'others' }, {
+    authorization: 'Bearer current-session-token',
+  }), response));
+
+  assert.equal(response.statusCode, 204);
+  assert.match(requestedUrl, /\/auth\/v1\/logout\?scope=others$/);
+  assert.equal(response.headers.has('set-cookie'), false);
+});
+
+test('global logout clears the current cookie only after provider success', async () => {
+  const { default: logout } = await import('../api/auth/logout.mjs');
+  const response = createResponse();
+
+  await withAuthProvider(async input => {
+    assert.match(String(input), /\/auth\/v1\/logout\?scope=global$/);
+    return new Response(null, { status: 204 });
+  }, () => logout(authRequest({ scope: 'global' }, {
+    authorization: 'Bearer current-session-token',
+  }), response));
+
+  assert.equal(response.statusCode, 204);
+  assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+});
+
+test('invalid logout scopes fail without contacting the provider', async () => {
+  const { default: logout } = await import('../api/auth/logout.mjs');
+  const response = createResponse();
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    return new Response(null, { status: 204 });
+  }, () => logout(authRequest({ scope: 'all-devices-maybe' }, {
+    authorization: 'Bearer current-session-token',
+  }), response));
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.payload.error, 'Sign-out scope is invalid.');
+  assert.equal(providerCalled, false);
+  assert.equal(response.headers.has('set-cookie'), false);
+});
+
+test('failed other-session revocation never reports success or clears the current cookie', async () => {
+  const { default: logout } = await import('../api/auth/logout.mjs');
+  const response = createResponse();
+  const originalConsoleError = console.error;
+  console.error = () => {};
+
+  try {
+    await withAuthProvider(async () => {
+      throw new Error('provider unavailable');
+    }, () => logout(authRequest({ scope: 'others' }, {
+      authorization: 'Bearer current-session-token',
+    }), response));
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(response.statusCode, 503);
+  assert.match(response.payload.error, /Could not reach the account service/);
+  assert.equal(response.headers.has('set-cookie'), false);
 });
 
 test('server auth rejects privileged keys before contacting the provider', async () => {
@@ -947,4 +1037,43 @@ test('catalog governance validation is part of the full release gate', () => {
   assert.match(governance, /Deal ID, public ID, user ID, email, address/);
   assert.match(adminStyles, /@media \(max-width: 700px\)/);
   assert.match(adminStyles, /\.admin-catalog-grid\s*\{\s*grid-template-columns: 1fr;/);
+});
+
+test('account session inventory is current-user-only, minimal, and deny-by-default', () => {
+  const migration = readText('supabase/account_session_security.sql');
+  const hardening = readText('supabase/production_auth_rbac_hardening.sql');
+
+  assert.match(migration, /security definer/);
+  assert.match(migration, /set search_path = ''/);
+  assert.match(migration, /where auth\.uid\(\) is not null/);
+  assert.match(migration, /sessions\.user_id = auth\.uid\(\)/);
+  assert.match(migration, /auth\.jwt\(\) ->> 'session_id'/);
+  assert.match(migration, /revoke all on function public\.get_my_account_sessions\(\) from public, anon/);
+  assert.match(migration, /grant execute on function public\.get_my_account_sessions\(\) to authenticated/);
+  assert.doesNotMatch(migration, /\bip\b/);
+  assert.doesNotMatch(migration, /refresh_token/);
+  assert.match(hardening, /'get_my_account_sessions'/);
+});
+
+test('session security UI separates current, other, and global sign-out actions', () => {
+  const component = readText('src/AccountSessionSecurity.tsx');
+  const client = readText('src/services/supabaseRest.ts');
+  const styles = readText('src/session-security.css');
+  const app = readText('src/app.tsx');
+  const sessionStandard = readText('docs/production-readiness/13_SESSION_SECURITY.md');
+
+  assert.match(client, /scope:SignOutScope='local'/);
+  assert.match(client, /sessionForRemoteRevocation\(session\)/);
+  assert.match(client, /revokeServerSession\(current\.accessToken,'others'\)/);
+  assert.match(client, /revokeServerSession\(current\.accessToken,'global'\)/);
+  assert.match(component, /Sign out other devices/);
+  assert.match(component, /Sign out everywhere/);
+  assert.match(component, /You will need to sign in again everywhere/);
+  assert.match(component, /Review your account sessions without exposing location or IP information/);
+  assert.match(app, /<AccountSessionSecurity session=\{session\}/);
+  assert.match(styles, /@media\(max-width:720px\)/);
+  assert.match(styles, /@media\(prefers-reduced-motion:reduce\)/);
+  assert.match(styles, /\.session-security-heading\{[^}]*height:auto;min-height:0/);
+  assert.match(sessionStandard, /does not mark SEC-002 complete/);
+  assert.match(sessionStandard, /already-issued access JWT can remain valid until its\s+short expiry/);
 });

@@ -10,6 +10,7 @@ import { getDealDeliveryDetails, saveDealDeliveryDetails, type DealDeliveryDetai
 import { confirmDealPaymentMethod, createProtectedCheckout, getDealPaymentRecord, getProtectedPaymentStatus, getStripeConnectStatus, releaseProtectedPayment, startStripeConnectOnboarding, type DealPaymentMethod, type DealPaymentRecord, type ProtectedPaymentState, type ProtectedPaymentStatus, type StripeConnectStatus } from './services/supabaseRest';
 import { getAppLanguage, t } from './i18n';
 import { AddressAutocomplete } from './AddressAutocomplete';
+import { AccountSessionSecurity } from './AccountSessionSecurity';
 import { BrandLogo } from './BrandLogo';
 import { CatalogSearchPanel } from './CatalogSearchPanel';
 import { SmartCatalogFields } from './SmartCatalogFields';
@@ -21,6 +22,7 @@ import { OTHER_CATALOG_VALUE, buildDealCatalogIdentity, buildSmartCatalogTitle, 
 import { decodeVehicleVin, type VehicleVinResult } from './services/catalogService';
 import './styles.css';
 import './security.css';
+import './session-security.css';
 import './dashboard.css';
 import './home.css';
 import './dispute.css';
@@ -2051,7 +2053,8 @@ export function App() {
     setView(returnAfterAuth);
   };
   const submitAuth=async(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');try{if(authMode==='signup'){const result=await signUp(authForm.email,authForm.password,authForm.displayName);if(result.session)await finishAuthentication(result.session);else setAuthMessage('Check your email to confirm your account, then return to this tab and sign in. Your completed draft will stay here.')}else{const nextSession=await signIn(authForm.email,authForm.password);await finishAuthentication(nextSession)}}catch(error){setAuthMessage(error instanceof Error?error.message:'Something went wrong')}};
-  const logout=()=>{void signOut(session);setSession(null);setIsAdmin(false);setView('home')};
+  const finishSignedOutSession=()=>{setSession(null);setIsAdmin(false);setView('home')};
+  const logout=()=>{void signOut(session);finishSignedOutSession()};
   const openProfile=async()=>{if(!session)return;setAuthMessage('');setView('profile');try{setProfile(await getMyProfileSummary(session))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not load profile')}};
   const requestVerification=async()=>{if(!session||!profile)return;setVerificationMessage('');try{const status=await requestIdentityVerification(session);setProfile({...profile,verification_status:status});setVerificationMessage('Request recorded. A verification provider must be connected before identity can be approved.')}catch(error){setVerificationMessage(error instanceof Error?error.message:'Could not request verification')}};
   const refreshSavedDeals=()=>{if(session)getMySavedDeals(session).then(setSavedDeals).catch(()=>setSavedDeals([]))};
@@ -2272,6 +2275,7 @@ export function App() {
       {view==='home'&&user&&<NotificationCenter items={notifications} deals={deals} onOpen={open} onOpenPublic={publicId=>getPublicDeal(publicId).then(deal=>{setActive(deal);setView('deal')}).catch(error=>setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable'))} onMarkAll={markAllActivityRead}/>}
       {view==='home'&&user&&<WorkspaceDealExplorer deals={deals} savedDeals={savedDeals} onOpen={open} onCreate={openCreate}/>}
       {view==='profile'&&profile&&<SecurityCenter email={user?.email||''} status={profile.verification_status} message={verificationMessage} onRequest={requestVerification}/>}
+      {view==='profile'&&session&&<AccountSessionSecurity session={session} onSignedOut={finishSignedOutSession}/>}
       {view==='profile'&&session&&<TrustPassportControls session={session}/>}
       {view==='profile'&&profile&&session&&<AccountSettings session={session} displayName={profile.display_name} onNameUpdated={name=>setProfile({...profile,display_name:name})}/>}
       {view==='passport'&&<PublicTrustPassportPage profile={publicPassport} message={passportMessage} onBack={()=>goHomeSection()}/>}
