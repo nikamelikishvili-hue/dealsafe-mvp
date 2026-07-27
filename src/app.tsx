@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, Bookmark, Boxes, Briefcase, CalendarClock, CalendarDays, Camera, Car, Check, ChevronDown, CircleCheckBig, Clock3, Copy, CreditCard, Eye, EyeOff, FileCheck2, FileDown, FileSignature, Fingerprint, Flag, Gamepad2, Gem, ImagePlus, Laptop, Link2, LockKeyhole, MailCheck, MapPinned, Menu, MessageCircle, Package, PackageCheck, Pencil, Plus, QrCode, Route, Scale, ScanSearch, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Tablet, Trash2, Truck, Watch, Wrench, X, ZoomIn } from 'lucide-react';
 import { DEMO_DEAL_PUBLIC_ID, demoRepository } from './services/demoRepository';
 import { acceptPublicDeal, askDealQuestion, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealEvidenceSignedUrl, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminDisputes, getAdminReports, getAdminRevenueSummary, getAdminRevenueTransactions, getDealInquiries, getDealInspection, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicAgreementHistory, getPublicDeal, getPublicSellerDeclaration, getPublicSellerTrustProfile, getPublicTrustPassport, getSellerShippingEvidenceReadiness, getStoredSession, getTrustPassportSettings, isCurrentUserDealSeller, isDealSaved, isSupabaseConfigured, listDealEvidence, listUserDeals, makeDealOffer, markArrived, markSessionActivity, openDealDispute, proposeMeeting, publishUserDealDraft, recordDealInspection, refreshSession, renewDealLink, reorderDealMedia, replyDealInquiry, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminDispute, resolveAdminDisputeFinancial, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, setDealSaved, setTrustPassportEnabled, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealEvidence, uploadDealPhotos, verifyAgreementRecord, type AdminDispute, type AdminReport, type AdminRevenueSummary, type AdminRevenueTransaction, type AgreementHistoryVersion, type AgreementVerificationResult, type DealEvidence, type DealInquiry, type DealInspection, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type EvidenceType, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type SellerDeclarationRecord, type SellerShippingEvidenceReadiness, type StoredSession, type TimelineEvent, type TrustPassport, type TrustPassportSettings } from './services/supabaseRest';
@@ -11,10 +11,12 @@ import { confirmDealPaymentMethod, createProtectedCheckout, getDealPaymentRecord
 import { getAppLanguage, t } from './i18n';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { BrandLogo } from './BrandLogo';
+import { CatalogSearchPanel } from './CatalogSearchPanel';
 import { SmartCatalogFields } from './SmartCatalogFields';
 import type { Deal, DealDraft } from './domain';
 import { amountForInput, currencyStep, formatMoney, toMinorUnits } from './currency';
 import { createAgreementFingerprint } from './agreementFingerprint';
+import { filterCatalogDeals, mergeCatalogSearchParams, readCatalogSearchState } from './catalogSearch';
 import { OTHER_CATALOG_VALUE, buildDealCatalogIdentity, buildSmartCatalogTitle, emptySmartCatalogSelection, isGuidedCatalogCategory, matchCatalogValue, sanitizeSmartCatalogSelection, vehicleCatalog, vehicleYears, type SmartCatalogCategoryId, type SmartCatalogSelection } from './smartCatalog';
 import { decodeVehicleVin, type VehicleVinResult } from './services/catalogService';
 import './styles.css';
@@ -77,6 +79,7 @@ import './deal-workflow-modern.css';
 import './deal-sections-compact.css';
 import './published-success.css';
 import './dealivra-brand.css';
+import './catalog-search.css';
 
 type PublicInfoView='buyer-protection'|'seller-protection'|'fees'|'disputes'|'terms'|'privacy';
 type View = 'home' | 'create' | 'published' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset' | 'link-error' | 'verify' | PublicInfoView;
@@ -352,20 +355,40 @@ function DealComparison({deals,onClose,onOpen}:{deals:Deal[];onClose:()=>void;on
   return <div className="compare-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)onClose()}}><section className="compare-dialog" role="dialog" aria-modal="true" aria-labelledby="compare-title"><div className="compare-title"><div><p className="eyebrow">{t('Private Watchlist')}</p><h2 id="compare-title">{t('Deal comparison')}</h2><p>{t('Compare price, condition, handoff, and seller trust.')}</p></div><button className="compare-close" aria-label={t('Close comparison')} onClick={onClose}><X/></button></div><div className="compare-scroll"><table><thead><tr><th>{t('Detail')}</th>{deals.map(deal=><th key={deal.id}><span className="compare-cover">{deal.mediaUrls?.[0]?<MediaPreview source={deal.mediaUrls[0]} alt={deal.title}/>:deal.title.slice(0,1).toUpperCase()}</span><b>{deal.title}</b><small>{deal.publicId}</small></th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.label}><th>{t(row.label)}</th>{deals.map(deal=><td key={deal.id}>{row.value(deal)}</td>)}</tr>)}<tr className="compare-actions"><th></th>{deals.map(deal=><td key={deal.id}><button className="primary" onClick={()=>onOpen(deal)}>{t('Open Deal Link')}<ArrowRight size={16}/></button></td>)}</tr></tbody></table></div><p className="compare-note"><ShieldCheck size={17}/>{t('Comparison uses the current details recorded in each Deal Link.')}</p></section></div>
 }
 
-function SavedDealsPanel({items,onOpen}:{items:Deal[];onOpen:(deal:Deal)=>void}){
+function SavedDealsPanel({items,totalCount,onOpen}:{items:Deal[];totalCount:number;onOpen:(deal:Deal)=>void}){
   const [selected,setSelected]=useState<string[]>([]);const [comparing,setComparing]=useState(false);const [message,setMessage]=useState('');
   useEffect(()=>setSelected(current=>current.filter(id=>items.some(deal=>deal.id===id))),[items]);
   const toggle=(dealId:string)=>{setMessage('');setSelected(current=>{if(current.includes(dealId))return current.filter(id=>id!==dealId);if(current.length>=3){setMessage('You can compare up to 3 deals.');return current}return [...current,dealId]})};
   const compare=()=>{if(selected.length<2){setMessage('Choose at least 2 deals.');return}setComparing(true)};
   const compared=items.filter(deal=>selected.includes(deal.id));
-  return <section className="saved-deals"><div className="saved-heading"><div><p className="eyebrow">{t('Private Watchlist')}</p><h2>{t('Saved Deal Links')}</h2><p>{t('Deals you want to review again stay here.')}</p></div><div className="saved-heading-actions"><span><Bookmark size={17}/>{items.length}</span>{items.length>=2&&<button className="secondary" disabled={selected.length<2} onClick={compare}><Scale size={17}/>{t('Compare selected')} ({selected.length})</button>}</div></div>{items.length>=2&&<p className="compare-help">{t('Choose 2 or 3 saved deals to compare.')}</p>}{message&&<div className="notice">{t(message)}</div>}{items.length?<div className="saved-grid">{items.map(deal=>{const isSelected=selected.includes(deal.id);return <article className={`saved-card ${isSelected?'selected':''}`} key={deal.id}><button className="saved-card-open" onClick={()=>onOpen(deal)}><span className="saved-card-media">{deal.mediaUrls?.[0]?<MediaPreview source={deal.mediaUrls[0]} alt={deal.title}/>:deal.title.slice(0,1).toUpperCase()}</span><span className="saved-card-body"><b>{deal.title}</b><small>{t('Seller')}: {deal.sellerName}</small><span className="saved-card-meta"><strong>{dealPrice(deal)}</strong><span className={`status ${isDealExpired(deal)?'expired':deal.status}`}>{t(isDealExpired(deal)?'expired':deal.status)}</span></span></span></button>{items.length>=2&&<button className="compare-select" aria-pressed={isSelected} onClick={()=>toggle(deal.id)}>{isSelected?<Check size={16}/>:<Scale size={16}/>} {t(isSelected?'Selected':'Select for comparison')}</button>}</article>})}</div>:<div className="saved-empty"><Bookmark/><span><b>{t('No saved deals yet')}</b><span>{t('Open a Deal Link and choose Save Deal Link.')}</span></span></div>}{comparing&&<DealComparison deals={compared} onClose={()=>setComparing(false)} onOpen={deal=>{setComparing(false);onOpen(deal)}}/>}</section>
+  return <section className="saved-deals"><div className="saved-heading"><div><p className="eyebrow">{t('Private Watchlist')}</p><h2>{t('Saved Deal Links')}</h2><p>{t('Deals you want to review again stay here.')}</p></div><div className="saved-heading-actions"><span><Bookmark size={17}/>{items.length}/{totalCount}</span>{items.length>=2&&<button className="secondary" disabled={selected.length<2} onClick={compare}><Scale size={17}/>{t('Compare selected')} ({selected.length})</button>}</div></div>{items.length>=2&&<p className="compare-help">{t('Choose 2 or 3 saved deals to compare.')}</p>}{message&&<div className="notice">{t(message)}</div>}{items.length?<div className="saved-grid">{items.map(deal=>{const isSelected=selected.includes(deal.id);return <article className={`saved-card ${isSelected?'selected':''}`} key={deal.id}><button className="saved-card-open" onClick={()=>onOpen(deal)}><span className="saved-card-media">{deal.mediaUrls?.[0]?<MediaPreview source={deal.mediaUrls[0]} alt={deal.title}/>:deal.title.slice(0,1).toUpperCase()}</span><span className="saved-card-body"><b>{deal.title}</b><small>{t('Seller')}: {deal.sellerName}</small><span className="saved-card-meta"><strong>{dealPrice(deal)}</strong><span className={`status ${isDealExpired(deal)?'expired':deal.status}`}>{t(isDealExpired(deal)?'expired':deal.status)}</span></span></span></button>{items.length>=2&&<button className="compare-select" aria-pressed={isSelected} onClick={()=>toggle(deal.id)}>{isSelected?<Check size={16}/>:<Scale size={16}/>} {t(isSelected?'Selected':'Select for comparison')}</button>}</article>})}</div>:<div className="saved-empty"><Bookmark/><span><b>{t(totalCount?'No saved deals match these filters':'No saved deals yet')}</b><span>{t(totalCount?'Change or clear the filters above to see other saved deals.':'Open a Deal Link and choose Save Deal Link.')}</span></span></div>}{comparing&&<DealComparison deals={compared} onClose={()=>setComparing(false)} onOpen={deal=>{setComparing(false);onOpen(deal)}}/>}</section>
 }
 
-function EnhancedDashboard({deals,onOpen,onCreate}:{deals:Deal[];onOpen:(deal:Deal)=>void;onCreate:()=>void}){
-  const [query,setQuery]=useState('');const [filter,setFilter]=useState<'all'|Deal['status']>('all');
-  const visible=deals.filter(deal=>(filter==='all'||deal.status===filter)&&(`${deal.title} ${deal.publicId}`.toLowerCase().includes(query.toLowerCase())));
-  const activeCount=deals.filter(deal=>(deal.status==='published'&&!isDealExpired(deal))||deal.status==='accepted').length;const completedCount=deals.filter(deal=>deal.status==='completed').length;
-  return <section className="enhanced-dashboard"><div className="dashboard-heading"><div><p className="eyebrow">{t('Your workspace')}</p><h2>{t('Deal dashboard')}</h2><p>{t('Track every sale from published link to completed handoff.')}</p></div><button className="primary" onClick={onCreate}><Plus size={17}/>{t('New deal')}</button></div><div className="dashboard-stats"><article><span>{t('All deals')}</span><strong>{deals.length}</strong></article><article><span>{t('Active')}</span><strong>{activeCount}</strong></article><article><span>{t('Completed')}</span><strong>{completedCount}</strong></article><article><span>{t('Total value')}</span><strong>{groupedDealValue(deals)}</strong></article></div><div className="dashboard-tools"><label><Search size={17}/><input aria-label={t('Search deals')} placeholder={t('Search by item or Deal ID')} value={query} onChange={event=>setQuery(event.target.value)}/></label><div className="filter-tabs">{(['all','published','accepted','completed'] as const).map(item=><button key={item} className={filter===item?'active':''} onClick={()=>setFilter(item)}>{t(item)}</button>)}</div></div>{visible.length?<div className="dashboard-list">{visible.map(deal=>{const expired=isDealExpired(deal);return <button key={deal.id} onClick={()=>onOpen(deal)}><span className="deal-icon">{deal.title.slice(0,1).toUpperCase()}</span><span className="deal-main"><b>{deal.title}</b><small>{deal.publicId} · {t(deal.viewerRole==='buyer'?'Buying':'Selling')}</small></span><strong>{dealPrice(deal)}</strong><span className={`status ${expired?'expired':deal.status}`}>{t(expired?'expired':deal.status)}</span><ArrowRight size={18}/></button>})}</div>:<div className="dashboard-empty"><Search/><b>{t('No matching deals')}</b><span>{t('Try another search or filter, or create a new Deal Link.')}</span><button className="secondary" onClick={onCreate}><Plus size={16}/>{t('Create deal')}</button></div>}</section>
+function EnhancedDashboard({deals,allDeals,onOpen,onCreate}:{deals:Deal[];allDeals:Deal[];onOpen:(deal:Deal)=>void;onCreate:()=>void}){
+  const activeCount=allDeals.filter(deal=>(deal.status==='published'&&!isDealExpired(deal))||deal.status==='accepted').length;const completedCount=allDeals.filter(deal=>deal.status==='completed').length;
+  return <section className="enhanced-dashboard"><div className="dashboard-heading"><div><p className="eyebrow">{t('Your workspace')}</p><h2>{t('Deal dashboard')}</h2><p>{t('Track every sale from published link to completed handoff.')}</p></div><button className="primary" onClick={onCreate}><Plus size={17}/>{t('New deal')}</button></div><div className="dashboard-stats"><article><span>{t('All deals')}</span><strong>{allDeals.length}</strong></article><article><span>{t('Active')}</span><strong>{activeCount}</strong></article><article><span>{t('Completed')}</span><strong>{completedCount}</strong></article><article><span>{t('Total value')}</span><strong>{groupedDealValue(allDeals)}</strong></article></div>{deals.length?<div className="dashboard-list">{deals.map(deal=>{const expired=isDealExpired(deal);return <button key={deal.id} onClick={()=>onOpen(deal)}><span className="deal-icon">{deal.title.slice(0,1).toUpperCase()}</span><span className="deal-main"><b>{deal.title}</b><small>{deal.publicId} · {t(deal.viewerRole==='buyer'?'Buying':'Selling')}</small></span><strong>{dealPrice(deal)}</strong><span className={`status ${expired?'expired':deal.status}`}>{t(expired?'expired':deal.status)}</span><ArrowRight size={18}/></button>})}</div>:<div className="dashboard-empty"><Search/><b>{t('No matching deals')}</b><span>{t('Change or clear the filters above, or create a new Deal Link.')}</span><button className="secondary" onClick={onCreate}><Plus size={16}/>{t('Create deal')}</button></div>}</section>
+}
+
+function WorkspaceDealExplorer({deals,savedDeals,onOpen,onCreate}:{deals:Deal[];savedDeals:Deal[];onOpen:(deal:Deal)=>void;onCreate:()=>void}){
+  const [filters,setFilters]=useState(()=>readCatalogSearchState(location.search));
+  const availableDeals=useMemo(()=>{
+    const unique=new Map<string,Deal>();
+    [...deals,...savedDeals].forEach(deal=>unique.set(deal.id,deal));
+    return [...unique.values()];
+  },[deals,savedDeals]);
+  const filteredDeals=useMemo(()=>filterCatalogDeals(deals,filters),[deals,filters]);
+  const filteredSavedDeals=useMemo(()=>filterCatalogDeals(savedDeals,filters),[savedDeals,filters]);
+  const matchingUniqueCount=useMemo(()=>filterCatalogDeals(availableDeals,filters).length,[availableDeals,filters]);
+  useEffect(()=>{
+    const search=mergeCatalogSearchParams(location.search,filters);
+    const destination=`${location.pathname}${search}${location.hash}`;
+    if(`${location.pathname}${location.search}${location.hash}`!==destination)history.replaceState({},'',destination);
+  },[filters]);
+  return <>
+    <CatalogSearchPanel deals={availableDeals} filteredCount={matchingUniqueCount} value={filters} onChange={setFilters}/>
+    <SavedDealsPanel items={filteredSavedDeals} totalCount={savedDeals.length} onOpen={onOpen}/>
+    <EnhancedDashboard deals={filteredDeals} allDeals={deals} onOpen={onOpen} onCreate={onCreate}/>
+  </>;
 }
 
 function DealSafetyActions({deal,session,onStatus}:{deal:Deal;session:StoredSession;onStatus:(status:Deal['status'])=>void}){
@@ -1671,7 +1694,14 @@ const privateViewLabels:Partial<Record<View,string>>={
   passport:'Digital Trust Passport',admin:'Admin',forgot:'Reset password',reset:'Choose a new password','link-error':'Deal Link unavailable',
   verify:'Verify an agreement'
 };
-const getPageMetadata=(view:View,activeDeal?:Deal):PageMetadata=>{
+const getPageMetadata=(view:View,activeDeal?:Deal,isAuthenticated=false):PageMetadata=>{
+  if(view==='home'&&isAuthenticated)return {
+    label:'Private workspace',
+    title:'Private Workspace — Dealivra',
+    description:'Private Dealivra workspace for saved deals and transaction records.',
+    path:'/',
+    indexable:false
+  };
   if(view==='home')return {
     label:'Home',
     title:'Dealivra — Private Deals, Made Clear',
@@ -1807,7 +1837,7 @@ export function App() {
   const [isAdmin,setIsAdmin]=useState(false);
   const [clock,setClock]=useState(Date.now());
   const previousViewRef=useRef<View>(view);
-  useEffect(()=>{applyPageMetadata(getPageMetadata(view,active))},[view,active?.title]);
+  useEffect(()=>{applyPageMetadata(getPageMetadata(view,active,Boolean(user)))},[view,active?.title,user]);
   useEffect(()=>{
     if(previousViewRef.current===view)return;
     previousViewRef.current=view;
@@ -2078,7 +2108,7 @@ export function App() {
   };
   const openInfo=(next:PublicInfoView)=>{history.pushState({},'',publicInfoPaths[next]);setView(next);setMobileMenuOpen(false);window.scrollTo({top:0,behavior:'smooth'})};
   const openVerify=()=>{history.pushState({},'',verifyPath);setView('verify');setMobileMenuOpen(false);window.scrollTo({top:0,behavior:'smooth'})};
-  const currentPageLabel=getPageMetadata(view,active).label;
+  const currentPageLabel=getPageMetadata(view,active,Boolean(user)).label;
   const agreementDocumentMode=view==='deal'&&new URLSearchParams(location.search).get('document')==='1';
   const pendingCreateLabel=pendingCreateAction==='save'?'save this draft':'publish this deal';
   const pendingAuthTitle=authMode==='signup'?`Create your account to ${pendingCreateLabel}.`:`Sign in to ${pendingCreateLabel}.`;
@@ -2190,8 +2220,7 @@ export function App() {
       </div>}
       {view==='deal'&&active&&session&&active.viewerRole!=='visitor'&&(['accepted','completed','disputed'] as Deal['status'][]).includes(active.status)&&<DealChat deal={active} session={session}/>}
       {view==='home'&&user&&<NotificationCenter items={notifications} deals={deals} onOpen={open} onOpenPublic={publicId=>getPublicDeal(publicId).then(deal=>{setActive(deal);setView('deal')}).catch(error=>setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable'))} onMarkAll={markAllActivityRead}/>}
-      {view==='home'&&user&&<SavedDealsPanel items={savedDeals} onOpen={open}/>}
-      {view==='home'&&user&&<EnhancedDashboard deals={deals} onOpen={open} onCreate={openCreate}/>}
+      {view==='home'&&user&&<WorkspaceDealExplorer deals={deals} savedDeals={savedDeals} onOpen={open} onCreate={openCreate}/>}
       {view==='profile'&&profile&&<SecurityCenter email={user?.email||''} status={profile.verification_status} message={verificationMessage} onRequest={requestVerification}/>}
       {view==='profile'&&session&&<TrustPassportControls session={session}/>}
       {view==='profile'&&profile&&session&&<AccountSettings session={session} displayName={profile.display_name} onNameUpdated={name=>setProfile({...profile,display_name:name})}/>}
