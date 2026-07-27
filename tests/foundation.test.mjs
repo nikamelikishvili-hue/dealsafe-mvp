@@ -135,8 +135,12 @@ test('Vercel configuration includes the minimum browser security headers', () =>
 
 test('private analytics removes query strings before collection', () => {
   const html = readText('index.html');
+  const main = readText('src/main.tsx');
   assert.match(html, /url\.origin\s*\+\s*url\.pathname/);
   assert.doesNotMatch(html, /dangerouslySetInnerHTML/);
+  assert.doesNotMatch(html, /src="\/_vercel\/insights\/script\.js"/);
+  assert.match(main, /location\.hostname\.endsWith\('\.vercel\.app'\)/);
+  assert.match(main, /analyticsScript\.src\s*=\s*'\/_vercel\/insights\/script\.js'/);
 });
 
 test('the production-readiness specification is complete and linked', () => {
@@ -507,4 +511,148 @@ test('verification includes a production-preview navigation smoke test', () => {
   assert.match(smokeTest, /expectApplicationPage\('\/terms'\)/);
   assert.match(smokeTest, /expectApplicationPage\('\/\?start=signin'\)/);
   assert.match(smokeTest, /serviceWorkerResponse/);
+});
+
+test('versioned catalog endpoint returns a bounded vehicle catalog with CDN caching', async () => {
+  const { default: catalog } = await import('../api/catalog.mjs');
+  const response = createResponse();
+
+  await catalog({
+    method: 'GET',
+    query: { category: 'vehicle' },
+    headers: {},
+  }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.payload.schemaVersion, 1);
+  assert.match(response.payload.version, /^\d{4}-\d{2}-\d{2}\.\d+$/);
+  assert.equal(response.payload.category, 'vehicle');
+  assert.ok(response.payload.brands.some(brand => brand.id === 'bmw' && brand.models.includes('X5')));
+  assert.ok(response.payload.years.includes('2021'));
+  assert.match(response.headers.get('cache-control'), /max-age=300/);
+  assert.match(response.headers.get('vercel-cdn-cache-control'), /stale-while-revalidate=86400/);
+});
+
+test('catalog endpoint rejects unsupported categories and write methods', async () => {
+  const { default: catalog } = await import('../api/catalog.mjs');
+  const unsupportedResponse = createResponse();
+  const writeResponse = createResponse();
+
+  await catalog({
+    method: 'GET',
+    query: { category: 'unreviewed' },
+    headers: {},
+  }, unsupportedResponse);
+  await catalog({
+    method: 'POST',
+    query: {},
+    headers: {},
+  }, writeResponse);
+
+  assert.equal(unsupportedResponse.statusCode, 400);
+  assert.equal(writeResponse.statusCode, 405);
+  assert.equal(writeResponse.headers.get('allow'), 'GET');
+});
+
+test('VIN endpoint rejects invalid and cross-origin requests before contacting NHTSA', async () => {
+  const { default: vin } = await import('../api/vehicles/vin.mjs');
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('The provider must not be called.');
+  };
+
+  try {
+    const invalidResponse = createResponse();
+    await vin(authRequest({ vin: 'NOT-A-VIN' }), invalidResponse);
+    assert.equal(invalidResponse.statusCode, 400);
+
+    const crossOriginResponse = createResponse();
+    await vin(authRequest(
+      { vin: '1HGCM82633A004352' },
+      { origin: 'https://attacker.example' },
+    ), crossOriginResponse);
+    assert.equal(crossOriginResponse.statusCode, 403);
+    assert.equal(crossOriginResponse.payload.error, 'Cross-origin VIN checks are not allowed.');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('VIN decoding maps only reviewed NHTSA fields and reuses its bounded memory cache', async () => {
+  const { default: vin } = await import('../api/vehicles/vin.mjs');
+  const { resetVehicleVinCacheForTests } = await import('../server/vehicleVinShared.mjs');
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  resetVehicleVinCacheForTests();
+  globalThis.fetch = async url => {
+    providerCalls += 1;
+    assert.match(String(url), /vpic\.nhtsa\.dot\.gov\/api\/vehicles\/DecodeVinValues\//);
+    assert.match(String(url), /modelyear=2003/);
+    return new Response(JSON.stringify({
+      Results: [{
+        VIN: '1HGCM82633A004352',
+        Make: 'HONDA',
+        Model: 'Accord',
+        ModelYear: '2003',
+        VehicleType: 'PASSENGER CAR',
+        BodyClass: 'Sedan/Saloon',
+        ErrorCode: '0',
+        UnreviewedProviderField: 'must not leave the server',
+      }],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    const firstResponse = createResponse();
+    const secondResponse = createResponse();
+    await vin(authRequest({ vin: '1hgcm82633a004352', modelYear: '2003' }), firstResponse);
+    await vin(authRequest({ vin: '1HGCM82633A004352', modelYear: '2003' }), secondResponse);
+
+    assert.equal(firstResponse.statusCode, 200);
+    assert.deepEqual(firstResponse.payload.vehicle, {
+      vin: '1HGCM82633A004352',
+      make: 'HONDA',
+      model: 'Accord',
+      modelYear: '2003',
+      vehicleType: 'PASSENGER CAR',
+      bodyClass: 'Sedan/Saloon',
+      source: 'NHTSA vPIC',
+      verifiedAt: firstResponse.payload.vehicle.verifiedAt,
+    });
+    assert.match(firstResponse.payload.vehicle.verifiedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(JSON.stringify(firstResponse.payload).includes('UnreviewedProviderField'), false);
+    assert.equal(secondResponse.payload.vehicle.verifiedAt, firstResponse.payload.vehicle.verifiedAt);
+    assert.equal(providerCalls, 1);
+    assert.match(firstResponse.headers.get('cache-control'), /no-store/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    resetVehicleVinCacheForTests();
+  }
+});
+
+test('VIN provider requests time out with a safe error code', async () => {
+  const { decodeVehicleVin, resetVehicleVinCacheForTests } = await import('../server/vehicleVinShared.mjs');
+  resetVehicleVinCacheForTests();
+  const hangingFetch = (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener('abort', () => {
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      reject(error);
+    }, { once: true });
+  });
+
+  await assert.rejects(
+    () => decodeVehicleVin('1HGCM82633A004352', '2003', {
+      fetchImplementation: hangingFetch,
+      timeoutMs: 5,
+    }),
+    error => error?.code === 'VIN_PROVIDER_TIMEOUT',
+  );
 });

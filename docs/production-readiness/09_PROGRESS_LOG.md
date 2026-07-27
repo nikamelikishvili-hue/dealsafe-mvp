@@ -216,3 +216,43 @@ This log records completed delivery evidence. A backlog item is not marked compl
 - Add structured search facets only after persistence and catalog-version rules
   are approved.
 
+## 2026-07-27 — Versioned catalog and VIN assistance
+
+### Implemented on the review branch
+
+- Moved the curated Phone and Vehicle data into one versioned, market-labelled
+  catalog artifact with stable brand IDs and a recorded update date.
+- Added a same-origin catalog API with bounded output, browser/CDN cache rules,
+  supported-category validation, and an embedded client fallback.
+- Added a server-only NHTSA vPIC VIN decoder. The browser never contacts NHTSA
+  directly.
+- Validates the 17-character VIN and optional model year before a provider
+  request, limits provider response size, applies a timeout, and keeps a bounded
+  24-hour in-process cache with a hashed key and no plaintext VIN in the cached
+  value.
+- Returns only reviewed year, make, model, vehicle type, and body-class fields;
+  private VIN responses are explicitly `no-store`.
+- Added a focused "Check VIN" action to Vehicle creation. A successful match
+  fills year/make/model and rebuilds the editable title while keeping manual
+  "Not listed" fallbacks.
+- Added plain-language disclosure that VIN decoding does not prove ownership,
+  title status, authenticity, or condition.
+- Kept this package database-neutral: no production schema or data migration is
+  applied.
+
+### Verification evidence
+
+- TypeScript strict check: passed.
+- Foundation, authentication, catalog, and VIN tests: 27 passed, 0 failed.
+- Invalid VIN and cross-origin requests are rejected before NHTSA is contacted.
+- Provider field allowlisting, cache reuse, timeout behavior, and private cache
+  headers are covered by automated tests.
+
+### Remaining catalog controls
+
+- Persist category, brand, model, and variant IDs only through a reviewed
+  expand/backfill migration with RLS and explicit grants.
+- Add governed catalog update approval, rollback evidence, and provider-rate
+  telemetry before public beta.
+- Build category-aware search facets after structured values are persisted.
+

@@ -14,7 +14,8 @@ import { BrandLogo } from './BrandLogo';
 import type { Deal, DealDraft } from './domain';
 import { amountForInput, currencyStep, formatMoney, toMinorUnits } from './currency';
 import { createAgreementFingerprint } from './agreementFingerprint';
-import { OTHER_CATALOG_VALUE, buildSmartCatalogTitle, emptySmartCatalogSelection, getCatalogModels, phoneCatalog, phoneStorageOptions, sanitizeSmartCatalogSelection, vehicleCatalog, vehicleYears, type SmartCatalogCategoryId, type SmartCatalogSelection } from './smartCatalog';
+import { OTHER_CATALOG_VALUE, buildSmartCatalogTitle, emptySmartCatalogSelection, getCatalogModels, getEmbeddedCatalogSnapshot, matchCatalogValue, sanitizeSmartCatalogSelection, vehicleCatalog, vehicleYears, type SmartCatalogCategoryId, type SmartCatalogSelection } from './smartCatalog';
+import { decodeVehicleVin, loadSmartCatalogCategory, type VehicleVinResult } from './services/catalogService';
 import './styles.css';
 import './security.css';
 import './dashboard.css';
@@ -86,6 +87,11 @@ type DealPrimaryAction={
 };
 type ShippingNavigationReadiness={loaded:boolean;ready:boolean};
 type CreateFieldError={fieldId:string;message:string};
+type VehicleVinLookupState={
+  status:'idle'|'loading'|'success'|'error';
+  message:string;
+  result?:VehicleVinResult;
+};
 
 function getShippingPrimaryAction(
   deal:Deal,
@@ -172,9 +178,19 @@ function DealTemplatePicker({selected,onSelect}:{selected:DealTemplateId;onSelec
 }
 
 function SmartCatalogFields({category,value,onChange}:{category:DealTemplateId;value:SmartCatalogSelection;onChange:(patch:Partial<SmartCatalogSelection>)=>void}){
-  if(category!=='phone'&&category!=='vehicle')return null;
-  const catalog=category==='phone'?phoneCatalog:vehicleCatalog;
-  const models=getCatalogModels(category,value.brand);
+  const guidedCategory=category==='vehicle'?'vehicle':'phone';
+  const isGuided=category==='phone'||category==='vehicle';
+  const [snapshot,setSnapshot]=useState(()=>getEmbeddedCatalogSnapshot(guidedCategory));
+  useEffect(()=>{
+    if(!isGuided)return;
+    let current=true;
+    setSnapshot(getEmbeddedCatalogSnapshot(guidedCategory));
+    loadSmartCatalogCategory(guidedCategory).then(result=>{if(current)setSnapshot(result)});
+    return()=>{current=false};
+  },[guidedCategory,isGuided]);
+  if(!isGuided)return null;
+  const catalog=snapshot.brands;
+  const models=getCatalogModels(category,value.brand,catalog);
   const update=(patch:Partial<SmartCatalogSelection>)=>onChange(patch);
   const title=buildSmartCatalogTitle(category,value);
   const changeBrand=(brand:string)=>update({brand,model:'',customBrand:'',customModel:''});
@@ -185,14 +201,15 @@ function SmartCatalogFields({category,value,onChange}:{category:DealTemplateId;v
   return <fieldset className="smart-catalog-fields">
     <legend><ScanSearch/><span><b>{t(category==='phone'?'Find your phone':'Find your vehicle')}</b><small>{t('Choose known details and Dealivra will build the item title for you.')}</small></span></legend>
     <div className={`smart-catalog-grid is-${category}`}>
-      {category==='vehicle'&&<label>{t('Year')}<select value={value.year} onChange={event=>update({year:event.target.value})}><option value="">{t('Choose year')}</option>{vehicleYears.map(year=><option key={year} value={year}>{year}</option>)}</select></label>}
-      <label>{t(category==='phone'?'Brand':'Make')}<select value={value.brand} onChange={event=>changeBrand(event.target.value)}><option value="">{t(category==='phone'?'Choose brand':'Choose make')}</option>{catalog.map(item=><option key={item.label} value={item.label}>{item.label}</option>)}<option value={OTHER_CATALOG_VALUE}>{t('Not listed')}</option></select></label>
+      {category==='vehicle'&&<label>{t('Year')}<select value={value.year} onChange={event=>update({year:event.target.value})}><option value="">{t('Choose year')}</option>{snapshot.years.map(year=><option key={year} value={year}>{year}</option>)}</select></label>}
+      <label>{t(category==='phone'?'Brand':'Make')}<select value={value.brand} onChange={event=>changeBrand(event.target.value)}><option value="">{t(category==='phone'?'Choose brand':'Choose make')}</option>{catalog.map(item=><option key={item.id} value={item.label}>{item.label}</option>)}<option value={OTHER_CATALOG_VALUE}>{t('Not listed')}</option></select></label>
       {!isOtherBrand&&<label>{t('Model')}<select value={value.model} disabled={!value.brand} onChange={event=>changeModel(event.target.value)}><option value="">{t(value.brand?'Choose model':category==='phone'?'Choose a brand first':'Choose a make first')}</option>{models.map(model=><option key={model} value={model}>{model}</option>)}{value.brand&&<option value={OTHER_CATALOG_VALUE}>{t('Not listed')}</option>}</select></label>}
-      {category==='phone'&&<label>{t('Storage')} <span className="optional-label">{t('Optional')}</span><select value={value.variant} onChange={event=>update({variant:event.target.value})}><option value="">{t('Choose storage')}</option>{phoneStorageOptions.map(storage=><option key={storage} value={storage}>{storage}</option>)}</select></label>}
+      {category==='phone'&&<label>{t('Storage')} <span className="optional-label">{t('Optional')}</span><select value={value.variant} onChange={event=>update({variant:event.target.value})}><option value="">{t('Choose storage')}</option>{snapshot.variants.map(storage=><option key={storage} value={storage}>{storage}</option>)}</select></label>}
       {isOtherBrand&&<><label>{t(category==='phone'?'Brand name':'Make name')}<input maxLength={60} placeholder={t(category==='phone'?'Enter brand':'Enter make')} value={value.customBrand} onChange={event=>update({customBrand:event.target.value})}/></label><label>{t('Model name')}<input maxLength={80} placeholder={t('Enter model')} value={value.customModel} onChange={event=>update({customModel:event.target.value})}/></label></>}
       {isOtherModel&&<label>{t('Model name')}<input maxLength={80} placeholder={t('Enter model')} value={value.customModel} onChange={event=>update({customModel:event.target.value})}/></label>}
     </div>
     <p className={`smart-catalog-preview ${title?'has-title':''}`}><BadgeCheck/><span><small>{t('Suggested title')}</small><b>{title||t('Choose details above')}</b></span></p>
+    <p className="smart-catalog-source"><ShieldCheck/>{t('Curated for the U.S. launch. Manual entry is always available.')}</p>
   </fieldset>;
 }
 
@@ -1777,6 +1794,7 @@ export function App() {
   const [dealTemplate,setDealTemplate]=useState<DealTemplateId>(()=>recoveredCreateDraft?.dealTemplate||'phone');
   const [catalogSelection,setCatalogSelection]=useState<SmartCatalogSelection>(()=>recoveredCreateDraft?.catalogSelection||emptySmartCatalogSelection());
   const catalogSelectionRef=useRef(catalogSelection);
+  const [vehicleVinLookup,setVehicleVinLookup]=useState<VehicleVinLookupState>({status:'idle',message:''});
   const [agreementChecks,setAgreementChecks]=useState({item:false,price:false,handoff:false});
   const [demoCompleted,setDemoCompleted]=useState(false);
   const [acceptanceProtected,setAcceptanceProtected]=useState(false);
@@ -1906,6 +1924,7 @@ export function App() {
     if(template===dealTemplate)return;
     const emptySelection=emptySmartCatalogSelection();
     setDealTemplate(template);
+    setVehicleVinLookup({status:'idle',message:''});
     catalogSelectionRef.current=emptySelection;
     setCatalogSelection(emptySelection);
     setDraft(current=>({...current,title:''}));
@@ -1915,6 +1934,35 @@ export function App() {
     catalogSelectionRef.current=next;
     setCatalogSelection(next);
     setDraft(current=>({...current,title:buildSmartCatalogTitle(dealTemplate,next)}));
+  };
+  const checkVehicleVin=async()=>{
+    if(dealTemplate!=='vehicle'||!identifierEntered||!identifierValid||vehicleVinLookup.status==='loading')return;
+    setVehicleVinLookup({status:'loading',message:'Checking manufacturer data…'});
+    try{
+      const result=await decodeVehicleVin(draft.serialNumber,catalogSelectionRef.current.year);
+      const matchedBrand=vehicleCatalog.find(item=>item.label.toLocaleLowerCase('en-US')===result.make.toLocaleLowerCase('en-US'));
+      const matchedModel=matchedBrand?matchCatalogValue(matchedBrand.models,result.model):'';
+      const matchedYear=matchCatalogValue(vehicleYears,result.modelYear);
+      const patch:Partial<SmartCatalogSelection>={
+        year:matchedYear||catalogSelectionRef.current.year,
+        brand:matchedBrand?.label||OTHER_CATALOG_VALUE,
+        model:matchedBrand?(matchedModel||OTHER_CATALOG_VALUE):'',
+        customBrand:matchedBrand?'':result.make,
+        customModel:matchedModel?'':result.model,
+      };
+      updateCatalogSelection(patch);
+      const identity=[result.modelYear,result.make,result.model].filter(Boolean).join(' ');
+      setVehicleVinLookup({
+        status:'success',
+        message:`Matched ${identity}. Review the details before continuing.`,
+        result,
+      });
+    }catch(error){
+      setVehicleVinLookup({
+        status:'error',
+        message:error instanceof Error?error.message:'VIN could not be checked. Enter the details manually.',
+      });
+    }
   };
   const showCreateErrors=()=>{
     setCreateValidationAttempted(true);
@@ -1929,7 +1977,7 @@ export function App() {
   };
   const goToCreateStep=(step:CreateFlowStep)=>{if(step>createAvailableStep)return;setAuthMessage('');setCreateValidationAttempted(false);setReviewingDraft(step===4);if(step<4)setCreateStep(step);window.requestAnimationFrame(()=>document.getElementById('create-deal-flow')?.scrollIntoView({behavior:'smooth',block:'start'}))};
   const reviewDraft=(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');if(!createItemReady){setCreateStep(1);return}if(!createTermsReady){setCreateStep(2);return}setReviewingDraft(true);window.scrollTo({top:0,behavior:'smooth'})};
-  const resetCreateFlow=()=>{const emptySelection=emptySmartCatalogSelection();clearGuestCreateDraft();setDraft({...initial});setPhotos([]);setDealTemplate('phone');catalogSelectionRef.current=emptySelection;setCatalogSelection(emptySelection);setCreateStep(1);setReviewingDraft(false);setCreateValidationAttempted(false);setSellerDeclarations(emptySellerDeclarations);setPendingCreateAction(null);setDraftRecovered(false);setDraftSavedAt(null)};
+  const resetCreateFlow=()=>{const emptySelection=emptySmartCatalogSelection();clearGuestCreateDraft();setDraft({...initial});setPhotos([]);setDealTemplate('phone');setVehicleVinLookup({status:'idle',message:''});catalogSelectionRef.current=emptySelection;setCatalogSelection(emptySelection);setCreateStep(1);setReviewingDraft(false);setCreateValidationAttempted(false);setSellerDeclarations(emptySellerDeclarations);setPendingCreateAction(null);setDraftRecovered(false);setDraftSavedAt(null)};
   const publishDraft=async(activeSession:StoredSession)=>{if(creating)return;setCreating(true);setAuthMessage('');try{let deal=await createUserDeal(activeSession,draft);setDeals(x=>[deal,...x]);setActive(deal);if(photos.length){try{const mediaUrls=await uploadDealPhotos(activeSession,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Deal created, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}resetCreateFlow();setActive(deal);setView('published')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save this deal');setView('create')}finally{setCreating(false)}};
   const saveDraftForSession=async(activeSession:StoredSession)=>{if(creating)return;setCreating(true);setAuthMessage('');try{let deal=await saveUserDealDraft(activeSession,draft);setDeals(items=>[deal,...items]);setActive(deal);if(photos.length){try{const mediaUrls=await uploadDealPhotos(activeSession,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Draft saved, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}resetCreateFlow();setView('deal')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save draft');setView('create')}finally{setCreating(false)}};
   const requestCreateAction=(action:'save'|'publish')=>{
@@ -2198,7 +2246,30 @@ export function App() {
           <DealTemplatePicker selected={dealTemplate} onSelect={chooseDealTemplate}/>
           <section className="form-wrap create-step-card"><form id="create-step-1" noValidate onSubmit={event=>{event.preventDefault();submitCreateStep(1)}}><SmartCatalogFields category={dealTemplate} value={catalogSelection} onChange={updateCatalogSelection}/><label>{t('Item title')}<input id="create-item-title" required minLength={3} maxLength={120} aria-invalid={createErrors.some(error=>error.fieldId==='create-item-title')} aria-describedby="create-item-title-help" placeholder={selectedDealTemplate.titlePlaceholder} value={draft.title} onChange={event=>setDraft({...draft,title:event.target.value})}/><small id="create-item-title-help" className={createErrors.some(error=>error.fieldId==='create-item-title')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-title')?.message||((dealTemplate==='phone'||dealTemplate==='vehicle')?'Auto-filled from your choices; edit it if needed.':'Use the brand, model, and one detail that helps identify the item.'))}</small></label><div className="two"><label>{t('Price')}<span className="price-currency-controls"><input id="create-item-price" required min={currencyStep(draft.currency)} step={currencyStep(draft.currency)} type="number" aria-invalid={createErrors.some(error=>error.fieldId==='create-item-price')} aria-describedby="create-item-price-help" placeholder="780" value={draft.price} onChange={event=>setDraft({...draft,price:event.target.value})}/><span className="currency-label">USD</span></span><small id="create-item-price-help" className={createErrors.some(error=>error.fieldId==='create-item-price')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-price')?.message||'Enter the agreed item price before fees or shipping.')}</small></label><label>{t('Condition')}<select value={draft.condition} onChange={event=>setDraft({...draft,condition:event.target.value as DealDraft['condition']})}><option value="Like new">{t('Like new')}</option><option value="Good">{t('Good')}</option><option value="Fair">{t('Fair')}</option></select></label></div></form></section>
         </div>}
-        {!reviewingDraft&&createStep===2&&<section className="form-wrap create-step-card"><form id="create-step-2" noValidate onSubmit={event=>{event.preventDefault();submitCreateStep(2)}}><div className="create-step-guidance"><ShieldCheck/><div><b>{t('What the buyer needs to know')}</b><span>{t(selectedDealTemplate.descriptionPrompt)}</span></div></div><label>{t('Known condition and defects')}<textarea id="create-item-description" required minLength={20} aria-invalid={createErrors.some(error=>error.fieldId==='create-item-description')} aria-describedby="create-item-description-help" placeholder={t(selectedDealTemplate.descriptionPrompt)} value={draft.description} onChange={event=>setDraft({...draft,description:event.target.value})}/><small id="create-item-description-help" className={createErrors.some(error=>error.fieldId==='create-item-description')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-description')?.message||`${draft.description.trim().length}/20 · Describe wear, repairs, or defects.`)}</small></label><label>{t(selectedDealTemplate.identifierLabel)}<input id="create-item-identifier" maxLength={40} pattern={selectedDealTemplate.identifierPattern} title={t(selectedDealTemplate.identifierHelp)} aria-describedby="create-item-identifier-help" placeholder={t(selectedDealTemplate.identifierPlaceholder)} spellCheck={false} aria-invalid={identifierEntered&&!identifierValid} value={draft.serialNumber} onChange={event=>setDraft({...draft,serialNumber:dealTemplate==='vehicle'?event.target.value.toUpperCase():event.target.value})}/><small id="create-item-identifier-help" className={`identifier-feedback ${identifierEntered?(identifierValid?'valid':'invalid'):''}`}>{t(identifierEntered?(identifierValid?'Format looks correct. This checks format only, not ownership or authenticity.':selectedDealTemplate.identifierHelp):'Stored privately; only last characters shown')}</small></label><div className="two"><label>{t('Handoff')}<select value={draft.deliveryMethod} onChange={event=>setDraft({...draft,deliveryMethod:event.target.value as DealDraft['deliveryMethod']})}><option value="Meet in person">{t('Meet in person')}</option><option value="Ship to buyer">{t('Ship to buyer')}</option></select></label><label>{t('Offer valid for')}<select value={draft.expiresInDays||7} onChange={event=>setDraft({...draft,expiresInDays:Number(event.target.value)})}><option value={1}>{t('1 day')}</option><option value={3}>{t('3 days')}</option><option value={7}>{t('7 days')}</option><option value={14}>{t('14 days')}</option><option value={30}>{t('30 days')}</option></select></label></div><div className="notice"><ShieldCheck/><span>{t('The Deal Link is not public until you confirm.')}</span></div></form></section>}
+        {!reviewingDraft&&createStep===2&&<section className="form-wrap create-step-card">
+          <form id="create-step-2" noValidate onSubmit={event=>{event.preventDefault();submitCreateStep(2)}}>
+            <div className="create-step-guidance"><ShieldCheck/><div><b>{t('What the buyer needs to know')}</b><span>{t(selectedDealTemplate.descriptionPrompt)}</span></div></div>
+            <label>{t('Known condition and defects')}
+              <textarea id="create-item-description" required minLength={20} aria-invalid={createErrors.some(error=>error.fieldId==='create-item-description')} aria-describedby="create-item-description-help" placeholder={t(selectedDealTemplate.descriptionPrompt)} value={draft.description} onChange={event=>setDraft({...draft,description:event.target.value})}/>
+              <small id="create-item-description-help" className={createErrors.some(error=>error.fieldId==='create-item-description')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-description')?.message||`${draft.description.trim().length}/20 · Describe wear, repairs, or defects.`)}</small>
+            </label>
+            <div className={`identifier-field ${dealTemplate==='vehicle'?'is-vin':''}`}>
+              <label htmlFor="create-item-identifier">{t(selectedDealTemplate.identifierLabel)}</label>
+              <div className="identifier-input-action">
+                <input id="create-item-identifier" maxLength={dealTemplate==='vehicle'?17:40} pattern={selectedDealTemplate.identifierPattern} title={t(selectedDealTemplate.identifierHelp)} aria-describedby="create-item-identifier-help" placeholder={t(selectedDealTemplate.identifierPlaceholder)} spellCheck={false} aria-invalid={identifierEntered&&!identifierValid} value={draft.serialNumber} onChange={event=>{setDraft({...draft,serialNumber:dealTemplate==='vehicle'?event.target.value.toUpperCase():event.target.value});setVehicleVinLookup({status:'idle',message:''})}}/>
+                {dealTemplate==='vehicle'&&<button type="button" className="vin-check-button" disabled={!identifierEntered||!identifierValid||vehicleVinLookup.status==='loading'} onClick={()=>void checkVehicleVin()}><ScanSearch/>{t(vehicleVinLookup.status==='loading'?'Checking…':'Check VIN')}</button>}
+              </div>
+              <small id="create-item-identifier-help" className={`identifier-feedback ${identifierEntered?(identifierValid?'valid':'invalid'):''}`}>{t(identifierEntered?(identifierValid?(dealTemplate==='vehicle'?'Format is ready for an NHTSA VIN check.':'Format looks correct. This checks format only, not ownership or authenticity.'):selectedDealTemplate.identifierHelp):'Stored privately; only last characters shown')}</small>
+            </div>
+            {dealTemplate==='vehicle'&&vehicleVinLookup.status!=='idle'&&<div className={`vin-lookup-status is-${vehicleVinLookup.status}`} role="status" aria-live="polite">
+              {vehicleVinLookup.status==='success'?<BadgeCheck/>:vehicleVinLookup.status==='error'?<ShieldAlert/>:<Clock3/>}
+              <span><b>{t(vehicleVinLookup.status==='success'?'VIN details found':vehicleVinLookup.status==='error'?'VIN check unavailable':'Checking VIN')}</b><small>{t(vehicleVinLookup.message)}</small>{vehicleVinLookup.result&&<em>{[vehicleVinLookup.result.vehicleType,vehicleVinLookup.result.bodyClass].filter(Boolean).join(' · ')}</em>}</span>
+            </div>}
+            {dealTemplate==='vehicle'&&<p className="vin-lookup-disclaimer"><ShieldCheck/>{t('NHTSA decoding helps identify manufacturer data. It does not prove ownership, title status, condition, or authenticity.')}</p>}
+            <div className="two"><label>{t('Handoff')}<select value={draft.deliveryMethod} onChange={event=>setDraft({...draft,deliveryMethod:event.target.value as DealDraft['deliveryMethod']})}><option value="Meet in person">{t('Meet in person')}</option><option value="Ship to buyer">{t('Ship to buyer')}</option></select></label><label>{t('Offer valid for')}<select value={draft.expiresInDays||7} onChange={event=>setDraft({...draft,expiresInDays:Number(event.target.value)})}><option value={1}>{t('1 day')}</option><option value={3}>{t('3 days')}</option><option value={7}>{t('7 days')}</option><option value={14}>{t('14 days')}</option><option value={30}>{t('30 days')}</option></select></label></div>
+            <div className="notice"><ShieldCheck/><span>{t('The Deal Link is not public until you confirm.')}</span></div>
+          </form>
+        </section>}
         {!reviewingDraft&&createStep===3&&<form id="create-step-3" className="create-media-step" onSubmit={reviewDraft}><section className="media-picker"><label>{t('Item photos or video')}<input className="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,video/mp4,video/webm" multiple onChange={event=>{const added=Array.from(event.target.files||[]);setPhotos(previous=>{const combined=[...previous,...added].filter((file,index,all)=>all.findIndex(other=>other.name===file.name&&other.size===file.size)===index).slice(0,6);let videoSeen=false;return combined.filter(file=>!isVideoFile(file)||(!videoSeen&&(videoSeen=true)))});event.currentTarget.value=''}}/><small>{t('Choose photos together or add them one at a time')} · {photos.length} {t('of 6')} {t('selected')}</small></label><p className="media-privacy"><ShieldCheck/>{t('Photo privacy: location and camera metadata are removed before upload.')}</p>{photos.length>0&&<div className="photo-previews">{photos.map((file,index)=><div key={`${file.name}-${index}`}><FilePreview file={file} alt={`${t('Preview')} ${index+1}`}/><span>{t(isVideoFile(file)?'Item video':index===0?'Main photo':'Photo')} {index>0&&!isVideoFile(file)?index+1:''}</span></div>)}</div>}</section><DealPhotoGuide template={selectedDealTemplate} count={photos.filter(file=>!file.type.startsWith('video/')).length}/><p className="create-media-optional"><ImagePlus/><span><b>{t('Photos are recommended, not required')}</b><small>{t('You can continue to review now and add more media before publishing.')}</small></span></p></form>}
         {reviewingDraft&&<CreateDealReview draft={draft} photos={photos} creating={creating} requiresAccount={!session} declarations={sellerDeclarations} onDeclarationsChange={setSellerDeclarations} onEdit={()=>{setReviewingDraft(false);setCreateStep(3)}} onSaveDraft={()=>requestCreateAction('save')} onPublish={()=>requestCreateAction('publish')}/>}
         {!reviewingDraft&&<div className={`create-action-dock ${createErrors.length?'has-errors':''}`} role="region" aria-label={t('Create deal action')}><div><small>{t(createErrors.length?'Needs attention':createStepMeta[createStep].eyebrow)}</small><strong>{t(createErrors.length?(createErrors.length===1?'1 detail needs attention':`${createErrors.length} details need attention`):createStepMeta[createStep].dock)}</strong><span>{t(createErrors.length?'Review the highlighted fields before continuing.':createStep===3?'Photos are optional. Continue when the record looks clear.':'Your progress stays here while you complete the next short step.')}</span></div><button type="button" className="primary" onClick={()=>{if(createErrors.length){document.getElementById('create-validation-summary')?.focus();return}const form=document.getElementById(`create-step-${createStep}`) as HTMLFormElement|null;form?.requestSubmit()}}>{t(createErrors.length?'Review details':createStepMeta[createStep].action)}<ArrowRight size={18}/></button></div>}
