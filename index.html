@@ -33,19 +33,7 @@
 </head>
 <body>
   <div id="root"></div>
-  <script>
-    window.va = window.va || function () {
-      (window.vaq = window.vaq || []).push(arguments);
-    };
-    window.va('beforeSend', function (event) {
-      try {
-        var url = new URL(event.url, window.location.origin);
-        return Object.assign({}, event, { url: url.origin + url.pathname });
-      } catch (_) {
-        return event;
-      }
-    });
-  </script>
+  <script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments);};window.va('beforeSend',function(event){try{var url=new URL(event.url,window.location.origin);return Object.assign({},event,{url:url.origin+url.pathname});}catch(_){return event;}});</script>
   <script vite-ignore defer src="/_vercel/insights/script.js"></script>
   <script type="module" src="/src/main.tsx"></script>
 </body>
