@@ -764,3 +764,134 @@ test('VIN provider requests time out with a safe error code', async () => {
     error => error?.code === 'VIN_PROVIDER_TIMEOUT',
   );
 });
+
+const loadCatalogSearchModule = async () => {
+  const typescript = await import('typescript');
+  const source = readText('src/catalogSearch.ts');
+  const output = typescript.transpileModule(source, {
+    compilerOptions: {
+      module: typescript.ModuleKind.ES2022,
+      target: typescript.ScriptTarget.ES2022,
+    },
+  }).outputText;
+  return import(`data:text/javascript;base64,${Buffer.from(output).toString('base64')}`);
+};
+
+test('catalog search URL state is bounded, shareable, and preserves unrelated navigation state', async () => {
+  const {
+    mergeCatalogSearchParams,
+    readCatalogSearchState,
+  } = await loadCatalogSearchModule();
+  const parsed = readCatalogSearchState(
+    '?start=create&q=iphone&category=phone&brand=apple&model=iphone-15&year=9999&status=published',
+  );
+
+  assert.deepEqual(parsed, {
+    query: 'iphone',
+    categoryId: 'phone',
+    brandId: 'apple',
+    modelId: 'iphone-15',
+    modelYear: null,
+    status: 'published',
+  });
+  assert.equal(
+    mergeCatalogSearchParams('?start=create&deal=ABC123', parsed),
+    '?start=create&deal=ABC123&q=iphone&category=phone&brand=apple&model=iphone-15&status=published',
+  );
+});
+
+test('catalog search uses structured facets instead of guessing identity from titles', async () => {
+  const {
+    emptyCatalogSearchState,
+    filterCatalogDeals,
+    getCatalogFacetOptions,
+  } = await loadCatalogSearchModule();
+  const base = {
+    description: 'A sufficiently complete item description.',
+    priceCents: 10000,
+    currency: 'USD',
+    condition: 'Good',
+    deliveryMethod: 'Ship to buyer',
+    status: 'published',
+    sellerName: 'Seller',
+    sellerVerification: 'not_started',
+    agreementVersion: 1,
+    createdAt: '2026-07-27T00:00:00Z',
+  };
+  const deals = [
+    {
+      ...base,
+      id: 'phone',
+      publicId: 'PHONE001',
+      title: 'Apple iPhone 15 · 256 GB',
+      catalog: {
+        categoryId: 'phone',
+        catalogVersion: '2026-07-24.1',
+        brandId: 'apple',
+        brandLabel: 'Apple',
+        modelId: 'iphone-15',
+        modelLabel: 'iPhone 15',
+        variantId: '256-gb',
+        variantLabel: '256 GB',
+      },
+    },
+    {
+      ...base,
+      id: 'vehicle',
+      publicId: 'CAR00001',
+      title: '2021 BMW X5',
+      catalog: {
+        categoryId: 'vehicle',
+        catalogVersion: '2026-07-24.1',
+        brandId: 'bmw',
+        brandLabel: 'BMW',
+        modelId: 'x5',
+        modelLabel: 'X5',
+        modelYear: 2021,
+      },
+    },
+    {
+      ...base,
+      id: 'legacy',
+      publicId: 'LEGACY01',
+      title: '2021 BMW X5',
+      catalog: {
+        categoryId: 'general',
+        catalogVersion: 'legacy',
+      },
+    },
+  ];
+  const vehicleFilters = {
+    ...emptyCatalogSearchState(),
+    categoryId: 'vehicle',
+    brandId: 'bmw',
+    modelId: 'x5',
+    modelYear: 2021,
+  };
+
+  assert.deepEqual(filterCatalogDeals(deals, vehicleFilters).map(deal => deal.id), ['vehicle']);
+  assert.deepEqual(
+    filterCatalogDeals(deals, { ...emptyCatalogSearchState(), query: 'apple 256' })
+      .map(deal => deal.id),
+    ['phone'],
+  );
+  const facets = getCatalogFacetOptions(deals, vehicleFilters);
+  assert.deepEqual(facets.brands.map(option => option.id), ['bmw']);
+  assert.deepEqual(facets.models.map(option => option.id), ['x5']);
+  assert.deepEqual(facets.years.map(option => option.id), ['2021']);
+});
+
+test('private catalog filtering is rendered once for both dashboard and Watchlist and remains noindex', () => {
+  const app = readText('src/app.tsx');
+  const panel = readText('src/CatalogSearchPanel.tsx');
+  const styles = readText('src/catalog-search.css');
+
+  assert.match(app, /<CatalogSearchPanel deals=\{availableDeals\}/);
+  assert.match(app, /<SavedDealsPanel items=\{filteredSavedDeals\}/);
+  assert.match(app, /<EnhancedDashboard deals=\{filteredDeals\} allDeals=\{deals\}/);
+  assert.match(app, /view==='home'&&isAuthenticated/);
+  assert.match(app, /indexable:false/);
+  assert.match(panel, /Filters stay in this URL/);
+  assert.match(panel, /Choose category first/);
+  assert.match(styles, /@media\(max-width:480px\)/);
+});
