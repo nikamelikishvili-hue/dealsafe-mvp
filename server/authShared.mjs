@@ -8,9 +8,23 @@ function header(request, name) {
 }
 
 function configuredSupabase() {
-  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/+$/, '');
-  const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '')
+    .trim()
+    .replace(/\/+$/, '');
+  const key = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '')
+    .trim();
   if (!url || !key) throw new Error('Authentication service is not configured.');
+
+  try {
+    const parsedUrl = new URL(url);
+    const isLocalDevelopment = parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1';
+    if (parsedUrl.protocol !== 'https:' && !(isLocalDevelopment && parsedUrl.protocol === 'http:')) {
+      throw new Error('Unsupported authentication service protocol.');
+    }
+  } catch {
+    throw new Error('Authentication service URL is invalid.');
+  }
+
   return { url, key };
 }
 
@@ -85,14 +99,18 @@ export function clearRefreshCookie(response) {
 
 export async function supabaseAuthRequest(path, init) {
   const { url, key } = configuredSupabase();
-  return fetch(`${url}/auth/v1/${path}`, {
-    ...init,
-    headers: {
-      apikey: key,
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-  });
+  try {
+    return await fetch(`${url}/auth/v1/${path}`, {
+      ...init,
+      headers: {
+        apikey: key,
+        'Content-Type': 'application/json',
+        ...(init?.headers || {}),
+      },
+    });
+  } catch (error) {
+    throw new Error('Authentication provider request failed.', { cause: error });
+  }
 }
 
 export async function authPayload(upstream) {
@@ -120,20 +138,39 @@ export function logAuthFailure(operation, error) {
   const message = error instanceof Error ? error.message : '';
   const safeMessage = message === 'Authentication service is not configured.'
     ? message
-    : /invalid url|failed to parse url/i.test(message)
+    : /invalid url|failed to parse url|service url is invalid/i.test(message)
       ? 'Authentication service URL is invalid.'
-      : /fetch failed|network/i.test(message)
+      : /fetch failed|network|provider request failed/i.test(message)
         ? 'Authentication provider request failed.'
         : 'Unexpected authentication service error.';
-  const causeCode = error && typeof error === 'object'
-    && 'cause' in error && error.cause && typeof error.cause === 'object'
-    && 'code' in error.cause && typeof error.cause.code === 'string'
-    ? error.cause.code
-    : undefined;
+  const diagnosticTokens = [];
+  const pending = [error];
+  const visited = new Set();
+
+  while (pending.length > 0 && diagnosticTokens.length < 8) {
+    const current = pending.shift();
+    if (!current || typeof current !== 'object' || visited.has(current)) continue;
+    visited.add(current);
+
+    for (const property of ['name', 'code']) {
+      const value = current[property];
+      if (
+        (typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(value))
+        || (typeof value === 'number' && Number.isFinite(value))
+      ) {
+        diagnosticTokens.push(`${property}:${value}`);
+      }
+    }
+
+    if ('cause' in current) pending.push(current.cause);
+    if ('errors' in current && Array.isArray(current.errors)) {
+      pending.push(...current.errors.slice(0, 3));
+    }
+  }
 
   console.error('[dealivra-auth]', {
     operation,
     error: safeMessage,
-    ...(causeCode ? { causeCode } : {}),
+    ...(diagnosticTokens.length > 0 ? { diagnostics: diagnosticTokens } : {}),
   });
 }

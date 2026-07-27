@@ -160,8 +160,10 @@ test('auth handlers never return a refresh token to browser JavaScript', async (
   const originalFetch = globalThis.fetch;
   const originalUrl = process.env.SUPABASE_URL;
   const originalKey = process.env.SUPABASE_PUBLISHABLE_KEY;
-  process.env.SUPABASE_URL = 'https://project.example.supabase.co';
-  process.env.SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test';
+  process.env.SUPABASE_URL = '  https://project.example.supabase.co/  ';
+  process.env.SUPABASE_PUBLISHABLE_KEY = '  sb_publishable_test  ';
+  let requestedUrl;
+  let requestedApiKey;
 
   const response = {
     statusCode: 200,
@@ -173,17 +175,21 @@ test('auth handlers never return a refresh token to browser JavaScript', async (
     end() { return this; },
   };
 
-  globalThis.fetch = async () => new Response(JSON.stringify({
-    access_token: 'header.eyJleHAiOjQxMDI0NDQ4MDB9.signature',
-    refresh_token: 'server-only-refresh-secret',
-    expires_in: 3600,
-    user: {
-      id: '00000000-0000-0000-0000-000000000001',
-      email: 'user@example.com',
-      email_confirmed_at: '2026-07-26T00:00:00Z',
-      user_metadata: { display_name: 'Test User' },
-    },
-  }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  globalThis.fetch = async (url, init) => {
+    requestedUrl = String(url);
+    requestedApiKey = init.headers.apikey;
+    return new Response(JSON.stringify({
+      access_token: 'header.eyJleHAiOjQxMDI0NDQ4MDB9.signature',
+      refresh_token: 'server-only-refresh-secret',
+      expires_in: 3600,
+      user: {
+        id: '00000000-0000-0000-0000-000000000001',
+        email: 'user@example.com',
+        email_confirmed_at: '2026-07-26T00:00:00Z',
+        user_metadata: { display_name: 'Test User' },
+      },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
 
   try {
     await login({
@@ -200,6 +206,8 @@ test('auth handlers never return a refresh token to browser JavaScript', async (
   }
 
   assert.equal(response.statusCode, 200);
+  assert.equal(requestedUrl, 'https://project.example.supabase.co/auth/v1/token?grant_type=password');
+  assert.equal(requestedApiKey, 'sb_publishable_test');
   assert.match(response.headers.get('set-cookie'), /HttpOnly; Secure; SameSite=Strict/);
   assert.equal(JSON.stringify(response.payload).includes('server-only-refresh-secret'), false);
   assert.equal(response.payload.access_token.startsWith('header.'), true);
