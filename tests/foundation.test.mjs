@@ -153,6 +153,7 @@ test('the production-readiness specification is complete and linked', () => {
     '08_IMPLEMENTATION_BACKLOG.md',
     '09_PROGRESS_LOG.md',
     '10_ENVIRONMENT_CONFIGURATION.md',
+    '11_LEGACY_IDENTIFIER_REGISTER.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -438,4 +439,23 @@ test('runtime configuration has documented safe-failure and secret-boundary chec
   assert.match(environmentStandard, /must never contain a Supabase `service_role` JWT/);
   assert.match(environmentStandard, /Preview, Staging, and Production must not share/);
   assert.match(example, /Never use sb_secret_ or service_role/);
+});
+
+test('new browser runtime identifiers use Dealivra with explicit legacy cleanup only', () => {
+  const addressAutocomplete = readText('src/AddressAutocomplete.tsx');
+  const authService = readText('src/services/supabaseRest.ts');
+  const i18n = readText('src/i18nFull.ts');
+  const checkoutFunction = readText('supabase/functions/stripe-create-checkout/index.ts');
+  const legacyRegister = readText('docs/production-readiness/11_LEGACY_IDENTIFIER_REGISTER.md');
+
+  assert.doesNotMatch(addressAutocomplete, /dealsafe/i);
+  assert.match(addressAutocomplete, /__dealivraGoogleMapsReady/);
+  assert.match(authService, /dealivra-session-updated/);
+  assert.match(authService, /dealivra-session-expired/);
+  assert.match(i18n, /const languageKey='dealivra_language'/);
+  assert.match(i18n, /localStorage\.removeItem\(legacyLanguageKey\)/);
+  assert.match(checkoutFunction, /DEALIVRA_PLATFORM_FEE_BPS/);
+  assert.match(checkoutFunction, /DEALSAFE_PLATFORM_FEE_BPS/);
+  assert.match(legacyRegister, /Approved migration aliases/);
+  assert.match(legacyRegister, /must not be reused for a new feature/);
 });

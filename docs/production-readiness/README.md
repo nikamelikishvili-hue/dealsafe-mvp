@@ -19,6 +19,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [08_IMPLEMENTATION_BACKLOG.md](08_IMPLEMENTATION_BACKLOG.md) | Ordered engineering and operations backlog with acceptance criteria |
 | [09_PROGRESS_LOG.md](09_PROGRESS_LOG.md) | Completed batches, verification evidence, partial items, and next work |
 | [10_ENVIRONMENT_CONFIGURATION.md](10_ENVIRONMENT_CONFIGURATION.md) | Required variables, environment isolation, safe failure, validation, and change control |
+| [11_LEGACY_IDENTIFIER_REGISTER.md](11_LEGACY_IDENTIFIER_REGISTER.md) | Approved migration aliases and the rule that all new runtime identifiers use Dealivra |
 
 ## Authority and change control
 

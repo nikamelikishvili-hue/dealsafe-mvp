@@ -115,3 +115,18 @@ This log records completed delivery evidence. A backlog item is not marked compl
 - Apply the reviewed authorization migration only to a non-production Supabase
   branch and run the cross-user authorization matrix.
 
+## 2026-07-27 — Dealivra runtime identifier normalization
+
+### Implemented on the review branch
+
+- Renamed current browser session events, language preference storage, and Google
+  Maps loader identifiers to Dealivra.
+- Added a one-time language preference migration that removes the old key after
+  copying a valid value.
+- Introduced `DEALIVRA_PLATFORM_FEE_BPS` as the canonical payment fee setting
+  while retaining the old setting as a documented temporary fallback.
+- Added a controlled register for database, payment, idempotency, and browser
+  migration aliases that cannot be removed safely without coordinated work.
+- Added regression checks preventing the Google Maps runtime from reintroducing
+  the old brand and proving the canonical Dealivra identifiers are present.
+

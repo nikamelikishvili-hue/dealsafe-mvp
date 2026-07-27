@@ -27,10 +27,15 @@ export const supportedLanguages=[
 
 export type AppLanguage=typeof supportedLanguages[number]['code'];
 
-const languageKey='dealsafe_language';
+const languageKey='dealivra_language';
+const legacyLanguageKey='dealsafe_language';
 const languageCodes=new Set<string>(supportedLanguages.map(language=>language.code));
 const resolveLanguage=(value:string|null):AppLanguage=>{const normalized=(value||'').toLowerCase();const exact=supportedLanguages.find(language=>language.code===normalized);if(exact)return exact.code;const base=normalized.split('-')[0];return languageCodes.has(base)?base as AppLanguage:'en'};
-const storedLanguage=localStorage.getItem(languageKey);
+const currentStoredLanguage=localStorage.getItem(languageKey);
+const legacyStoredLanguage=localStorage.getItem(legacyLanguageKey);
+const storedLanguage=currentStoredLanguage||legacyStoredLanguage;
+if(!currentStoredLanguage&&legacyStoredLanguage&&languageCodes.has(legacyStoredLanguage))localStorage.setItem(languageKey,legacyStoredLanguage);
+localStorage.removeItem(legacyLanguageKey);
 let activeLanguage:AppLanguage=storedLanguage&&languageCodes.has(storedLanguage)?storedLanguage as AppLanguage:resolveLanguage(navigator.languages?.[0]||navigator.language);
 
 const ka:Record<string,string>={

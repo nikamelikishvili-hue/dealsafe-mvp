@@ -124,8 +124,8 @@ interface AuthResponse {
 
 export const sessionStorageKey = 'dealivra_session_v2';
 export const legacySessionStorageKey = 'dealsafe_session';
-export const sessionUpdatedEvent = 'dealsafe-session-updated';
-export const sessionExpiredEvent = 'dealsafe-session-expired';
+export const sessionUpdatedEvent = 'dealivra-session-updated';
+export const sessionExpiredEvent = 'dealivra-session-expired';
 export const sessionIdleTimeoutMs = 30 * 60 * 1000;
 export const sessionAbsoluteTimeoutMs = 8 * 60 * 60 * 1000;
 const activityWriteIntervalMs = 60 * 1000;
