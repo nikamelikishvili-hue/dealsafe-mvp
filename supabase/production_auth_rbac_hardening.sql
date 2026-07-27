@@ -71,37 +71,39 @@ create policy "profiles self insert"
 on public.profiles
 for insert
 to authenticated
-with check (auth.uid() = id and app_role = 'member');
+with check ((select auth.uid()) = id and app_role = 'member');
 
 create policy "profiles self read"
 on public.profiles
 for select
 to authenticated
-using (auth.uid() = id);
+using ((select auth.uid()) = id);
 
 create policy "profiles self update"
 on public.profiles
 for update
 to authenticated
-using (auth.uid() = id)
-with check (auth.uid() = id);
+using ((select auth.uid()) = id)
+with check ((select auth.uid()) = id);
 
 drop policy if exists "participants read deals" on public.deals;
 drop policy if exists "seller inserts deals" on public.deals;
 drop policy if exists "seller updates deals" on public.deals;
+drop policy if exists "seller inserts draft deals" on public.deals;
+drop policy if exists "seller updates own draft deals" on public.deals;
 
 create policy "participants read deals"
 on public.deals
 for select
 to authenticated
-using (seller_id = auth.uid() or buyer_id = auth.uid());
+using (seller_id = (select auth.uid()) or buyer_id = (select auth.uid()));
 
 create policy "seller inserts draft deals"
 on public.deals
 for insert
 to authenticated
 with check (
-  seller_id = auth.uid()
+  seller_id = (select auth.uid())
   and buyer_id is null
   and status = 'draft'
   and current_agreement_version = 0
@@ -112,14 +114,23 @@ create policy "seller updates own draft deals"
 on public.deals
 for update
 to authenticated
-using (seller_id = auth.uid() and status = 'draft')
+using (seller_id = (select auth.uid()) and status = 'draft')
 with check (
-  seller_id = auth.uid()
+  seller_id = (select auth.uid())
   and buyer_id is null
   and status = 'draft'
   and current_agreement_version = 0
   and published_at is null
 );
+
+-- These indexes support both participant lookups and the ownership predicates
+-- used by the policies above. Partial indexing avoids storing null buyers.
+create index if not exists deals_seller_id_idx
+on public.deals (seller_id);
+
+create index if not exists deals_buyer_id_idx
+on public.deals (buyer_id)
+where buyer_id is not null;
 
 -- Remove direct Data API access first, then grant the minimum used by the SPA.
 revoke all privileges on all tables in schema public from anon, authenticated;
