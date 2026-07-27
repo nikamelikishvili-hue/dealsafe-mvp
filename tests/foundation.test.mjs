@@ -9,6 +9,65 @@ const root = new URL('../', import.meta.url);
 const rootPath = fileURLToPath(root);
 const readJson = relativePath => JSON.parse(readFileSync(new URL(relativePath, root), 'utf8'));
 const readText = relativePath => readFileSync(new URL(relativePath, root), 'utf8');
+const authRequest = (body = {}, headers = {}) => ({
+  method: 'POST',
+  headers: {
+    origin: 'https://dealivra.test',
+    host: 'dealivra.test',
+    ...headers,
+  },
+  body,
+});
+const createResponse = () => ({
+  statusCode: 200,
+  headers: new Map(),
+  payload: undefined,
+  ended: false,
+  setHeader(name, value) {
+    this.headers.set(name.toLowerCase(), value);
+  },
+  status(code) {
+    this.statusCode = code;
+    return this;
+  },
+  json(value) {
+    this.payload = value;
+    return this;
+  },
+  end() {
+    this.ended = true;
+    return this;
+  },
+});
+const authProviderSession = refreshToken => ({
+  access_token: 'header.eyJleHAiOjQxMDI0NDQ4MDB9.signature',
+  refresh_token: refreshToken,
+  expires_in: 3600,
+  user: {
+    id: '00000000-0000-0000-0000-000000000001',
+    email: 'user@example.com',
+    email_confirmed_at: '2026-07-26T00:00:00Z',
+    user_metadata: { display_name: 'Test User' },
+  },
+});
+const withAuthProvider = async (fetchImplementation, callback) => {
+  const originalFetch = globalThis.fetch;
+  const originalUrl = process.env.SUPABASE_URL;
+  const originalKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+  process.env.SUPABASE_URL = '  https://project.example.supabase.co/  ';
+  process.env.SUPABASE_PUBLISHABLE_KEY = '  sb_publishable_\n test  ';
+  globalThis.fetch = fetchImplementation;
+
+  try {
+    return await callback();
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = originalUrl;
+    if (originalKey === undefined) delete process.env.SUPABASE_PUBLISHABLE_KEY;
+    else process.env.SUPABASE_PUBLISHABLE_KEY = originalKey;
+  }
+};
 
 test('runtime and development dependencies are exactly pinned', () => {
   const packageJson = readJson('package.json');
@@ -157,53 +216,21 @@ test('production database hardening is deny-by-default with narrow RPC allowlist
 
 test('auth handlers never return a refresh token to browser JavaScript', async () => {
   const { default: login } = await import('../api/auth/login.mjs');
-  const originalFetch = globalThis.fetch;
-  const originalUrl = process.env.SUPABASE_URL;
-  const originalKey = process.env.SUPABASE_PUBLISHABLE_KEY;
-  process.env.SUPABASE_URL = '  https://project.example.supabase.co/  ';
-  process.env.SUPABASE_PUBLISHABLE_KEY = '  sb_publishable_\n test  ';
   let requestedUrl;
   let requestedApiKey;
+  const response = createResponse();
 
-  const response = {
-    statusCode: 200,
-    headers: new Map(),
-    payload: undefined,
-    setHeader(name, value) { this.headers.set(name.toLowerCase(), value); },
-    status(code) { this.statusCode = code; return this; },
-    json(value) { this.payload = value; return this; },
-    end() { return this; },
-  };
-
-  globalThis.fetch = async (url, init) => {
+  await withAuthProvider(async (url, init) => {
     requestedUrl = String(url);
     requestedApiKey = init.headers.apikey;
-    return new Response(JSON.stringify({
-      access_token: 'header.eyJleHAiOjQxMDI0NDQ4MDB9.signature',
-      refresh_token: 'server-only-refresh-secret',
-      expires_in: 3600,
-      user: {
-        id: '00000000-0000-0000-0000-000000000001',
-        email: 'user@example.com',
-        email_confirmed_at: '2026-07-26T00:00:00Z',
-        user_metadata: { display_name: 'Test User' },
-      },
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  };
-
-  try {
-    await login({
-      method: 'POST',
-      headers: { origin: 'https://dealivra.test', host: 'dealivra.test' },
-      body: { email: 'user@example.com', password: 'ExamplePass123' },
-    }, response);
-  } finally {
-    globalThis.fetch = originalFetch;
-    if (originalUrl === undefined) delete process.env.SUPABASE_URL;
-    else process.env.SUPABASE_URL = originalUrl;
-    if (originalKey === undefined) delete process.env.SUPABASE_PUBLISHABLE_KEY;
-    else process.env.SUPABASE_PUBLISHABLE_KEY = originalKey;
-  }
+    return new Response(JSON.stringify(authProviderSession('server-only-refresh-secret')), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, () => login(authRequest({
+    email: 'user@example.com',
+    password: 'ExamplePass123',
+  }), response));
 
   assert.equal(response.statusCode, 200);
   assert.equal(requestedUrl, 'https://project.example.supabase.co/auth/v1/token?grant_type=password');
@@ -211,4 +238,159 @@ test('auth handlers never return a refresh token to browser JavaScript', async (
   assert.match(response.headers.get('set-cookie'), /HttpOnly; Secure; SameSite=Strict/);
   assert.equal(JSON.stringify(response.payload).includes('server-only-refresh-secret'), false);
   assert.equal(response.payload.access_token.startsWith('header.'), true);
+});
+
+test('signup rejects cross-origin requests before contacting the auth provider', async () => {
+  const { default: signup } = await import('../api/auth/signup.mjs');
+  const response = createResponse();
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, () => signup(authRequest({
+    displayName: 'Test User',
+    email: 'user@example.com',
+    password: 'ExamplePass123',
+  }, {
+    origin: 'https://attacker.example',
+  }), response));
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.payload.error, 'Cross-origin authentication is not allowed.');
+  assert.equal(providerCalled, false);
+});
+
+test('signup validates password strength before contacting the auth provider', async () => {
+  const { default: signup } = await import('../api/auth/signup.mjs');
+  const response = createResponse();
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, () => signup(authRequest({
+    displayName: 'Test User',
+    email: 'user@example.com',
+    password: 'weak',
+  }), response));
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.payload.error, /12\+ characters/);
+  assert.equal(providerCalled, false);
+});
+
+test('signup keeps email-confirmation accounts signed out without creating a refresh cookie', async () => {
+  const { default: signup } = await import('../api/auth/signup.mjs');
+  const response = createResponse();
+  let submittedBody;
+
+  await withAuthProvider(async (_url, init) => {
+    submittedBody = JSON.parse(init.body);
+    return new Response(JSON.stringify({
+      user: {
+        id: '00000000-0000-0000-0000-000000000001',
+        email: 'user@example.com',
+      },
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, () => signup(authRequest({
+    displayName: '  Test User  ',
+    email: '  USER@EXAMPLE.COM  ',
+    password: 'ExamplePass123',
+  }), response));
+
+  assert.equal(response.statusCode, 202);
+  assert.deepEqual(response.payload, {
+    session: null,
+    needsEmailConfirmation: true,
+  });
+  assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(submittedBody.email, 'user@example.com');
+  assert.equal(submittedBody.data.display_name, 'Test User');
+});
+
+test('refresh rotates the HttpOnly cookie without exposing its secret', async () => {
+  const { default: refresh } = await import('../api/auth/refresh.mjs');
+  const response = createResponse();
+  let requestedUrl;
+  let submittedBody;
+
+  await withAuthProvider(async (url, init) => {
+    requestedUrl = String(url);
+    submittedBody = JSON.parse(init.body);
+    return new Response(JSON.stringify(authProviderSession('new/refresh+secret')), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, () => refresh(authRequest({}, {
+    cookie: '__Host-dealivra-refresh=old%2Frefresh%2Bsecret',
+  }), response));
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(requestedUrl, 'https://project.example.supabase.co/auth/v1/token?grant_type=refresh_token');
+  assert.deepEqual(submittedBody, { refresh_token: 'old/refresh+secret' });
+  assert.match(
+    response.headers.get('set-cookie'),
+    /__Host-dealivra-refresh=new%2Frefresh%2Bsecret;.*HttpOnly; Secure; SameSite=Strict/,
+  );
+  assert.equal(JSON.stringify(response.payload).includes('new/refresh+secret'), false);
+});
+
+test('failed refresh clears the server-only cookie', async () => {
+  const { default: refresh } = await import('../api/auth/refresh.mjs');
+  const response = createResponse();
+
+  await withAuthProvider(async () => new Response(JSON.stringify({
+    error: 'invalid refresh token',
+  }), {
+    status: 401,
+    headers: { 'Content-Type': 'application/json' },
+  }), () => refresh(authRequest({}, {
+    cookie: '__Host-dealivra-refresh=expired-secret',
+  }), response));
+
+  assert.equal(response.statusCode, 401);
+  assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+  assert.equal(response.payload.error, 'Your session expired. Please sign in again.');
+});
+
+test('malformed refresh cookies fail safely without contacting the auth provider', async () => {
+  const { default: refresh } = await import('../api/auth/refresh.mjs');
+  const response = createResponse();
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, () => refresh(authRequest({}, {
+    cookie: '__Host-dealivra-refresh=%E0%A4%A',
+  }), response));
+
+  assert.equal(response.statusCode, 401);
+  assert.equal(response.payload.error, 'Your session expired. Please sign in again.');
+  assert.equal(providerCalled, false);
+});
+
+test('logout clears the refresh cookie even when provider revocation is unavailable', async () => {
+  const { default: logout } = await import('../api/auth/logout.mjs');
+  const response = createResponse();
+  const originalConsoleError = console.error;
+  console.error = () => {};
+
+  try {
+    await withAuthProvider(async () => {
+      throw new Error('provider unavailable');
+    }, () => logout(authRequest({}, {
+      authorization: 'Bearer short-lived-access-token',
+    }), response));
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.equal(response.statusCode, 204);
+  assert.equal(response.ended, true);
+  assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
 });

@@ -96,7 +96,13 @@ export function readRefreshToken(request) {
   const cookie = header(request, 'cookie') || '';
   for (const part of cookie.split(';')) {
     const [name, ...value] = part.trim().split('=');
-    if (name === refreshCookieName) return decodeURIComponent(value.join('='));
+    if (name === refreshCookieName) {
+      try {
+        return decodeURIComponent(value.join('='));
+      } catch {
+        return null;
+      }
+    }
   }
   return null;
 }
