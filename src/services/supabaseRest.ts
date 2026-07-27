@@ -102,6 +102,12 @@ interface DealRow {
   id: string; public_id: string; title: string; description: string;
   price_cents: number; currency: CurrencyCode; condition: 'Like new' | 'Good' | 'Fair';
   serial_last_four: string | null; delivery_method: 'Meet in person' | 'Ship to buyer';
+  category_id?: NonNullable<Deal['catalog']>['categoryId'];
+  catalog_version?: string;
+  catalog_brand_id?: string | null; catalog_brand_label?: string | null;
+  catalog_model_id?: string | null; catalog_model_label?: string | null;
+  model_year?: number | null;
+  catalog_variant_id?: string | null; catalog_variant_label?: string | null;
   status: 'draft' | 'published' | 'accepted' | 'completed' | 'cancelled' | 'disputed';
   current_agreement_version: number; created_at: string;
   expires_at: string | null;
@@ -391,6 +397,17 @@ async function accountEmailConfirmed(session:StoredSession){
 
 function mapDeal(row: DealRow, sellerName: string, viewerId?: string, sellerContactVerified=false) {
   const viewerRole: Deal['viewerRole'] = viewerId ? (row.seller_id===viewerId?'seller':row.buyer_id===viewerId?'buyer':'visitor') : 'visitor';
+  const catalog: Deal['catalog'] = {
+    categoryId: row.category_id || 'general',
+    catalogVersion: row.catalog_version || 'legacy',
+    brandId: row.catalog_brand_id || undefined,
+    brandLabel: row.catalog_brand_label || undefined,
+    modelId: row.catalog_model_id || undefined,
+    modelLabel: row.catalog_model_label || undefined,
+    modelYear: row.model_year || undefined,
+    variantId: row.catalog_variant_id || undefined,
+    variantLabel: row.catalog_variant_label || undefined,
+  };
   return {
     id: row.id, publicId: row.public_id, title: row.title, description: row.description,
     priceCents: row.price_cents, currency: row.currency, condition: row.condition,
@@ -401,7 +418,23 @@ function mapDeal(row: DealRow, sellerName: string, viewerId?: string, sellerCont
     agreementVersion: row.current_agreement_version, createdAt: row.created_at,
     expiresAt: row.expires_at || undefined,
     mediaUrls: (row.deal_media || []).sort((a,b)=>a.sort_order-b.sort_order).map(item=>publicMediaUrl(item.storage_path)),
+    catalog,
     viewerRole,
+  };
+}
+
+function catalogWriteColumns(draft: DealDraft) {
+  const catalog=draft.catalog;
+  return {
+    category_id:catalog?.categoryId||'general',
+    catalog_version:catalog?.catalogVersion||'legacy',
+    catalog_brand_id:catalog?.brandId||null,
+    catalog_brand_label:catalog?.brandLabel||null,
+    catalog_model_id:catalog?.modelId||null,
+    catalog_model_label:catalog?.modelLabel||null,
+    model_year:catalog?.modelYear||null,
+    catalog_variant_id:catalog?.variantId||null,
+    catalog_variant_label:catalog?.variantLabel||null,
   };
 }
 
@@ -471,7 +504,7 @@ export async function saveUserDealDraft(session:StoredSession,draft:DealDraft){
   const title=draft.title.trim();
   if(title.length<3||title.length>120)throw new Error('Item title must contain 3 to 120 characters.');
   const serial=draft.serialNumber.trim();
-  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=representation'},body:JSON.stringify({seller_id:session.user.id,title,description:draft.description.trim(),price_cents:toMinorUnits(draft.price,draft.currency),currency:draft.currency,condition:draft.condition,serial_last_four:serial?serial.slice(-4):null,delivery_method:draft.deliveryMethod,status:'draft',current_agreement_version:0,published_at:null,expires_at:new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString()})});
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=representation'},body:JSON.stringify({seller_id:session.user.id,title,description:draft.description.trim(),price_cents:toMinorUnits(draft.price,draft.currency),currency:draft.currency,condition:draft.condition,serial_last_four:serial?serial.slice(-4):null,delivery_method:draft.deliveryMethod,status:'draft',current_agreement_version:0,published_at:null,expires_at:new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString(),...catalogWriteColumns(draft)})});
   const data=await response.json();
   if(!response.ok)throw new Error(data?.message||'Could not save draft');
   return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id,await accountEmailConfirmed(session));
@@ -481,7 +514,7 @@ export async function updateUserDealDraft(session:StoredSession,dealId:string,dr
   const title=draft.title.trim();
   if(title.length<3||title.length>120)throw new Error('Item title must contain 3 to 120 characters.');
   const serial=draft.serialNumber.trim();
-  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals?id=eq.${encodeURIComponent(dealId)}&seller_id=eq.${session.user.id}&status=eq.draft`,{method:'PATCH',headers:{...headers(session.accessToken),Prefer:'return=representation'},body:JSON.stringify({title,description:draft.description.trim(),price_cents:toMinorUnits(draft.price,draft.currency),currency:draft.currency,condition:draft.condition,serial_last_four:serial?serial.slice(-4):null,delivery_method:draft.deliveryMethod,expires_at:new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString(),updated_at:new Date().toISOString()})});
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals?id=eq.${encodeURIComponent(dealId)}&seller_id=eq.${session.user.id}&status=eq.draft`,{method:'PATCH',headers:{...headers(session.accessToken),Prefer:'return=representation'},body:JSON.stringify({title,description:draft.description.trim(),price_cents:toMinorUnits(draft.price,draft.currency),currency:draft.currency,condition:draft.condition,serial_last_four:serial?serial.slice(-4):null,delivery_method:draft.deliveryMethod,expires_at:new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString(),updated_at:new Date().toISOString(),...catalogWriteColumns(draft)})});
   const data=await response.json();
   if(!response.ok)throw new Error(data?.message||'Could not update draft');
   if(!(data as DealRow[])[0])throw new Error('Draft was not found');

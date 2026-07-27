@@ -157,6 +157,35 @@ grant update (title, description, price_cents, currency, condition,
 on public.deals
 to authenticated;
 
+-- CAT-004 is additive and may be deployed after this hardening file. Preserve
+-- least-privilege draft writes when those structured columns are present,
+-- while keeping this migration safe against an older production schema.
+do $catalog_column_grants$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'deals'
+      and column_name = 'category_id'
+  ) then
+    execute 'grant insert (
+      category_id, catalog_version,
+      catalog_brand_id, catalog_brand_label,
+      catalog_model_id, catalog_model_label, model_year,
+      catalog_variant_id, catalog_variant_label
+    ) on public.deals to authenticated';
+
+    execute 'grant update (
+      category_id, catalog_version,
+      catalog_brand_id, catalog_brand_label,
+      catalog_model_id, catalog_model_label, model_year,
+      catalog_variant_id, catalog_variant_label
+    ) on public.deals to authenticated';
+  end if;
+end
+$catalog_column_grants$;
+
 grant update (display_name)
 on public.profiles
 to authenticated;

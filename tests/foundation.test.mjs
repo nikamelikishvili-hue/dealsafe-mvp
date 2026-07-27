@@ -590,6 +590,57 @@ test('guided catalog endpoint serves every reviewed category with a manual fallb
   }
 });
 
+test('structured catalog identity is persisted with stable IDs and a legacy-safe backfill', () => {
+  const migration = readText('supabase/structured_catalog_persistence.sql');
+  const domain = readText('src/domain.ts');
+  const smartCatalog = readText('src/smartCatalog.ts');
+  const service = readText('src/services/supabaseRest.ts');
+  const application = readText('src/app.tsx');
+
+  for (const column of [
+    'category_id',
+    'catalog_version',
+    'catalog_brand_id',
+    'catalog_brand_label',
+    'catalog_model_id',
+    'catalog_model_label',
+    'model_year',
+    'catalog_variant_id',
+    'catalog_variant_label',
+  ]) {
+    assert.match(migration, new RegExp(`add column if not exists ${column}`));
+    assert.match(service, new RegExp(`${column}:`));
+  }
+
+  assert.match(migration, /category_id = coalesce\(category_id, 'general'\)/);
+  assert.match(migration, /catalog_version = coalesce\(catalog_version, 'legacy'\)/);
+  assert.match(migration, /deals_catalog_facets_idx/);
+  assert.match(migration, /'catalog_identity',v_catalog/);
+  assert.match(migration, /grant insert \([\s\S]*category_id[\s\S]*\) on public\.deals to authenticated/);
+  assert.doesNotMatch(migration, /grant (?:select|insert|update|delete|all)[^;]* on public\.deals to anon/i);
+  assert.match(domain, /export interface DealCatalogIdentity/);
+  assert.match(smartCatalog, /export function buildDealCatalogIdentity/);
+  assert.match(smartCatalog, /selection\.brand === OTHER_CATALOG_VALUE \? 'other'/);
+  assert.match(service, /function catalogWriteColumns/);
+  assert.match(application, /buildDealCatalogIdentity\(dealTemplate,catalogSelectionRef\.current\)/);
+});
+
+test('public catalog projection omits participant and restricted evidence fields', () => {
+  const migration = readText('supabase/structured_catalog_persistence.sql');
+  const publicProjection = migration.slice(
+    migration.indexOf('create function public.get_public_deal'),
+    migration.indexOf('drop function if exists public.get_my_saved_deals'),
+  );
+
+  assert.match(publicProjection, /category_id text/);
+  assert.match(publicProjection, /catalog_brand_id text/);
+  assert.match(publicProjection, /catalog_model_id text/);
+  assert.match(publicProjection, /model_year smallint/);
+  assert.doesNotMatch(publicProjection, /seller_id text|seller_id uuid|buyer_id text|buyer_id uuid/);
+  assert.doesNotMatch(publicProjection, /serial_ciphertext|acceptance_code_hash|verification_reference/);
+  assert.match(publicProjection, /moderation\.status='hidden'/);
+});
+
 test('catalog endpoint rejects unsupported categories and write methods', async () => {
   const { default: catalog } = await import('../api/catalog.mjs');
   const unsupportedResponse = createResponse();

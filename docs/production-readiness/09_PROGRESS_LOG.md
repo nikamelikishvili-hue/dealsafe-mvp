@@ -331,3 +331,46 @@ This log records completed delivery evidence. A backlog item is not marked compl
 - Repository regression tests verify every browser RPC appears in the reviewed
   allowlist and that mutation/admin RPCs are absent from the anonymous block.
 
+## 2026-07-27 — Structured catalog persistence
+
+### Implemented
+
+- Added versioned listing identity fields for category, catalog version, brand,
+  model, vehicle year, and variant. Stable IDs and display-label snapshots are
+  stored separately so a future catalog label change does not rewrite an
+  accepted deal.
+- New creation flows derive the structured record from the reviewed catalog or
+  the explicit `other` fallback; non-guided categories still persist their
+  category ID without inventing brand/model values.
+- Existing production deals were backfilled as `general` / `legacy` instead of
+  guessing structured identity from free-form titles.
+- Added database checks for approved category IDs, version format, bounded
+  labels, normalized IDs, and vehicle-only model years.
+- Added a partial catalog-facet index for the future structured search work.
+- Agreement versions now snapshot and hash the catalog identity at publication
+  and when a seller publishes a later agreement version.
+- Public Deal Link and saved-deal projections expose only approved listing
+  identity fields. Participant IDs, full serial values, access-code data, and
+  restricted evidence remain outside the public projection.
+- Direct browser writes are limited to the nine reviewed catalog columns and
+  remain protected by the existing seller-owned-draft RLS policy.
+
+### Production migration and verification
+
+- Supabase migration history records
+  `20260727214604_persist_structured_catalog_identity`.
+- All nine columns, catalog constraints, and the facet index are present.
+- Existing rows missing the category or catalog version backfill: 0.
+- Authenticated catalog column grants: 9; anonymous base-table read access:
+  denied.
+- Anonymous function execution remains exactly eight reviewed public reads,
+  with zero unexpected anonymous functions.
+- Publishing and update RPCs remain authenticated-only.
+- Full repository verification passed: strict typecheck, 30 automated tests,
+  secret scan, production build, and preview navigation smoke test.
+
+### Next catalog control
+
+- CAT-005 can now build category-aware, shareable search facets from structured
+  columns without parsing listing titles.
+
