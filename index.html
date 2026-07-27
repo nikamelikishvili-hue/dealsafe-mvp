@@ -31,5 +31,22 @@
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Dealivra","url":"https://dealivra.com/","applicationCategory":"FinanceApplication","operatingSystem":"Web","inLanguage":"en-US","areaServed":"US","description":"Dealivra keeps agreements, payment status, delivery evidence, and handoff together in one clear private transaction record."}</script>
   <title>Dealivra — Private Deals, Made Clear</title>
 </head>
-<body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
+<body>
+  <div id="root"></div>
+  <script>
+    window.va = window.va || function () {
+      (window.vaq = window.vaq || []).push(arguments);
+    };
+    window.va('beforeSend', function (event) {
+      try {
+        var url = new URL(event.url, window.location.origin);
+        return Object.assign({}, event, { url: url.origin + url.pathname });
+      } catch (_) {
+        return event;
+      }
+    });
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
 </html>
