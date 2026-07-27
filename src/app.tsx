@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, Bookmark, CalendarClock, CalendarDays, Car, Check, ChevronDown, CircleCheckBig, Clock3, Copy, CreditCard, Eye, EyeOff, FileCheck2, FileDown, FileSignature, Fingerprint, Flag, ImagePlus, Laptop, Link2, LockKeyhole, MailCheck, MapPinned, Menu, MessageCircle, Package, PackageCheck, Pencil, Plus, QrCode, Route, Scale, ScanSearch, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Trash2, Truck, Watch, X, ZoomIn } from 'lucide-react';
+import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, Bookmark, Boxes, Briefcase, CalendarClock, CalendarDays, Camera, Car, Check, ChevronDown, CircleCheckBig, Clock3, Copy, CreditCard, Eye, EyeOff, FileCheck2, FileDown, FileSignature, Fingerprint, Flag, Gamepad2, Gem, ImagePlus, Laptop, Link2, LockKeyhole, MailCheck, MapPinned, Menu, MessageCircle, Package, PackageCheck, Pencil, Plus, QrCode, Route, Scale, ScanSearch, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Tablet, Trash2, Truck, Watch, Wrench, X, ZoomIn } from 'lucide-react';
 import { DEMO_DEAL_PUBLIC_ID, demoRepository } from './services/demoRepository';
 import { acceptPublicDeal, askDealQuestion, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealEvidenceSignedUrl, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminDisputes, getAdminReports, getAdminRevenueSummary, getAdminRevenueTransactions, getDealInquiries, getDealInspection, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicAgreementHistory, getPublicDeal, getPublicSellerDeclaration, getPublicSellerTrustProfile, getPublicTrustPassport, getSellerShippingEvidenceReadiness, getStoredSession, getTrustPassportSettings, isCurrentUserDealSeller, isDealSaved, isSupabaseConfigured, listDealEvidence, listUserDeals, makeDealOffer, markArrived, markSessionActivity, openDealDispute, proposeMeeting, publishUserDealDraft, recordDealInspection, refreshSession, renewDealLink, reorderDealMedia, replyDealInquiry, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminDispute, resolveAdminDisputeFinancial, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, setDealSaved, setTrustPassportEnabled, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealEvidence, uploadDealPhotos, verifyAgreementRecord, type AdminDispute, type AdminReport, type AdminRevenueSummary, type AdminRevenueTransaction, type AgreementHistoryVersion, type AgreementVerificationResult, type DealEvidence, type DealInquiry, type DealInspection, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type EvidenceType, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type SellerDeclarationRecord, type SellerShippingEvidenceReadiness, type StoredSession, type TimelineEvent, type TrustPassport, type TrustPassportSettings } from './services/supabaseRest';
 import { markAllNotificationsRead, markDealNotificationsRead } from './services/supabaseRest';
@@ -14,6 +14,7 @@ import { BrandLogo } from './BrandLogo';
 import type { Deal, DealDraft } from './domain';
 import { amountForInput, currencyStep, formatMoney, toMinorUnits } from './currency';
 import { createAgreementFingerprint } from './agreementFingerprint';
+import { OTHER_CATALOG_VALUE, buildSmartCatalogTitle, emptySmartCatalogSelection, getCatalogModels, phoneCatalog, phoneStorageOptions, sanitizeSmartCatalogSelection, vehicleCatalog, vehicleYears, type SmartCatalogCategoryId, type SmartCatalogSelection } from './smartCatalog';
 import './styles.css';
 import './security.css';
 import './dashboard.css';
@@ -55,6 +56,7 @@ import './seller-trust.css';
 import './trust-passport.css';
 import './watchlist.css';
 import './deal-templates.css';
+import './smart-catalog.css';
 import './seller-declaration-status.css';
 import './agreement-history.css';
 import './agreement-verification.css';
@@ -125,7 +127,7 @@ const viewFromPath=():PublicInfoView|'verify'|'home'=>(
 );
 interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
 const initial: DealDraft = {title:'',description:'',price:'',currency:'USD',condition:'Good',serialNumber:'',deliveryMethod:'Meet in person',expiresInDays:7};
-type DealTemplateId='phone'|'laptop'|'vehicle'|'watch'|'general';
+type DealTemplateId=SmartCatalogCategoryId;
 type CreateFlowStep=1|2|3|4;
 type DealTemplate={id:DealTemplateId;label:string;titlePlaceholder:string;descriptionPrompt:string;photoPrompt:string;identifierLabel:string;identifierPlaceholder:string;identifierHelp:string;identifierPattern:string;icon:typeof Smartphone};
 const createFlowSteps=[
@@ -143,8 +145,15 @@ const createStepMeta={
 const dealTemplates:DealTemplate[]=[
   {id:'phone',label:'Phone',titlePlaceholder:'iPhone 15 Pro · 256 GB',descriptionPrompt:'Include the model, storage, battery health, lock status, repairs, damage, and accessories.',photoPrompt:'Photograph the front, back, sides, powered-on screen, serial or IMEI label, damage, and accessories.',identifierLabel:'Serial or IMEI (optional)',identifierPlaceholder:'15-digit IMEI or manufacturer serial',identifierHelp:'Enter a 15-digit IMEI or a manufacturer serial number with 6 to 30 characters.',identifierPattern:'(?:[0-9]{15}|[A-Za-z0-9-]{6,30})',icon:Smartphone},
   {id:'laptop',label:'Laptop',titlePlaceholder:'MacBook Pro 14 · M3 · 512 GB',descriptionPrompt:'Include the processor, memory, storage, battery condition, screen condition, repairs, and charger.',photoPrompt:'Photograph the lid, powered-on screen, keyboard, ports, bottom serial label, charger, and damage.',identifierLabel:'Serial number (optional)',identifierPlaceholder:'Manufacturer serial number',identifierHelp:'Enter at least 3 characters.',identifierPattern:'.{3,40}',icon:Laptop},
+  {id:'tablet',label:'Tablet',titlePlaceholder:'Apple iPad Pro 11 · 256 GB',descriptionPrompt:'Include the model, storage, connectivity, battery condition, screen condition, repairs, and accessories.',photoPrompt:'Photograph the front, back, sides, powered-on screen, serial label, damage, and accessories.',identifierLabel:'Serial or IMEI (optional)',identifierPlaceholder:'Serial number or IMEI',identifierHelp:'Enter at least 3 characters.',identifierPattern:'.{3,40}',icon:Tablet},
   {id:'vehicle',label:'Vehicle',titlePlaceholder:'2021 BMW X5 · 42,000 miles',descriptionPrompt:'Include the mileage, title status, accident history, service history, warning lights, and known defects.',photoPrompt:'Photograph the front, rear, both sides, interior, odometer, VIN label, tires, and known defects.',identifierLabel:'VIN (optional)',identifierPlaceholder:'17-character VIN',identifierHelp:'A VIN must contain exactly 17 letters or numbers and cannot use I, O, or Q.',identifierPattern:'[A-HJ-NPR-Z0-9]{17}',icon:Car},
   {id:'watch',label:'Luxury watch',titlePlaceholder:'Rolex Submariner · Reference 126610LN',descriptionPrompt:'Include the reference number, authenticity evidence, service history, condition, box, papers, and accessories.',photoPrompt:'Photograph the dial, caseback, crown, bracelet, serial or reference, box, papers, and visible wear.',identifierLabel:'Reference or serial number (optional)',identifierPlaceholder:'Reference or serial number',identifierHelp:'Enter at least 3 characters.',identifierPattern:'.{3,40}',icon:Watch},
+  {id:'camera',label:'Camera',titlePlaceholder:'Sony Alpha a7 IV · Body only',descriptionPrompt:'Include shutter count, sensor and body condition, repairs, included lenses, batteries, and accessories.',photoPrompt:'Photograph the front, back, sensor or lens mount, powered-on screen, serial label, accessories, and damage.',identifierLabel:'Serial number (optional)',identifierPlaceholder:'Manufacturer serial number',identifierHelp:'Enter at least 3 characters.',identifierPattern:'.{3,40}',icon:Camera},
+  {id:'gaming',label:'Gaming',titlePlaceholder:'Sony PlayStation 5 · Disc edition',descriptionPrompt:'Include the exact model, storage, controller count, account or lock status, repairs, and accessories.',photoPrompt:'Photograph every side, powered-on screen, serial label, controllers, cables, games, and damage.',identifierLabel:'Serial number (optional)',identifierPlaceholder:'Manufacturer serial number',identifierHelp:'Enter at least 3 characters.',identifierPattern:'.{3,40}',icon:Gamepad2},
+  {id:'tools',label:'Tools & equipment',titlePlaceholder:'DeWalt 20V MAX drill kit',descriptionPrompt:'Include the model, hours or usage, power source, operational condition, repairs, batteries, and attachments.',photoPrompt:'Photograph all sides, model plate, operating controls, batteries, attachments, and wear or damage.',identifierLabel:'Serial or equipment number (optional)',identifierPlaceholder:'Serial or equipment number',identifierHelp:'Enter at least 3 characters.',identifierPattern:'.{3,40}',icon:Wrench},
+  {id:'business',label:'Business equipment',titlePlaceholder:'Commercial equipment brand and model',descriptionPrompt:'Include the manufacturer, model, age, hours or usage, service history, defects, and included components.',photoPrompt:'Photograph all sides, data plate, controls, powered-on state, accessories, and wear or damage.',identifierLabel:'Serial or asset number (optional)',identifierPlaceholder:'Serial or asset number',identifierHelp:'Enter at least 3 characters.',identifierPattern:'.{3,40}',icon:Briefcase},
+  {id:'jewelry',label:'Jewelry',titlePlaceholder:'18K gold diamond ring · Size 7',descriptionPrompt:'Include the material, weight, stones, measurements, hallmark, appraisal, repairs, and condition.',photoPrompt:'Photograph all angles, hallmark, clasp or setting, appraisal or certificate, packaging, and visible wear.',identifierLabel:'Certificate or reference (optional)',identifierPlaceholder:'Certificate or reference number',identifierHelp:'Enter at least 3 characters.',identifierPattern:'.{3,40}',icon:Gem},
+  {id:'collectible',label:'Collectibles',titlePlaceholder:'Item name · Edition or year',descriptionPrompt:'Include the creator or brand, edition, year, provenance, grading, restoration, defects, and packaging.',photoPrompt:'Photograph the front, back, markings, certificate or grading label, packaging, and every defect.',identifierLabel:'Certificate or reference (optional)',identifierPlaceholder:'Certificate or reference number',identifierHelp:'Enter at least 3 characters.',identifierPattern:'.{3,40}',icon:Boxes},
   {id:'general',label:'Other item',titlePlaceholder:'Item brand and model',descriptionPrompt:'Include the brand, model, age, usage, known defects, repairs, and included parts or accessories.',photoPrompt:'Photograph the front, back, multiple angles, serial or reference label, defects, and included parts.',identifierLabel:'Serial or reference number (optional)',identifierPlaceholder:'Serial or reference number',identifierHelp:'Enter at least 3 characters.',identifierPattern:'.{3,40}',icon:Package}
 ];
 const formatDateTime=(value:string)=>new Date(value).toLocaleString(getAppLanguage());
@@ -155,8 +164,36 @@ const isDealExpired=(deal:Deal,now=Date.now())=>deal.status==='published'&&Boole
 const relativeExpiry=(expiresAt:string,now:number)=>{const difference=new Date(expiresAt).getTime()-now;const absolute=Math.abs(difference);const [amount,unit]=absolute>=24*60*60*1000?[Math.ceil(difference/(24*60*60*1000)),'day' as const]:absolute>=60*60*1000?[Math.ceil(difference/(60*60*1000)),'hour' as const]:[Math.ceil(difference/(60*1000)),'minute' as const];return new Intl.RelativeTimeFormat(getAppLanguage(),{numeric:'auto'}).format(amount,unit)};
 
 function DealTemplatePicker({selected,onSelect}:{selected:DealTemplateId;onSelect:(id:DealTemplateId)=>void}){
+  const featuredIds:DealTemplateId[]=['phone','vehicle','laptop','tablet','watch'];
+  const [expanded,setExpanded]=useState(false);
   const template=dealTemplates.find(item=>item.id===selected)||dealTemplates[0];
-  return <section className="deal-template-picker no-print"><div className="deal-template-heading"><PackageCheck/><div><p className="eyebrow">{t('Start with a template')}</p><h2>{t('Choose an item category')}</h2><p>{t('Select the closest category to get a safer description checklist.')}</p></div></div><div className="deal-template-grid">{dealTemplates.map(item=>{const Icon=item.icon;return <button key={item.id} type="button" className={selected===item.id?'selected':''} aria-pressed={selected===item.id} onClick={()=>onSelect(item.id)}><Icon/><span>{t(item.label)}</span>{selected===item.id&&<Check/>}</button>})}</div><div className="deal-template-guidance"><ShieldCheck/><div><b>{t('Include these details')}</b><span>{t(template.descriptionPrompt)}</span></div></div></section>;
+  const visibleTemplates=expanded?dealTemplates:dealTemplates.filter(item=>featuredIds.includes(item.id)||item.id===selected);
+  return <section className="deal-template-picker no-print"><div className="deal-template-heading"><PackageCheck/><div><p className="eyebrow">{t('Start with a template')}</p><h2>{t('Choose an item category')}</h2><p>{t('Select the closest category to get a safer description checklist.')}</p></div></div><div className="deal-template-grid">{visibleTemplates.map(item=>{const Icon=item.icon;return <button key={item.id} type="button" className={selected===item.id?'selected':''} aria-pressed={selected===item.id} onClick={()=>onSelect(item.id)}><Icon/><span>{t(item.label)}</span>{selected===item.id&&<Check/>}</button>})}</div><button type="button" className="catalog-category-toggle" aria-expanded={expanded} onClick={()=>setExpanded(value=>!value)}>{t(expanded?'Show fewer categories':'More categories')}<ChevronDown className={expanded?'is-open':''}/></button><div className="deal-template-guidance"><ShieldCheck/><div><b>{t('Include these details')}</b><span>{t(template.descriptionPrompt)}</span></div></div></section>;
+}
+
+function SmartCatalogFields({category,value,onChange}:{category:DealTemplateId;value:SmartCatalogSelection;onChange:(patch:Partial<SmartCatalogSelection>)=>void}){
+  if(category!=='phone'&&category!=='vehicle')return null;
+  const catalog=category==='phone'?phoneCatalog:vehicleCatalog;
+  const models=getCatalogModels(category,value.brand);
+  const update=(patch:Partial<SmartCatalogSelection>)=>onChange(patch);
+  const title=buildSmartCatalogTitle(category,value);
+  const changeBrand=(brand:string)=>update({brand,model:'',customBrand:'',customModel:''});
+  const changeModel=(model:string)=>update({model,customModel:''});
+  const isOtherBrand=value.brand===OTHER_CATALOG_VALUE;
+  const isOtherModel=value.model===OTHER_CATALOG_VALUE;
+
+  return <fieldset className="smart-catalog-fields">
+    <legend><ScanSearch/><span><b>{t(category==='phone'?'Find your phone':'Find your vehicle')}</b><small>{t('Choose known details and Dealivra will build the item title for you.')}</small></span></legend>
+    <div className={`smart-catalog-grid is-${category}`}>
+      {category==='vehicle'&&<label>{t('Year')}<select value={value.year} onChange={event=>update({year:event.target.value})}><option value="">{t('Choose year')}</option>{vehicleYears.map(year=><option key={year} value={year}>{year}</option>)}</select></label>}
+      <label>{t(category==='phone'?'Brand':'Make')}<select value={value.brand} onChange={event=>changeBrand(event.target.value)}><option value="">{t(category==='phone'?'Choose brand':'Choose make')}</option>{catalog.map(item=><option key={item.label} value={item.label}>{item.label}</option>)}<option value={OTHER_CATALOG_VALUE}>{t('Not listed')}</option></select></label>
+      {!isOtherBrand&&<label>{t('Model')}<select value={value.model} disabled={!value.brand} onChange={event=>changeModel(event.target.value)}><option value="">{t(value.brand?'Choose model':category==='phone'?'Choose a brand first':'Choose a make first')}</option>{models.map(model=><option key={model} value={model}>{model}</option>)}{value.brand&&<option value={OTHER_CATALOG_VALUE}>{t('Not listed')}</option>}</select></label>}
+      {category==='phone'&&<label>{t('Storage')} <span className="optional-label">{t('Optional')}</span><select value={value.variant} onChange={event=>update({variant:event.target.value})}><option value="">{t('Choose storage')}</option>{phoneStorageOptions.map(storage=><option key={storage} value={storage}>{storage}</option>)}</select></label>}
+      {isOtherBrand&&<><label>{t(category==='phone'?'Brand name':'Make name')}<input maxLength={60} placeholder={t(category==='phone'?'Enter brand':'Enter make')} value={value.customBrand} onChange={event=>update({customBrand:event.target.value})}/></label><label>{t('Model name')}<input maxLength={80} placeholder={t('Enter model')} value={value.customModel} onChange={event=>update({customModel:event.target.value})}/></label></>}
+      {isOtherModel&&<label>{t('Model name')}<input maxLength={80} placeholder={t('Enter model')} value={value.customModel} onChange={event=>update({customModel:event.target.value})}/></label>}
+    </div>
+    <p className={`smart-catalog-preview ${title?'has-title':''}`}><BadgeCheck/><span><small>{t('Suggested title')}</small><b>{title||t('Choose details above')}</b></span></p>
+  </fieldset>;
 }
 
 function DealPhotoGuide({template,count}:{template:DealTemplate;count:number}){
@@ -1183,6 +1220,7 @@ type GuestCreateDraftRecovery={
   savedAt:number;
   draft:DealDraft;
   dealTemplate:DealTemplateId;
+  catalogSelection?:SmartCatalogSelection;
   createStep:CreateFlowStep;
   reviewingDraft:boolean;
 };
@@ -1214,6 +1252,7 @@ const readGuestCreateDraft=():GuestCreateDraftRecovery|null=>{
     const condition=(['Like new','Good','Fair'] as DealDraft['condition'][]).includes(stored.draft.condition as DealDraft['condition'])?stored.draft.condition as DealDraft['condition']:'Good';
     const deliveryMethod=(['Meet in person','Ship to buyer'] as DealDraft['deliveryMethod'][]).includes(stored.draft.deliveryMethod as DealDraft['deliveryMethod'])?stored.draft.deliveryMethod as DealDraft['deliveryMethod']:'Meet in person';
     const expiresInDays=([1,3,7,14,30] as number[]).includes(stored.draft.expiresInDays as number)?stored.draft.expiresInDays as number:7;
+    const catalogSelection=sanitizeSmartCatalogSelection(stored.catalogSelection);
     const draft:DealDraft={
       title:typeof stored.draft.title==='string'?stored.draft.title:'',
       description:typeof stored.draft.description==='string'?stored.draft.description:'',
@@ -1229,7 +1268,7 @@ const readGuestCreateDraft=():GuestCreateDraftRecovery|null=>{
       return null;
     }
     const reviewingDraft=Boolean(stored.reviewingDraft&&draft.title.trim().length>=3&&Number(draft.price)>0&&draft.description.trim().length>=20);
-    return {version:1,savedAt:stored.savedAt,draft,dealTemplate:template,createStep:step,reviewingDraft};
+    return {version:1,savedAt:stored.savedAt,draft,dealTemplate:template,catalogSelection,createStep:step,reviewingDraft};
   }catch{
     clearGuestCreateDraft();
     return null;
@@ -1736,6 +1775,8 @@ export function App() {
   const [authMessage,setAuthMessage]=useState('');
   const [photos,setPhotos]=useState<File[]>([]);
   const [dealTemplate,setDealTemplate]=useState<DealTemplateId>(()=>recoveredCreateDraft?.dealTemplate||'phone');
+  const [catalogSelection,setCatalogSelection]=useState<SmartCatalogSelection>(()=>recoveredCreateDraft?.catalogSelection||emptySmartCatalogSelection());
+  const catalogSelectionRef=useRef(catalogSelection);
   const [agreementChecks,setAgreementChecks]=useState({item:false,price:false,handoff:false});
   const [demoCompleted,setDemoCompleted]=useState(false);
   const [acceptanceProtected,setAcceptanceProtected]=useState(false);
@@ -1834,14 +1875,16 @@ export function App() {
         savedAt,
         draft:{...draft,serialNumber:''},
         dealTemplate,
+        catalogSelection,
         createStep,
         reviewingDraft
       });
       setDraftSavedAt(savedAt);
     },450);
     return()=>window.clearTimeout(timer);
-  },[draft,dealTemplate,createStep,reviewingDraft,session]);
+  },[draft,dealTemplate,catalogSelection,createStep,reviewingDraft,session]);
   useEffect(()=>{if(!session)return;const renew=()=>{if(!session.expiresAt||session.expiresAt-Date.now()<10*60*1000)refreshSession(session).then(setSession).catch(()=>{void signOut(session);setSession(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')})};renew();const timer=setInterval(renew,5*60*1000);return()=>clearInterval(timer)},[session?.user.id,session?.expiresAt]);
+  useEffect(()=>{catalogSelectionRef.current=catalogSelection},[catalogSelection]);
   useEffect(()=>{if(!session){setNotifications([]);return}const load=()=>getMyNotifications(session).then(setNotifications).catch(()=>setNotifications([]));void load();const timer=window.setInterval(()=>void load(),30_000);return()=>window.clearInterval(timer)},[session?.accessToken]);
   useEffect(()=>{if(view!=='deal'||!active||!session)return;setNotifications(items=>items.map(item=>item.deal_id===active.id?{...item,is_read:true}:item));void markDealNotificationsRead(session,active.id).catch(()=>{})},[view,active?.id,session?.accessToken]);
   useEffect(()=>{if(session)getAdminAccess(session).then(setIsAdmin).catch(()=>setIsAdmin(false));else setIsAdmin(false)},[session]);
@@ -1859,6 +1902,20 @@ export function App() {
     return()=>{current=false};
   },[active?.id,active?.viewerRole,active?.status,active?.deliveryMethod,session?.accessToken,evidenceRevision]);
   const focusCreateField=(fieldId:string)=>{const field=document.getElementById(fieldId);field?.focus({preventScroll:true});field?.scrollIntoView({behavior:'smooth',block:'center'})};
+  const chooseDealTemplate=(template:DealTemplateId)=>{
+    if(template===dealTemplate)return;
+    const emptySelection=emptySmartCatalogSelection();
+    setDealTemplate(template);
+    catalogSelectionRef.current=emptySelection;
+    setCatalogSelection(emptySelection);
+    setDraft(current=>({...current,title:''}));
+  };
+  const updateCatalogSelection=(patch:Partial<SmartCatalogSelection>)=>{
+    const next={...catalogSelectionRef.current,...patch};
+    catalogSelectionRef.current=next;
+    setCatalogSelection(next);
+    setDraft(current=>({...current,title:buildSmartCatalogTitle(dealTemplate,next)}));
+  };
   const showCreateErrors=()=>{
     setCreateValidationAttempted(true);
     window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>document.getElementById('create-validation-summary')?.focus({preventScroll:false})));
@@ -1872,7 +1929,7 @@ export function App() {
   };
   const goToCreateStep=(step:CreateFlowStep)=>{if(step>createAvailableStep)return;setAuthMessage('');setCreateValidationAttempted(false);setReviewingDraft(step===4);if(step<4)setCreateStep(step);window.requestAnimationFrame(()=>document.getElementById('create-deal-flow')?.scrollIntoView({behavior:'smooth',block:'start'}))};
   const reviewDraft=(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');if(!createItemReady){setCreateStep(1);return}if(!createTermsReady){setCreateStep(2);return}setReviewingDraft(true);window.scrollTo({top:0,behavior:'smooth'})};
-  const resetCreateFlow=()=>{clearGuestCreateDraft();setDraft({...initial});setPhotos([]);setDealTemplate('phone');setCreateStep(1);setReviewingDraft(false);setCreateValidationAttempted(false);setSellerDeclarations(emptySellerDeclarations);setPendingCreateAction(null);setDraftRecovered(false);setDraftSavedAt(null)};
+  const resetCreateFlow=()=>{const emptySelection=emptySmartCatalogSelection();clearGuestCreateDraft();setDraft({...initial});setPhotos([]);setDealTemplate('phone');catalogSelectionRef.current=emptySelection;setCatalogSelection(emptySelection);setCreateStep(1);setReviewingDraft(false);setCreateValidationAttempted(false);setSellerDeclarations(emptySellerDeclarations);setPendingCreateAction(null);setDraftRecovered(false);setDraftSavedAt(null)};
   const publishDraft=async(activeSession:StoredSession)=>{if(creating)return;setCreating(true);setAuthMessage('');try{let deal=await createUserDeal(activeSession,draft);setDeals(x=>[deal,...x]);setActive(deal);if(photos.length){try{const mediaUrls=await uploadDealPhotos(activeSession,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Deal created, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}resetCreateFlow();setActive(deal);setView('published')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save this deal');setView('create')}finally{setCreating(false)}};
   const saveDraftForSession=async(activeSession:StoredSession)=>{if(creating)return;setCreating(true);setAuthMessage('');try{let deal=await saveUserDealDraft(activeSession,draft);setDeals(items=>[deal,...items]);setActive(deal);if(photos.length){try{const mediaUrls=await uploadDealPhotos(activeSession,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Draft saved, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}resetCreateFlow();setView('deal')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save draft');setView('create')}finally{setCreating(false)}};
   const requestCreateAction=(action:'save'|'publish')=>{
@@ -2138,8 +2195,8 @@ export function App() {
         {!reviewingDraft&&<header className="create-flow-heading"><button className="back" onClick={()=>setView('home')}>← {t(user?'Dashboard':'Home')}</button><p className="eyebrow">{t(createStepMeta[createStep].eyebrow)}</p><h1>{t(createStepMeta[createStep].title)}</h1><p className="lede small">{t(createStepMeta[createStep].description)}</p></header>}
         {!reviewingDraft&&createErrors.length>0&&<CreateValidationSummary errors={createErrors} onSelect={focusCreateField}/>}
         {!reviewingDraft&&createStep===1&&<div className="create-step-layout">
-          <DealTemplatePicker selected={dealTemplate} onSelect={setDealTemplate}/>
-          <section className="form-wrap create-step-card"><form id="create-step-1" noValidate onSubmit={event=>{event.preventDefault();submitCreateStep(1)}}><label>{t('Item title')}<input id="create-item-title" required minLength={3} maxLength={120} aria-invalid={createErrors.some(error=>error.fieldId==='create-item-title')} aria-describedby="create-item-title-help" placeholder={selectedDealTemplate.titlePlaceholder} value={draft.title} onChange={event=>setDraft({...draft,title:event.target.value})}/><small id="create-item-title-help" className={createErrors.some(error=>error.fieldId==='create-item-title')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-title')?.message||'Use the brand, model, and one detail that helps identify the item.')}</small></label><div className="two"><label>{t('Price')}<span className="price-currency-controls"><input id="create-item-price" required min={currencyStep(draft.currency)} step={currencyStep(draft.currency)} type="number" aria-invalid={createErrors.some(error=>error.fieldId==='create-item-price')} aria-describedby="create-item-price-help" placeholder="780" value={draft.price} onChange={event=>setDraft({...draft,price:event.target.value})}/><span className="currency-label">USD</span></span><small id="create-item-price-help" className={createErrors.some(error=>error.fieldId==='create-item-price')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-price')?.message||'Enter the agreed item price before fees or shipping.')}</small></label><label>{t('Condition')}<select value={draft.condition} onChange={event=>setDraft({...draft,condition:event.target.value as DealDraft['condition']})}><option value="Like new">{t('Like new')}</option><option value="Good">{t('Good')}</option><option value="Fair">{t('Fair')}</option></select></label></div></form></section>
+          <DealTemplatePicker selected={dealTemplate} onSelect={chooseDealTemplate}/>
+          <section className="form-wrap create-step-card"><form id="create-step-1" noValidate onSubmit={event=>{event.preventDefault();submitCreateStep(1)}}><SmartCatalogFields category={dealTemplate} value={catalogSelection} onChange={updateCatalogSelection}/><label>{t('Item title')}<input id="create-item-title" required minLength={3} maxLength={120} aria-invalid={createErrors.some(error=>error.fieldId==='create-item-title')} aria-describedby="create-item-title-help" placeholder={selectedDealTemplate.titlePlaceholder} value={draft.title} onChange={event=>setDraft({...draft,title:event.target.value})}/><small id="create-item-title-help" className={createErrors.some(error=>error.fieldId==='create-item-title')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-title')?.message||((dealTemplate==='phone'||dealTemplate==='vehicle')?'Auto-filled from your choices; edit it if needed.':'Use the brand, model, and one detail that helps identify the item.'))}</small></label><div className="two"><label>{t('Price')}<span className="price-currency-controls"><input id="create-item-price" required min={currencyStep(draft.currency)} step={currencyStep(draft.currency)} type="number" aria-invalid={createErrors.some(error=>error.fieldId==='create-item-price')} aria-describedby="create-item-price-help" placeholder="780" value={draft.price} onChange={event=>setDraft({...draft,price:event.target.value})}/><span className="currency-label">USD</span></span><small id="create-item-price-help" className={createErrors.some(error=>error.fieldId==='create-item-price')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-price')?.message||'Enter the agreed item price before fees or shipping.')}</small></label><label>{t('Condition')}<select value={draft.condition} onChange={event=>setDraft({...draft,condition:event.target.value as DealDraft['condition']})}><option value="Like new">{t('Like new')}</option><option value="Good">{t('Good')}</option><option value="Fair">{t('Fair')}</option></select></label></div></form></section>
         </div>}
         {!reviewingDraft&&createStep===2&&<section className="form-wrap create-step-card"><form id="create-step-2" noValidate onSubmit={event=>{event.preventDefault();submitCreateStep(2)}}><div className="create-step-guidance"><ShieldCheck/><div><b>{t('What the buyer needs to know')}</b><span>{t(selectedDealTemplate.descriptionPrompt)}</span></div></div><label>{t('Known condition and defects')}<textarea id="create-item-description" required minLength={20} aria-invalid={createErrors.some(error=>error.fieldId==='create-item-description')} aria-describedby="create-item-description-help" placeholder={t(selectedDealTemplate.descriptionPrompt)} value={draft.description} onChange={event=>setDraft({...draft,description:event.target.value})}/><small id="create-item-description-help" className={createErrors.some(error=>error.fieldId==='create-item-description')?'field-help invalid':'field-help'}>{t(createErrors.find(error=>error.fieldId==='create-item-description')?.message||`${draft.description.trim().length}/20 · Describe wear, repairs, or defects.`)}</small></label><label>{t(selectedDealTemplate.identifierLabel)}<input id="create-item-identifier" maxLength={40} pattern={selectedDealTemplate.identifierPattern} title={t(selectedDealTemplate.identifierHelp)} aria-describedby="create-item-identifier-help" placeholder={t(selectedDealTemplate.identifierPlaceholder)} spellCheck={false} aria-invalid={identifierEntered&&!identifierValid} value={draft.serialNumber} onChange={event=>setDraft({...draft,serialNumber:dealTemplate==='vehicle'?event.target.value.toUpperCase():event.target.value})}/><small id="create-item-identifier-help" className={`identifier-feedback ${identifierEntered?(identifierValid?'valid':'invalid'):''}`}>{t(identifierEntered?(identifierValid?'Format looks correct. This checks format only, not ownership or authenticity.':selectedDealTemplate.identifierHelp):'Stored privately; only last characters shown')}</small></label><div className="two"><label>{t('Handoff')}<select value={draft.deliveryMethod} onChange={event=>setDraft({...draft,deliveryMethod:event.target.value as DealDraft['deliveryMethod']})}><option value="Meet in person">{t('Meet in person')}</option><option value="Ship to buyer">{t('Ship to buyer')}</option></select></label><label>{t('Offer valid for')}<select value={draft.expiresInDays||7} onChange={event=>setDraft({...draft,expiresInDays:Number(event.target.value)})}><option value={1}>{t('1 day')}</option><option value={3}>{t('3 days')}</option><option value={7}>{t('7 days')}</option><option value={14}>{t('14 days')}</option><option value={30}>{t('30 days')}</option></select></label></div><div className="notice"><ShieldCheck/><span>{t('The Deal Link is not public until you confirm.')}</span></div></form></section>}
         {!reviewingDraft&&createStep===3&&<form id="create-step-3" className="create-media-step" onSubmit={reviewDraft}><section className="media-picker"><label>{t('Item photos or video')}<input className="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,video/mp4,video/webm" multiple onChange={event=>{const added=Array.from(event.target.files||[]);setPhotos(previous=>{const combined=[...previous,...added].filter((file,index,all)=>all.findIndex(other=>other.name===file.name&&other.size===file.size)===index).slice(0,6);let videoSeen=false;return combined.filter(file=>!isVideoFile(file)||(!videoSeen&&(videoSeen=true)))});event.currentTarget.value=''}}/><small>{t('Choose photos together or add them one at a time')} · {photos.length} {t('of 6')} {t('selected')}</small></label><p className="media-privacy"><ShieldCheck/>{t('Photo privacy: location and camera metadata are removed before upload.')}</p>{photos.length>0&&<div className="photo-previews">{photos.map((file,index)=><div key={`${file.name}-${index}`}><FilePreview file={file} alt={`${t('Preview')} ${index+1}`}/><span>{t(isVideoFile(file)?'Item video':index===0?'Main photo':'Photo')} {index>0&&!isVideoFile(file)?index+1:''}</span></div>)}</div>}</section><DealPhotoGuide template={selectedDealTemplate} count={photos.filter(file=>!file.type.startsWith('video/')).length}/><p className="create-media-optional"><ImagePlus/><span><b>{t('Photos are recommended, not required')}</b><small>{t('You can continue to review now and add more media before publishing.')}</small></span></p></form>}
