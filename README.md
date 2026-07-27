@@ -26,12 +26,23 @@ A mobile-first proof of concept for creating a trusted transaction record and sh
 
 ## Run locally
 
+Use Node.js 24 or later and npm. The repository intentionally keeps one lockfile so local,
+continuous-integration, Preview, and production installs resolve the same dependency graph.
+
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
 Open the address shown in the terminal. No credentials are needed for the demo; data is held in browser state.
+
+Before opening a pull request, run:
+
+```bash
+npm run verify
+```
+
+This performs the TypeScript check, foundation/security configuration tests, and a production build.
 
 ## Production setup
 
@@ -44,4 +55,8 @@ Open the address shown in the terminal. No credentials are needed for the demo; 
 
 This build records consent and deal terms; it is not an escrow service and does not hold funds. “Verification” is a transparent placeholder until a compliant vendor is connected. Legal counsel should review the agreement wording, privacy policy, evidence retention, and marketplace/payment obligations before launch.
 
-See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for product decisions and [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) for the delivery plan.
+See [PROJECT_BRIEF.md](PROJECT_BRIEF.md) for the original product brief and
+[docs/production-readiness/README.md](docs/production-readiness/README.md) for the current US
+production-readiness program, security architecture, release gates, and ordered implementation
+backlog. The older [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md) is retained as historical
+MVP context and does not override the production-readiness gates.
