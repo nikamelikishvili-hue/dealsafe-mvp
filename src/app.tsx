@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, Bookmark, Boxes, Briefcase, CalendarClock, CalendarDays, Camera, Car, Check, ChevronDown, CircleCheckBig, Clock3, Copy, CreditCard, Eye, EyeOff, FileCheck2, FileDown, FileSignature, Fingerprint, Flag, Gamepad2, Gem, ImagePlus, Laptop, Link2, LockKeyhole, MailCheck, MapPinned, Menu, MessageCircle, Package, PackageCheck, Pencil, Plus, QrCode, Route, Scale, ScanSearch, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Tablet, Trash2, Truck, Watch, Wrench, X, ZoomIn } from 'lucide-react';
 import { DEMO_DEAL_PUBLIC_ID, demoRepository } from './services/demoRepository';
-import { acceptPublicDeal, askDealQuestion, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealEvidenceSignedUrl, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminDisputes, getAdminReports, getAdminRevenueSummary, getAdminRevenueTransactions, getDealInquiries, getDealInspection, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicAgreementHistory, getPublicDeal, getPublicSellerDeclaration, getPublicSellerTrustProfile, getPublicTrustPassport, getSellerShippingEvidenceReadiness, getStoredSession, getTrustPassportSettings, isCurrentUserDealSeller, isDealSaved, isSupabaseConfigured, listDealEvidence, listUserDeals, makeDealOffer, markArrived, markSessionActivity, openDealDispute, proposeMeeting, publishUserDealDraft, recordDealInspection, refreshSession, renewDealLink, reorderDealMedia, replyDealInquiry, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminDispute, resolveAdminDisputeFinancial, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, setDealSaved, setTrustPassportEnabled, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealEvidence, uploadDealPhotos, verifyAgreementRecord, type AdminDispute, type AdminReport, type AdminRevenueSummary, type AdminRevenueTransaction, type AgreementHistoryVersion, type AgreementVerificationResult, type DealEvidence, type DealInquiry, type DealInspection, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type EvidenceType, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type SellerDeclarationRecord, type SellerShippingEvidenceReadiness, type StoredSession, type TimelineEvent, type TrustPassport, type TrustPassportSettings } from './services/supabaseRest';
+import { acceptPublicDeal, askDealQuestion, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealEvidenceSignedUrl, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminCatalogAdoption, getAdminDisputes, getAdminReports, getAdminRevenueSummary, getAdminRevenueTransactions, getDealInquiries, getDealInspection, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicAgreementHistory, getPublicDeal, getPublicSellerDeclaration, getPublicSellerTrustProfile, getPublicTrustPassport, getSellerShippingEvidenceReadiness, getStoredSession, getTrustPassportSettings, isCurrentUserDealSeller, isDealSaved, isSupabaseConfigured, listDealEvidence, listUserDeals, makeDealOffer, markArrived, markSessionActivity, openDealDispute, proposeMeeting, publishUserDealDraft, recordDealInspection, refreshSession, renewDealLink, reorderDealMedia, replyDealInquiry, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminDispute, resolveAdminDisputeFinancial, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, setDealSaved, setTrustPassportEnabled, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealEvidence, uploadDealPhotos, verifyAgreementRecord, type AdminCatalogAdoption, type AdminDispute, type AdminReport, type AdminRevenueSummary, type AdminRevenueTransaction, type AgreementHistoryVersion, type AgreementVerificationResult, type DealEvidence, type DealInquiry, type DealInspection, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type EvidenceType, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type SellerDeclarationRecord, type SellerShippingEvidenceReadiness, type StoredSession, type TimelineEvent, type TrustPassport, type TrustPassportSettings } from './services/supabaseRest';
 import { markAllNotificationsRead, markDealNotificationsRead } from './services/supabaseRest';
 import { configureBuyerAccessCode, getDealAcceptanceProtection } from './services/supabaseRest';
 import { getDealParticipants, type DealParticipants } from './services/supabaseRest';
@@ -17,7 +17,7 @@ import type { Deal, DealDraft } from './domain';
 import { amountForInput, currencyStep, formatMoney, toMinorUnits } from './currency';
 import { createAgreementFingerprint } from './agreementFingerprint';
 import { filterCatalogDeals, mergeCatalogSearchParams, readCatalogSearchState } from './catalogSearch';
-import { OTHER_CATALOG_VALUE, buildDealCatalogIdentity, buildSmartCatalogTitle, emptySmartCatalogSelection, isGuidedCatalogCategory, matchCatalogValue, sanitizeSmartCatalogSelection, vehicleCatalog, vehicleYears, type SmartCatalogCategoryId, type SmartCatalogSelection } from './smartCatalog';
+import { OTHER_CATALOG_VALUE, buildDealCatalogIdentity, buildSmartCatalogTitle, emptySmartCatalogSelection, isGuidedCatalogCategory, matchCatalogValue, sanitizeSmartCatalogSelection, smartCatalogVersion, vehicleCatalog, vehicleYears, type SmartCatalogCategoryId, type SmartCatalogSelection } from './smartCatalog';
 import { decodeVehicleVin, type VehicleVinResult } from './services/catalogService';
 import './styles.css';
 import './security.css';
@@ -55,6 +55,7 @@ import './report-deal.css';
 import './admin-center.css';
 import './admin-disputes.css';
 import './admin-revenue.css';
+import './admin-catalog.css';
 import './risk-check.css';
 import './seller-trust.css';
 import './trust-passport.css';
@@ -389,6 +390,55 @@ function WorkspaceDealExplorer({deals,savedDeals,onOpen,onCreate}:{deals:Deal[];
     <SavedDealsPanel items={filteredSavedDeals} totalCount={savedDeals.length} onOpen={onOpen}/>
     <EnhancedDashboard deals={filteredDeals} allDeals={deals} onOpen={onOpen} onCreate={onCreate}/>
   </>;
+}
+
+function AdminCatalogCenter({session}:{session:StoredSession}){
+  const [days,setDays]=useState<7|30|90>(30);
+  const [rows,setRows]=useState<AdminCatalogAdoption[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [message,setMessage]=useState('');
+  const load=async(activeDays=days)=>{
+    setLoading(true);
+    setMessage('');
+    try{setRows(await getAdminCatalogAdoption(session,activeDays))}
+    catch(error){setRows([]);setMessage(error instanceof Error?error.message:'Could not load catalog adoption')}
+    finally{setLoading(false)}
+  };
+  useEffect(()=>{void load(days)},[session.accessToken,days]);
+  const totals=rows.reduce((summary,row)=>({
+    deals:summary.deals+Number(row.deal_count||0),
+    brands:summary.brands+Number(row.structured_brand_count||0),
+    models:summary.models+Number(row.structured_model_count||0),
+    fallbacks:summary.fallbacks+Number(row.manual_fallback_count||0),
+    completed:summary.completed+Number(row.completed_count||0),
+  }),{deals:0,brands:0,models:0,fallbacks:0,completed:0});
+  const percent=(value:number)=>totals.deals?`${Math.round(value/totals.deals*100)}%`:'0%';
+  const activeVersionDeals=rows.filter(row=>row.catalog_version===smartCatalogVersion).reduce((total,row)=>total+Number(row.deal_count||0),0);
+  const cards=[
+    {label:'Active version adoption',value:percent(activeVersionDeals),detail:`Catalog ${smartCatalogVersion}`},
+    {label:'Structured brand coverage',value:percent(totals.brands),detail:`${totals.brands} of ${totals.deals} deals`},
+    {label:'Structured model coverage',value:percent(totals.models),detail:`${totals.models} of ${totals.deals} deals`},
+    {label:'Manual fallback',value:percent(totals.fallbacks),detail:`${totals.fallbacks} deals need coverage review`},
+  ];
+  return <section className="admin-catalog">
+    <div className="admin-catalog-heading">
+      <div className="admin-catalog-title"><Boxes/><div><p className="eyebrow">{t('Catalog operations')}</p><h2>{t('Catalog governance')}</h2><span>{t('Monitor version adoption and manual fallback without exposing deal or participant identifiers.')}</span></div></div>
+      <div className="admin-catalog-controls"><label>{t('Window')}<select value={days} onChange={event=>setDays(Number(event.target.value) as 7|30|90)}><option value={7}>{t('7 days')}</option><option value={30}>{t('30 days')}</option><option value={90}>{t('90 days')}</option></select></label><button className="secondary" onClick={()=>void load()} disabled={loading}>{t(loading?'Refreshing…':'Refresh')}</button></div>
+    </div>
+    <div className="admin-catalog-release"><CircleCheckBig/><div><b>{t('Active governed release')}</b><span>{smartCatalogVersion} · U.S. launch catalog · {t('historical deal versions remain unchanged')}</span></div></div>
+    {message&&<div className="notice" role="alert">{t(message)}</div>}
+    {loading&&!rows.length?<div className="admin-catalog-empty">{t('Loading catalog adoption…')}</div>:<>
+      <div className="admin-catalog-grid">{cards.map(card=><article key={card.label}><span>{t(card.label)}</span><strong>{card.value}</strong><small>{t(card.detail)}</small></article>)}</div>
+      <div className="admin-catalog-table-wrap">
+        <table className="admin-catalog-table">
+          <thead><tr><th>{t('Version and category')}</th><th>{t('Deals')}</th><th>{t('Brand')}</th><th>{t('Model')}</th><th>{t('Fallback')}</th><th>{t('Lifecycle')}</th></tr></thead>
+          <tbody>{rows.map(row=><tr key={`${row.catalog_version}-${row.category_id}`}><td><b>{row.category_id.replaceAll('-',' ')}</b><small>{row.catalog_version}</small></td><td>{row.deal_count}</td><td>{row.structured_brand_count}</td><td>{row.structured_model_count}</td><td><span className={Number(row.manual_fallback_count)>0?'needs-review':''}>{row.manual_fallback_count}</span></td><td><small>{row.draft_count} {t('draft')} · {row.published_count} {t('published')} · {row.accepted_count} {t('accepted')} · {row.completed_count} {t('completed')}</small></td></tr>)}</tbody>
+        </table>
+        {!rows.length&&!message&&<div className="admin-catalog-empty">{t(`No catalog activity in the last ${days} days.`)}</div>}
+      </div>
+      <p className="admin-catalog-note"><ShieldCheck size={16}/>{t('Only aggregate version and category counts are returned. Deal IDs, people, addresses, serials, evidence, and payments are excluded.')}</p>
+    </>}
+  </section>;
 }
 
 function DealSafetyActions({deal,session,onStatus}:{deal:Deal;session:StoredSession;onStatus:(status:Deal['status'])=>void}){
@@ -2142,7 +2192,7 @@ export function App() {
       {view==='verify'&&<section className="agreement-verifier-page"><button className="back" onClick={()=>goHomeSection()}>← {t('Back to home')}</button><p className="eyebrow">{t('Agreement verification')}</p><h1>{t('Verify an agreement')}</h1><p className="lede small">{t('Use the Deal ID and SHA-256 agreement code saved with the record.')}</p><AgreementVerifier/></section>}
       {Object.prototype.hasOwnProperty.call(publicInfoPaths,view)&&<PublicInfoPage view={view as PublicInfoView} onBack={()=>goHomeSection()} onCreate={openCreate}/>}
       {view==='home'&&<InstallApp/>}
-      {view==='admin'&&session&&isAdmin&&<><AdminRevenueCenter session={session} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/><AdminDisputeCenter session={session}/><AdminReportCenter session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/></>}
+      {view==='admin'&&session&&isAdmin&&<><AdminCatalogCenter session={session}/><AdminRevenueCenter session={session} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/><AdminDisputeCenter session={session}/><AdminReportCenter session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/></>}
       {view==='published'&&active&&<PublishedDealSuccess deal={active} warning={authMessage} session={session} acceptanceProtected={acceptanceProtected} onProtectionChanged={setAcceptanceProtected} onOpen={()=>{setAuthMessage('');setView('deal')}} onDashboard={()=>goHomeSection()} onCreateAnother={openCreate}/>}
       {view==='create'&&authMessage&&<div className="creation-error notice">{t(authMessage)}</div>}
       {view==='create'&&creating&&<div className="creation-progress notice">{t('Creating your Deal Link…')}</div>}

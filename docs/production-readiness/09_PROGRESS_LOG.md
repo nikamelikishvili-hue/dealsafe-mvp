@@ -407,3 +407,40 @@ This log records completed delivery evidence. A backlog item is not marked compl
 - CAT-006: define catalog ownership, release evidence, update cadence, adoption
   metrics, and a tested rollback procedure before adding more external datasets.
 
+## 2026-07-27 — CAT-006 catalog governance and rollback controls
+
+### Implemented
+
+- Added an immutable active release pointer and versioned release manifest for
+  catalog `2026-07-27.2`, including dataset checksum, source ownership, U.S.
+  market, release evidence, review cadence, approved metrics, and rollback
+  policy.
+- Added a release validator that rejects checksum drift, path traversal,
+  unexpected categories, duplicate catalog identities, missing source owners,
+  incomplete verification evidence, unsafe analytics dimensions, and
+  destructive rollback requirements.
+- Made `catalog:verify` the first step in the repository-wide release gate.
+- Added a catalog governance runbook covering three-role approval, source
+  policy, monthly and emergency review, adoption review, and a rollback that
+  preserves the structured snapshot recorded on every historical deal.
+- Added an administrator-only aggregate RPC for 7-, 30-, and 90-day catalog
+  adoption. The result is grouped only by catalog version and category and does
+  not return deal, participant, address, serial, evidence, message, or payment
+  identifiers.
+- Added a responsive Admin catalog panel showing active-version adoption,
+  structured brand/model coverage, manual fallback, and lifecycle aggregates.
+
+### Verification target
+
+- Catalog manifest validator, TypeScript, repository tests, secret scan,
+  production build, Preview navigation smoke, database authorization checks,
+  and responsive Admin catalog review must pass before merge.
+- The production deployment must reference the reviewed merge commit and
+  production access protection remains enabled.
+
+### Next catalog control
+
+- Continue catalog expansion only through a new immutable release manifest.
+  Use the 30-day admin aggregates to prioritize real coverage gaps before
+  adding another external dataset.
+

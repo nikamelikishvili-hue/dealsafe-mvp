@@ -231,6 +231,7 @@ declare
     'create_deal_shipment',
     'current_user_app_role',
     'generate_handoff_pin',
+    'get_admin_catalog_adoption',
     'get_admin_disputes',
     'get_admin_reports',
     'get_admin_revenue_summary',

@@ -7,11 +7,12 @@
     "dev": "vite",
     "typecheck": "tsc -b --pretty false",
     "test": "node --test --test-isolation=none tests/foundation.test.mjs",
+    "catalog:verify": "node scripts/validate-catalog-release.mjs",
     "security:secrets": "node scripts/scan-repository-secrets.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "smoke:preview": "node scripts/smoke-preview.mjs",
-    "verify": "npm run typecheck && npm test && npm run security:secrets && npm run build && npm run smoke:preview"
+    "verify": "npm run catalog:verify && npm run typecheck && npm test && npm run security:secrets && npm run build && npm run smoke:preview"
   },
   "dependencies": {
     "lucide-react": "1.25.0",

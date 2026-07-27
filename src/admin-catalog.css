@@ -1,0 +1,252 @@
+.admin-catalog {
+  max-width: 1040px;
+  margin: 30px auto 24px;
+  padding: 30px;
+  border: 1px solid #d8e3ee;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 100% 0, rgba(54, 196, 180, .12), transparent 30%),
+    linear-gradient(145deg, #fff, #f7faff);
+  box-shadow: 0 18px 48px rgba(24, 53, 91, .08);
+}
+
+.admin-catalog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.admin-catalog-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.admin-catalog-title > svg {
+  width: 34px;
+  height: 34px;
+  padding: 8px;
+  box-sizing: content-box;
+  border-radius: 14px;
+  color: #245bd7;
+  background: #eaf1ff;
+}
+
+.admin-catalog-title .eyebrow {
+  margin: 0;
+  color: #245bd7;
+}
+
+.admin-catalog-title h2 {
+  margin: 4px 0 5px;
+  font: 800 clamp(28px, 4vw, 40px) Manrope, sans-serif;
+  color: #101d35;
+}
+
+.admin-catalog-title span {
+  display: block;
+  max-width: 610px;
+  color: #667389;
+  line-height: 1.55;
+}
+
+.admin-catalog-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.admin-catalog-controls label {
+  display: grid;
+  gap: 5px;
+  color: #5f6d82;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-catalog-controls select {
+  min-width: 120px;
+  margin: 0;
+  padding: 10px 34px 10px 12px;
+  border-color: #cfdbea;
+  background-color: #fff;
+}
+
+.admin-catalog-controls .secondary {
+  min-height: 42px;
+}
+
+.admin-catalog-release {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 24px 0 18px;
+  padding: 13px 15px;
+  border: 1px solid #bfe4dc;
+  border-radius: 14px;
+  color: #205e59;
+  background: #effaf7;
+}
+
+.admin-catalog-release svg {
+  flex: none;
+  color: #159d8e;
+}
+
+.admin-catalog-release div {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-catalog-release span {
+  color: #5f7774;
+  font-size: 13px;
+}
+
+.admin-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-catalog-grid article {
+  display: grid;
+  gap: 7px;
+  min-height: 130px;
+  padding: 18px;
+  border: 1px solid #dce5f0;
+  border-radius: 17px;
+  background: rgba(255, 255, 255, .9);
+}
+
+.admin-catalog-grid span {
+  color: #647187;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+
+.admin-catalog-grid strong {
+  color: #142440;
+  font: 800 30px Manrope, sans-serif;
+}
+
+.admin-catalog-grid small {
+  color: #778398;
+  line-height: 1.35;
+}
+
+.admin-catalog-table-wrap {
+  overflow-x: auto;
+  margin-top: 18px;
+  border: 1px solid #dce5f0;
+  border-radius: 17px;
+  background: #fff;
+}
+
+.admin-catalog-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+.admin-catalog-table th,
+.admin-catalog-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e7edf4;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.admin-catalog-table th {
+  color: #66758b;
+  background: #f7f9fc;
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.admin-catalog-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.admin-catalog-table td:first-child b {
+  display: block;
+  color: #172642;
+  text-transform: capitalize;
+}
+
+.admin-catalog-table td:first-child small {
+  color: #7b8799;
+}
+
+.admin-catalog-table .needs-review {
+  display: inline-flex;
+  min-width: 28px;
+  justify-content: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #8b5e12;
+  background: #fff3d8;
+  font-weight: 800;
+}
+
+.admin-catalog-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 16px 0 0;
+  color: #68768b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-catalog-note svg {
+  flex: none;
+  color: #245bd7;
+}
+
+.admin-catalog-empty {
+  padding: 30px;
+  color: #768397;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .admin-catalog-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .admin-catalog {
+    margin-top: 16px;
+    padding: 20px 14px;
+    border-radius: 18px;
+  }
+
+  .admin-catalog-heading {
+    display: grid;
+  }
+
+  .admin-catalog-controls,
+  .admin-catalog-controls label,
+  .admin-catalog-controls select,
+  .admin-catalog-controls .secondary {
+    width: 100%;
+  }
+
+  .admin-catalog-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-catalog-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-catalog-grid article {
+    min-height: 105px;
+  }
+}
