@@ -219,6 +219,37 @@ export async function supabaseAuthRequest(path, init) {
   }
 }
 
+export async function currentUserAppRole(accessToken) {
+  const { url, key } = configuredSupabase();
+  try {
+    const upstream = await fetch(`${url}/rest/v1/rpc/current_user_app_role`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    });
+    const role = await upstream.json().catch(() => null);
+    if (
+      !upstream.ok
+      || typeof role !== 'string'
+      || !['member', 'support', 'compliance', 'admin'].includes(role)
+    ) {
+      throw new Error('Application role could not be verified.');
+    }
+    return role;
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Application role could not be verified.') {
+      throw error;
+    }
+    const providerError = new Error('Application role provider request failed.', { cause: error });
+    providerError.code = providerFailureCode(error);
+    throw providerError;
+  }
+}
+
 export async function authPayload(upstream) {
   const data = await upstream.json().catch(() => null);
   return data && typeof data === 'object' ? data : {};
