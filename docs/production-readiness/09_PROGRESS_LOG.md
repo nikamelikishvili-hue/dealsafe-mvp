@@ -1059,12 +1059,19 @@ automatic payout.
   notices. Correlation lookup is an operator requirement, not an automatic
   advisor-driven index.
 
+### DAT-005 release evidence
+
+- Reviewed repository change: PR [#67](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/67), limited to the six governed DAT-005 files.
+- GitHub workflow `30361415168` (run 77) completed successfully for exact head commit `eddfdb630eb5f9e7da78b17f46c7574c04adac75`.
+- Protected Preview `dpl_J2qEGVovpc2SxL72Rdmd5BUzY2bJ` was READY on that exact head commit with clean errors-only build output and no warning, error, or fatal runtime logs.
+- Squash merge produced exact main commit `e52c015f0adc3e2d7703552f2ec305090f159ee9`.
+- Protected production deployment `dpl_DKuZWY1UyX6unmhgirJ9C94gGrhF` was READY on that exact merge commit with clean errors-only build output and no warning, error, or fatal runtime logs.
+- The Vercel project remained `live: false`, on Node.js 24.x, with no public/custom domain attached.
+
 ### DAT-005 state
 
-**Complete in the production database; repository release pending.** The
-append-only triggers, least-privilege grants, and correlation identifiers are
-active. The full repository gate, protected Preview, reviewed merge, and exact
-protected production deployment remain required before the batch is closed.
+**Complete.** The production database, repository gate, protected Preview,
+reviewed merge, and exact protected production deployment all passed.
 
 This work does not authorize public launch, real-money processing, automatic
 payout, or deletion of production history.
