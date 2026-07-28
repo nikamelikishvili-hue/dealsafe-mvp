@@ -139,6 +139,54 @@ export function readRefreshToken(request) {
   return null;
 }
 
+export function readBearerToken(request) {
+  const authorization = header(request, 'authorization');
+  if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) return null;
+  const token = authorization.slice(7).trim();
+  return token && token.length <= 8192 ? token : null;
+}
+
+export function decodeAccessTokenClaims(accessToken) {
+  try {
+    const encoded = accessToken.split('.')[1];
+    if (!encoded) return {};
+    const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = Buffer.from(
+      normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='),
+      'base64',
+    ).toString('utf8');
+    const claims = JSON.parse(decoded);
+    return claims && typeof claims === 'object' && !Array.isArray(claims) ? claims : {};
+  } catch {
+    return {};
+  }
+}
+
+export function safeMfaFactors(user) {
+  if (!Array.isArray(user?.factors)) return [];
+  return user.factors
+    .filter((factor) => (
+      factor
+      && factor.status === 'verified'
+      && factor.factor_type === 'totp'
+      && typeof factor.id === 'string'
+    ))
+    .map((factor) => ({
+      id: factor.id,
+      factorType: 'totp',
+      friendlyName: typeof factor.friendly_name === 'string' && factor.friendly_name.trim()
+        ? factor.friendly_name.trim().slice(0, 80)
+        : 'Authenticator app',
+      createdAt: typeof factor.created_at === 'string' ? factor.created_at : null,
+      updatedAt: typeof factor.updated_at === 'string' ? factor.updated_at : null,
+    }));
+}
+
+export function hasVerifiedMfaFactor(user) {
+  return Array.isArray(user?.factors)
+    && user.factors.some((factor) => factor?.status === 'verified');
+}
+
 export function setRefreshCookie(response, refreshToken) {
   response.setHeader(
     'Set-Cookie',
