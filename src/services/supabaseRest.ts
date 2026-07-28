@@ -661,7 +661,32 @@ export async function setDealPaymentMethod(session:StoredSession,dealId:string,m
 export async function confirmDealPaymentMethod(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/confirm_deal_payment_method`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not confirm payment method')}}
 export async function markDealPaymentSent(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/mark_deal_payment_sent`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not record payment sent')}}
 export async function markDealPaymentReceived(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/mark_deal_payment_received`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not confirm payment received')}}
-async function invokeEdgeFunction<T>(session:StoredSession,name:string,body:Record<string,unknown>){const response=await authenticatedFetch(session,`${supabaseUrl}/functions/v1/${name}`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(body)});const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.error||data?.message||'Secure payment service is unavailable');return data as T}
+export class SecurePaymentServiceError extends Error{
+  readonly code:string;
+  readonly correlationId:string|null;
+  readonly retryable:boolean;
+  constructor(message:string,code:string,correlationId:string|null,retryable:boolean){
+    super(message);
+    this.name='SecurePaymentServiceError';
+    this.code=code;
+    this.correlationId=correlationId;
+    this.retryable=retryable;
+  }
+}
+async function invokeEdgeFunction<T>(session:StoredSession,name:string,body:Record<string,unknown>){
+  const response=await authenticatedFetch(session,`${supabaseUrl}/functions/v1/${name}`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(body)});
+  const data=await response.json().catch(()=>null) as {error?:unknown;code?:unknown;correlationId?:unknown;retryable?:unknown}|null;
+  if(!response.ok){
+    const safeMessage=typeof data?.error==='string'&&data.error.length<=240?data.error:'Secure payment service is unavailable.';
+    const code=typeof data?.code==='string'&&/^[a-z0-9_]{1,64}$/.test(data.code)?data.code:'payment_service_error';
+    const bodyReference=typeof data?.correlationId==='string'&&/^[0-9a-f-]{36}$/i.test(data.correlationId)?data.correlationId:null;
+    const headerReference=response.headers.get('X-Dealivra-Correlation-Id');
+    const correlationId=bodyReference||(headerReference&&/^[0-9a-f-]{36}$/i.test(headerReference)?headerReference:null);
+    const referenceText=correlationId?` Support reference: ${correlationId}.`:'';
+    throw new SecurePaymentServiceError(`${safeMessage}${referenceText}`,code,correlationId,data?.retryable===true);
+  }
+  return data as T;
+}
 export async function getStripeConnectStatus(session:StoredSession){return invokeEdgeFunction<StripeConnectStatus>(session,'stripe-connect',{action:'status'})}
 export async function startStripeConnectOnboarding(session:StoredSession,dealPublicId:string){return invokeEdgeFunction<{url:string;expiresAt:number}>(session,'stripe-connect',{action:'onboard',dealPublicId})}
 export async function getProtectedPaymentStatus(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_protected_payment_status`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.message||'Could not load protected payment');return (data as ProtectedPaymentStatus[])[0]||null}

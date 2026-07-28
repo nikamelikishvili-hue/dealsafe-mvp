@@ -1,5 +1,12 @@
 import { adminClient, errorResponse, handleBrowserRequest, json, requireUser, stripeRequest } from "../_shared/common.ts";
 import { type FinancialCommand, verifyTrustedStripePayment } from "../_shared/financial.ts";
+import { linkFinancialCommandObservation } from "../_shared/payment-ledger.ts";
+import {
+  paymentError,
+  providerRequestId,
+  recordPaymentSuccess,
+  startPaymentOperation,
+} from "../_shared/payment-observability.ts";
 
 type StripeTransfer = {
   id: string;
@@ -34,16 +41,22 @@ async function failClaim(commandId: string | null, claimToken: string | null, co
   }
 }
 
-Deno.serve((request) => handleBrowserRequest(request, async () => {
+Deno.serve((request) => {
+  const context = startPaymentOperation("stripe-release-payment");
+  return handleBrowserRequest(request, async () => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   let commandId: string | null = null;
   let claimToken: string | null = null;
+  let dealIdForLog: string | null = null;
   let providerMayBeComplete = false;
   try {
     const user = await requireUser(request);
     const { dealId } = await request.json() as { dealId?: string };
-    if (!dealId || !uuidPattern.test(dealId)) throw new Error("Deal is required");
+    if (!dealId || !uuidPattern.test(dealId)) {
+      throw paymentError("deal_required", "Select a valid deal before requesting payout review.", 400);
+    }
+    dealIdForLog = dealId;
 
     const admin = adminClient();
     const { data, error: prepareError } = await admin.rpc(
@@ -57,26 +70,47 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       },
     );
     if (prepareError || !data) {
-      throw new Error("This payout is not eligible for release or requires operations review");
+      throw paymentError(
+        "release_not_eligible",
+        "This payout is not eligible for release or requires operations review.",
+        409,
+      );
     }
 
     const command = data as FinancialCommand;
     if (command.disposition === "succeeded" && command.providerObjectId) {
+      recordPaymentSuccess(context, "release_reused", { dealId });
       return json({ released: true, transferId: command.providerObjectId, idempotent: true });
     }
     if (command.disposition === "in_progress") {
-      throw new Error("This payout is already being reviewed. Please try again shortly.");
+      throw paymentError(
+        "release_in_progress",
+        "This payout is already being reviewed. Please try again shortly.",
+        409,
+        { retryable: true },
+      );
     }
 
     commandId = command.commandId || null;
     claimToken = command.claimToken || null;
+    await linkFinancialCommandObservation(context, commandId, claimToken);
     try {
       await verifyTrustedStripePayment(command, "transfer");
     } catch (error) {
+      await linkFinancialCommandObservation(
+        context,
+        commandId,
+        claimToken,
+        providerRequestId(error),
+      );
       await failClaim(commandId, claimToken, safeVerificationCode(error));
       commandId = null;
       claimToken = null;
-      throw new Error("Payout verification did not pass. Operations review is required.");
+      throw paymentError(
+        "release_verification_failed",
+        "Payout verification did not pass. Operations review is required.",
+        409,
+      );
     }
 
     const params = new URLSearchParams();
@@ -96,9 +130,21 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       transfer = await stripeRequest<StripeTransfer>("/v1/transfers", {
         params,
         idempotencyKey: command.idempotencyKey,
+        context,
       });
-    } catch {
-      throw new Error("The seller payout needs reconciliation before a safe retry.");
+    } catch (error) {
+      await linkFinancialCommandObservation(
+        context,
+        commandId,
+        claimToken,
+        providerRequestId(error),
+      );
+      throw paymentError(
+        "release_reconciliation_required",
+        "The seller payout needs operations review before a safe retry.",
+        409,
+        { providerRequestId: providerRequestId(error) },
+      );
     }
 
     if (
@@ -113,7 +159,11 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       || transfer.metadata?.dealivra_payment_id !== command.paymentId
       || transfer.metadata?.dealivra_command_id !== command.commandId
     ) {
-      throw new Error("Stripe payout confirmation did not match the approved command.");
+      throw paymentError(
+        "release_confirmation_mismatch",
+        "The payout confirmation did not match the approved command. Operations review is required.",
+        409,
+      );
     }
 
     const { data: finalized, error: finalizeError } = await admin.rpc(
@@ -126,16 +176,34 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       },
     );
     if (finalizeError || !(finalized as { resolved?: boolean } | null)?.resolved) {
-      throw new Error("The payout was created but needs reconciliation before any retry");
+      throw paymentError(
+        "release_recording_uncertain",
+        "The payout was created but needs operations review before any retry.",
+        409,
+      );
     }
 
+    recordPaymentSuccess(context, "release_completed", {
+      commandId,
+      dealId,
+    });
     commandId = null;
     claimToken = null;
     return json({ released: true, transferId: transfer.id });
   } catch (error) {
     if (commandId && claimToken && !providerMayBeComplete) {
+      await linkFinancialCommandObservation(
+        context,
+        commandId,
+        claimToken,
+        providerRequestId(error),
+      );
       await failClaim(commandId, claimToken, "release_unhandled_failure");
     }
-    return errorResponse(error);
+    return errorResponse(error, context, {
+      commandId,
+      dealId: dealIdForLog,
+    });
   }
-}));
+  }, context);
+});
