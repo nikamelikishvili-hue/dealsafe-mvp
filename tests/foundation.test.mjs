@@ -182,6 +182,7 @@ test('the production-readiness specification is complete and linked', () => {
     '19_SECURITY_DEFINER_GOVERNANCE.md',
     '20_AUTH_PASSWORD_SECURITY.md',
     '21_AUTHENTICATED_RPC_MATRIX.md',
+    '22_RLS_POLICY_PERFORMANCE.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -1218,6 +1219,34 @@ test('signed-in SECURITY DEFINER functions have an exact cross-role matrix', () 
   assert.match(standard, /ordinary member is denied by all five administrator readers/);
   assert.match(standard, /does not authorize public\s+launch/);
   assert.match(readinessIndex, /21_AUTHENTICATED_RPC_MATRIX\.md/);
+});
+
+test('participant RLS policies evaluate Auth once without changing role semantics', () => {
+  const migration = readText('supabase/rls_auth_initplan_optimization.sql');
+  const rollbackTests = readText('supabase/tests/rls_auth_initplan_optimization_rollback.sql');
+  const standard = readText('docs/production-readiness/22_RLS_POLICY_PERFORMANCE.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.equal(
+    [...migration.matchAll(/create policy "/g)].length,
+    10,
+    'DBP-001 must govern exactly ten RLS policies',
+  );
+  assert.doesNotMatch(migration, /= auth\.uid\(\)/);
+  assert.match(migration, /= \(select auth\.uid\(\)\)/);
+  assert.match(migration, /\(select public\.is_dealsafe_admin\(\)\)/);
+  assert.match(rollbackTests, /DBP-001 governed RLS policy inventory changed/);
+  assert.match(rollbackTests, /DBP-001 seller lost RLS read access/);
+  assert.match(rollbackTests, /DBP-001 buyer lost RLS read access/);
+  assert.match(rollbackTests, /DBP-001 outsider gained RLS read access/);
+  assert.match(rollbackTests, /DBP-001 RPC-only message table gained direct SELECT access/);
+  assert.match(rollbackTests, /DBP-001 outsider inserted a media record/);
+  assert.match(rollbackTests, /DBP-001 outsider inserted a deal-evidence record/);
+  assert.match(rollbackTests, /set local role authenticated/);
+  assert.match(rollbackTests, /rollback;/);
+  assert.match(standard, /performance remediation may never broaden visibility/i);
+  assert.match(standard, /Foreign-key index recommendations are intentionally excluded/);
+  assert.match(readinessIndex, /22_RLS_POLICY_PERFORMANCE\.md/);
 });
 
 test('protected Edge Functions validate the Auth session row after JWT verification', () => {

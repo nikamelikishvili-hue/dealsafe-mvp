@@ -901,3 +901,45 @@ governed function change automatically reopens this gate.
 This does not authorize public launch, real-money processing, or automatic
 payout. Leaked-password screening remains a separate public-launch blocker on
 the current Supabase plan.
+
+## DBP-001 RLS Auth InitPlan optimization
+
+### Implemented
+
+- Recreated the exact ten advisor-identified participant policies so
+  `auth.uid()` and the administrator helper are evaluated once per statement,
+  not once per candidate row.
+- Preserved every policy name, table, command, `authenticated` role, permissive
+  mode, ownership relationship, participant rule, and evidence uploader rule.
+- Kept `deal_messages` RPC-only; the optimization did not add direct browser
+  table access.
+- Added a production rollback suite using real rows from all six
+  browser-readable governed tables plus transaction-only media/evidence writes.
+
+### Verification evidence
+
+- All 59 repository foundation tests passed and the repository secret scan
+  passed before the production dry-run.
+- The migration plus full seller/buyer/outsider and write matrix first passed
+  inside one production transaction that was completely rolled back.
+- The first dry-run correctly exposed that `deal_messages` has no direct
+  `authenticated` table grant. The suite was tightened to assert this
+  RPC-only boundary instead of broadening access.
+- Migration `rls_auth_initplan_optimization` applied successfully.
+- The standalone post-migration rollback suite passed without returning
+  identity values or retaining its test records.
+- The post-migration Supabase performance advisor reports zero
+  `auth_rls_initplan` findings; all ten targeted warnings are removed.
+- The security advisor reports no new warning class or unreviewed exposure.
+- Foreign-key index recommendations remain a separate measured batch so index
+  write cost and real query value can be reviewed independently.
+
+### DBP-001 state
+
+**Complete in production.** Statement-level Auth evaluation is active and the
+original seller, buyer, outsider, administrator, RPC-only, insert, and delete
+boundaries are regression-tested.
+
+This optimization does not authorize public launch, real-money processing, or
+automatic payout. The project remains closed until the complete launch program
+passes.
