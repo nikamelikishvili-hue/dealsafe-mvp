@@ -1435,8 +1435,9 @@ returns zero blocked privileged accounts.
 
 - Split unfinished-factor cancellation from verified-factor removal so the
   low-risk cleanup path cannot delete an active authenticator.
-- Required a newly issued AAL2 session, no older than ten minutes, before any
-  verified TOTP factor removal.
+- Required `aal2` plus a TOTP verification timestamp no older than ten minutes
+  from the signed JWT `amr` claim before verified-factor removal. A routine
+  access-token refresh cannot reset this verification window.
 - Loaded the application role through the authenticated,
   server-controlled `current_user_app_role` RPC instead of trusting browser
   data or editable user metadata.
