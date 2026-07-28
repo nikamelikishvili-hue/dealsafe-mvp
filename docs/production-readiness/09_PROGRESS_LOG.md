@@ -479,3 +479,46 @@ already-issued short-lived access JWT can remain valid until expiry. Immediate
 active-session validation and cross-device negative authorization evidence are
 still required before SEC-002 is complete.
 
+## 2026-07-28 — SEC-002 immediate active-session enforcement
+
+### Implemented
+
+- Added one owner-bound session lookup that requires an exact Auth user ID,
+  session ID, and optional `not_after` match without exposing session metadata.
+- Added a Data API pre-request control that keeps anonymous and trusted service
+  requests unchanged but returns 401 for a signed-in JWT whose Auth session is
+  no longer active.
+- Added one restrictive Storage policy, so every existing and future
+  authenticated object policy also requires an active Auth session.
+- Updated all four JWT-protected Stripe Edge Functions to validate the Auth
+  session row after the platform and Auth JWT checks.
+- Kept the Stripe webhook on its separate signature-authenticated path.
+- Added a narrow emergency rollback that disables the Data API and Storage
+  enforcement while leaving helpers available to deployed Edge Functions.
+
+### Verification evidence
+
+- Supabase migrations `active_session_validation` and
+  `active_session_enforcement` applied successfully.
+- A current real session was accepted and a random session ID for the same
+  owner was rejected without returning either identifier.
+- Function inspection confirmed `SECURITY DEFINER`, `STABLE`, empty
+  `search_path`, and the intended anon/authenticated/service-role grants.
+- PostgREST inspection confirmed the exact pre-request function is configured.
+- Storage inspection confirmed an `ALL`, authenticated-only, `RESTRICTIVE`
+  policy with active-session checks for reads and writes.
+- The four protected Stripe functions are active with `verify_jwt=true` and the
+  shared session validator; the webhook remains `verify_jwt=false`.
+- Anonymous public Deal Link RPC smoke remained 200 after activation.
+  A Stripe function request without a user JWT remained rejected with 401.
+- Repository coverage increased from 43 to 47 passing tests before the full
+  release gate.
+
+### SEC-002 state
+
+**In progress.** The immediate denial control is deployed. SEC-002 remains open
+until a controlled two-device test proves a revoked device loses Data API,
+private Storage, and protected Edge Function access before its JWT expiry.
+Security notification and suspected-account-takeover recovery evidence also
+remain required.
+

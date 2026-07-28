@@ -1074,6 +1074,63 @@ test('session security UI separates current, other, and global sign-out actions'
   assert.match(styles, /@media\(max-width:720px\)/);
   assert.match(styles, /@media\(prefers-reduced-motion:reduce\)/);
   assert.match(styles, /\.session-security-heading\{[^}]*height:auto;min-height:0/);
-  assert.match(sessionStandard, /does not mark SEC-002 complete/);
-  assert.match(sessionStandard, /already-issued access JWT can remain valid until its\s+short expiry/);
+  assert.match(sessionStandard, /14_IMMEDIATE_SESSION_REVOCATION\.md/);
+  assert.match(sessionStandard, /SEC-002 remains open until the required two-device negative authorization test/);
+});
+
+test('active-session lookup is minimal, owner-bound, and service-only for arbitrary identifiers', () => {
+  const validation = readText('supabase/active_session_validation.sql');
+
+  assert.match(validation, /security definer/g);
+  assert.match(validation, /set search_path = ''/g);
+  assert.match(validation, /active_session\.id = p_session_id/);
+  assert.match(validation, /active_session\.user_id = p_user_id/);
+  assert.match(validation, /active_session\.not_after is null[\s\S]*active_session\.not_after > now\(\)/);
+  assert.match(validation, /request_user_id is distinct from auth\.uid\(\)/);
+  assert.match(validation, /revoke all on function public\.is_auth_session_active_for_service\(uuid, uuid\)[\s\S]*from public, anon, authenticated/);
+  assert.match(validation, /grant execute on function public\.is_auth_session_active_for_service\(uuid, uuid\)[\s\S]*to service_role/);
+});
+
+test('Data API and Storage require a currently active authenticated session with rollback', () => {
+  const enforcement = readText('supabase/active_session_enforcement.sql');
+  const rollback = readText('supabase/active_session_enforcement_rollback.sql');
+
+  assert.match(enforcement, /request_role in \('', 'anon', 'service_role'\)/);
+  assert.match(enforcement, /raise sqlstate 'PGRST'/);
+  assert.match(enforcement, /'status', 401/);
+  assert.match(enforcement, /set pgrst\.db_pre_request = 'public\.enforce_active_auth_session'/);
+  assert.match(enforcement, /as restrictive[\s\S]*for all[\s\S]*to authenticated/);
+  assert.match(enforcement, /select public\.is_current_auth_session_active\(\)/);
+  assert.match(rollback, /reset pgrst\.db_pre_request/);
+  assert.match(rollback, /drop policy if exists "authenticated sessions must be active"/);
+  assert.match(rollback, /notify pgrst, 'reload config'/);
+});
+
+test('protected Edge Functions validate the Auth session row after JWT verification', () => {
+  const common = readText('supabase/functions/_shared/common.ts');
+  const config = readText('supabase/config.toml');
+
+  assert.match(common, /admin\.auth\.getUser\(token\)/);
+  assert.match(common, /claims\.session_id/);
+  assert.match(common, /subject !== data\.user\.id/);
+  assert.match(common, /role !== "authenticated"/);
+  assert.match(common, /\.rpc\(\s*"is_auth_session_active_for_service"/);
+  assert.match(common, /sessionActive !== true/);
+  assert.match(common, /return \(await requireActiveUserSession\(request\)\)\.user/);
+  assert.match(common, /session is invalid or expired\/i\.test\(message\)[\s\S]*\? 401/);
+  assert.match(config, /\[functions\.stripe-webhook\][\s\S]*verify_jwt = false/);
+});
+
+test('immediate-session runbook covers every current request path and the remaining live test', () => {
+  const standard = readText('docs/production-readiness/14_IMMEDIATE_SESSION_REVOCATION.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(standard, /Data API \(`\/rest\/v1`\)/);
+  assert.match(standard, /Storage \(`\/storage\/v1`\)/);
+  assert.match(standard, /Protected Stripe Edge Functions/);
+  assert.match(standard, /Stripe webhook/);
+  assert.match(standard, /Realtime \| Not used/);
+  assert.match(standard, /two-device end-to-end test/);
+  assert.match(standard, /active_session_enforcement_rollback\.sql/);
+  assert.match(readinessIndex, /14_IMMEDIATE_SESSION_REVOCATION\.md/);
 });

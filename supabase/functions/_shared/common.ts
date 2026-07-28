@@ -32,13 +32,57 @@ export function adminClient() {
   );
 }
 
-export async function requireUser(request: Request): Promise<User> {
+type VerifiedUserSession = {
+  user: User;
+  sessionId: string;
+};
+
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  const parts = token.split(".");
+  if (parts.length !== 3) throw new Error("Your session is invalid or expired");
+  try {
+    const normalized = parts[1].replaceAll("-", "+").replaceAll("_", "/");
+    const padding = "=".repeat((4 - normalized.length % 4) % 4);
+    const payload = JSON.parse(atob(normalized + padding));
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      throw new Error("Invalid token payload");
+    }
+    return payload as Record<string, unknown>;
+  } catch {
+    throw new Error("Your session is invalid or expired");
+  }
+}
+
+export async function requireActiveUserSession(request: Request): Promise<VerifiedUserSession> {
   const authorization = request.headers.get("Authorization") || "";
   const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
   if (!token) throw new Error("Sign in is required");
-  const { data, error } = await adminClient().auth.getUser(token);
+
+  const admin = adminClient();
+  const { data, error } = await admin.auth.getUser(token);
   if (error || !data.user) throw new Error("Your session is invalid or expired");
-  return data.user;
+
+  const claims = decodeJwtPayload(token);
+  const sessionId = typeof claims.session_id === "string" ? claims.session_id : "";
+  const subject = typeof claims.sub === "string" ? claims.sub : "";
+  const role = typeof claims.role === "string" ? claims.role : "";
+  if (!sessionId || subject !== data.user.id || role !== "authenticated") {
+    throw new Error("Your session is invalid or expired");
+  }
+
+  const { data: sessionActive, error: sessionError } = await admin.rpc(
+    "is_auth_session_active_for_service",
+    { p_user_id: data.user.id, p_session_id: sessionId },
+  );
+  if (sessionError || sessionActive !== true) {
+    throw new Error("Your session is invalid or expired");
+  }
+
+  return { user: data.user, sessionId };
+}
+
+export async function requireUser(request: Request): Promise<User> {
+  return (await requireActiveUserSession(request)).user;
 }
 
 type StripeRequestOptions = {
@@ -71,7 +115,11 @@ export async function stripeRequest<T>(path: string, options: StripeRequestOptio
 
 export function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "Request failed";
-  const status = /required|invalid|expired|Only |unavailable|must |not ready/i.test(message) ? 400 : 500;
+  const status = /sign in is required|session is invalid or expired/i.test(message)
+    ? 401
+    : /required|invalid|expired|Only |unavailable|must |not ready/i.test(message)
+    ? 400
+    : 500;
   return json({ error: message }, status);
 }
 
