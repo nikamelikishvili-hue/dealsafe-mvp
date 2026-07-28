@@ -29,6 +29,24 @@ This log records completed delivery evidence. A backlog item is not marked compl
 - The production custom domain remains unbound and real-money mode remains
   disabled.
 
+### Review and protected Preview evidence
+
+- Draft PR [#73](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/73)
+  contains exactly seven governed files with no database, payment, or public
+  access change.
+- GitHub workflow `30393806517` (run 95) passed on exact review head
+  `29554cd86e314b11ac248caa788c6d33192b9791`.
+- Protected Preview `dpl_7VHDFr7aPLdY59AdqasRUgg1u5Vb` is READY on that
+  exact head; its errors-only build output and warning/error/fatal runtime scan
+  are clean.
+- Anonymous requests to both the immutable deployment and branch alias return
+  Vercel Authentication `302`, `noindex`, HSTS, and frame-denial headers.
+- The authenticated Preview renders the Dealivra application, and
+  `GET /api/security/csp-report` reaches the deployed Function and fails safely
+  with `Method not allowed`.
+- An authenticated raw application-header capture and one synthetic sanitized
+  CSP POST are still required before SEC-004 can be marked complete.
+
 ## 2026-07-26 — Phase 1 specification and foundation batch
 
 ### Completed
