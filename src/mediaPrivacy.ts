@@ -2,10 +2,10 @@ const maximumSourceBytes=20*1024*1024;
 const maximumImageDimension=2400;
 const outputQuality=0.86;
 
-const videoTypes=new Set(['video/mp4','video/webm']);
+const videoTypes=new Set(['video/mp4','video/webm','video/quicktime']);
 
 export function isVideoUpload(file:File){
-  return videoTypes.has(file.type)||/\.(mp4|webm)$/i.test(file.name);
+  return videoTypes.has(file.type)||/\.(mp4|webm|mov)$/i.test(file.name);
 }
 
 export function fitImageWithinBounds(width:number,height:number,maxDimension=maximumImageDimension){
