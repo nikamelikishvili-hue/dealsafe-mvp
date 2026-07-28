@@ -5,6 +5,7 @@ import {
   requireUser,
 } from "../_shared/common.ts";
 import {
+  detectEvidenceFile,
   evidenceSignedUrlTtlSeconds,
   evidenceUploadIntakeTtlSeconds,
   safeEvidenceFileName,
@@ -16,6 +17,7 @@ import {
 } from "../_shared/evidence-policy.ts";
 import {
   EvidenceScanError,
+  evidenceSha256,
   scanEvidenceBytes,
 } from "../_shared/evidence-scan.ts";
 
@@ -59,6 +61,11 @@ type DealAccess = {
   buyer_id: string | null;
   seller_id: string;
   status: string;
+};
+
+type IntegrityResult = {
+  integrity_status: "verified" | "missing" | "mismatch" | "invalid";
+  integrity_checked_at: string;
 };
 
 class EvidenceEndpointError extends Error {
@@ -387,13 +394,44 @@ async function userIsCaseReviewer(userId: string, dealId: string) {
   return profile?.app_role === "admin" && (count || 0) > 0;
 }
 
+async function recordIntegrityResult(
+  evidenceId: string,
+  userId: string,
+  details: {
+    storagePresent: boolean;
+    structureValid: boolean;
+    observedSha256: string | null;
+    observedSizeBytes: number | null;
+    observedMimeType: string | null;
+  },
+) {
+  const { data, error } = await adminClient().rpc(
+    "record_evidence_integrity_result",
+    {
+      p_evidence_id: evidenceId,
+      p_checked_by: userId,
+      p_storage_present: details.storagePresent,
+      p_structure_valid: details.structureValid,
+      p_observed_sha256: details.observedSha256,
+      p_observed_size_bytes: details.observedSizeBytes,
+      p_observed_mime_type: details.observedMimeType,
+      p_correlation_id: crypto.randomUUID(),
+    },
+  );
+  const result = (Array.isArray(data) ? data[0] : data) as IntegrityResult | null;
+  if (error || !result) throw error || new Error("Evidence integrity result was not recorded");
+  return result;
+}
+
 async function signedUrl(userId: string, evidenceId: string) {
   if (!uuidPattern.test(evidenceId)) {
     throw new EvidenceEndpointError("evidence_required", "The evidence file was not found.");
   }
   const admin = adminClient();
   const { data: evidence, error } = await admin.from("deal_evidence")
-    .select("id,deal_id,storage_path,mime_type,scan_status,deals(seller_id,buyer_id)")
+    .select(
+      "id,deal_id,storage_path,file_name,mime_type,detected_mime_type,file_size_bytes,sha256,scan_status,scanned_at,uploader_role,evidence_type,deals(seller_id,buyer_id)",
+    )
     .eq("id", evidenceId)
     .maybeSingle();
   const deal = Array.isArray(evidence?.deals) ? evidence?.deals[0] : evidence?.deals;
@@ -417,6 +455,50 @@ async function signedUrl(userId: string, evidenceId: string) {
     );
   }
 
+  const { data: file, error: downloadError } = await admin.storage
+    .from("deal-evidence")
+    .download(evidence.storage_path);
+  if (downloadError || !file) {
+    await recordIntegrityResult(evidence.id, userId, {
+      storagePresent: false,
+      structureValid: false,
+      observedSha256: null,
+      observedSizeBytes: null,
+      observedMimeType: null,
+    });
+    throw new EvidenceEndpointError(
+      "evidence_integrity_failed",
+      "This file could not be verified and was not opened.",
+      423,
+    );
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const detected = detectEvidenceFile(bytes);
+  const declaration: EvidenceDeclaration = {
+    claimedMimeType: evidence.detected_mime_type || evidence.mime_type || "",
+    evidenceType: evidence.evidence_type || "",
+    fileName: evidence.file_name || "evidence-file",
+    fileSize: Number(evidence.file_size_bytes || 0),
+    role: evidence.uploader_role || "",
+  };
+  const byteValidation = validateEvidenceBytes(bytes, declaration);
+  const observedSha256 = await evidenceSha256(bytes);
+  const integrity = await recordIntegrityResult(evidence.id, userId, {
+    storagePresent: true,
+    structureValid: byteValidation.ok,
+    observedSha256,
+    observedSizeBytes: bytes.byteLength,
+    observedMimeType: detected?.mimeType || null,
+  });
+  if (integrity.integrity_status !== "verified") {
+    throw new EvidenceEndpointError(
+      "evidence_integrity_failed",
+      "This file could not be verified and was not opened.",
+      423,
+    );
+  }
+
   const { data: signed, error: signedError } = await admin.storage
     .from("deal-evidence")
     .createSignedUrl(evidence.storage_path, evidenceSignedUrlTtlSeconds);
@@ -430,7 +512,18 @@ async function signedUrl(userId: string, evidenceId: string) {
     signed_url_expires_at: expiresAt,
   });
   if (accessError) throw accessError;
-  return json({ url: signed.signedUrl, expiresAt, mimeType: evidence.mime_type });
+  return json({
+    url: signed.signedUrl,
+    expiresAt,
+    mimeType: detected?.mimeType || evidence.detected_mime_type,
+    fileName: evidence.file_name,
+    fileSizeBytes: bytes.byteLength,
+    sha256: observedSha256,
+    scanStatus: evidence.scan_status,
+    scannedAt: evidence.scanned_at,
+    integrityStatus: integrity.integrity_status,
+    integrityCheckedAt: integrity.integrity_checked_at,
+  });
 }
 
 Deno.serve((request) =>
