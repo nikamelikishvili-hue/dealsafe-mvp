@@ -85,7 +85,10 @@ factor, so activation would cause an administrative lockout. The migration now
 contains an atomic rollout guard and refuses to activate unless every
 privileged account has at least two verified TOTP factors. A read-only,
 identifier-free aggregate preflight and the two-device/dual-control operating
-matrix are documented for enrollment.
+matrix are documented for enrollment. The same two-factor floor is now
+enforced at the verified-factor removal API, which also requires a freshly
+issued AAL2 session and separates unfinished enrollment cancellation from
+verified-factor removal.
 
 ## Epic 6 — Evidence and private files
 
