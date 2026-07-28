@@ -97,6 +97,14 @@ export interface AdminCatalogAdoption {
   completed_count:number;
   latest_deal_at:string;
 }
+export interface AccountSession {
+  session_id:string;
+  created_at:string;
+  last_active_at:string;
+  expires_at:string|null;
+  user_agent:string;
+  current_session:boolean;
+}
 export interface RiskAssessment { risk_score:number;risk_level:'low'|'medium'|'high';signals:string[] }
 export interface PublicTrustProfile { display_name:string;verification_status:'not_started'|'pending'|'verified'|'failed';member_since:string;completed_sales:number;rating_count:number;average_rating:number|null }
 export interface TrustPassportSettings { public_id:string;enabled:boolean }
@@ -168,17 +176,23 @@ function clearStoredSession(){
   localStorage.removeItem(legacySessionStorageKey);
 }
 
-async function revokeServerSession(accessToken?:string){
-  await fetch('/api/auth/logout',{
+type SignOutScope='local'|'others'|'global';
+
+async function revokeServerSession(accessToken?:string,scope:SignOutScope='local'){
+  const response=await fetch('/api/auth/logout',{
     method:'POST',
     headers:{
       'Content-Type':'application/json',
       ...(accessToken?{Authorization:`Bearer ${accessToken}`}:{})
     },
     credentials:'same-origin',
-    body:'{}',
+    body:JSON.stringify({scope}),
     keepalive:true,
-  }).catch(()=>{});
+  });
+  if(!response.ok){
+    const data=await response.json().catch(()=>null) as {error?:string}|null;
+    throw new Error(data?.error||'Could not update your signed-in devices.');
+  }
 }
 
 function normalizeSession(value:unknown):StoredSession|null{
@@ -264,7 +278,7 @@ export function getStoredSession(): StoredSession | null {
     ||now-session.createdAt>sessionAbsoluteTimeoutMs
   ){
     clearStoredSession();
-    void revokeServerSession(session.accessToken);
+    void revokeServerSession(session.accessToken).catch(()=>{});
     return null;
   }
   return session;
@@ -336,7 +350,7 @@ export async function refreshSession(session:StoredSession){
 function expireSession(){
   const session=readStoredSession();
   clearStoredSession();
-  void revokeServerSession(session?.accessToken);
+  void revokeServerSession(session?.accessToken).catch(()=>{});
   window.dispatchEvent(new Event(sessionExpiredEvent));
 }
 
@@ -399,7 +413,28 @@ function validatePassword(password:string){
 
 export async function signOut(session:StoredSession|null=getStoredSession()){
   clearStoredSession();
-  await revokeServerSession(session?.accessToken);
+  await revokeServerSession(session?.accessToken,'local').catch(()=>{});
+}
+
+async function sessionForRemoteRevocation(session:StoredSession){
+  const current=getStoredSession();
+  if(!current||current.user.id!==session.user.id){
+    throw new Error('Your session expired. Please sign in again.');
+  }
+  return !current.expiresAt||current.expiresAt-Date.now()<60_000
+    ?refreshSession(current)
+    :current;
+}
+
+export async function signOutOtherSessions(session:StoredSession){
+  const current=await sessionForRemoteRevocation(session);
+  await revokeServerSession(current.accessToken,'others');
+}
+
+export async function signOutEverywhere(session:StoredSession){
+  const current=await sessionForRemoteRevocation(session);
+  await revokeServerSession(current.accessToken,'global');
+  clearStoredSession();
 }
 
 async function accountEmailConfirmed(session:StoredSession){
@@ -567,6 +602,7 @@ export async function generateHandoffPin(session:StoredSession,dealId:string){co
 export async function completeHandoff(session:StoredSession,dealId:string,pin:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/complete_handoff`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_pin:pin})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not complete deal')}}
 export async function submitRating(session:StoredSession,dealId:string,stars:number,comment:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/submit_rating`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_stars:stars,p_comment:comment})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not submit rating')}}
 export async function getMyProfileSummary(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_profile_summary`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load profile')}const rows=await response.json() as ProfileSummary[];if(!rows[0])throw new Error('Profile was not found');return rows[0]}
+export async function getMyAccountSessions(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_account_sessions`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json().catch(()=>null);throw new Error(d?.message||'Could not load signed-in devices')}return await response.json() as AccountSession[]}
 export async function requestIdentityVerification(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/request_identity_verification`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not request verification')}return await response.json() as ProfileSummary['verification_status']}
 export async function cancelDeal(session:StoredSession,dealId:string,reason:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/cancel_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_reason:reason})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not cancel deal')}}
 export async function openDealDispute(session:StoredSession,dealId:string,reason:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/open_deal_dispute`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_reason:reason})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not open dispute')}}

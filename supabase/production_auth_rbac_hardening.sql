@@ -245,6 +245,7 @@ declare
     'get_deal_participants',
     'get_deal_payment_record',
     'get_deal_timeline',
+    'get_my_account_sessions',
     'get_my_notifications',
     'get_my_profile_summary',
     'get_my_saved_deals',
