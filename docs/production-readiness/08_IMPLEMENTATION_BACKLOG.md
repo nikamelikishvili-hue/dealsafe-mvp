@@ -66,6 +66,14 @@ This backlog turns the production specification into controlled delivery work. P
 | SEC-006 | P0 | Add route/action rate limits, CAPTCHA, and abuse telemetry | Defined burst/velocity tests create alerts/blocks |
 | SEC-007 | P1 | Add security notifications and sensitive-change cooldowns | Email/payout/MFA changes are recorded and alerted |
 
+SEC-004 now has repository-level enforcement and regression coverage for CSP,
+HSTS, frame, MIME, referrer, permissions, cross-domain-policy, and reporting
+headers. Its bounded same-origin reporting endpoint removes query strings,
+fragments, identifier-like path segments, samples, referrers, and original
+policy text before logging. SEC-004 remains open until a protected Preview
+proves the actual response headers and a synthetic sanitized event, alert and
+retention ownership are recorded, and rollback is rehearsed.
+
 SEC-003A now provides TOTP enrollment, enrolled-user login challenge, and
 mandatory `aal2` enforcement for `support`, `compliance`, and `admin` across the
 Data API, Storage, and protected Edge Functions. SEC-003 remains open for a
