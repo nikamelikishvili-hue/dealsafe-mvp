@@ -50,6 +50,7 @@ const createResponse = () => ({
 const authProviderSession = (refreshToken, options = {}) => ({
   access_token: `header.${Buffer.from(JSON.stringify({
     exp: 4102444800,
+    iat: options.iat ?? Math.floor(Date.now() / 1000),
     ...(options.aal ? { aal: options.aal } : {}),
   })).toString('base64url')}.signature`,
   refresh_token: refreshToken,
@@ -557,6 +558,134 @@ test('MFA endpoint validates action inputs before contacting the provider', asyn
   assert.equal(response.payload.error, 'The authenticator request is invalid.');
 });
 
+test('privileged MFA removal preserves the two-authenticator floor', async () => {
+  const { default: mfa } = await import('../api/auth/mfa.mjs');
+  const response = createResponse();
+  const factorId = '11111111-1111-4111-8111-111111111111';
+  const factors = [
+    {
+      id: factorId,
+      factor_type: 'totp',
+      status: 'verified',
+      friendly_name: 'Primary authenticator',
+    },
+    {
+      id: '22222222-2222-4222-8222-222222222222',
+      factor_type: 'totp',
+      status: 'verified',
+      friendly_name: 'Backup authenticator',
+    },
+  ];
+  const requested = [];
+  const accessToken = authProviderSession('unused', {
+    aal: 'aal2',
+    factors,
+  }).access_token;
+
+  await withAuthProvider(async (url, init) => {
+    requested.push({ url: String(url), method: init.method });
+    if (String(url).endsWith('/auth/v1/user')) {
+      return new Response(JSON.stringify({
+        id: '00000000-0000-0000-0000-000000000001',
+        factors,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (String(url).endsWith('/rest/v1/rpc/current_user_app_role')) {
+      return new Response(JSON.stringify('admin'), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new Error('The factor delete request must not be sent.');
+  }, () => mfa(authRequest({
+    action: 'unenroll',
+    factorId,
+  }, {
+    authorization: `Bearer ${accessToken}`,
+  }), response));
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.payload.error, /Add and verify another authenticator/);
+  assert.deepEqual(requested.map(item => item.url), [
+    'https://project.example.supabase.co/auth/v1/user',
+    'https://project.example.supabase.co/rest/v1/rpc/current_user_app_role',
+  ]);
+});
+
+test('verified MFA removal requires a recently issued AAL2 session', async () => {
+  const { default: mfa } = await import('../api/auth/mfa.mjs');
+  const response = createResponse();
+  const factorId = '11111111-1111-4111-8111-111111111111';
+  const factors = [{
+    id: factorId,
+    factor_type: 'totp',
+    status: 'verified',
+    friendly_name: 'Primary authenticator',
+  }];
+  const accessToken = authProviderSession('unused', {
+    aal: 'aal2',
+    factors,
+    iat: Math.floor(Date.now() / 1000) - (11 * 60),
+  }).access_token;
+  let providerCalls = 0;
+
+  await withAuthProvider(async (url) => {
+    providerCalls += 1;
+    assert.equal(String(url), 'https://project.example.supabase.co/auth/v1/user');
+    return new Response(JSON.stringify({
+      id: '00000000-0000-0000-0000-000000000001',
+      factors,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, () => mfa(authRequest({
+    action: 'unenroll',
+    factorId,
+  }, {
+    authorization: `Bearer ${accessToken}`,
+  }), response));
+
+  assert.equal(response.statusCode, 403);
+  assert.match(response.payload.error, /Sign in again and verify/);
+  assert.equal(providerCalls, 1);
+});
+
+test('unfinished MFA enrollment cancellation cannot remove a verified factor', async () => {
+  const { default: mfa } = await import('../api/auth/mfa.mjs');
+  const response = createResponse();
+  const factorId = '11111111-1111-4111-8111-111111111111';
+  let providerCalls = 0;
+
+  await withAuthProvider(async (url) => {
+    providerCalls += 1;
+    assert.equal(String(url), 'https://project.example.supabase.co/auth/v1/user');
+    return new Response(JSON.stringify({
+      id: '00000000-0000-0000-0000-000000000001',
+      factors: [{
+        id: factorId,
+        factor_type: 'totp',
+        status: 'verified',
+      }],
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, () => mfa(authRequest({
+    action: 'cancel_enrollment',
+    factorId,
+  }, {
+    authorization: 'Bearer existing-session',
+  }), response));
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.payload.error, /Only an unfinished authenticator setup/);
+  assert.equal(providerCalls, 1);
+});
+
 test('signup rejects cross-origin requests before contacting the auth provider', async () => {
   const { default: signup } = await import('../api/auth/signup.mjs');
   const response = createResponse();
@@ -781,9 +910,11 @@ test('MFA enforcement is shared by Data API, Storage, protected functions, and a
   assert.match(accountMfa, /Authenticator protection/);
   assert.match(accountMfa, /autoComplete="one-time-code"/);
   assert.match(accountMfa, /A second enrolled device reduces account-recovery risk/);
+  assert.match(accountMfa, /must keep at least/);
   assert.doesNotMatch(accountMfa, /dangerouslySetInnerHTML/);
   assert.match(loginMfa, /STEP 2 OF 2/);
   assert.match(client, /pendingAccessToken/);
+  assert.match(client, /action:'cancel_enrollment'/);
   assert.match(client, /claims\?\.aal!=='aal2'/);
   assert.match(client, /window\.dispatchEvent\(new Event\(mfaRequiredEvent\)\)/);
   assert.match(app, /<AccountMfaSecurity session=\{session\}/);
