@@ -738,13 +738,25 @@ automatic payout, and the public custom domain remain disabled.
 - The full local release gate passed with the catalog release check,
   type checking, 53 repository tests, secret scanning, production build, and
   Preview navigation smoke test.
-- Protected Preview, GitHub CI, and exact-commit protected production
-  verification remain required before this item is closed.
+- GitHub PR #58 passed `Quality and security foundation` run 58 and the
+  Vercel status check on exact Preview commit
+  `9f30b49202dfae61761981279f31f1de087c16c7`.
+- The protected Preview was `READY`; an authenticated fetch returned 200 with
+  the Dealivra title, `noindex`, and Content Security Policy.
+- PR #58 merged as verified commit
+  `59918f73793c3602e2d790905c5da790be9f5ac5`. Exact production deployment
+  `dpl_384GgNZNGDRN9WwjitwX2J8qRi36` reached `READY`.
+- The protected production artifact returned 200 only through authorized
+  access with `noindex` and Content Security Policy. The generated production
+  aliases still redirect to Vercel Authentication, while `dealivra.com`,
+  `www.dealivra.com`, and the legacy public project alias return 404.
+- Vercel reported no runtime error cluster in the post-release window.
 
 ### PAY-004 state
 
-**In progress.** Database, deployed function, live negative-HTTP, advisor, and
-local release-gate evidence passed. Protected Preview, GitHub CI, and
-exact-commit protected production evidence are still required. The public
-custom domain and real-money mode remain disabled.
+**Complete for the current Sandbox observability foundation.** Database,
+deployed function, live negative-HTTP, advisor, local release-gate, protected
+Preview, GitHub CI, and exact-commit protected production evidence passed.
+The public custom domain, real-money mode, and automatic payout remain
+disabled.
 
