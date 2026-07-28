@@ -1245,9 +1245,57 @@ processing, automatic payout, or evidence upload activation.
 
 ### EVD-005 state
 
-**Backend foundation active; PR #71 final review, merge, and closed-production
-verification pending.** The scanner remains deliberately unconfigured and
-fail-closed.
+**Backend foundation active; PR #71 merged and closed-production verification
+passed.** The scanner remains deliberately unconfigured and fail-closed.
 
 This work does not authorize public launch, external private beta, real-money
 processing, automatic payout, or evidence upload activation.
+
+## 2026-07-28 — SEC-003A TOTP MFA and privileged AAL2 enforcement
+
+### Implemented on the review branch
+
+- Added same-origin TOTP enrollment, challenge/verify, factor inventory, and
+  verified-factor removal without exposing a refresh token to browser
+  JavaScript.
+- Added a two-step password login. Enrolled accounts receive a pending `aal1`
+  token and cannot enter the application until a fresh TOTP challenge returns
+  `aal2`.
+- Added a modern, keyboard-accessible account security center with QR/manual
+  setup, one-time-code semantics, multiple authenticator support, explicit
+  removal confirmation, mobile layout, and reduced-motion behavior.
+- Added mandatory `aal2` for `support`, `compliance`, and `admin`, plus opt-in
+  enforcement for every member who has a verified factor.
+- Applied the same rule to the Data API pre-request hook, a restrictive Storage
+  policy, protected payment/evidence Edge Functions, and session refresh.
+- Added an emergency rollback and rollback-only boundary proof.
+- Added fail-closed handling for verified authentication factors the current
+  Dealivra client cannot challenge.
+- Passed the complete local release gate: catalog validation, TypeScript,
+  72 automated tests, repository secret scanning, production build, and
+  Preview smoke.
+- Passed desktop and 390px browser checks for the home, sign-in, and MFA
+  step-two screens with no console warnings, error overlay, or horizontal
+  overflow. Reconfirmed that the Fees-page Home action returns to `/`.
+- Ran a read-only production readiness aggregate: one `admin` account exists,
+  with zero verified factors and zero accounts meeting the two-factor rollout
+  requirement.
+
+### Remaining release gates
+
+- Enroll two factors for every current privileged account before activating the
+  database migration.
+- Pass the protected two-device positive and password-only negative matrix.
+- Approve and rehearse lost-factor recovery with dual control for privileged
+  accounts.
+- Add sensitive-change notifications and cooldowns under SEC-007.
+- Select a documented phishing-resistant privileged factor. TOTP is not
+  phishing-resistant, so SEC-003 is not yet fully closed.
+
+### SEC-003 state
+
+**Repository implementation verified; production activation is blocked by
+privileged-factor enrollment.** Activating the migration now would lock the
+current admin account out. This stage does not authorize public launch,
+external private beta, real-money processing, automatic payout, scanner
+activation, or removal of Vercel protection.
