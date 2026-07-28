@@ -1134,3 +1134,46 @@ test('immediate-session runbook covers every current request path and the remain
   assert.match(standard, /active_session_enforcement_rollback\.sql/);
   assert.match(readinessIndex, /14_IMMEDIATE_SESSION_REVOCATION\.md/);
 });
+
+test('protected payment Edge Functions use an exact fail-closed browser origin boundary', () => {
+  const common = readText('supabase/functions/_shared/common.ts');
+  const protectedFunctions = [
+    'stripe-connect',
+    'stripe-create-checkout',
+    'stripe-release-payment',
+    'stripe-resolve-dispute',
+  ];
+
+  assert.doesNotMatch(common, /Access-Control-Allow-Origin["']?\s*:\s*["']\*/);
+  assert.match(common, /request\.headers\.get\("Origin"\)/);
+  assert.match(common, /value === "null"/);
+  assert.match(common, /exactBrowserOrigins\(\)\.has\(parsed\.origin\)/);
+  assert.match(common, /isOwnedVercelPreview\(parsed\)/);
+  assert.match(common, /DEALIVRA_VERCEL_PROJECT_SLUG/);
+  assert.match(common, /DEALIVRA_VERCEL_TEAM_SLUG/);
+  assert.match(common, /requestedHeaders\.some\(\(header\) => !browserRequestHeaders\.has\(header\)\)/);
+  assert.match(common, /Access-Control-Allow-Origin", origin/);
+  assert.match(common, /"Vary": "Origin"/);
+
+  for (const functionName of protectedFunctions) {
+    const source = readText(`supabase/functions/${functionName}/index.ts`);
+    assert.match(source, /handleBrowserRequest\(request/);
+    assert.doesNotMatch(source, /corsHeaders/);
+  }
+});
+
+test('Stripe webhook stays signature-authenticated and outside browser CORS', () => {
+  const webhook = readText('supabase/functions/stripe-webhook/index.ts');
+  const config = readText('supabase/config.toml');
+  const originStandard = readText('docs/production-readiness/15_EDGE_ORIGIN_SECURITY.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(webhook, /verifyStripeSignature/);
+  assert.match(webhook, /Stripe-Signature/);
+  assert.doesNotMatch(webhook, /handleBrowserRequest/);
+  assert.match(config, /\[functions\.stripe-webhook\][\s\S]*verify_jwt = false/);
+  assert.match(originStandard, /The Stripe webhook is intentionally excluded/);
+  assert.match(originStandard, /never return `Access-Control-Allow-Origin: \*`/);
+  assert.match(originStandard, /future SEC-001 server-managed session architecture/);
+  assert.match(readinessIndex, /15_EDGE_ORIGIN_SECURITY\.md/);
+});

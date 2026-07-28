@@ -1,15 +1,20 @@
 import { createClient, type User } from "npm:@supabase/supabase-js@2";
 
-export const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, stripe-signature",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const browserRequestHeaders = new Set([
+  "apikey",
+  "authorization",
+  "content-type",
+  "x-client-info",
+  "x-supabase-api-version",
+]);
 
 export function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: {
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json",
+    },
   });
 }
 
@@ -22,6 +27,111 @@ export function requiredSecret(name: string) {
 export function siteUrl() {
   const configured = Deno.env.get("SITE_URL") || "https://dealivra.com";
   return configured.replace(/\/$/, "");
+}
+
+function exactBrowserOrigins() {
+  const origins = new Set(["https://dealivra.com", "https://www.dealivra.com"]);
+  const configured = [siteUrl(), ...(Deno.env.get("DEALIVRA_ALLOWED_ORIGINS") || "").split(",")];
+
+  for (const value of configured) {
+    try {
+      const parsed = new URL(value.trim());
+      if (parsed.protocol === "https:" && parsed.origin === value.trim().replace(/\/$/, "")) {
+        origins.add(parsed.origin);
+      }
+    } catch {
+      // Invalid configuration is ignored so it cannot broaden the allowlist.
+    }
+  }
+  return origins;
+}
+
+function isOwnedVercelPreview(origin: URL) {
+  const project = (Deno.env.get("DEALIVRA_VERCEL_PROJECT_SLUG") || "dealsafe").trim().toLowerCase();
+  const team = (Deno.env.get("DEALIVRA_VERCEL_TEAM_SLUG") || "nika13").trim().toLowerCase();
+  if (!/^[a-z0-9-]+$/.test(project) || !/^[a-z0-9-]+$/.test(team)) return false;
+
+  const prefix = `${project}-`;
+  const suffix = `-${team}.vercel.app`;
+  const hostname = origin.hostname.toLowerCase();
+  return origin.protocol === "https:"
+    && origin.port === ""
+    && hostname.startsWith(prefix)
+    && hostname.endsWith(suffix)
+    && hostname.length > prefix.length + suffix.length;
+}
+
+function allowedBrowserOrigin(request: Request) {
+  const value = request.headers.get("Origin")?.trim();
+  if (!value || value === "null") return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.origin !== value || parsed.username || parsed.password) return null;
+    if (exactBrowserOrigins().has(parsed.origin) || isOwnedVercelPreview(parsed)) {
+      return parsed.origin;
+    }
+  } catch {
+    // Malformed origins fail closed.
+  }
+  return null;
+}
+
+function appendVaryOrigin(headers: Headers) {
+  const values = (headers.get("Vary") || "").split(",").map((value) => value.trim()).filter(Boolean);
+  if (!values.some((value) => value.toLowerCase() === "origin")) values.push("Origin");
+  headers.set("Vary", values.join(", "));
+}
+
+function withBrowserCors(response: Response, origin: string) {
+  const headers = new Headers(response.headers);
+  headers.set("Access-Control-Allow-Origin", origin);
+  appendVaryOrigin(headers);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function deniedBrowserRequest(message = "Request origin is not allowed") {
+  const response = json({ error: message }, 403);
+  const headers = new Headers(response.headers);
+  appendVaryOrigin(headers);
+  return new Response(response.body, { status: response.status, headers });
+}
+
+export async function handleBrowserRequest(
+  request: Request,
+  handler: () => Promise<Response> | Response,
+) {
+  const origin = allowedBrowserOrigin(request);
+  if (!origin) return deniedBrowserRequest();
+
+  if (request.method === "OPTIONS") {
+    if (request.headers.get("Access-Control-Request-Method")?.toUpperCase() !== "POST") {
+      return deniedBrowserRequest("Requested method is not allowed");
+    }
+    const requestedHeaders = (request.headers.get("Access-Control-Request-Headers") || "")
+      .split(",")
+      .map((header) => header.trim().toLowerCase())
+      .filter(Boolean);
+    if (requestedHeaders.some((header) => !browserRequestHeaders.has(header))) {
+      return deniedBrowserRequest("Requested headers are not allowed");
+    }
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Headers": [...browserRequestHeaders].join(", "),
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Max-Age": "600",
+        "Cache-Control": "no-store",
+        "Vary": "Origin",
+      },
+    });
+  }
+
+  return withBrowserCors(await handler(), origin);
 }
 
 export function adminClient() {

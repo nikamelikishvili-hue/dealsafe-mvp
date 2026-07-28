@@ -1,9 +1,8 @@
-import { adminClient, corsHeaders, errorResponse, json, requireUser, stripeRequest } from "../_shared/common.ts";
+import { adminClient, errorResponse, handleBrowserRequest, json, requireUser, stripeRequest } from "../_shared/common.ts";
 
 type StripeTransfer = { id: string };
 
-Deno.serve(async (request) => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+Deno.serve((request) => handleBrowserRequest(request, async () => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   try {
     const user = await requireUser(request);
@@ -73,4 +72,4 @@ Deno.serve(async (request) => {
   } catch (error) {
     return errorResponse(error);
   }
-});
+}));
