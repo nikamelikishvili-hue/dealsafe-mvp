@@ -984,13 +984,26 @@ passes.
   expected before organic traffic reaches each path; the governance standard
   forbids premature removal.
 - The security advisor reports no new warning class or unreviewed exposure.
+- GitHub workflow run `30330121000` completed successfully for reviewed head
+  `edfe4fda043245c55fa33039388d85459ea52410`.
+- Protected Preview deployment `dpl_DbiZLTNtpmrPvsvdKmnohUmZWwUd` reached
+  `READY` for that exact reviewed head; its error-only build log and
+  warning/error/fatal runtime scan were empty.
+- PR `#65` was squash-merged to `main` as
+  `5f973b6293c6138d1afb9ee82bd3ed836e88a673`.
+- Exact production deployment `dpl_8uGX6uQ6pLAozSYUQLniACZ2DymJ` reached
+  `READY` for that merge commit. The build completed cleanly, the post-release
+  runtime error scan was empty, Node.js remained pinned to `24.x`, and the
+  Vercel project remained `live: false`.
+- `dealivra.com`, `www.dealivra.com`, and the retired
+  `dealsafe-mvp.vercel.app` alias returned `DEPLOYMENT_NOT_FOUND`; the only
+  attached aliases remained the protected team-scoped Vercel aliases.
 
 ### DBP-002 state
 
-**Complete in the production database; repository release pending.** The six
-measured access paths are active and verified. The full repository gate,
-protected Preview, merge, and exact protected production deployment remain
-required before the batch is closed.
+**Complete.** The six measured access paths are active, production-verified,
+repository-tested, reviewed, merged, and running on the exact protected
+production deployment.
 
 This work does not authorize public launch, real-money processing, or
 automatic payout.
