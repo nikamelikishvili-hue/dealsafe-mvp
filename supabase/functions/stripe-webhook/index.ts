@@ -1,4 +1,12 @@
-import { adminClient, json, requiredSecret } from "../_shared/common.ts";
+import { adminClient, requiredSecret } from "../_shared/common.ts";
+import { linkWebhookObservation } from "../_shared/payment-ledger.ts";
+import {
+  paymentJson,
+  type PaymentOperationContext,
+  recordPaymentLog,
+  recordPaymentSuccess,
+  startPaymentOperation,
+} from "../_shared/payment-observability.ts";
 
 type StripeEvent = {
   id: string;
@@ -123,26 +131,47 @@ function references(event: StripeEvent) {
   };
 }
 
-function webhookError(status = 500) {
-  return json({ error: "Webhook processing failed" }, status);
+function webhookError(
+  context: PaymentOperationContext,
+  code: string,
+  status = 500,
+  providerEventId?: string | null,
+  message = "Webhook processing failed",
+) {
+  recordPaymentLog(context, {
+    event: "webhook_failed",
+    outcome: "failed",
+    severity: status >= 500 ? "error" : "warning",
+    errorCode: code,
+    httpStatus: status,
+    providerEventId,
+  });
+  return paymentJson(context, {
+    error: message,
+    code,
+    correlationId: context.correlationId,
+  }, status);
 }
 
 Deno.serve(async (request) => {
-  if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  const context = startPaymentOperation("stripe-webhook");
+  if (request.method !== "POST") {
+    return webhookError(context, "method_not_allowed", 405, null, "Method not allowed");
+  }
   const contentLength = Number(request.headers.get("Content-Length") || "0");
   if (!Number.isFinite(contentLength) || contentLength < 0 || contentLength > maxWebhookBytes) {
-    return json({ error: "Request is too large" }, 413);
+    return webhookError(context, "request_too_large", 413, null, "Request is too large");
   }
   let eventId: string | null = null;
   let claimToken: string | null = null;
   try {
     const payload = await request.text();
     if (new TextEncoder().encode(payload).byteLength > maxWebhookBytes) {
-      return json({ error: "Request is too large" }, 413);
+      return webhookError(context, "request_too_large", 413, null, "Request is too large");
     }
     const signature = request.headers.get("Stripe-Signature") || "";
     if (!await verifyStripeSignature(payload, signature, requiredSecret("STRIPE_WEBHOOK_SECRET"))) {
-      return json({ error: "Invalid Stripe signature" }, 400);
+      return webhookError(context, "invalid_signature", 400, null, "Invalid Stripe signature");
     }
     const event = JSON.parse(payload) as StripeEvent;
     if (
@@ -156,9 +185,9 @@ Deno.serve(async (request) => {
       || !event.data
       || typeof event.data.object !== "object"
     ) {
-      return webhookError(400);
+      return webhookError(context, "invalid_event", 400);
     }
-    if (event.livemode) return webhookError(400);
+    if (event.livemode) return webhookError(context, "live_mode_rejected", 400, event.id);
 
     const admin = adminClient();
     eventId = event.id;
@@ -169,17 +198,37 @@ Deno.serve(async (request) => {
       p_livemode: event.livemode,
       p_lease_seconds: 300,
     });
-    if (claimError || !claim) return webhookError();
+    if (claimError || !claim) return webhookError(context, "claim_failed", 500, event.id);
 
     const claimed = claim as ClaimResult;
     if (claimed.disposition === "processed") {
-      return json({ received: true, duplicate: true });
+      recordPaymentLog(context, {
+        event: "webhook_duplicate",
+        outcome: "duplicate",
+        providerEventId: event.id,
+      });
+      return paymentJson(context, { received: true, duplicate: true });
     }
     if (claimed.disposition === "in_progress") {
-      return json({ error: "Webhook is already being processed" }, 409);
+      recordPaymentLog(context, {
+        event: "webhook_in_progress",
+        outcome: "in_progress",
+        severity: "warning",
+        errorCode: "webhook_in_progress",
+        httpStatus: 409,
+        providerEventId: event.id,
+      });
+      return paymentJson(context, {
+        error: "Webhook is already being processed",
+        code: "webhook_in_progress",
+        correlationId: context.correlationId,
+      }, 409);
     }
     claimToken = claimed.claimToken || null;
-    if (!claimToken || !uuidPattern.test(claimToken)) return webhookError();
+    if (!claimToken || !uuidPattern.test(claimToken)) {
+      return webhookError(context, "claim_token_invalid", 500, event.id);
+    }
+    await linkWebhookObservation(context, event.id, claimToken);
 
     const refs = references(event);
     const { data: applied, error: applyError } = await admin.rpc("apply_stripe_webhook_event", {
@@ -208,10 +257,14 @@ Deno.serve(async (request) => {
         p_claim_token: claimToken,
         p_error_code: applyError?.code === "P0002" ? "payment_reference_not_found" : "apply_failed",
       });
-      return webhookError();
+      return webhookError(context, "apply_failed", 500, event.id);
     }
 
-    return json({ received: true, outcome: (applied as { outcome?: string }).outcome || "processed" });
+    recordPaymentSuccess(context, "webhook_applied", { providerEventId: event.id });
+    return paymentJson(context, {
+      received: true,
+      outcome: (applied as { outcome?: string }).outcome || "processed",
+    });
   } catch {
     if (eventId && claimToken) {
       try {
@@ -224,6 +277,6 @@ Deno.serve(async (request) => {
         // The lease permits a later Stripe retry even if failure recording is unavailable.
       }
     }
-    return webhookError();
+    return webhookError(context, "unhandled_failure", 500, eventId);
   }
 });

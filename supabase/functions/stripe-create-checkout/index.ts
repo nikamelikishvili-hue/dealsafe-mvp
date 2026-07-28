@@ -1,4 +1,11 @@
 import { adminClient, errorResponse, handleBrowserRequest, json, requireUser, siteUrl, stripeRequest } from "../_shared/common.ts";
+import { linkFinancialCommandObservation } from "../_shared/payment-ledger.ts";
+import {
+  paymentError,
+  providerRequestId,
+  recordPaymentSuccess,
+  startPaymentOperation,
+} from "../_shared/payment-observability.ts";
 
 type StripeAccount = {
   id: string;
@@ -50,7 +57,11 @@ function integerSetting(name: string, fallback: number, minimum: number, maximum
   if (raw === undefined || raw === "") return fallback;
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
-    throw new Error(`${name} is invalid`);
+    throw paymentError(
+      "checkout_configuration_invalid",
+      "Secure checkout is temporarily unavailable.",
+      503,
+    );
   }
   return value;
 }
@@ -68,16 +79,22 @@ async function failClaim(commandId: string | null, claimToken: string | null, co
   }
 }
 
-Deno.serve((request) => handleBrowserRequest(request, async () => {
+Deno.serve((request) => {
+  const context = startPaymentOperation("stripe-create-checkout");
+  return handleBrowserRequest(request, async () => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   let commandId: string | null = null;
   let claimToken: string | null = null;
+  let dealIdForLog: string | null = null;
   let providerRequestStarted = false;
   try {
     const user = await requireUser(request);
     const { dealId } = await request.json() as { dealId?: string };
-    if (!dealId || !uuidPattern.test(dealId)) throw new Error("Deal is required");
+    if (!dealId || !uuidPattern.test(dealId)) {
+      throw paymentError("deal_required", "Select a valid deal before starting checkout.", 400);
+    }
+    dealIdForLog = dealId;
 
     const legacyFeeBps = integerSetting("DEALSAFE_PLATFORM_FEE_BPS", 0, 0, 2000);
     const feeBps = integerSetting("DEALIVRA_PLATFORM_FEE_BPS", legacyFeeBps, 0, 2000);
@@ -89,7 +106,11 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
     );
     const feeVersion = (Deno.env.get("DEALIVRA_PLATFORM_FEE_VERSION") || "sandbox_v1").trim();
     if (!/^[a-z0-9][a-z0-9_.-]{0,39}$/.test(feeVersion)) {
-      throw new Error("Checkout fee policy is unavailable");
+      throw paymentError(
+        "checkout_fee_policy_unavailable",
+        "Secure checkout is temporarily unavailable.",
+        503,
+      );
     }
 
     const admin = adminClient();
@@ -104,24 +125,27 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       : sellerLookup?.profiles;
     const sellerAccountId = sellerProfile?.stripe_account_id;
     if (sellerLookupError || !sellerAccountId || !stripeAccountPattern.test(sellerAccountId)) {
-      throw new Error("Seller must connect Stripe payouts before payment");
+      throw paymentError(
+        "seller_onboarding_required",
+        "The seller must complete payout setup before checkout can begin.",
+        409,
+      );
     }
 
-    let account: StripeAccount;
-    try {
-      account = await stripeRequest<StripeAccount>(
-        `/v1/accounts/${encodeURIComponent(sellerAccountId)}`,
-        { method: "GET" },
-      );
-    } catch {
-      throw new Error("Seller payout status could not be verified. Please try again.");
-    }
+    const account = await stripeRequest<StripeAccount>(
+      `/v1/accounts/${encodeURIComponent(sellerAccountId)}`,
+      { method: "GET", context },
+    );
     if (
       account.id !== sellerAccountId
       || account.livemode === true
       || !stripeAccountPattern.test(account.id)
     ) {
-      throw new Error("Seller payout status could not be verified");
+      throw paymentError(
+        "seller_account_mismatch",
+        "Seller payout status could not be verified. Please contact support.",
+        409,
+      );
     }
 
     const sellerReady = account.details_submitted
@@ -133,8 +157,21 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       stripe_transfers_active: account.capabilities?.transfers === "active",
       stripe_onboarding_updated_at: new Date().toISOString(),
     }).eq("id", sellerLookup.seller_id).eq("stripe_account_id", sellerAccountId);
-    if (accountSaveError) throw new Error("Seller payout status could not be verified");
-    if (!sellerReady) throw new Error("Seller payout setup is not complete");
+    if (accountSaveError) {
+      throw paymentError(
+        "seller_status_save_failed",
+        "Seller payout status could not be saved. Please try again.",
+        503,
+        { retryable: true },
+      );
+    }
+    if (!sellerReady) {
+      throw paymentError(
+        "seller_onboarding_incomplete",
+        "The seller's payout setup is not complete.",
+        409,
+      );
+    }
 
     const { data, error: prepareError } = await admin.rpc("prepare_stripe_checkout", {
       p_deal_id: dealId,
@@ -143,7 +180,13 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       p_fee_version: feeVersion,
       p_max_amount_cents: maximumAmountCents,
     });
-    if (prepareError || !data) throw new Error("Checkout is not available for this deal");
+    if (prepareError || !data) {
+      throw paymentError(
+        "checkout_not_eligible",
+        "Secure checkout is not available for this deal.",
+        409,
+      );
+    }
     const reservation = data as CheckoutReservation;
 
     if (
@@ -151,6 +194,7 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       && reservation.checkoutUrl
       && reservation.checkoutExpiresAt
     ) {
+      recordPaymentSuccess(context, "checkout_reused", { dealId });
       return json({
         url: reservation.checkoutUrl,
         expiresAt: reservation.checkoutExpiresAt,
@@ -158,7 +202,12 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       });
     }
     if (reservation.disposition === "in_progress") {
-      throw new Error("Checkout is already being prepared. Please try again shortly.");
+      throw paymentError(
+        "checkout_in_progress",
+        "Checkout is already being prepared. Please try again shortly.",
+        409,
+        { retryable: true },
+      );
     }
 
     commandId = reservation.commandId || null;
@@ -183,8 +232,13 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       || !Number.isSafeInteger(reservation.agreementVersion)
       || !reservation.feeVersion
     ) {
-      throw new Error("Checkout reservation could not be verified");
+      throw paymentError(
+        "checkout_reservation_invalid",
+        "Secure checkout could not be verified. Please contact support.",
+        409,
+      );
     }
+    await linkFinancialCommandObservation(context, commandId, claimToken);
 
     const base = siteUrl();
     const successUrl = `${base}/?deal=${encodeURIComponent(reservation.dealPublicId)}&payment=success&session_id={CHECKOUT_SESSION_ID}`;
@@ -225,9 +279,21 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       session = await stripeRequest<StripeCheckoutSession>("/v1/checkout/sessions", {
         params,
         idempotencyKey: reservation.idempotencyKey,
+        context,
       });
-    } catch {
-      throw new Error("Secure checkout needs reconciliation before a safe retry.");
+    } catch (error) {
+      await linkFinancialCommandObservation(
+        context,
+        commandId,
+        claimToken,
+        providerRequestId(error),
+      );
+      throw paymentError(
+        "checkout_reconciliation_required",
+        "Checkout needs operations review before it can be retried safely. Contact support with the reference below.",
+        409,
+        { providerRequestId: providerRequestId(error) },
+      );
     }
 
     if (
@@ -239,7 +305,11 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       || !session.url
       || session.expires_at * 1000 <= Date.now() + 60_000
     ) {
-      throw new Error("Secure checkout could not be verified and needs reconciliation.");
+      throw paymentError(
+        "checkout_confirmation_mismatch",
+        "Checkout could not be verified and needs operations review.",
+        409,
+      );
     }
 
     const expiresAt = new Date(session.expires_at * 1000).toISOString();
@@ -255,16 +325,34 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       },
     );
     if (attachError || attached !== true) {
-      throw new Error("Checkout was prepared but needs reconciliation before any retry.");
+      throw paymentError(
+        "checkout_recording_uncertain",
+        "Checkout was prepared but needs operations review before any retry.",
+        409,
+      );
     }
 
+    recordPaymentSuccess(context, "checkout_created", {
+      commandId,
+      dealId,
+    });
     commandId = null;
     claimToken = null;
     return json({ url: session.url, expiresAt });
   } catch (error) {
     if (!providerRequestStarted) {
+      await linkFinancialCommandObservation(
+        context,
+        commandId,
+        claimToken,
+        providerRequestId(error),
+      );
       await failClaim(commandId, claimToken, "checkout_unhandled_failure");
     }
-    return errorResponse(error);
+    return errorResponse(error, context, {
+      commandId,
+      dealId: dealIdForLog,
+    });
   }
-}));
+  }, context);
+});

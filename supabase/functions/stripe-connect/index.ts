@@ -1,4 +1,9 @@
 import { adminClient, errorResponse, handleBrowserRequest, json, requireUser, siteUrl, stripeRequest } from "../_shared/common.ts";
+import {
+  paymentError,
+  recordPaymentSuccess,
+  startPaymentOperation,
+} from "../_shared/payment-observability.ts";
 
 type StripeAccount = {
   id: string;
@@ -17,34 +22,61 @@ function accountStatus(account: StripeAccount) {
   };
 }
 
-Deno.serve((request) => handleBrowserRequest(request, async () => {
+Deno.serve((request) => {
+  const context = startPaymentOperation("stripe-connect");
+  return handleBrowserRequest(request, async () => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   try {
     const user = await requireUser(request);
     const body = await request.json().catch(() => ({})) as { action?: string; dealPublicId?: string };
+    if (body.action !== "status" && body.action !== "onboard") {
+      throw paymentError("invalid_connect_action", "Select a valid seller payout action.", 400);
+    }
     const admin = adminClient();
     const { data: profile, error: profileError } = await admin
       .from("profiles")
       .select("stripe_account_id")
       .eq("id", user.id)
       .single();
-    if (profileError) throw new Error("Dealivra profile was not found");
+    if (profileError) {
+      throw paymentError(
+        "profile_unavailable",
+        "Your Dealivra profile could not be loaded. Please try again.",
+        503,
+        { retryable: true },
+      );
+    }
 
     let accountId = profile?.stripe_account_id as string | null;
     let account: StripeAccount | null = null;
     if (accountId) {
-      account = await stripeRequest<StripeAccount>(`/v1/accounts/${encodeURIComponent(accountId)}`, { method: "GET" });
+      account = await stripeRequest<StripeAccount>(
+        `/v1/accounts/${encodeURIComponent(accountId)}`,
+        { method: "GET", context },
+      );
     }
 
     if (body.action === "status") {
-      if (!account) return json({ connected: false, detailsSubmitted: false, payoutsEnabled: false, transfersActive: false, ready: false });
+      if (!account) {
+        recordPaymentSuccess(context, "connect_status_checked");
+        return json({ connected: false, detailsSubmitted: false, payoutsEnabled: false, transfersActive: false, ready: false });
+      }
       const status = accountStatus(account);
-      await admin.from("profiles").update({
+      const { error: statusSaveError } = await admin.from("profiles").update({
         stripe_details_submitted: status.detailsSubmitted,
         stripe_payouts_enabled: status.payoutsEnabled,
         stripe_transfers_active: status.transfersActive,
         stripe_onboarding_updated_at: new Date().toISOString(),
       }).eq("id", user.id);
+      if (statusSaveError) {
+        throw paymentError(
+          "connect_status_save_failed",
+          "Seller payout status could not be saved. Please try again.",
+          503,
+          { retryable: true },
+        );
+      }
+      recordPaymentSuccess(context, "connect_status_checked");
       return json(status);
     }
 
@@ -59,6 +91,7 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
       account = await stripeRequest<StripeAccount>("/v1/accounts", {
         params,
         idempotencyKey: `dealsafe-connect-${user.id}`,
+        context,
       });
       accountId = account.id;
       const status = accountStatus(account);
@@ -69,7 +102,13 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
         stripe_transfers_active: status.transfersActive,
         stripe_onboarding_updated_at: new Date().toISOString(),
       }).eq("id", user.id);
-      if (error) throw new Error("Could not save the Stripe seller account");
+      if (error) {
+        throw paymentError(
+          "connect_account_save_failed",
+          "The seller payout account could not be saved. Please contact support.",
+          503,
+        );
+      }
     }
 
     const base = siteUrl();
@@ -80,9 +119,25 @@ Deno.serve((request) => handleBrowserRequest(request, async () => {
     params.set("return_url", `${base}/?stripe_onboarding=returned${dealQuery}`);
     params.set("type", "account_onboarding");
     params.set("collection_options[fields]", "eventually_due");
-    const link = await stripeRequest<{ url: string; expires_at: number }>("/v1/account_links", { params });
+    const link = await stripeRequest<{ url: string; expires_at: number }>(
+      "/v1/account_links",
+      { params, context },
+    );
+    if (
+      typeof link.url !== "string"
+      || !link.url.startsWith("https://connect.stripe.com/")
+      || !Number.isSafeInteger(link.expires_at)
+    ) {
+      throw paymentError(
+        "connect_link_invalid",
+        "Secure seller onboarding could not be verified. Please contact support.",
+        502,
+      );
+    }
+    recordPaymentSuccess(context, "connect_onboarding_created");
     return json({ url: link.url, expiresAt: link.expires_at });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, context);
   }
-}));
+  }, context);
+});

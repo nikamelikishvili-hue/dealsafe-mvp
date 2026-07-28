@@ -691,8 +691,60 @@ complete.
 
 ### PAY-003 state
 
-**In progress.** Database, concurrency, advisor, deployed Edge Function, and
-local repository verification evidence pass. Protected Preview, GitHub CI, and
-exact-commit protected production evidence remain before this batch is
-complete.
+**Complete for the current Sandbox foundation.** Database, concurrency,
+advisor, deployed Edge Function, local release-gate, protected Preview, GitHub
+CI, and exact-commit protected production evidence passed. Real-money mode,
+automatic payout, and the public custom domain remain disabled.
+
+## PAY-004 safe provider errors and operation correlation
+
+### Implemented
+
+- Added explicit customer-safe payment errors with bounded codes, HTTP status,
+  retryability, and one server-generated support reference.
+- Replaced raw Stripe error propagation with normalization based only on
+  bounded provider type/code, response status, and validated Stripe request ID.
+- Added structured `dealivra.payment.operation.v1` logs with a fixed schema and
+  no arbitrary payload, user text, provider message, secret, or payment data.
+- Added the same correlation ID to response body/header, financial commands,
+  webhook events, and the browser's displayed support reference.
+- Added a service-only exception queue for failed or stale financial commands
+  and webhook attempts.
+- Added a monitoring/alert matrix and a support workflow that forbids blind
+  retry of reconciliation-required operations.
+
+### Verification evidence
+
+- The `payment_provider_observability` migration applied successfully after
+  first parsing and validating it inside a fully rolled-back production
+  transaction.
+- The rollback-only PAY-004 database suite passed after migration. Browser
+  roles cannot read the financial command ledger or exception queue, while
+  `service_role` can read the sanitized exception view.
+- The production exception queue is empty and no synthetic command or webhook
+  record remains.
+- Edge Functions `stripe-connect` v10, `stripe-create-checkout` v11,
+  `stripe-release-payment` v12, `stripe-resolve-dispute` v5, and
+  `stripe-webhook` v10 are active with the intended JWT boundaries.
+- A live webhook GET returned 405 and an invalid-signature POST returned 400.
+  Both responses used `no-store` and included the same server-generated UUID
+  in the JSON body and `X-Dealivra-Correlation-Id` header.
+- Live unauthenticated POSTs to all four protected financial functions were
+  denied by the Supabase gateway with 401 before application code ran.
+- The performance advisor reports the new correlation indexes as unused,
+  which is expected while private-beta command traffic remains at zero. The
+  security advisor confirms the service-only ledgers remain RLS-enabled with
+  no browser policy.
+- The full local release gate passed with the catalog release check,
+  type checking, 53 repository tests, secret scanning, production build, and
+  Preview navigation smoke test.
+- Protected Preview, GitHub CI, and exact-commit protected production
+  verification remain required before this item is closed.
+
+### PAY-004 state
+
+**In progress.** Database, deployed function, live negative-HTTP, advisor, and
+local release-gate evidence passed. Protected Preview, GitHub CI, and
+exact-commit protected production evidence are still required. The public
+custom domain and real-money mode remain disabled.
 

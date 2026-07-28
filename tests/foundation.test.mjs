@@ -177,6 +177,8 @@ test('the production-readiness specification is complete and linked', () => {
     '14_IMMEDIATE_SESSION_REVOCATION.md',
     '15_EDGE_ORIGIN_SECURITY.md',
     '16_STRIPE_WEBHOOK_REPLAY_SAFETY.md',
+    '17_TRUSTED_PAYMENT_COMMANDS.md',
+    '18_PAYMENT_PROVIDER_OBSERVABILITY.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -1125,6 +1127,7 @@ test('Data API and Storage require a currently active authenticated session with
 
 test('protected Edge Functions validate the Auth session row after JWT verification', () => {
   const common = readText('supabase/functions/_shared/common.ts');
+  const observability = readText('supabase/functions/_shared/payment-observability.ts');
   const config = readText('supabase/config.toml');
 
   assert.match(common, /admin\.auth\.getUser\(token\)/);
@@ -1134,7 +1137,8 @@ test('protected Edge Functions validate the Auth session row after JWT verificat
   assert.match(common, /\.rpc\(\s*"is_auth_session_active_for_service"/);
   assert.match(common, /sessionActive !== true/);
   assert.match(common, /return \(await requireActiveUserSession\(request\)\)\.user/);
-  assert.match(common, /session is invalid or expired\/i\.test\(message\)[\s\S]*\? 401/);
+  assert.match(observability, /\^Your session is invalid or expired\$\/i\.test\(message\)/);
+  assert.match(observability, /"session_expired"[\s\S]*401/);
   assert.match(config, /\[functions\.stripe-webhook\][\s\S]*verify_jwt = false/);
 });
 
@@ -1211,7 +1215,7 @@ test('Stripe webhook claims and applies each provider event through one fenced t
   assert.doesNotMatch(webhook, /\.from\("stripe_webhook_events"\)/);
   assert.doesNotMatch(webhook, /\.from\("protected_payments"\)/);
   assert.doesNotMatch(webhook, /\.from\("audit_events"\)/);
-  assert.match(webhook, /if \(event\.livemode\) return webhookError\(400\)/);
+  assert.match(webhook, /if \(event\.livemode\) return webhookError\(context, "live_mode_rejected", 400, event\.id\)/);
   assert.match(webhook, /messages\[code\] \|\| "The payment was not completed/);
   assert.doesNotMatch(webhook, /last_payment_error\?\.message/);
 
@@ -1320,4 +1324,70 @@ test('Stripe webhook rejects untrusted financial event fields before state trans
   assert.match(migration, /payment_transfer_group_mismatch/);
   assert.match(migration, /p_event_type = 'charge\.dispute\.created'[\s\S]*p_amount_cents > v_payment\.item_amount_cents/);
   assert.match(migration, /v_payment\.fee_version <> 'legacy_v1'/);
+});
+
+test('payment provider failures are customer-safe, correlated, and operator-actionable', () => {
+  const common = readText('supabase/functions/_shared/common.ts');
+  const observability = readText('supabase/functions/_shared/payment-observability.ts');
+  const ledger = readText('supabase/functions/_shared/payment-ledger.ts');
+  const migration = readText('supabase/payment_provider_observability.sql');
+  const rollbackTests = readText('supabase/tests/payment_provider_observability_rollback.sql');
+  const client = readText('src/services/supabaseRest.ts');
+  const standard = readText('docs/production-readiness/18_PAYMENT_PROVIDER_OBSERVABILITY.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+  const handlers = [
+    readText('supabase/functions/stripe-connect/index.ts'),
+    readText('supabase/functions/stripe-create-checkout/index.ts'),
+    readText('supabase/functions/stripe-release-payment/index.ts'),
+    readText('supabase/functions/stripe-resolve-dispute/index.ts'),
+  ];
+  const webhook = readText('supabase/functions/stripe-webhook/index.ts');
+
+  assert.match(common, /throw stripeProviderError\(response, data\)/);
+  assert.match(common, /throw stripeNetworkError\(\)/);
+  assert.doesNotMatch(common, /data\?\.error\?\.message/);
+  assert.doesNotMatch(observability, /provider\.message/);
+  assert.match(observability, /dealivra\.payment\.operation\.v1/);
+  assert.match(observability, /X-Dealivra-Correlation-Id/);
+  assert.match(observability, /correlationId: context\.correlationId/);
+  assert.match(observability, /payment_service_error/);
+  assert.match(observability, /provider_request_id/);
+  assert.doesNotMatch(observability, /console\.(?:error|warn|info)\([^s]/);
+
+  for (const handler of handlers) {
+    assert.match(handler, /startPaymentOperation\("stripe-/);
+    assert.match(handler, /errorResponse\(error, context/);
+    assert.match(handler, /handleBrowserRequest\(request, async \(\) =>/);
+    assert.match(handler, /}, context\)/);
+  }
+
+  assert.match(webhook, /startPaymentOperation\("stripe-webhook"\)/);
+  assert.match(webhook, /paymentJson\(context/);
+  assert.match(webhook, /linkWebhookObservation\(context, event\.id, claimToken\)/);
+  assert.doesNotMatch(webhook, /last_payment_error\?\.message/);
+
+  assert.match(ledger, /\.from\("stripe_financial_commands"\)/);
+  assert.match(ledger, /\.from\("stripe_webhook_events"\)/);
+  assert.match(ledger, /correlation_id: context\.correlationId/);
+  assert.match(ledger, /provider_request_id/);
+
+  assert.match(migration, /add column if not exists correlation_id uuid/);
+  assert.match(migration, /add column if not exists provider_request_id text/);
+  assert.match(migration, /create or replace view public\.stripe_payment_operation_exceptions/);
+  assert.match(migration, /with \(security_invoker = true\)/);
+  assert.match(migration, /revoke all on table public\.stripe_payment_operation_exceptions[\s\S]*from public, anon, authenticated/);
+  assert.match(migration, /grant select on table public\.stripe_payment_operation_exceptions to service_role/);
+  assert.doesNotMatch(migration, /raw_provider/);
+
+  assert.match(rollbackTests, /PAY-004 financial ledgers are not protected by RLS/);
+  assert.match(rollbackTests, /PAY-004 observability data is visible to a browser role/);
+  assert.match(rollbackTests, /PAY-004 correlation columns are incomplete/);
+  assert.match(rollbackTests, /PAY-004 correlation indexes are incomplete/);
+
+  assert.match(client, /class SecurePaymentServiceError extends Error/);
+  assert.match(client, /Support reference:/);
+  assert.match(client, /X-Dealivra-Correlation-Id/);
+  assert.match(standard, /never displays/);
+  assert.match(standard, /No alert automatically releases, refunds, retries/);
+  assert.match(readinessIndex, /18_PAYMENT_PROVIDER_OBSERVABILITY\.md/);
 });

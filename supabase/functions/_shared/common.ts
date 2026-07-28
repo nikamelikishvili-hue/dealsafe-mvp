@@ -1,4 +1,12 @@
 import { createClient, type User } from "npm:@supabase/supabase-js@2";
+import {
+  correlationHeader,
+  type PaymentOperationContext,
+  paymentErrorResponse,
+  stripeNetworkError,
+  stripeProviderError,
+  withPaymentCorrelation,
+} from "./payment-observability.ts";
 
 const browserRequestHeaders = new Set([
   "apikey",
@@ -85,6 +93,7 @@ function appendVaryOrigin(headers: Headers) {
 function withBrowserCors(response: Response, origin: string) {
   const headers = new Headers(response.headers);
   headers.set("Access-Control-Allow-Origin", origin);
+  headers.set("Access-Control-Expose-Headers", correlationHeader);
   appendVaryOrigin(headers);
   return new Response(response.body, {
     status: response.status,
@@ -103,20 +112,26 @@ function deniedBrowserRequest(message = "Request origin is not allowed") {
 export async function handleBrowserRequest(
   request: Request,
   handler: () => Promise<Response> | Response,
+  context?: PaymentOperationContext,
 ) {
   const origin = allowedBrowserOrigin(request);
-  if (!origin) return deniedBrowserRequest();
+  if (!origin) {
+    const response = deniedBrowserRequest();
+    return context ? withPaymentCorrelation(response, context) : response;
+  }
 
   if (request.method === "OPTIONS") {
     if (request.headers.get("Access-Control-Request-Method")?.toUpperCase() !== "POST") {
-      return deniedBrowserRequest("Requested method is not allowed");
+      const response = deniedBrowserRequest("Requested method is not allowed");
+      return context ? withPaymentCorrelation(response, context) : response;
     }
     const requestedHeaders = (request.headers.get("Access-Control-Request-Headers") || "")
       .split(",")
       .map((header) => header.trim().toLowerCase())
       .filter(Boolean);
     if (requestedHeaders.some((header) => !browserRequestHeaders.has(header))) {
-      return deniedBrowserRequest("Requested headers are not allowed");
+      const response = deniedBrowserRequest("Requested headers are not allowed");
+      return context ? withPaymentCorrelation(response, context) : response;
     }
     return new Response(null, {
       status: 204,
@@ -124,14 +139,17 @@ export async function handleBrowserRequest(
         "Access-Control-Allow-Headers": [...browserRequestHeaders].join(", "),
         "Access-Control-Allow-Methods": "POST, OPTIONS",
         "Access-Control-Allow-Origin": origin,
+        "Access-Control-Expose-Headers": correlationHeader,
         "Access-Control-Max-Age": "600",
         "Cache-Control": "no-store",
+        ...(context ? { [correlationHeader]: context.correlationId } : {}),
         "Vary": "Origin",
       },
     });
   }
 
-  return withBrowserCors(await handler(), origin);
+  const response = await handler();
+  return withBrowserCors(context ? withPaymentCorrelation(response, context) : response, origin);
 }
 
 export function adminClient() {
@@ -199,6 +217,7 @@ type StripeRequestOptions = {
   method?: "GET" | "POST";
   params?: URLSearchParams;
   idempotencyKey?: string;
+  context?: PaymentOperationContext;
 };
 
 export async function stripeRequest<T>(path: string, options: StripeRequestOptions = {}): Promise<T> {
@@ -210,26 +229,32 @@ export async function stripeRequest<T>(path: string, options: StripeRequestOptio
   const headers = new Headers({ Authorization: `Bearer ${secretKey}` });
   if (method === "POST") headers.set("Content-Type", "application/x-www-form-urlencoded");
   if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
-  const response = await fetch(`https://api.stripe.com${path}`, {
-    method,
-    headers,
-    body: method === "POST" ? options.params?.toString() || "" : undefined,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`https://api.stripe.com${path}`, {
+      method,
+      headers,
+      body: method === "POST" ? options.params?.toString() || "" : undefined,
+    });
+  } catch {
+    throw stripeNetworkError();
+  }
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    const message = data?.error?.message || `Stripe request failed (${response.status})`;
-    throw new Error(message);
+    throw stripeProviderError(response, data);
   }
   return data as T;
 }
 
-export function errorResponse(error: unknown) {
-  const message = error instanceof Error ? error.message : "Request failed";
-  const status = /sign in is required|session is invalid or expired/i.test(message)
-    ? 401
-    : /required|invalid|expired|Only |unavailable|must |not ready/i.test(message)
-    ? 400
-    : 500;
-  return json({ error: message }, status);
+export function errorResponse(
+  error: unknown,
+  context: PaymentOperationContext,
+  details: {
+    commandId?: string | null;
+    dealId?: string | null;
+    providerEventId?: string | null;
+  } = {},
+) {
+  return paymentErrorResponse(context, error, details);
 }
 
