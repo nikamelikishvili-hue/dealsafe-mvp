@@ -130,6 +130,41 @@ Repository tests additionally enforce that:
 - the regular evidence viewer rejects any non-retained lifecycle state;
 - the admin center never receives a storage path or maintenance secret.
 
+## Release evidence
+
+- Draft PR [#71](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/71)
+  contains the isolated EVD-005 implementation.
+- GitHub workflow run 88 passed on review head
+  `8f9c1cd327d23415f9dbe518a13c534d51a02054`.
+- Protected Preview `dpl_6BxH5tgSHadZupTtDSxoxk5NMFJc` is READY on that
+  head, has no build/runtime error, requires Vercel Authentication, returns
+  `x-robots-tag: noindex`, and has no custom production domain.
+- Production migrations are active as:
+  - `evidence_lifecycle_governance` version `20260728165554`;
+  - `evidence_lifecycle_claim_fix` version `20260728170054`;
+  - `evidence_lifecycle_fk_indexes` version `20260728170533`.
+- `evidence-maintenance` version 1 is ACTIVE with bundle SHA-256
+  `88c8af31072dfedcfe5004aa49e95daba971ef1b95ada953ad0fb0fd057685bc`.
+- JWT-protected `evidence-files` version 3 is ACTIVE with bundle SHA-256
+  `a57bace444daee803eed27ea44171712e84f81a08182b3441fc1273dc277191c`.
+- The live rollback suite passed after proving that Legal Hold blocks deletion,
+  release requires fresh review, job claims are bounded, and completion
+  redacts metadata only after verified object absence.
+- The authenticated worker returned HTTP 200 with zero claimed jobs because no
+  evidence was eligible. A request with an invalid maintenance secret returned
+  HTTP 403.
+- Both Cron jobs are active. The worker reads its credential through Vault; the
+  raw value is absent from source, Cron SQL, application tables, and browser
+  responses.
+- All four new private tables have RLS enabled. Browser roles have no direct
+  DML or function execution grants; service-role access is explicit.
+- Database advisor verification reports no unindexed foreign keys for the new
+  lifecycle tables and no executable Security Definer warnings for the seven
+  new lifecycle functions.
+- `pg_net` remains in the platform-managed `public` schema because the installed
+  extension is not relocatable. Leaked-password protection remains a global
+  launch blocker to resolve before external authentication is enabled.
+
 ## Release boundary
 
 No existing production evidence is deleted as part of rollout verification.

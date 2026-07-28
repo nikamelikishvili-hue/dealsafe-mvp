@@ -1220,10 +1220,34 @@ processing, automatic payout, or evidence upload activation.
   from shipping/viewing.
 - The malware scanner remains deliberately unconfigured and fail-closed.
 
+### Release evidence
+
+- Draft PR [#71](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/71)
+  contains the isolated EVD-005 change set.
+- GitHub workflow run 88 passed on review head
+  `8f9c1cd327d23415f9dbe518a13c534d51a02054`.
+- Protected Preview `dpl_6BxH5tgSHadZupTtDSxoxk5NMFJc` is READY on the
+  same head, requires Vercel Authentication, returns `noindex`, and has no
+  custom domain.
+- Production migrations `20260728165554`, `20260728170054`, and
+  `20260728170533` are active.
+- `evidence-maintenance` version 1 and JWT-protected `evidence-files` version 3
+  are ACTIVE.
+- The live rollback suite passed. A Vault-authenticated maintenance invocation
+  returned HTTP 200 with zero eligible jobs; an invalid-secret request returned
+  HTTP 403.
+- Both lifecycle Cron jobs are active. The new lifecycle tables and functions
+  have no browser DML/execute grants, and advisor checks report no unindexed
+  foreign keys or executable Security Definer warnings for the new objects.
+- All eleven production evidence rows remain retained. No lifecycle alert,
+  deletion job, active legal hold, synthetic intake, or cleanup candidate
+  remains after verification.
+
 ### EVD-005 state
 
-**Implementation prepared; repository, Preview, migration, scheduled worker,
-rollback suite, and closed-production verification pending.**
+**Backend foundation active; PR #71 final review, merge, and closed-production
+verification pending.** The scanner remains deliberately unconfigured and
+fail-closed.
 
 This work does not authorize public launch, external private beta, real-money
 processing, automatic payout, or evidence upload activation.
