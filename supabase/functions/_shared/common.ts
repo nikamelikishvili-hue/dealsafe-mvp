@@ -163,6 +163,7 @@ export function adminClient() {
 type VerifiedUserSession = {
   user: User;
   sessionId: string;
+  assuranceLevel: "aal1" | "aal2";
 };
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
@@ -194,6 +195,7 @@ export async function requireActiveUserSession(request: Request): Promise<Verifi
   const sessionId = typeof claims.session_id === "string" ? claims.session_id : "";
   const subject = typeof claims.sub === "string" ? claims.sub : "";
   const role = typeof claims.role === "string" ? claims.role : "";
+  const assuranceLevel = claims.aal === "aal2" ? "aal2" : "aal1";
   if (!sessionId || subject !== data.user.id || role !== "authenticated") {
     throw new Error("Your session is invalid or expired");
   }
@@ -206,7 +208,20 @@ export async function requireActiveUserSession(request: Request): Promise<Verifi
     throw new Error("Your session is invalid or expired");
   }
 
-  return { user: data.user, sessionId };
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("app_role")
+    .eq("id", data.user.id)
+    .maybeSingle();
+  if (profileError) throw new Error("Your session is invalid or expired");
+
+  const verifiedFactor = data.user.factors?.some((factor) => factor.status === "verified") === true;
+  const privilegedRole = ["support", "compliance", "admin"].includes(profile?.app_role || "");
+  if ((verifiedFactor || privilegedRole) && assuranceLevel !== "aal2") {
+    throw new Error("Multi-factor verification is required");
+  }
+
+  return { user: data.user, sessionId, assuranceLevel };
 }
 
 export async function requireUser(request: Request): Promise<User> {
