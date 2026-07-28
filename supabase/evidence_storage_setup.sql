@@ -1,5 +1,6 @@
--- Private storage for dispute evidence. Run after evidence_dispute_setup.sql.
--- Evidence files are never exposed through a public URL.
+-- Legacy bucket bootstrap. The governed upload/read workflow is defined by
+-- evidence_file_security.sql. This file must never restore direct browser
+-- access to final evidence objects.
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -8,11 +9,7 @@ values (
   false,
   52428800,
   array[
-    'image/jpeg',
-    'image/png',
     'image/webp',
-    'image/heic',
-    'image/heif',
     'video/mp4',
     'video/webm',
     'video/quicktime'
@@ -24,29 +21,9 @@ on conflict (id) do update set
   allowed_mime_types=excluded.allowed_mime_types;
 
 drop policy if exists "participants upload deal evidence files" on storage.objects;
-create policy "participants upload deal evidence files" on storage.objects
-  for insert to authenticated
-  with check (
-    bucket_id='deal-evidence'
-    and (storage.foldername(name))[1]=auth.uid()::text
-    and exists (
-      select 1 from public.deals d
-      where d.id::text=(storage.foldername(name))[2]
-        and (d.seller_id=auth.uid() or d.buyer_id=auth.uid())
-    )
-  );
-
 drop policy if exists "participants read deal evidence files" on storage.objects;
-create policy "participants read deal evidence files" on storage.objects
-  for select to authenticated
-  using (
-    bucket_id='deal-evidence'
-    and exists (
-      select 1 from public.deals d
-      where d.id::text=(storage.foldername(name))[2]
-        and (d.seller_id=auth.uid() or d.buyer_id=auth.uid())
-    )
-  );
+drop policy if exists "participants and admins read deal evidence files" on storage.objects;
 
--- There are deliberately no update or delete policies for authenticated users.
--- Evidence is append-only; service-role/admin workflows can remove files if needed.
+-- There are deliberately no authenticated INSERT/SELECT/UPDATE/DELETE policies
+-- for the final bucket. The Edge Function uses the service role only after
+-- authorization, byte-signature validation, and malware scanning.

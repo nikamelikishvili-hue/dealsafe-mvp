@@ -1076,3 +1076,69 @@ reviewed merge, and exact protected production deployment all passed.
 This work does not authorize public launch, real-money processing, automatic
 payout, or deletion of production history.
 
+## 2026-07-28 — EVD-001/002/003 evidence-file security implementation
+
+### Implemented on the review branch
+
+- Added one shared seller/buyer evidence policy for category/media pairing,
+  canonical MIME types, 10 MB photo and 50 MB video limits, intake expiry, and
+  60-second signed access.
+- Added byte-structure validation for metadata-free WebP, ISO base-media
+  MP4/MOV, and WebM instead of trusting a filename, extension, browser MIME
+  value, or Storage metadata.
+- Added browser photo privacy processing and the same declaration/byte policy
+  before an upload is requested.
+- Added a private quarantine bucket, server-approved one-time intake paths,
+  rate-limited intake creation, and no browser read/update/delete path.
+- Added a fail-closed malware-scanner gateway contract with SHA-256 binding,
+  bounded response parsing, timeout handling, and an EICAR pre-check.
+- Added clean-only promotion to the final private vault. Legacy evidence is
+  labeled `legacy_unscanned` and cannot count toward shipping readiness.
+- Removed direct authenticated final-bucket access and direct evidence-record
+  inserts. Safe metadata excludes object paths, uploader IDs, raw metadata, and
+  scanner internals.
+- Added server-issued participant/dispute-case access and an append-only log
+  for every 60-second evidence URL.
+
+### Verification target
+
+- Unit fixtures cover valid WebP, metadata-bearing WebP, role/type mismatch,
+  size limits, EICAR, and scanner hash/verdict validation.
+- The rollback-only database suite covers the bucket/policy/grant/view/trigger
+  inventory and seller/buyer/outsider/case-admin metadata authorization.
+- The full repository gate passed: catalog governance, typecheck, 64/64 unit
+  tests, secret scan, production build, and the protected production-preview
+  navigation smoke test.
+- The migration and the seller/buyer/outsider/case-admin authorization matrix
+  passed together inside one production transaction and rolled back cleanly.
+- Protected Preview `dpl_CY1QTXNwmAPY1Wh2zZvho126yVkH` is READY on exact
+  reviewed head `7ec467d057cb830b79408fd53d08ee779ddd4ab5`; its build has
+  no error event and its warning/error/fatal runtime scan is clean.
+
+### EVD deployment evidence
+
+- Draft PR [#69](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/69)
+  contains exactly 20 governed evidence-security files.
+- GitHub workflow `30365645015` (run 81) completed successfully for exact head
+  `7ec467d057cb830b79408fd53d08ee779ddd4ab5`.
+- JWT-protected Edge Function `evidence-files` version 1 is ACTIVE with bundle
+  SHA-256 `f38f733440bf4d30ee45da31d1065f623f023cfad7c73a427b5d937a640ed82e`.
+- Migration `evidence_file_security` applied as version `20260728135548`.
+- The post-migration rollback suite passed on the live schema. Both buckets
+  are private; direct final-bucket policies, authenticated evidence inserts,
+  and authenticated storage-path reads are zero.
+- Eleven pre-existing records are explicitly `legacy_unscanned`; none can
+  receive a signed URL or satisfy shipping readiness.
+- The scanner gateway is deliberately unconfigured and fail-closed.
+  External scanner staging scenarios, cross-account signed access, and
+  expired-URL verification remain required.
+
+### EVD state
+
+**Backend foundation active; repository review and scanner activation
+pending.** A reviewed scanner vendor or internally operated gateway, staging
+secrets, and the live negative test matrix are mandatory before evidence
+uploads can be enabled for external testers.
+
+This work does not authorize public launch, external private beta, real-money
+processing, or automatic payout.

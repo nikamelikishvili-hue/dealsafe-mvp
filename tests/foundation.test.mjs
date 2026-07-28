@@ -1231,8 +1231,8 @@ test('participant RLS policies evaluate Auth once without changing role semantic
 
   assert.equal(
     [...migration.matchAll(/create policy "/g)].length,
-    10,
-    'DBP-001 must govern exactly ten RLS policies',
+    9,
+    'DBP-001 must govern exactly nine RLS policies',
   );
   assert.doesNotMatch(migration, /= auth\.uid\(\)/);
   assert.match(migration, /= \(select auth\.uid\(\)\)/);
@@ -1243,7 +1243,7 @@ test('participant RLS policies evaluate Auth once without changing role semantic
   assert.match(rollbackTests, /DBP-001 outsider gained RLS read access/);
   assert.match(rollbackTests, /DBP-001 RPC-only message table gained direct SELECT access/);
   assert.match(rollbackTests, /DBP-001 outsider inserted a media record/);
-  assert.match(rollbackTests, /DBP-001 outsider inserted a deal-evidence record/);
+  assert.match(rollbackTests, /DBP-001 browser evidence INSERT was restored/);
   assert.match(rollbackTests, /set local role authenticated/);
   assert.match(rollbackTests, /rollback;/);
   assert.match(standard, /performance remediation may never broaden visibility/i);
@@ -1582,4 +1582,144 @@ test('payment provider failures are customer-safe, correlated, and operator-acti
   assert.match(standard, /never displays/);
   assert.match(standard, /No alert automatically releases, refunds, retries/);
   assert.match(readinessIndex, /18_PAYMENT_PROVIDER_OBSERVABILITY\.md/);
+});
+
+test('evidence file policy rejects mismatched, metadata-bearing, and oversized files', async () => {
+  const {
+    containsEicarTestPattern,
+    detectEvidenceFile,
+    evidenceImageMaxBytes,
+    evidenceSignedUrlTtlSeconds,
+    evidenceVideoMaxBytes,
+    validateEvidenceBytes,
+    validateEvidenceDeclaration,
+  } = await import('../supabase/functions/_shared/evidence-policy.ts');
+
+  const webp = Buffer.alloc(22);
+  webp.write('RIFF', 0, 'ascii');
+  webp.writeUInt32LE(14, 4);
+  webp.write('WEBP', 8, 'ascii');
+  webp.write('VP8L', 12, 'ascii');
+  webp.writeUInt32LE(1, 16);
+  webp[20] = 0x2f;
+
+  const imageDeclaration = {
+    claimedMimeType: 'image/webp',
+    evidenceType: 'seller_item_photo',
+    fileName: 'item.webp',
+    fileSize: webp.length,
+    role: 'seller',
+  };
+  assert.deepEqual(detectEvidenceFile(webp), {
+    extension: 'webp',
+    kind: 'image',
+    mimeType: 'image/webp',
+  });
+  assert.equal(validateEvidenceBytes(webp, imageDeclaration).ok, true);
+  assert.equal(validateEvidenceBytes(webp, {
+    ...imageDeclaration,
+    evidenceType: 'seller_packing_video',
+  }).ok, false);
+
+  const metadataWebp = Buffer.alloc(30);
+  metadataWebp.write('RIFF', 0, 'ascii');
+  metadataWebp.writeUInt32LE(22, 4);
+  metadataWebp.write('WEBP', 8, 'ascii');
+  metadataWebp.write('EXIF', 12, 'ascii');
+  metadataWebp.writeUInt32LE(1, 16);
+  metadataWebp[20] = 1;
+  metadataWebp.write('VP8L', 22, 'ascii');
+  assert.equal(detectEvidenceFile(metadataWebp), null);
+
+  assert.equal(validateEvidenceDeclaration({
+    ...imageDeclaration,
+    fileSize: evidenceImageMaxBytes + 1,
+  }).ok, false);
+  assert.equal(validateEvidenceDeclaration({
+    claimedMimeType: 'video/mp4',
+    evidenceType: 'buyer_unboxing_video',
+    fileName: 'unboxing.mp4',
+    fileSize: evidenceVideoMaxBytes + 1,
+    role: 'buyer',
+  }).ok, false);
+  assert.equal(evidenceSignedUrlTtlSeconds, 60);
+  assert.equal(containsEicarTestPattern(Buffer.from(
+    'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!',
+  )), true);
+});
+
+test('evidence scanner accepts only bounded hash-matched provider verdicts', async () => {
+  const { validateScannerVerdict } = await import(
+    '../supabase/functions/_shared/evidence-scan.ts'
+  );
+  const sha256 = 'a'.repeat(64);
+  assert.deepEqual(validateScannerVerdict({
+    verdict: 'clean',
+    sha256,
+    scanId: 'scan-123',
+    engine: 'clamav-gateway-v1',
+  }, sha256), {
+    verdict: 'clean',
+    sha256,
+    scanId: 'scan-123',
+    engine: 'clamav-gateway-v1',
+  });
+  assert.throws(() => validateScannerVerdict({
+    verdict: 'clean',
+    sha256: 'b'.repeat(64),
+    scanId: 'scan-123',
+    engine: 'clamav-gateway-v1',
+  }, sha256), /invalid response/i);
+  assert.throws(() => validateScannerVerdict({
+    verdict: 'unknown',
+    sha256,
+    scanId: 'scan-123',
+    engine: 'clamav-gateway-v1',
+  }, sha256), /invalid response/i);
+});
+
+test('private evidence uses quarantine, service-side scanning, and 60-second access', () => {
+  const migration = readText('supabase/evidence_file_security.sql');
+  const rollbackTests = readText('supabase/tests/evidence_file_security_rollback.sql');
+  const edgeFunction = readText('supabase/functions/evidence-files/index.ts');
+  const scanner = readText('supabase/functions/_shared/evidence-scan.ts');
+  const client = readText('src/services/supabaseRest.ts');
+  const standard = readText('docs/production-readiness/25_EVIDENCE_FILE_SECURITY.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(migration, /deal-evidence-quarantine/);
+  assert.match(migration, /approved evidence quarantine upload/);
+  assert.match(migration, /drop policy if exists "participants read deal evidence files"/);
+  assert.match(migration, /deal_evidence_clean_scan_contract/);
+  assert.match(migration, /evidence_file_access_events_reject_update_delete/);
+  assert.match(migration, /with \(security_invoker = true, security_barrier = true\)/);
+  assert.doesNotMatch(
+    migration.match(/create view public\.deal_evidence_safe[\s\S]*?from public\.deal_evidence as evidence;/)?.[0] || '',
+    /storage_path|uploaded_by|scan_provider|scan_reference|metadata/,
+  );
+  assert.match(migration, /evidence\.scan_status = 'clean'/);
+
+  assert.match(edgeFunction, /validateEvidenceBytes\(bytes, declaration\)/);
+  assert.match(edgeFunction, /scanEvidenceBytes\(bytes/);
+  assert.match(edgeFunction, /\.from\("deal-evidence-quarantine"\)/);
+  assert.match(edgeFunction, /createSignedUrl\(evidence\.storage_path, evidenceSignedUrlTtlSeconds\)/);
+  assert.match(edgeFunction, /participant \? "participant" : "dispute_case"/);
+  assert.match(edgeFunction, /profile\?\.app_role === "admin" && \(count \|\| 0\) > 0/);
+  assert.match(scanner, /DEALIVRA_MALWARE_SCANNER_URL/);
+  assert.match(scanner, /DEALIVRA_MALWARE_SCANNER_TOKEN/);
+  assert.match(scanner, /X-Content-SHA256/);
+  assert.match(scanner, /scanner_unavailable/);
+
+  assert.match(client, /functions\/v1\/evidence-files/);
+  assert.match(client, /deal_evidence_safe/);
+  assert.doesNotMatch(client, /object\/sign\/deal-evidence/);
+  assert.doesNotMatch(client, /rest\/v1\/deal_evidence[^_]/);
+
+  assert.match(rollbackTests, /EVD-001 bucket allowlist or privacy contract changed/);
+  assert.match(rollbackTests, /EVD-003 outsider read another deal evidence record/);
+  assert.match(rollbackTests, /EVD-003 administrator lost dispute-case metadata access/);
+  assert.match(rollbackTests, /rollback;/);
+  assert.match(standard, /scanner remains fail-closed/i);
+  assert.match(standard, /does not authorize public launch/i);
+  assert.match(readinessIndex, /25_EVIDENCE_FILE_SECURITY\.md/);
 });

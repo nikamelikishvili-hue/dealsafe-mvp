@@ -1,6 +1,11 @@
 import type { Deal, DealDraft } from '../domain';
 import { toMinorUnits, type CurrencyCode } from '../currency';
 import { isVideoUpload, prepareMediaUpload } from '../mediaPrivacy';
+import {
+  validateEvidenceBytes,
+  validateEvidenceDeclaration,
+  type EvidenceUploadType,
+} from '../../supabase/functions/_shared/evidence-policy';
 
 // Vercel can preserve pasted line breaks in environment variables. Keep only
 // the first non-empty line so an accidental multi-line key never becomes an
@@ -110,8 +115,8 @@ export interface PublicTrustProfile { display_name:string;verification_status:'n
 export interface TrustPassportSettings { public_id:string;enabled:boolean }
 export interface TrustPassport { display_name:string;verification_status:'not_started'|'pending'|'verified'|'failed';member_since:string;completed_deals:number;completed_sales:number;completed_purchases:number;rating_count:number;average_rating:number|null;recent_ratings:{stars:number;created_at:string}[] }
 export interface DealInspection { agreement_version:number;item_reviewed:boolean;price_confirmed:boolean;handoff_confirmed:boolean;reference_checked:boolean;inspected_at:string;buyer_name:string }
-export type EvidenceType='seller_packing_video'|'seller_item_photo'|'seller_serial_number'|'seller_package_weight'|'buyer_unboxing_video'|'buyer_received_photo'|'buyer_damage_photo'|'other';
-export interface DealEvidence { id:string;deal_id:string;dispute_id:string|null;uploaded_by:string;uploader_role:'seller'|'buyer'|'admin';evidence_type:EvidenceType|string;storage_path:string;file_name:string|null;mime_type:string|null;file_size_bytes:number|null;sha256:string|null;metadata:Record<string,unknown>;created_at:string }
+export type EvidenceType=EvidenceUploadType;
+export interface DealEvidence { id:string;deal_id:string;dispute_id:string|null;uploader_role:'seller'|'buyer'|'admin';evidence_type:EvidenceType|string;file_name:string|null;mime_type:string|null;detected_mime_type:string|null;file_size_bytes:number|null;sha256:string|null;scan_status:'clean'|'legacy_unscanned';scanned_at:string|null;created_at:string }
 export interface AdminDispute { dispute_id:string;deal_id:string;public_id:string;title:string;reason:string;dispute_status:'open'|'evidence_requested'|'under_review'|'resolved_buyer'|'resolved_seller'|'refunded'|'cancelled';response_deadline:string;opened_at:string;opened_by_name:string;seller_name:string;buyer_name:string;payment_status:string;item_amount_cents:number;currency:CurrencyCode;resolution_note:string|null }
 export interface SellerDeclarationRecord { attested:boolean;attested_at:string|null }
 export interface AgreementHistoryVersion { version:number;price_cents:number;currency:CurrencyCode;condition:'Like new'|'Good'|'Fair';delivery_method:'Meet in person'|'Ship to buyer';content_hash:string;created_at:string;acceptance_count:number;is_current:boolean }
@@ -524,26 +529,52 @@ export async function uploadDealPhotos(session: StoredSession, dealId: string, f
   return urls;
 }
 
-function evidenceExtension(file:File){const fromName=file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g,'');if(fromName)return fromName;const fromType=file.type.split('/').pop()?.toLowerCase().replace(/[^a-z0-9]/g,'');return fromType||'bin'}
-async function fileSha256(file:File){try{if(!crypto.subtle)return null;const digest=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());return Array.from(new Uint8Array(digest)).map(byte=>byte.toString(16).padStart(2,'0')).join('')}catch{return null}}
-export async function uploadDealEvidence(session:StoredSession,dealId:string,uploaderRole:'seller'|'buyer',evidenceType:EvidenceType,file:File){
-  if(file.size>50*1024*1024)throw new Error('Evidence files must be 50 MB or smaller.');
-  if(!file.type.startsWith('image/')&&!file.type.startsWith('video/'))throw new Error('Choose an image or video file.');
-  if(uploaderRole==='seller'){
-    const imageEvidence:EvidenceType[]=['seller_item_photo','seller_serial_number','seller_package_weight'];
-    if(evidenceType==='seller_packing_video'&&!file.type.startsWith('video/'))throw new Error('Packing evidence must be a video file.');
-    if(imageEvidence.includes(evidenceType)&&!file.type.startsWith('image/'))throw new Error('This evidence type requires a photo.');
-    if(!imageEvidence.includes(evidenceType)&&evidenceType!=='seller_packing_video')throw new Error('Choose a seller evidence type.');
+async function invokeEvidenceFiles<T>(session:StoredSession,body:Record<string,unknown>){
+  const response=await authenticatedFetch(session,`${supabaseUrl}/functions/v1/evidence-files`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(body)});
+  const data=await response.json().catch(()=>null) as ({error?:unknown;code?:unknown}&T)|null;
+  if(!response.ok){
+    const message=typeof data?.error==='string'&&data.error.length<=240?data.error:'The secure file service is temporarily unavailable.';
+    throw new Error(message);
   }
-  const path=`${session.user.id}/${dealId}/${crypto.randomUUID()}.${evidenceExtension(file)}`;
-  const upload=await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/deal-evidence/${path.split('/').map(encodeURIComponent).join('/')}`,{method:'POST',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`,'Content-Type':file.type||'application/octet-stream','x-upsert':'false'},body:file});
-  if(!upload.ok){const data=await upload.json().catch(()=>null);throw new Error(data?.message||data?.error||'Could not upload evidence file');}
-  const record=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_evidence`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=representation'},body:JSON.stringify({deal_id:dealId,uploaded_by:session.user.id,uploader_role:uploaderRole,evidence_type:evidenceType,storage_path:path,file_name:file.name,mime_type:file.type||null,file_size_bytes:file.size,sha256:await fileSha256(file),metadata:{source:'deal_evidence_panel'}})});
-  if(!record.ok){await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/deal-evidence/${path.split('/').map(encodeURIComponent).join('/')}`,{method:'DELETE',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`}}).catch(()=>{});const data=await record.json().catch(()=>null);throw new Error(data?.message||'File uploaded, but its evidence record could not be saved');}
-  const rows=await record.json() as DealEvidence[];return rows[0];
+  if(!data)throw new Error('The secure file service returned an invalid response.');
+  return data as T;
 }
-export async function listDealEvidence(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_evidence?deal_id=eq.${encodeURIComponent(dealId)}&select=*&order=created_at.desc`,{headers:headers(session.accessToken)});if(!response.ok){const data=await response.json().catch(()=>null);throw new Error(data?.message||'Could not load evidence');}return await response.json() as DealEvidence[]}
-export async function createDealEvidenceSignedUrl(session:StoredSession,storagePath:string,expiresIn=900){const encoded=storagePath.split('/').map(encodeURIComponent).join('/');const response=await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/sign/deal-evidence/${encoded}`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({expiresIn})});const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.message||'Could not open evidence file');const signed=data?.signedURL||data?.signedUrl;if(typeof signed!=='string')throw new Error('Evidence file URL was not returned');return signed.startsWith('http')?signed:`${supabaseUrl}/storage/v1${signed.startsWith('/')?'':'/'}${signed}`}
+function normalizeEvidenceVideo(file:File){
+  const extension=file.name.split('.').pop()?.toLowerCase();
+  const mimeType=file.type==='video/quicktime'||extension==='mov'
+    ?'video/quicktime'
+    :file.type==='video/webm'||extension==='webm'
+    ?'video/webm'
+    :file.type==='video/mp4'||extension==='mp4'
+    ?'video/mp4'
+    :'';
+  if(!mimeType)throw new Error('Choose an MP4, MOV, or WebM video.');
+  return file.type===mimeType?file:new File([file],file.name,{type:mimeType,lastModified:file.lastModified});
+}
+export async function uploadDealEvidence(session:StoredSession,dealId:string,uploaderRole:'seller'|'buyer',evidenceType:EvidenceType,file:File){
+  const preparedFile=isVideoUpload(file)?normalizeEvidenceVideo(file):await prepareMediaUpload(file);
+  const declaration={claimedMimeType:preparedFile.type,evidenceType,fileName:preparedFile.name,fileSize:preparedFile.size,role:uploaderRole};
+  const validation=validateEvidenceDeclaration(declaration);
+  if(!validation.ok)throw new Error(validation.message);
+  const byteValidation=validateEvidenceBytes(new Uint8Array(await preparedFile.arrayBuffer()),declaration);
+  if(!byteValidation.ok)throw new Error(byteValidation.message);
+  const intake=await invokeEvidenceFiles<{intakeId:string;path:string;bucket:'deal-evidence-quarantine';expiresAt:string}>(session,{
+    action:'request-upload',
+    dealId,
+    uploaderRole,
+    evidenceType,
+    fileName:preparedFile.name,
+    claimedMimeType:preparedFile.type,
+    fileSize:preparedFile.size
+  });
+  const encodedPath=intake.path.split('/').map(encodeURIComponent).join('/');
+  const upload=await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/${intake.bucket}/${encodedPath}`,{method:'POST',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`,'Content-Type':preparedFile.type,'x-upsert':'false'},body:preparedFile});
+  if(!upload.ok){const data=await upload.json().catch(()=>null);throw new Error(data?.message||data?.error||'Could not upload evidence file');}
+  const result=await invokeEvidenceFiles<{evidence:DealEvidence}>(session,{action:'finalize-upload',intakeId:intake.intakeId});
+  return result.evidence;
+}
+export async function listDealEvidence(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_evidence_safe?deal_id=eq.${encodeURIComponent(dealId)}&select=*&order=created_at.desc`,{headers:headers(session.accessToken)});if(!response.ok){const data=await response.json().catch(()=>null);throw new Error(data?.message||'Could not load evidence');}return await response.json() as DealEvidence[]}
+export async function createDealEvidenceSignedUrl(session:StoredSession,evidenceId:string){const data=await invokeEvidenceFiles<{url:string;expiresAt:string;mimeType:string|null}>(session,{action:'signed-url',evidenceId});return data.url}
 
 export async function deleteDealMedia(session:StoredSession,dealId:string,publicUrl:string){const marker='/storage/v1/object/public/deal-media/';const encodedPath=publicUrl.split(marker)[1];if(!encodedPath)throw new Error('Invalid media URL');const path=encodedPath.split('/').map(decodeURIComponent).join('/');const removeObject=await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/deal-media/${path.split('/').map(encodeURIComponent).join('/')}`,{method:'DELETE',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`}});if(!removeObject.ok)throw new Error('Could not remove the stored file');const removeRecord=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_media?deal_id=eq.${dealId}&storage_path=eq.${encodeURIComponent(path)}`,{method:'DELETE',headers:{...headers(session.accessToken),Prefer:'return=minimal'}});if(!removeRecord.ok)throw new Error('File removed, but its record could not be cleaned up')}
 export async function reorderDealMedia(session:StoredSession,dealId:string,publicUrls:string[]){const marker='/storage/v1/object/public/deal-media/';const paths=publicUrls.map(url=>{const encoded=url.split(marker)[1];if(!encoded)throw new Error('Invalid media URL');return encoded.split('/').map(decodeURIComponent).join('/')});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/reorder_deal_media`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_paths:paths})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not reorder media')}}

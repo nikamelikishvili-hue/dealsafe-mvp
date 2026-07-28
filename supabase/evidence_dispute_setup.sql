@@ -55,7 +55,8 @@ alter table public.deal_evidence enable row level security;
 revoke all on table public.deal_disputes from public, anon, authenticated;
 revoke all on table public.deal_evidence from public, anon, authenticated;
 grant select on table public.deal_disputes to authenticated;
-grant select, insert on table public.deal_evidence to authenticated;
+-- evidence_file_security.sql grants only the safe metadata columns. Browser
+-- INSERT is intentionally unavailable because clean records are service-owned.
 
 drop policy if exists "participants read deal disputes" on public.deal_disputes;
 create policy "participants read deal disputes" on public.deal_disputes
@@ -76,16 +77,8 @@ create policy "participants read deal evidence" on public.deal_evidence
   ));
 
 drop policy if exists "participants upload deal evidence" on public.deal_evidence;
-create policy "participants upload deal evidence" on public.deal_evidence
-  for insert to authenticated
-  with check (
-    uploaded_by = auth.uid()
-    and (
-      (uploader_role = 'seller' and exists (select 1 from public.deals d where d.id = deal_evidence.deal_id and d.seller_id = auth.uid()))
-      or
-      (uploader_role = 'buyer' and exists (select 1 from public.deals d where d.id = deal_evidence.deal_id and d.buyer_id = auth.uid()))
-    )
-  );
+-- Upload authorization, quarantine, byte inspection, and the final metadata
+-- INSERT are handled by the evidence-files Edge Function.
 
 -- Keep the existing public API, but also create a structured dispute record.
 create or replace function public.open_deal_dispute(p_deal_id uuid,p_reason text)
