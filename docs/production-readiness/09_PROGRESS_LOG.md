@@ -1407,3 +1407,54 @@ activation, or removal of Vercel protection.
 - The full local release gate passed catalog verification, TypeScript,
   74 automated tests, repository secret scanning, production build, and
   Preview smoke.
+
+### Merge and protected Production evidence
+
+- The final review head `b465894dc700c0085863be1bb7a6b8526f65ac73`
+  passed GitHub workflow `30396900291` (run 99) and Vercel status.
+- PR #74 was squash-merged to `main` as verified commit
+  `edeed745a64896cc1f740748be89d5a4fc03bec0`.
+- Exact Production deployment `dpl_57ZZsvUoeHUS3CTAXHFhk5qJepb6` reached
+  `READY` on that commit. The errors-only build completed cleanly in ten
+  seconds and the warning/error/fatal runtime scan returned no records.
+- Anonymous access remains behind Vercel Authentication with HTTP 302,
+  `noindex`, HSTS, frame denial, and no-store.
+- The Vercel project remains `live: false`; only the protected team-scoped
+  aliases are attached.
+
+### SEC-003 activation-safety state
+
+**Merged and protected Production verified; enforcement remains deliberately
+inactive.** Factor enrollment and the dual-control matrix are the next gate.
+The database migration must not be applied before the aggregate readiness query
+returns zero blocked privileged accounts.
+
+## 2026-07-28 — SEC-003 privileged factor-removal safety
+
+### Implemented locally for review
+
+- Split unfinished-factor cancellation from verified-factor removal so the
+  low-risk cleanup path cannot delete an active authenticator.
+- Required a newly issued AAL2 session, no older than ten minutes, before any
+  verified TOTP factor removal.
+- Loaded the application role through the authenticated,
+  server-controlled `current_user_app_role` RPC instead of trusting browser
+  data or editable user metadata.
+- Enforced a minimum of two verified authenticators for `support`,
+  `compliance`, and `admin` at the server mutation boundary. An operator must
+  enroll and verify a third factor before replacing either existing factor.
+- Reflected the server-provided minimum in the account security UI and disabled
+  destructive controls when the floor has been reached.
+- Added negative tests for the privileged two-factor floor, stale AAL2
+  rejection, and verified-factor rejection by the unfinished-setup path.
+- Passed the complete local release gate: catalog validation, TypeScript,
+  77 automated tests, repository secret scanning, production build, and
+  Preview smoke.
+
+### Activation boundary
+
+The read-only Production preflight still reports one privileged account, zero
+ready accounts, and one blocked account. MFA enforcement remains unapplied.
+This batch does not create, verify, or remove a factor; change public access;
+enable real-money processing; activate the scanner; or remove Vercel
+Authentication.
