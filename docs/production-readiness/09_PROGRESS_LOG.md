@@ -1142,3 +1142,52 @@ uploads can be enabled for external testers.
 
 This work does not authorize public launch, external private beta, real-money
 processing, or automatic payout.
+
+## 2026-07-28 — EVD-004 evidence integrity inventory and safe viewer
+
+### Implemented on the review branch
+
+- Added a service-only atomic integrity writer and append-only event inventory.
+- Added latest participant/case-safe `unverified`, `verified`, `missing`,
+  `mismatch`, or `invalid` status without exposing object paths or scanner
+  internals.
+- Re-downloads and reparses private evidence, recomputes SHA-256, and compares
+  type and byte length before every signed viewing URL.
+- Missing, malformed, changed, or mismatched objects fail closed and do not
+  receive a viewing URL.
+- Replaced direct new-tab viewing and admin URL prefetch with one shared modal
+  that renders only local allowlisted image/video blobs.
+- The viewer shows scan/integrity status, full SHA-256, file size/type, and
+  timestamps, and supports keyboard close, focus restoration, mobile layout,
+  and reduced motion.
+
+### Release evidence
+
+- Draft PR [#70](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/70)
+  contains exactly 12 reviewed files.
+- GitHub workflow `30372585274` (run 84) passed for exact head
+  `2211a4551fecbd5b79b4bcdd3eab913c8974f456`.
+- Protected Preview `dpl_Fe11mQ672ZQV4wMCeDqhzWnTm4jC` is READY on the same
+  head, has no build error, redirects through Vercel Authentication, and
+  returns `x-robots-tag: noindex`.
+- Migration `evidence_integrity_inventory` is active as version
+  `20260728151953`.
+- JWT-protected `evidence-files` version 2 is ACTIVE with bundle SHA-256
+  `af110dfe15325bd925415b94add9db9f4f72b88516fe8b4a82d2e787355095d4`.
+- The live rollback suite passed. Browser roles cannot read or insert integrity
+  events or execute the recorder; two mutation-denial triggers protect the raw
+  inventory.
+- The participant-safe view contains integrity status and timestamp without
+  storage paths or scanner-internal fields.
+- All 11 pre-existing evidence rows remain `legacy_unscanned`. No evidence row
+  is marked integrity-verified and no synthetic integrity event remains after
+  verification.
+
+### EVD-004 state
+
+**Backend active; reviewed merge and protected production verification
+pending.** The scanner gateway remains deliberately unconfigured, so external
+evidence upload and the clean-object staging scenario remain disabled.
+
+This work does not authorize public launch, external private beta, real-money
+processing, automatic payout, or evidence upload activation.

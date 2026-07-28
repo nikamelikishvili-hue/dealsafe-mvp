@@ -1712,7 +1712,7 @@ test('private evidence uses quarantine, service-side scanning, and 60-second acc
 
   assert.match(client, /functions\/v1\/evidence-files/);
   assert.match(client, /deal_evidence_safe/);
-  assert.doesNotMatch(client, /object\/sign\/deal-evidence/);
+  assert.doesNotMatch(client, /fetch\([^)]*object\/sign\/deal-evidence/);
   assert.doesNotMatch(client, /rest\/v1\/deal_evidence[^_]/);
 
   assert.match(rollbackTests, /EVD-001 bucket allowlist or privacy contract changed/);
@@ -1722,4 +1722,66 @@ test('private evidence uses quarantine, service-side scanning, and 60-second acc
   assert.match(standard, /scanner remains fail-closed/i);
   assert.match(standard, /does not authorize public launch/i);
   assert.match(readinessIndex, /25_EVIDENCE_FILE_SECURITY\.md/);
+});
+
+test('evidence viewer revalidates bytes and records append-only integrity before access', () => {
+  const migration = readText('supabase/evidence_integrity_inventory.sql');
+  const rollbackTests = readText('supabase/tests/evidence_integrity_inventory_rollback.sql');
+  const edgeFunction = readText('supabase/functions/evidence-files/index.ts');
+  const client = readText('src/services/supabaseRest.ts');
+  const viewer = readText('src/EvidenceViewer.tsx');
+  const styles = readText('src/evidence.css');
+  const app = readText('src/app.tsx');
+  const standard = readText('docs/production-readiness/26_EVIDENCE_INTEGRITY_VIEWER.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(migration, /create table if not exists public\.evidence_integrity_events/);
+  assert.match(migration, /evidence_integrity_events_reject_update_delete/);
+  assert.match(migration, /create or replace function public\.record_evidence_integrity_result/);
+  assert.match(migration, /security definer[\s\S]*set search_path = ''/);
+  assert.match(migration, /grant execute on function public\.record_evidence_integrity_result[\s\S]*to service_role/);
+  assert.match(migration, /revoke all on function public\.record_evidence_integrity_result[\s\S]*from public, anon, authenticated/);
+  assert.match(migration, /integrity_status[\s\S]*integrity_checked_at/);
+  assert.doesNotMatch(
+    migration.match(/create view public\.deal_evidence_safe[\s\S]*?from public\.deal_evidence as evidence;/)?.[0] || '',
+    /storage_path|uploaded_by|scan_provider|scan_reference|metadata|observed_sha256/,
+  );
+
+  const downloadIndex = edgeFunction.indexOf('.from("deal-evidence")\n    .download(evidence.storage_path)');
+  const hashIndex = edgeFunction.indexOf('evidenceSha256(bytes)');
+  const integrityIndex = edgeFunction.indexOf('recordIntegrityResult(evidence.id, userId', hashIndex);
+  const signedIndex = edgeFunction.indexOf('createSignedUrl(evidence.storage_path, evidenceSignedUrlTtlSeconds)');
+  assert.ok(downloadIndex >= 0, 'Evidence viewer must download the private object for revalidation');
+  assert.ok(hashIndex > downloadIndex, 'Evidence digest must be recomputed after private download');
+  assert.ok(integrityIndex > hashIndex, 'Integrity result must be recorded after digest computation');
+  assert.ok(signedIndex > integrityIndex, 'Signed URL must be created only after integrity recording');
+  assert.match(edgeFunction, /integrity\.integrity_status !== "verified"/);
+  assert.match(edgeFunction, /evidence_integrity_failed/);
+
+  assert.match(client, /export async function loadDealEvidenceViewer/);
+  assert.match(client, /credentials:'omit',referrerPolicy:'no-referrer'/);
+  assert.match(client, /URL\.createObjectURL\(new Blob/);
+  assert.match(client, /bytes\.byteLength!==data\.fileSizeBytes/);
+  assert.match(client, /crypto\.subtle\.digest\('SHA-256',bytes\)/);
+  assert.match(client, /evidenceViewerSha256\(bytes\)!==data\.sha256/);
+  assert.match(client, /signedUrl\.origin!==expectedStorageOrigin/);
+  assert.match(client, /storage\/v1\/object\/sign\/deal-evidence/);
+  assert.doesNotMatch(app, /window\.open\('about:blank','_blank'\)/);
+  assert.doesNotMatch(viewer, /<iframe|<object|<embed|dangerouslySetInnerHTML/);
+  assert.match(viewer, /URL\.revokeObjectURL/);
+  assert.match(viewer, /role="dialog"/);
+  assert.match(viewer, /aria-modal="true"/);
+  assert.match(viewer, /event\.key === 'Escape'/);
+  assert.match(viewer, /event\.key !== 'Tab'/);
+  assert.match(styles, /\.evidence-viewer-backdrop/);
+  assert.match(styles, /@media \(max-width:700px\)/);
+  assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
+
+  assert.match(rollbackTests, /EVD-004 matching bytes were not recorded as verified/);
+  assert.match(rollbackTests, /EVD-004 digest mismatch did not fail closed/);
+  assert.match(rollbackTests, /EVD-004 integrity history was mutable/);
+  assert.match(rollbackTests, /rollback;/);
+  assert.match(standard, /never uses an iframe, object, embed/i);
+  assert.match(standard, /does not authorize public launch/i);
+  assert.match(readinessIndex, /26_EVIDENCE_INTEGRITY_VIEWER\.md/);
 });
