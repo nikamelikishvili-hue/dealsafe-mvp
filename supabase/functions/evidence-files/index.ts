@@ -355,7 +355,7 @@ async function finalizeUpload(userId: string, intakeId: string) {
       },
     })
     .select(
-      "id,deal_id,dispute_id,uploaded_by,uploader_role,evidence_type,file_name,mime_type,detected_mime_type,file_size_bytes,sha256,scan_status,scanned_at,created_at",
+      "id,deal_id,dispute_id,uploaded_by,uploader_role,evidence_type,file_name,mime_type,detected_mime_type,file_size_bytes,sha256,scan_status,scanned_at,integrity_status,integrity_checked_at,retention_class,retention_until,lifecycle_status,deleted_at,created_at",
     )
     .single();
   if (evidenceError || !evidence) {
@@ -430,7 +430,7 @@ async function signedUrl(userId: string, evidenceId: string) {
   const admin = adminClient();
   const { data: evidence, error } = await admin.from("deal_evidence")
     .select(
-      "id,deal_id,storage_path,file_name,mime_type,detected_mime_type,file_size_bytes,sha256,scan_status,scanned_at,uploader_role,evidence_type,deals(seller_id,buyer_id)",
+      "id,deal_id,storage_path,file_name,mime_type,detected_mime_type,file_size_bytes,sha256,scan_status,scanned_at,lifecycle_status,uploader_role,evidence_type,deals(seller_id,buyer_id)",
     )
     .eq("id", evidenceId)
     .maybeSingle();
@@ -442,6 +442,13 @@ async function signedUrl(userId: string, evidenceId: string) {
     throw new EvidenceEndpointError(
       "evidence_not_cleared",
       "This file is not available until its security review is complete.",
+      423,
+    );
+  }
+  if (evidence.lifecycle_status !== "retained") {
+    throw new EvidenceEndpointError(
+      "evidence_lifecycle_blocked",
+      "This file is unavailable while its retention status is under review.",
       423,
     );
   }

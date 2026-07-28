@@ -116,9 +116,51 @@ export interface TrustPassportSettings { public_id:string;enabled:boolean }
 export interface TrustPassport { display_name:string;verification_status:'not_started'|'pending'|'verified'|'failed';member_since:string;completed_deals:number;completed_sales:number;completed_purchases:number;rating_count:number;average_rating:number|null;recent_ratings:{stars:number;created_at:string}[] }
 export interface DealInspection { agreement_version:number;item_reviewed:boolean;price_confirmed:boolean;handoff_confirmed:boolean;reference_checked:boolean;inspected_at:string;buyer_name:string }
 export type EvidenceType=EvidenceUploadType;
-export type EvidenceIntegrityStatus='unverified'|'verified'|'missing'|'mismatch'|'invalid';
-export interface DealEvidence { id:string;deal_id:string;dispute_id:string|null;uploader_role:'seller'|'buyer'|'admin';evidence_type:EvidenceType|string;file_name:string|null;mime_type:string|null;detected_mime_type:string|null;file_size_bytes:number|null;sha256:string|null;scan_status:'clean'|'legacy_unscanned';scanned_at:string|null;integrity_status:EvidenceIntegrityStatus;integrity_checked_at:string|null;created_at:string }
+export type EvidenceIntegrityStatus='unverified'|'verified'|'missing'|'mismatch'|'invalid'|'deleted';
+export type EvidenceLifecycleStatus='retained'|'deletion_review'|'deletion_approved'|'deletion_processing'|'deleted';
+export interface DealEvidence { id:string;deal_id:string;dispute_id:string|null;uploader_role:'seller'|'buyer'|'admin';evidence_type:EvidenceType|string;file_name:string|null;mime_type:string|null;detected_mime_type:string|null;file_size_bytes:number|null;sha256:string|null;scan_status:'clean'|'legacy_unscanned'|'deleted';scanned_at:string|null;integrity_status:EvidenceIntegrityStatus;integrity_checked_at:string|null;retention_class:'routine_evidence'|'dispute_evidence';retention_until:string|null;lifecycle_status:EvidenceLifecycleStatus;deleted_at:string|null;created_at:string }
 export interface DealEvidenceViewer { objectUrl:string;expiresAt:string;mimeType:'image/webp'|'video/mp4'|'video/webm'|'video/quicktime';fileName:string;fileSizeBytes:number;sha256:string;scanStatus:'clean';scannedAt:string;integrityStatus:'verified';integrityCheckedAt:string }
+export interface EvidenceLifecycleJob {
+  jobId:string;
+  jobType:'integrity_check'|'quarantine_cleanup'|'evidence_delete';
+  status:'pending'|'pending_review'|'approved'|'processing'|'blocked'|'failed';
+  evidenceId:string|null;
+  publicId:string|null;
+  title:string|null;
+  retentionClass:'routine_evidence'|'dispute_evidence'|null;
+  retentionUntil:string|null;
+  lifecycleStatus:EvidenceLifecycleStatus|null;
+  reasonCode:string;
+  attempts:number;
+  lastErrorCode:string|null;
+  createdAt:string;
+  updatedAt:string;
+  activeHold:boolean;
+  holdKey:string|null;
+}
+export interface EvidenceLifecycleAlert {
+  alertId:string;
+  alertType:'deletion_review_required'|'integrity_failure'|'maintenance_failure'|'legal_hold_block';
+  severity:'info'|'warning'|'critical';
+  ownerRole:'admin'|'compliance';
+  status:'open'|'acknowledged';
+  summary:string;
+  evidenceId:string|null;
+  jobId:string|null;
+  createdAt:string;
+}
+export interface EvidenceLifecycleSnapshot {
+  generatedAt:string;
+  counts:{
+    openAlerts:number;
+    integrityQueued:number;
+    quarantineQueued:number;
+    deletionReviews:number;
+    activeLegalHolds:number;
+  };
+  jobs:EvidenceLifecycleJob[];
+  alerts:EvidenceLifecycleAlert[];
+}
 export interface AdminDispute { dispute_id:string;deal_id:string;public_id:string;title:string;reason:string;dispute_status:'open'|'evidence_requested'|'under_review'|'resolved_buyer'|'resolved_seller'|'refunded'|'cancelled';response_deadline:string;opened_at:string;opened_by_name:string;seller_name:string;buyer_name:string;payment_status:string;item_amount_cents:number;currency:CurrencyCode;resolution_note:string|null }
 export interface SellerDeclarationRecord { attested:boolean;attested_at:string|null }
 export interface AgreementHistoryVersion { version:number;price_cents:number;currency:CurrencyCode;condition:'Like new'|'Good'|'Fair';delivery_method:'Meet in person'|'Ship to buyer';content_hash:string;created_at:string;acceptance_count:number;is_current:boolean }
@@ -540,6 +582,34 @@ async function invokeEvidenceFiles<T>(session:StoredSession,body:Record<string,u
   }
   if(!data)throw new Error('The secure file service returned an invalid response.');
   return data as T;
+}
+async function invokeEvidenceMaintenance<T>(session:StoredSession,body:Record<string,unknown>){
+  const response=await authenticatedFetch(session,`${supabaseUrl}/functions/v1/evidence-maintenance`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(body)});
+  const data=await response.json().catch(()=>null) as ({error?:unknown;code?:unknown}&T)|null;
+  if(!response.ok){
+    const message=typeof data?.error==='string'&&data.error.length<=240?data.error:'The evidence lifecycle service is temporarily unavailable.';
+    throw new Error(message);
+  }
+  if(!data)throw new Error('The evidence lifecycle service returned an invalid response.');
+  return data as T;
+}
+export async function getEvidenceLifecycleSnapshot(session:StoredSession){
+  return await invokeEvidenceMaintenance<EvidenceLifecycleSnapshot>(session,{action:'snapshot'});
+}
+export async function refreshEvidenceLifecycleInventory(session:StoredSession){
+  await invokeEvidenceMaintenance<{inventory:Record<string,unknown>}>(session,{action:'refresh-inventory'});
+}
+export async function approveEvidenceDeletion(session:StoredSession,evidenceId:string,reason:string){
+  await invokeEvidenceMaintenance<{jobId:string}>(session,{action:'approve-deletion',evidenceId,reason});
+}
+export async function placeEvidenceLegalHold(session:StoredSession,evidenceId:string,reason:string){
+  return await invokeEvidenceMaintenance<{holdKey:string}>(session,{action:'place-legal-hold',evidenceId,reason});
+}
+export async function releaseEvidenceLegalHold(session:StoredSession,evidenceId:string,holdKey:string,reason:string){
+  await invokeEvidenceMaintenance<{holdKey:string}>(session,{action:'release-legal-hold',evidenceId,holdKey,reason});
+}
+export async function acknowledgeEvidenceLifecycleAlert(session:StoredSession,alertId:string){
+  await invokeEvidenceMaintenance<{acknowledged:boolean}>(session,{action:'acknowledge-alert',alertId});
 }
 function normalizeEvidenceVideo(file:File){
   const extension=file.name.split('.').pop()?.toLowerCase();

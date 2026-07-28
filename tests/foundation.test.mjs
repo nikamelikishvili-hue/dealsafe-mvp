@@ -185,6 +185,9 @@ test('the production-readiness specification is complete and linked', () => {
     '22_RLS_POLICY_PERFORMANCE.md',
     '23_FOREIGN_KEY_INDEX_GOVERNANCE.md',
     '24_IMMUTABLE_AUDIT_EVENTS.md',
+    '25_EVIDENCE_FILE_SECURITY.md',
+    '26_EVIDENCE_INTEGRITY_VIEWER.md',
+    '27_EVIDENCE_LIFECYCLE_GOVERNANCE.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -266,6 +269,42 @@ test('production database hardening is deny-by-default with narrow RPC allowlist
   assert.match(schema, /for update to authenticated[\s\S]*with check \(auth\.uid\(\) = id\)/);
   assert.match(schema, /seller inserts draft deals/);
   assert.match(schema, /seller updates own draft deals/);
+});
+
+test('evidence lifecycle deletion is review-gated, hold-aware, and Storage-verified', () => {
+  const migration = readText('supabase/evidence_lifecycle_governance.sql');
+  const worker = readText('supabase/functions/evidence-maintenance/index.ts');
+  const viewerEndpoint = readText('supabase/functions/evidence-files/index.ts');
+  const functionConfig = readText('supabase/config.toml');
+  const adminCenter = readText('src/EvidenceLifecycleCenter.tsx');
+
+  assert.match(migration, /status\s*=\s*'pending_review'/);
+  assert.match(migration, /approve_evidence_deletion/);
+  assert.match(migration, /evidence_has_active_legal_hold/);
+  assert.match(migration, /dispute\.status in \('open', 'evidence_requested', 'under_review'\)/);
+  assert.match(migration, /vault\.create_secret/);
+  assert.match(migration, /dealivra-evidence-lifecycle-inventory/);
+  assert.match(migration, /dealivra-evidence-maintenance-worker/);
+  assert.match(migration, /revoke update, delete, truncate, trigger[\s\S]*evidence_lifecycle_events/);
+  assert.match(migration, /with \(security_invoker = true, security_barrier = true\)/);
+
+  assert.match(functionConfig, /\[functions\.evidence-maintenance\][\s\S]*verify_jwt = false/);
+  assert.match(worker, /x-dealivra-maintenance-secret/);
+  assert.match(worker, /claim_evidence_maintenance_jobs/);
+  assert.match(worker, /requireUser\(request\)/);
+  assert.match(worker, /requireOperator\(userId\)/);
+  assert.doesNotMatch(worker, /SUPABASE_SERVICE_ROLE_KEY\s*[:=]\s*["'][^"']+/);
+
+  const removalIndex = worker.indexOf('.remove([job.storage_path])');
+  const absenceCheckIndex = worker.indexOf('.download(job.storage_path)', removalIndex);
+  const completionIndex = worker.indexOf('"complete_evidence_maintenance_job"', absenceCheckIndex);
+  assert.ok(removalIndex >= 0, 'Worker must delete with the Storage API');
+  assert.ok(absenceCheckIndex > removalIndex, 'Worker must verify absence after Storage removal');
+  assert.ok(completionIndex > absenceCheckIndex, 'Metadata completion must happen after absence verification');
+
+  assert.match(viewerEndpoint, /evidence\.lifecycle_status !== "retained"/);
+  assert.match(adminCenter, /Evidence lifecycle center/);
+  assert.doesNotMatch(adminCenter, /storage_path|maintenance_secret|scan_reference/);
 });
 
 test('auth handlers never return a refresh token to browser JavaScript', async () => {
