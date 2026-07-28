@@ -522,3 +522,41 @@ private Storage, and protected Edge Function access before its JWT expiry.
 Security notification and suspected-account-takeover recovery evidence also
 remain required.
 
+## 2026-07-28 — SEC-005 protected payment origin boundary
+
+### Implemented
+
+- Replaced wildcard CORS in the shared Edge Function response path with exact
+  production origins and a project-and-team-bound Vercel Preview rule.
+- Required an approved, non-opaque browser origin before any protected
+  payment function reaches JWT, database, or Stripe logic.
+- Added fail-closed preflight checks for the method and request-header
+  allowlist, exact origin echoing, `Vary: Origin`, and `no-store`.
+- Kept the Stripe webhook outside the browser-origin boundary because it uses
+  its raw-body Stripe signature and timestamp check.
+- Documented explicit environment overrides without permitting broad
+  `*.vercel.app` or wildcard origins.
+
+### Verification evidence
+
+- Repository coverage increased from 47 to 49 passing tests. It proves no
+  protected function imports or serves application wildcard CORS and all four
+  use the shared origin boundary.
+- All four deployed protected functions returned `204` and echoed the exact
+  Dealivra production or owned Preview origin for reviewed preflights.
+- Foreign, missing, opaque, wrong-project, wrong-team, method, and header
+  preflight cases returned `403` without an allow-origin header.
+- A request from an approved origin without a user JWT still returned `401`.
+  Supabase's gateway generates that pre-function rejection; the application
+  boundary remains responsible for exact CORS on requests that reach function
+  code.
+- The four protected functions remain active with `verify_jwt=true`; the
+  unchanged Stripe webhook remains active with `verify_jwt=false`.
+
+### SEC-005 state
+
+**In progress.** This batch closes the CORS/origin portion after deployment and
+negative HTTP evidence. Cookie-session CSRF protection remains coupled to the
+future SEC-001 server-managed session architecture and must be completed before
+SEC-005 is fully closed.
+

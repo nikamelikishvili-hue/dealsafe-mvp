@@ -11,6 +11,10 @@ Dealivra must use separate configuration for Local, Preview, Staging, and Produc
 | `SUPABASE_URL` | Server | Yes outside local static demo | Supabase project origin used by same-origin Auth Functions | Auth Function returns a generic `503` and logs a safe diagnostic |
 | `SUPABASE_PUBLISHABLE_KEY` | Server | Yes outside local static demo | Browser-safe publishable key used by Auth Functions | Auth Function returns a generic `503` and logs a safe diagnostic |
 | `VITE_GOOGLE_MAPS_API_KEY` | Browser | No | Address autocomplete restricted to approved web origins | Structured manual US address fields remain available |
+| `SITE_URL` | Supabase Edge Function | Yes for payment flows | Canonical HTTPS origin used for Stripe redirects and the protected-function origin allowlist | Defaults to `https://dealivra.com`; nonmatching browser calls are denied |
+| `DEALIVRA_ALLOWED_ORIGINS` | Supabase Edge Function | No | Comma-separated additional exact HTTPS origins for an approved environment | Invalid entries are ignored and cannot broaden access |
+| `DEALIVRA_VERCEL_PROJECT_SLUG` | Supabase Edge Function | No | Expected Vercel project prefix for protected Preview deployments | Defaults to the current `dealsafe` project slug |
+| `DEALIVRA_VERCEL_TEAM_SLUG` | Supabase Edge Function | No | Expected Vercel team suffix for protected Preview deployments | Defaults to the current `nika13` team slug |
 
 `VITE_` values are public by design and are included in the browser build. They must never contain a Supabase `service_role` JWT, an `sb_secret_` key, a Stripe secret, an email-provider key, or any other privileged credential.
 
@@ -39,6 +43,11 @@ Preview, Staging, and Production must not share a Supabase project, Stripe accou
 
 - Supabase URLs must be an HTTPS origin without credentials, query parameters, fragments, or an extra path. Plain HTTP is accepted only for `localhost` or `127.0.0.1`.
 - Browser and Auth Function configuration rejects keys beginning with `sb_secret_`.
+- Protected payment Edge Functions require an exact allowed browser `Origin`.
+  Missing, opaque, malformed, HTTP, foreign, or unexpected Vercel origins are
+  denied before user/session and payment logic runs.
+- Preview matching is limited to the configured project and team slugs. A
+  wildcard such as `*.vercel.app` or `*` is prohibited.
 - Auth endpoints return generic user-facing errors and must never return configuration values.
 - Server diagnostics may name the failing configuration category but must not log URLs, keys, tokens, cookies, passwords, or submitted identity data.
 - Address autocomplete is optional. State, ZIP code, apartment/suite/unit, and the remaining address fields must continue to work without Google Maps.

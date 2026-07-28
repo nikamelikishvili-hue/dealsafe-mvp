@@ -23,6 +23,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [12_CATALOG_GOVERNANCE.md](12_CATALOG_GOVERNANCE.md) | Catalog ownership, release evidence, update cadence, privacy-safe adoption metrics, and rollback |
 | [13_SESSION_SECURITY.md](13_SESSION_SECURITY.md) | Session visibility, scoped revocation, privacy boundaries, verification evidence, and remaining immediate-revocation work |
 | [14_IMMEDIATE_SESSION_REVOCATION.md](14_IMMEDIATE_SESSION_REVOCATION.md) | Immediate active-session checks across the Data API, Storage, and protected Edge Functions, including safe rollback |
+| [15_EDGE_ORIGIN_SECURITY.md](15_EDGE_ORIGIN_SECURITY.md) | Exact production/Preview origin enforcement for browser-invoked payment functions and webhook separation |
 
 ## Authority and change control
 
