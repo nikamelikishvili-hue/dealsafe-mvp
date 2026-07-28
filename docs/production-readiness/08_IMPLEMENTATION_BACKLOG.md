@@ -66,6 +66,15 @@ This backlog turns the production specification into controlled delivery work. P
 | SEC-006 | P0 | Add route/action rate limits, CAPTCHA, and abuse telemetry | Defined burst/velocity tests create alerts/blocks |
 | SEC-007 | P1 | Add security notifications and sensitive-change cooldowns | Email/payout/MFA changes are recorded and alerted |
 
+SEC-003A now provides TOTP enrollment, enrolled-user login challenge, and
+mandatory `aal2` enforcement for `support`, `compliance`, and `admin` across the
+Data API, Storage, and protected Edge Functions. SEC-003 remains open for a
+supported phishing-resistant privileged factor, approved lost-factor recovery,
+security notifications, and the protected two-device negative test matrix.
+The production enforcement migration is staged but intentionally unapplied:
+the current aggregate readiness check found one admin account with no verified
+factor, so activation would cause an administrative lockout.
+
 ## Epic 6 — Evidence and private files
 
 | ID | Priority | Work | Acceptance |
