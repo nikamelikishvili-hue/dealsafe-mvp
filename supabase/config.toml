@@ -3,3 +3,6 @@ verify_jwt = false
 
 [functions.evidence-files]
 verify_jwt = true
+
+[functions.evidence-maintenance]
+verify_jwt = false
