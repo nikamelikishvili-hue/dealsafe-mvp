@@ -39,8 +39,11 @@ const createResponse = () => ({
     return this;
   },
 });
-const authProviderSession = refreshToken => ({
-  access_token: 'header.eyJleHAiOjQxMDI0NDQ4MDB9.signature',
+const authProviderSession = (refreshToken, options = {}) => ({
+  access_token: `header.${Buffer.from(JSON.stringify({
+    exp: 4102444800,
+    ...(options.aal ? { aal: options.aal } : {}),
+  })).toString('base64url')}.signature`,
   refresh_token: refreshToken,
   expires_in: 3600,
   user: {
@@ -48,6 +51,7 @@ const authProviderSession = refreshToken => ({
     email: 'user@example.com',
     email_confirmed_at: '2026-07-26T00:00:00Z',
     user_metadata: { display_name: 'Test User' },
+    factors: options.factors ?? [],
   },
 });
 const withAuthProvider = async (fetchImplementation, callback) => {
@@ -188,6 +192,7 @@ test('the production-readiness specification is complete and linked', () => {
     '25_EVIDENCE_FILE_SECURITY.md',
     '26_EVIDENCE_INTEGRITY_VIEWER.md',
     '27_EVIDENCE_LIFECYCLE_GOVERNANCE.md',
+    '28_MFA_AND_PRIVILEGED_STEP_UP.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -334,6 +339,127 @@ test('auth handlers never return a refresh token to browser JavaScript', async (
   assert.equal(response.payload.access_token.startsWith('header.'), true);
 });
 
+test('password login with a verified TOTP factor stays pending until AAL2 verification', async () => {
+  const { default: login } = await import('../api/auth/login.mjs');
+  const response = createResponse();
+  const factor = {
+    id: '11111111-1111-4111-8111-111111111111',
+    factor_type: 'totp',
+    status: 'verified',
+    friendly_name: 'Primary authenticator',
+    created_at: '2026-07-28T00:00:00Z',
+    updated_at: '2026-07-28T00:00:00Z',
+  };
+
+  await withAuthProvider(async () => new Response(JSON.stringify(
+    authProviderSession('must-not-reach-browser', { aal: 'aal1', factors: [factor] }),
+  ), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  }), () => login(authRequest({
+    email: 'user@example.com',
+    password: 'ExamplePass123!',
+  }), response));
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.payload.mfa_required, true);
+  assert.equal(response.payload.factors[0].id, factor.id);
+  assert.equal(response.payload.factors[0].friendlyName, 'Primary authenticator');
+  assert.equal(response.payload.pending_access_token.startsWith('header.'), true);
+  assert.equal(JSON.stringify(response.payload).includes('must-not-reach-browser'), false);
+  assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+});
+
+test('password login fails closed for a verified factor the app cannot challenge', async () => {
+  const { default: login } = await import('../api/auth/login.mjs');
+  const response = createResponse();
+  const unsupportedFactor = {
+    id: '11111111-1111-4111-8111-111111111111',
+    factor_type: 'phone',
+    status: 'verified',
+  };
+
+  await withAuthProvider(async () => new Response(JSON.stringify(
+    authProviderSession('must-not-be-issued', {
+      aal: 'aal1',
+      factors: [unsupportedFactor],
+    }),
+  ), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  }), () => login(authRequest({
+    email: 'user@example.com',
+    password: 'ExamplePass123!',
+  }), response));
+
+  assert.equal(response.statusCode, 403);
+  assert.match(response.payload.error, /unsupported authenticator method/);
+  assert.equal(JSON.stringify(response.payload).includes('must-not-be-issued'), false);
+  assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+});
+
+test('MFA challenge verification promotes the session and keeps its refresh token HttpOnly', async () => {
+  const { default: mfa } = await import('../api/auth/mfa.mjs');
+  const response = createResponse();
+  const factorId = '11111111-1111-4111-8111-111111111111';
+  const requested = [];
+
+  await withAuthProvider(async (url, init) => {
+    requested.push({ url: String(url), body: JSON.parse(init.body) });
+    if (String(url).endsWith(`/factors/${factorId}/challenge`)) {
+      return new Response(JSON.stringify({ id: '22222222-2222-4222-8222-222222222222' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify(authProviderSession('verified-refresh-secret', {
+      aal: 'aal2',
+    })), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, () => mfa(authRequest({
+    action: 'challenge_and_verify',
+    factorId,
+    code: '123456',
+  }, {
+    authorization: 'Bearer pending-aal1-token',
+  }), response));
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(requested.map(item => item.url), [
+    `https://project.example.supabase.co/auth/v1/factors/${factorId}/challenge`,
+    `https://project.example.supabase.co/auth/v1/factors/${factorId}/verify`,
+  ]);
+  assert.deepEqual(requested[1].body, {
+    challenge_id: '22222222-2222-4222-8222-222222222222',
+    code: '123456',
+  });
+  assert.match(response.headers.get('set-cookie'), /verified-refresh-secret/);
+  assert.equal(JSON.stringify(response.payload).includes('verified-refresh-secret'), false);
+});
+
+test('MFA endpoint validates action inputs before contacting the provider', async () => {
+  const { default: mfa } = await import('../api/auth/mfa.mjs');
+  const response = createResponse();
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('Provider must not be called.');
+  }, () => mfa(authRequest({
+    action: 'challenge_and_verify',
+    factorId: 'not-a-factor',
+    code: '12ab',
+  }, {
+    authorization: 'Bearer pending-token',
+  }), response));
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(providerCalled, false);
+  assert.equal(response.payload.error, 'The authenticator request is invalid.');
+});
+
 test('signup rejects cross-origin requests before contacting the auth provider', async () => {
   const { default: signup } = await import('../api/auth/signup.mjs');
   const response = createResponse();
@@ -472,6 +598,32 @@ test('refresh rotates the HttpOnly cookie without exposing its secret', async ()
   assert.equal(JSON.stringify(response.payload).includes('new/refresh+secret'), false);
 });
 
+test('refresh requires AAL2 for every verified factor type', async () => {
+  const { default: refresh } = await import('../api/auth/refresh.mjs');
+  const response = createResponse();
+
+  await withAuthProvider(async () => new Response(JSON.stringify(
+    authProviderSession('must-not-rotate', {
+      aal: 'aal1',
+      factors: [{
+        id: '11111111-1111-4111-8111-111111111111',
+        factor_type: 'phone',
+        status: 'verified',
+      }],
+    }),
+  ), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  }), () => refresh(authRequest({}, {
+    cookie: '__Host-dealivra-refresh=existing-secret',
+  }), response));
+
+  assert.equal(response.statusCode, 401);
+  assert.match(response.payload.error, /Verify your authenticator/);
+  assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+  assert.equal(JSON.stringify(response.payload).includes('must-not-rotate'), false);
+});
+
 test('failed refresh clears the server-only cookie', async () => {
   const { default: refresh } = await import('../api/auth/refresh.mjs');
   const response = createResponse();
@@ -488,6 +640,51 @@ test('failed refresh clears the server-only cookie', async () => {
   assert.equal(response.statusCode, 401);
   assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
   assert.equal(response.payload.error, 'Your session expired. Please sign in again.');
+});
+
+test('MFA enforcement is shared by Data API, Storage, protected functions, and account UI', () => {
+  const migration = readText('supabase/mfa_assurance_enforcement.sql');
+  const rollback = readText('supabase/mfa_assurance_enforcement_rollback.sql');
+  const rollbackTests = readText('supabase/tests/mfa_assurance_enforcement_rollback.sql');
+  const edgeCommon = readText('supabase/functions/_shared/common.ts');
+  const paymentErrors = readText('supabase/functions/_shared/payment-observability.ts');
+  const evidenceEndpoint = readText('supabase/functions/evidence-files/index.ts');
+  const accountMfa = readText('src/AccountMfaSecurity.tsx');
+  const loginMfa = readText('src/MfaLoginVerification.tsx');
+  const client = readText('src/services/supabaseRest.ts');
+  const app = readText('src/app.tsx');
+  const standard = readText('docs/production-readiness/28_MFA_AND_PRIVILEGED_STEP_UP.md');
+
+  assert.match(migration, /auth\.mfa_factors/);
+  assert.match(migration, /factor\.status = 'verified'/);
+  assert.match(migration, /'support', 'compliance', 'admin'/);
+  assert.match(migration, /request_aal = 'aal2'/);
+  assert.match(migration, /DEALIVRA_MFA_REQUIRED/);
+  assert.match(migration, /'status', 403/);
+  assert.match(migration, /as restrictive[\s\S]*for all[\s\S]*to authenticated/);
+  assert.match(rollback, /drop policy if exists "MFA assurance required for protected accounts"/);
+  assert.match(rollback, /drop function if exists dealsafe_private\.is_current_mfa_assurance_sufficient/);
+  assert.match(rollbackTests, /SEC-003 private assurance helper boundary is not exact/);
+
+  assert.match(edgeCommon, /data\.user\.factors\?\.some/);
+  assert.match(edgeCommon, /\["support", "compliance", "admin"\]/);
+  assert.match(edgeCommon, /assuranceLevel !== "aal2"/);
+  assert.match(edgeCommon, /Multi-factor verification is required/);
+  assert.match(paymentErrors, /"mfa_required"[\s\S]*403/);
+  assert.match(evidenceEndpoint, /code: "mfa_required"[\s\S]*403/);
+
+  assert.match(accountMfa, /Authenticator protection/);
+  assert.match(accountMfa, /autoComplete="one-time-code"/);
+  assert.match(accountMfa, /A second enrolled device reduces account-recovery risk/);
+  assert.doesNotMatch(accountMfa, /dangerouslySetInnerHTML/);
+  assert.match(loginMfa, /STEP 2 OF 2/);
+  assert.match(client, /pendingAccessToken/);
+  assert.match(client, /claims\?\.aal!=='aal2'/);
+  assert.match(client, /window\.dispatchEvent\(new Event\(mfaRequiredEvent\)\)/);
+  assert.match(app, /<AccountMfaSecurity session=\{session\}/);
+  assert.match(app, /<MfaLoginVerification challenge=\{mfaLogin\}/);
+  assert.match(standard, /TOTP is not phishing-resistant/);
+  assert.match(standard, /does not authorize public launch/);
 });
 
 test('malformed refresh cookies fail safely without contacting the auth provider', async () => {
