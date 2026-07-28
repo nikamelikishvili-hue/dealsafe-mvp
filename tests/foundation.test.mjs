@@ -137,8 +137,7 @@ test('Vercel configuration includes the minimum browser security headers', () =>
       source: '/:path*',
       has: [
         {
-          type: 'header',
-          key: 'host',
+          type: 'host',
           value: 'dealsafe-mvp.vercel.app',
         },
       ],
