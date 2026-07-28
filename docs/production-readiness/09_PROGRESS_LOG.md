@@ -630,7 +630,69 @@ SEC-005 is fully closed.
 ### PAY-002 state
 
 **In progress.** The database and webhook controls are deployed and verified.
-GitHub CI, exact-commit protected release evidence, and a Stripe Dashboard
-Sandbox resend/concurrency record are still required before PAY-002 is marked
+GitHub CI and the exact protected production release passed. A Stripe Dashboard
+Sandbox resend/concurrency record is still required before PAY-002 is marked
+complete.
+
+## PAY-003 trusted payment commands and state invariants
+
+### Implemented
+
+- Added an immutable Checkout snapshot for agreement version, fee version,
+  amount split, currency, seller account, and attempt number.
+- Added a service-only financial command ledger with provider idempotency,
+  recovery lease, attempt limit, and random fencing token.
+- Moved Checkout attach, seller release, dispute refund/release, dispute
+  resolution, deal transition, and material audit into locked database RPCs.
+- Added Stripe PaymentIntent, Charge, Connect account, transfer, and refund
+  comparisons before database finalization.
+- Added webhook amount, currency, transfer-group, internal metadata, agreement,
+  and fee-version validation.
+- Removed the buyer-controlled seller-payout action. Completed delivery now
+  waits for Dealivra operations review during the private beta.
+- Replaced raw provider failure persistence with bounded codes and reviewed
+  customer-safe states.
+
+### Verification evidence
+
+- The combined database migrations parse successfully inside a production
+  transaction that is fully rolled back.
+- The rollback-only PAY-003 suite passed Checkout claim/reuse, concurrent
+  fencing, wrong-buyer denial, immutable amount rejection, admin denial,
+  failed-command recovery, stale-token rejection, exact-once release audit,
+  amount/currency/account/state mismatch denial, and atomic dispute refund.
+- Existing 13 Sandbox payment snapshots were audited before the migration:
+  deal amount, currency, buyer, seller, and current seller account had zero
+  mismatches.
+- Production migrations `stripe_trusted_payment_commands`,
+  `stripe_webhook_trusted_invariants`, and
+  `stripe_financial_commands_requested_by_index` applied successfully.
+- The production rollback-only PAY-003 suite passed again after migration.
+- Two genuinely concurrent production calls produced exactly one `claimed`
+  and one `in_progress` command result; all synthetic records were removed.
+- The command table is RLS-enabled with no browser grants. All six trusted
+  financial RPCs use `SECURITY DEFINER`, an empty `search_path`, and execute
+  grants limited to `postgres` and `service_role`.
+- The existing 13 Sandbox payments have complete trusted snapshots and zero
+  amount/currency mismatches. No test command remains in the production
+  ledger.
+- Edge Functions `stripe-create-checkout` v10,
+  `stripe-release-payment` v11, `stripe-resolve-dispute` v4, and
+  `stripe-webhook` v9 are active with the intended JWT boundaries.
+- Post-migration advisors found no missing foreign-key index. The service-only
+  command ledger intentionally has RLS with no browser policy; new indexes are
+  reported as unused until private-beta command traffic begins.
+- Live negative HTTP checks returned 405 for webhook GET, 400 for an invalid
+  signature, and 401 for protected payment commands without a JWT. Webhook
+  rejections use `no-store`.
+- The full local release gate passed with the catalog release check,
+  type checking, 52 repository tests, secret scanning, production build, and
+  Preview navigation smoke test.
+
+### PAY-003 state
+
+**In progress.** Database, concurrency, advisor, deployed Edge Function, and
+local repository verification evidence pass. Protected Preview, GitHub CI, and
+exact-commit protected production evidence remain before this batch is
 complete.
 

@@ -1,211 +1,235 @@
 import { adminClient, errorResponse, handleBrowserRequest, json, requireUser, stripeRequest } from "../_shared/common.ts";
+import { type FinancialCommand, verifyTrustedStripePayment } from "../_shared/financial.ts";
 
 type Decision = "resolved_buyer" | "resolved_seller";
-type StripeTransfer = { id: string };
-type StripeRefund = { id: string; status?: string };
-type StripePaymentIntent = { latest_charge?: string | { id?: string } | null };
 
-const activeDisputeStatuses = ["open", "evidence_requested", "under_review"];
+type StripeTransfer = {
+  id: string;
+  livemode: boolean;
+  amount: number;
+  currency: string;
+  destination: string;
+  source_transaction: string | null;
+  transfer_group: string | null;
+  metadata?: Record<string, string>;
+};
 
-async function chargeIdForPayment(payment: { charge_id?: string | null; payment_intent_id?: string | null }) {
-  if (payment.charge_id) return payment.charge_id;
-  if (!payment.payment_intent_id) return null;
-  const intent = await stripeRequest<StripePaymentIntent>(
-    `/v1/payment_intents/${encodeURIComponent(payment.payment_intent_id)}`,
-    { method: "GET" },
-  );
-  return typeof intent.latest_charge === "string"
-    ? intent.latest_charge
-    : intent.latest_charge?.id || null;
+type StripeRefund = {
+  id: string;
+  livemode: boolean;
+  status: string;
+  amount: number;
+  currency: string;
+  payment_intent: string | null;
+  charge: string | null;
+  metadata?: Record<string, string>;
+};
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function safeVerificationCode(error: unknown) {
+  const value = error instanceof Error ? error.message : "";
+  return /^(financial_command_mismatch|payment_intent_mismatch|charge_mismatch|charge_not_transferable|charge_refund_mismatch|seller_account_mismatch)$/.test(value)
+    ? value
+    : "provider_verification_failed";
 }
 
-async function finishDispute(
-  admin: ReturnType<typeof adminClient>,
-  disputeId: string,
-  dealId: string,
-  decision: Decision,
-  note: string,
-  actorId: string,
-) {
-  const disputeStatus = decision;
-  const { error: disputeError } = await admin
-    .from("deal_disputes")
-    .update({
-      status: disputeStatus,
-      resolution_note: note,
-      resolved_by: actorId,
-      resolved_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", disputeId)
-    .in("status", activeDisputeStatuses);
-  if (disputeError) throw new Error("Could not save the dispute decision");
-
-  const nextDealStatus = decision === "resolved_buyer" ? "cancelled" : "completed";
-  await admin
-    .from("deals")
-    .update({ status: nextDealStatus, updated_at: new Date().toISOString() })
-    .eq("id", dealId)
-    .eq("status", "disputed");
-
-  await admin.from("audit_events").insert({
-    deal_id: dealId,
-    actor_id: actorId,
-    event_type: decision === "resolved_buyer" ? "dispute_refunded" : "dispute_released_to_seller",
-    metadata: { dispute_id: disputeId, note },
-  });
+async function failClaim(commandId: string | null, claimToken: string | null, code: string) {
+  if (!commandId || !claimToken) return;
+  try {
+    await adminClient().rpc("fail_stripe_financial_command", {
+      p_command_id: commandId,
+      p_claim_token: claimToken,
+      p_error_code: code,
+    });
+  } catch {
+    // The fenced command lease permits a later operations retry.
+  }
 }
 
 Deno.serve((request) => handleBrowserRequest(request, async () => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
+  let commandId: string | null = null;
+  let claimToken: string | null = null;
+  let providerMayBeComplete = false;
   try {
     const user = await requireUser(request);
-    const body = await request.json() as { disputeId?: string; decision?: string; note?: string };
-    const disputeId = body.disputeId?.trim();
+    const body = await request.json() as {
+      disputeId?: string;
+      decision?: string;
+      note?: string;
+    };
+    const disputeId = body.disputeId?.trim() || "";
     const note = body.note?.trim() || "";
     const decision = body.decision as Decision;
-    if (!disputeId) throw new Error("Dispute is required");
-    if (decision !== "resolved_buyer" && decision !== "resolved_seller") throw new Error("Invalid financial dispute decision");
-    if (note.length < 3 || note.length > 1000) throw new Error("Resolution note must contain 3 to 1000 characters");
+    if (!uuidPattern.test(disputeId)) throw new Error("Dispute is required");
+    if (decision !== "resolved_buyer" && decision !== "resolved_seller") {
+      throw new Error("Invalid financial dispute decision");
+    }
+    if (note.length < 3 || note.length > 1000) {
+      throw new Error("Resolution note must contain 3 to 1000 characters");
+    }
 
     const admin = adminClient();
-    const { data: profile, error: profileError } = await admin
-      .from("profiles")
-      .select("is_admin")
-      .eq("id", user.id)
-      .single();
-    if (profileError || !profile?.is_admin) throw new Error("Admin access required");
-
     const { data: dispute, error: disputeError } = await admin
       .from("deal_disputes")
-      .select("id,deal_id,status")
+      .select("deal_id")
       .eq("id", disputeId)
       .single();
-    if (disputeError || !dispute || !activeDisputeStatuses.includes(dispute.status)) {
-      throw new Error("Open dispute was not found");
+    if (disputeError || !dispute?.deal_id) throw new Error("Open dispute was not found");
+
+    const commandType = decision === "resolved_buyer"
+      ? "dispute_refund"
+      : "dispute_release";
+    const action = decision === "resolved_buyer" ? "refund" : "transfer";
+    const { data, error: prepareError } = await admin.rpc(
+      "prepare_stripe_financial_command",
+      {
+        p_deal_id: dispute.deal_id,
+        p_dispute_id: disputeId,
+        p_command_type: commandType,
+        p_actor_id: user.id,
+        p_lease_seconds: 300,
+      },
+    );
+    if (prepareError || !data) {
+      throw new Error("This dispute decision is not eligible for a financial action");
     }
 
-    const { data: deal, error: dealError } = await admin
-      .from("deals")
-      .select("id,public_id,status")
-      .eq("id", dispute.deal_id)
-      .single();
-    if (dealError || !deal) throw new Error("Deal was not found");
-
-    const { data: payment, error: paymentError } = await admin
-      .from("protected_payments")
-      .select("id,status,seller_stripe_account_id,seller_amount_cents,currency,payment_intent_id,charge_id,transfer_group,transfer_id,refund_id")
-      .eq("deal_id", deal.id)
-      .single();
-    if (paymentError || !payment) throw new Error("Protected payment was not found");
-
-    if (decision === "resolved_buyer") {
-      if (payment.refund_id && payment.status === "refunded") {
-        return json({ resolved: true, action: "refund", refundId: payment.refund_id, idempotent: true });
-      }
-      if (payment.transfer_id || payment.status === "released") {
-        throw new Error("Funds were already released and cannot be refunded automatically");
-      }
-      if (!["funds_secured", "disputed", "release_failed", "refund_pending"].includes(payment.status)) {
-        throw new Error("Payment is not ready for a buyer refund");
-      }
-
-      await admin.from("protected_payments").update({
-        status: "refund_pending",
-        failure_message: null,
-        updated_at: new Date().toISOString(),
-      }).eq("id", payment.id);
-
-      let stripeCompleted = false;
-      try {
-        const params = new URLSearchParams();
-        if (payment.payment_intent_id) params.set("payment_intent", payment.payment_intent_id);
-        else if (payment.charge_id) params.set("charge", payment.charge_id);
-        else throw new Error("Stripe payment is not ready for a refund");
-        params.set("metadata[deal_id]", deal.id);
-        params.set("metadata[dispute_id]", dispute.id);
-        params.set("metadata[dealsafe_payment_id]", payment.id);
-        const refund = await stripeRequest<StripeRefund>("/v1/refunds", {
-          params,
-          idempotencyKey: `dealsafe-dispute-refund-${payment.id}-${dispute.id}`,
-        });
-        stripeCompleted = true;
-        const refundedAt = new Date().toISOString();
-        const { error: saveError } = await admin.from("protected_payments").update({
-          status: "refunded",
-          refund_id: refund.id,
-          refunded_at: refundedAt,
-          updated_at: refundedAt,
-        }).eq("id", payment.id);
-        if (saveError) throw new Error("Refund was created but could not be recorded");
-        await finishDispute(admin, dispute.id, deal.id, decision, note, user.id);
-        return json({ resolved: true, action: "refund", refundId: refund.id });
-      } catch (error) {
-        if (!stripeCompleted) {
-          const failure = error instanceof Error ? error.message : "Stripe refund failed";
-          await admin.from("protected_payments").update({
-            status: "release_failed",
-            failure_message: failure,
-            updated_at: new Date().toISOString(),
-          }).eq("id", payment.id);
-        }
-        throw error;
-      }
-    }
-
-    if (payment.transfer_id && payment.status === "released") {
-      return json({ resolved: true, action: "transfer", transferId: payment.transfer_id, idempotent: true });
-    }
-    if (!["funds_secured", "disputed", "release_failed"].includes(payment.status)) {
-      throw new Error("Payment is not ready for a seller release");
-    }
-    if (!payment.seller_stripe_account_id) throw new Error("Seller Stripe payouts are not connected");
-    const chargeId = await chargeIdForPayment(payment);
-    if (!chargeId) throw new Error("Stripe charge is not ready for release");
-
-    await admin.from("protected_payments").update({
-      status: "release_pending",
-      charge_id: payment.charge_id || chargeId,
-      failure_message: null,
-      updated_at: new Date().toISOString(),
-    }).eq("id", payment.id);
-
-    let stripeCompleted = false;
-    try {
-      const params = new URLSearchParams();
-      params.set("amount", String(payment.seller_amount_cents));
-      params.set("currency", String(payment.currency).toLowerCase());
-      params.set("destination", payment.seller_stripe_account_id);
-      params.set("source_transaction", chargeId);
-      params.set("transfer_group", payment.transfer_group);
-      params.set("description", `Dealivra ${deal.public_id}`);
-      params.set("metadata[deal_id]", deal.id);
-      params.set("metadata[dispute_id]", dispute.id);
-      params.set("metadata[dealsafe_payment_id]", payment.id);
-      const transfer = await stripeRequest<StripeTransfer>("/v1/transfers", {
-        params,
-        idempotencyKey: `dealsafe-dispute-release-${payment.id}-${dispute.id}`,
+    const command = data as FinancialCommand;
+    if (command.disposition === "succeeded" && command.providerObjectId) {
+      return json({
+        resolved: true,
+        action,
+        ...(action === "refund"
+          ? { refundId: command.providerObjectId }
+          : { transferId: command.providerObjectId }),
+        idempotent: true,
       });
-      stripeCompleted = true;
-      const releasedAt = new Date().toISOString();
-      const { error: saveError } = await admin.from("protected_payments").update({
-        status: "released",
-        transfer_id: transfer.id,
-        released_at: releasedAt,
-        updated_at: releasedAt,
-      }).eq("id", payment.id);
-      if (saveError) throw new Error("Transfer was created but could not be recorded");
-      await finishDispute(admin, dispute.id, deal.id, decision, note, user.id);
-      return json({ resolved: true, action: "transfer", transferId: transfer.id });
-    } catch (error) {
-      if (!stripeCompleted) {
-        const failure = error instanceof Error ? error.message : "Stripe transfer failed";
-        await admin.from("protected_payments").update({ status: "release_failed", failure_message: failure, updated_at: new Date().toISOString() }).eq("id", payment.id);
-      }
-      throw error;
     }
+    if (command.disposition === "in_progress") {
+      throw new Error("This financial decision is already being reviewed. Please try again shortly.");
+    }
+
+    commandId = command.commandId || null;
+    claimToken = command.claimToken || null;
+    try {
+      await verifyTrustedStripePayment(command, action);
+    } catch (error) {
+      await failClaim(commandId, claimToken, safeVerificationCode(error));
+      commandId = null;
+      claimToken = null;
+      throw new Error("Payment verification did not pass. The dispute remains under operations review.");
+    }
+
+    let providerObjectId: string;
+    if (action === "refund") {
+      const params = new URLSearchParams();
+      params.set("payment_intent", command.paymentIntentId!);
+      params.set("amount", String(command.amountCents));
+      params.set("metadata[deal_id]", command.dealId!);
+      params.set("metadata[dispute_id]", command.disputeId!);
+      params.set("metadata[dealivra_payment_id]", command.paymentId!);
+      params.set("metadata[dealivra_command_id]", command.commandId!);
+
+      let refund: StripeRefund;
+      providerMayBeComplete = true;
+      try {
+        refund = await stripeRequest<StripeRefund>("/v1/refunds", {
+          params,
+          idempotencyKey: command.idempotencyKey,
+        });
+      } catch {
+        throw new Error("The approved refund needs reconciliation before a safe retry.");
+      }
+
+      if (
+        refund.livemode
+        || !/^re_[A-Za-z0-9_]{8,255}$/.test(refund.id)
+        || refund.amount !== command.amountCents
+        || refund.currency.toUpperCase() !== command.currency
+        || refund.payment_intent !== command.paymentIntentId
+        || refund.charge !== command.chargeId
+        || refund.metadata?.deal_id !== command.dealId
+        || refund.metadata?.dispute_id !== command.disputeId
+        || refund.metadata?.dealivra_payment_id !== command.paymentId
+        || refund.metadata?.dealivra_command_id !== command.commandId
+      ) {
+        throw new Error("Stripe refund confirmation did not match the approved command.");
+      }
+      if (refund.status !== "succeeded") {
+        throw new Error("The refund is pending provider confirmation and requires reconciliation.");
+      }
+      providerObjectId = refund.id;
+    } else {
+      const params = new URLSearchParams();
+      params.set("amount", String(command.amountCents));
+      params.set("currency", command.currency!.toLowerCase());
+      params.set("destination", command.sellerStripeAccountId!);
+      params.set("source_transaction", command.chargeId!);
+      params.set("transfer_group", command.transferGroup!);
+      params.set("description", `Dealivra ${command.dealPublicId}`);
+      params.set("metadata[deal_id]", command.dealId!);
+      params.set("metadata[dispute_id]", command.disputeId!);
+      params.set("metadata[dealivra_payment_id]", command.paymentId!);
+      params.set("metadata[dealivra_command_id]", command.commandId!);
+
+      let transfer: StripeTransfer;
+      providerMayBeComplete = true;
+      try {
+        transfer = await stripeRequest<StripeTransfer>("/v1/transfers", {
+          params,
+          idempotencyKey: command.idempotencyKey,
+        });
+      } catch {
+        throw new Error("The approved payout needs reconciliation before a safe retry.");
+      }
+
+      if (
+        transfer.livemode
+        || !/^tr_[A-Za-z0-9_]{8,255}$/.test(transfer.id)
+        || transfer.amount !== command.amountCents
+        || transfer.currency.toUpperCase() !== command.currency
+        || transfer.destination !== command.sellerStripeAccountId
+        || transfer.source_transaction !== command.chargeId
+        || transfer.transfer_group !== command.transferGroup
+        || transfer.metadata?.deal_id !== command.dealId
+        || transfer.metadata?.dispute_id !== command.disputeId
+        || transfer.metadata?.dealivra_payment_id !== command.paymentId
+        || transfer.metadata?.dealivra_command_id !== command.commandId
+      ) {
+        throw new Error("Stripe payout confirmation did not match the approved command.");
+      }
+      providerObjectId = transfer.id;
+    }
+
+    const { data: finalized, error: finalizeError } = await admin.rpc(
+      "finalize_stripe_financial_command",
+      {
+        p_command_id: commandId,
+        p_claim_token: claimToken,
+        p_provider_object_id: providerObjectId,
+        p_resolution_note: note,
+      },
+    );
+    if (finalizeError || !(finalized as { resolved?: boolean } | null)?.resolved) {
+      throw new Error("The provider action needs reconciliation before any retry");
+    }
+
+    commandId = null;
+    claimToken = null;
+    return json({
+      resolved: true,
+      action,
+      ...(action === "refund"
+        ? { refundId: providerObjectId }
+        : { transferId: providerObjectId }),
+    });
   } catch (error) {
+    if (commandId && claimToken && !providerMayBeComplete) {
+      await failClaim(commandId, claimToken, "dispute_command_unhandled_failure");
+    }
     return errorResponse(error);
   }
 }));

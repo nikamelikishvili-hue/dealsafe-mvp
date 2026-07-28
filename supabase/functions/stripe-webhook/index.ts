@@ -51,6 +51,16 @@ function stringValue(value: unknown, pattern?: RegExp) {
   return !pattern || pattern.test(value) ? value : null;
 }
 
+function positiveInteger(value: unknown) {
+  return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : null;
+}
+
+function versionInteger(value: unknown) {
+  if (typeof value !== "string" || !/^[1-9][0-9]{0,6}$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
 function safeFailure(object: Record<string, unknown>) {
   const error = record(object.last_payment_error);
   const code = stringValue(error.code, /^[a-z0-9_]{1,64}$/) || "payment_failed";
@@ -80,6 +90,16 @@ function references(event: StripeEvent) {
   const latestCharge = typeof object.latest_charge === "string"
     ? stringValue(object.latest_charge, /^ch_[A-Za-z0-9_]{8,255}$/)
     : null;
+  const disputeCharge = event.type === "charge.dispute.created"
+    ? stringValue(object.charge, /^ch_[A-Za-z0-9_]{8,255}$/)
+    : null;
+  const amount = event.type === "charge.refunded"
+    ? positiveInteger(object.amount_refunded)
+    : event.type === "payment_intent.succeeded"
+    ? positiveInteger(object.amount_received)
+    : event.type.startsWith("checkout.session.")
+    ? positiveInteger(object.amount_total)
+    : positiveInteger(object.amount);
 
   return {
     dealId,
@@ -88,10 +108,18 @@ function references(event: StripeEvent) {
       : null,
     paymentIntentId: paymentIntent,
     chargeId: event.type.startsWith("charge.")
-      ? stringValue(objectId, /^ch_[A-Za-z0-9_]{8,255}$/)
+      ? disputeCharge || stringValue(objectId, /^ch_[A-Za-z0-9_]{8,255}$/)
       : latestCharge,
     paymentStatus: stringValue(object.payment_status, /^[a-z_]{1,32}$/),
     failure: safeFailure(object),
+    amountCents: amount,
+    currency: stringValue(object.currency, /^[a-zA-Z]{3}$/)?.toUpperCase() || null,
+    transferGroup: stringValue(object.transfer_group, /^(?:DLV|DS)_[A-Fa-f0-9]{32}$/),
+    metadataPaymentId: stringValue(metadata.dealivra_payment_id, uuidPattern),
+    metadataBuyerId: stringValue(metadata.buyer_id, uuidPattern),
+    metadataSellerId: stringValue(metadata.seller_id, uuidPattern),
+    metadataAgreementVersion: versionInteger(metadata.agreement_version),
+    metadataFeeVersion: stringValue(metadata.fee_version, /^[a-z0-9][a-z0-9_.-]{0,39}$/),
   };
 }
 
@@ -165,6 +193,14 @@ Deno.serve(async (request) => {
       p_payment_status: refs.paymentStatus,
       p_failure_code: refs.failure.code,
       p_failure_message: refs.failure.message,
+      p_amount_cents: refs.amountCents,
+      p_currency: refs.currency,
+      p_transfer_group: refs.transferGroup,
+      p_metadata_payment_id: refs.metadataPaymentId,
+      p_metadata_buyer_id: refs.metadataBuyerId,
+      p_metadata_seller_id: refs.metadataSellerId,
+      p_metadata_agreement_version: refs.metadataAgreementVersion,
+      p_metadata_fee_version: refs.metadataFeeVersion,
     });
     if (applyError || !applied) {
       await admin.rpc("fail_stripe_webhook_event", {
