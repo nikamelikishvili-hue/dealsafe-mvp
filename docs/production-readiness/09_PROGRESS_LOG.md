@@ -1391,3 +1391,19 @@ activation, or removal of Vercel protection.
 - A second authorized reviewer must record only non-secret pass/fail evidence.
 - The aggregate preflight and the two-device positive/password-only negative
   matrix must pass before the database and Edge enforcement activation step.
+
+### Review and protected Preview evidence
+
+- Draft PR [#74](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/74)
+  contains exactly six reviewed files and is based on SEC-004 Production commit
+  `4adc795b912ee3c209e431941c638607803e9eae`.
+- GitHub workflow `30396370399` (run 98) passed on exact review head
+  `6f519b2514ca23c33911d5a6865e86973b1a1d85`.
+- Protected Preview `dpl_9x8fqdw5o7ANs2QhBsFDwwJHTo4b` is `READY` on
+  that exact head. Its errors-only build completed cleanly in eleven seconds
+  and the warning/error/fatal runtime scan returned no records.
+- Anonymous Preview access remains behind Vercel Authentication with HTTP 302,
+  `noindex`, HSTS, frame denial, and no-store.
+- The full local release gate passed catalog verification, TypeScript,
+  74 automated tests, repository secret scanning, production build, and
+  Preview smoke.
