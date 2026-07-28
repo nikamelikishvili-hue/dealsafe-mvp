@@ -63,6 +63,31 @@ export interface StoredSession {
   lastActivityAt:number;
   user:AuthUser;
 }
+export interface MfaFactor {
+  id:string;
+  factorType:'totp';
+  friendlyName:string;
+  createdAt:string|null;
+  updatedAt:string|null;
+}
+export interface MfaLoginChallenge {
+  mfaRequired:true;
+  pendingAccessToken:string;
+  expiresAt:number;
+  factors:MfaFactor[];
+}
+export interface MfaStatus {
+  assuranceLevel:'aal1'|'aal2';
+  factors:MfaFactor[];
+  unsupportedVerifiedFactor:boolean;
+}
+export interface MfaEnrollment {
+  factorId:string;
+  friendlyName:string;
+  qrCodeSvg:string;
+  secret:string;
+  uri:string|null;
+}
 export interface ProfileSummary { display_name:string; verification_status:'not_started'|'pending'|'verified'|'failed'; member_since:string; completed_deals:number; rating_count:number; average_rating:number|null; recent_ratings:{stars:number;comment:string|null;created_at:string}[] }
 export interface TimelineEvent { id:string; event_type:string; created_at:string; is_mine:boolean }
 export interface DealNotification extends TimelineEvent { deal_id:string; public_id:string; title:string; is_read:boolean }
@@ -203,19 +228,25 @@ export const sessionStorageKey = 'dealivra_session_v2';
 export const legacySessionStorageKey = 'dealsafe_session';
 export const sessionUpdatedEvent = 'dealivra-session-updated';
 export const sessionExpiredEvent = 'dealivra-session-expired';
+export const mfaRequiredEvent = 'dealivra-mfa-required';
 export const sessionIdleTimeoutMs = 30 * 60 * 1000;
 export const sessionAbsoluteTimeoutMs = 8 * 60 * 60 * 1000;
 const activityWriteIntervalMs = 60 * 1000;
 let refreshPromise: Promise<StoredSession> | null = null;
 
-function decodeJwtExpiry(token:string){
+function decodeJwtPayload(token:string){
   try{
     const encoded=token.split('.')[1];
     if(!encoded)return null;
     const normalized=encoded.replace(/-/g,'+').replace(/_/g,'/');
-    const payload=JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length/4)*4,'='))) as {exp?:number};
-    return typeof payload.exp==='number'?payload.exp*1000:null;
+    const payload=JSON.parse(atob(normalized.padEnd(Math.ceil(normalized.length/4)*4,'='))) as Record<string,unknown>;
+    return payload&&typeof payload==='object'?payload:null;
   }catch{return null}
+}
+
+function decodeJwtExpiry(token:string){
+  const payload=decodeJwtPayload(token);
+  return typeof payload?.exp==='number'?payload.exp*1000:null;
 }
 
 function clearStoredSession(){
@@ -371,11 +402,94 @@ export async function signIn(email: string, password: string) {
     method: 'POST', headers: {'Content-Type':'application/json'}, credentials:'same-origin',
     body: JSON.stringify({ email:email.trim().toLowerCase(), password }),
   });
-  const data = await response.json() as AuthResponse&{error?:string};
+  const data = await response.json() as AuthResponse&{
+    error?:string;
+    mfa_required?:boolean;
+    pending_access_token?:string;
+    factors?:MfaFactor[];
+  };
   if (!response.ok) throw new Error(data.error || 'Invalid email or password.');
+  if(data.mfa_required){
+    if(
+      typeof data.pending_access_token!=='string'
+      ||!Array.isArray(data.factors)
+      ||data.factors.length===0
+    )throw new Error('Multi-factor sign-in could not be started.');
+    return {
+      mfaRequired:true,
+      pendingAccessToken:data.pending_access_token,
+      expiresAt:decodeJwtExpiry(data.pending_access_token)??Date.now()+(data.expires_in||300)*1000,
+      factors:data.factors,
+    } satisfies MfaLoginChallenge;
+  }
   const user = toUser(data);
   if (!data.access_token || !user) throw new Error('No session returned');
   return storeSession(data,user);
+}
+
+async function mfaRequest<T>(accessToken:string,body:Record<string,unknown>){
+  const response=await fetch('/api/auth/mfa',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      Authorization:`Bearer ${accessToken}`,
+    },
+    credentials:'same-origin',
+    body:JSON.stringify(body),
+  });
+  const data=await response.json().catch(()=>null) as (T&{error?:string})|null;
+  if(!response.ok)throw new Error(data?.error||'Authenticator security could not be updated.');
+  if(!data)throw new Error('Authenticator security returned an invalid response.');
+  return data;
+}
+
+function storeVerifiedMfaSession(data:AuthResponse,previous?:StoredSession){
+  const user=toUser(data)||previous?.user;
+  if(!data.access_token||!user)throw new Error('The verified session could not be created.');
+  const claims=decodeJwtPayload(data.access_token);
+  if(claims?.aal!=='aal2')throw new Error('Multi-factor verification did not reach the required security level.');
+  return storeSession(data,user,previous);
+}
+
+export async function verifyMfaLogin(challenge:MfaLoginChallenge,factorId:string,code:string){
+  if(Date.now()>=challenge.expiresAt)throw new Error('This sign-in attempt expired. Enter your password again.');
+  const data=await mfaRequest<AuthResponse>(challenge.pendingAccessToken,{
+    action:'challenge_and_verify',
+    factorId,
+    code:code.trim(),
+  });
+  return storeVerifiedMfaSession(data);
+}
+
+export async function getMfaStatus(session:StoredSession){
+  const current=await sessionForRemoteRevocation(session);
+  return mfaRequest<MfaStatus>(current.accessToken,{action:'list'});
+}
+
+export async function startMfaEnrollment(session:StoredSession,friendlyName:string){
+  const current=await sessionForRemoteRevocation(session);
+  return mfaRequest<MfaEnrollment>(current.accessToken,{
+    action:'enroll',
+    friendlyName:friendlyName.trim(),
+  });
+}
+
+export async function verifyMfaEnrollment(session:StoredSession,factorId:string,code:string){
+  const current=await sessionForRemoteRevocation(session);
+  const data=await mfaRequest<AuthResponse>(current.accessToken,{
+    action:'challenge_and_verify',
+    factorId,
+    code:code.trim(),
+  });
+  return storeVerifiedMfaSession(data,current);
+}
+
+export async function unenrollMfaFactor(session:StoredSession,factorId:string){
+  const current=await sessionForRemoteRevocation(session);
+  const data=await mfaRequest<AuthResponse>(current.accessToken,{action:'unenroll',factorId});
+  const user=toUser(data)||current.user;
+  if(!data.access_token)throw new Error('The updated session could not be created.');
+  return storeSession(data,user,current);
 }
 
 export async function refreshSession(session:StoredSession){
@@ -426,6 +540,12 @@ async function authenticatedFetch(session:StoredSession,input:RequestInfo|URL,in
   if(response.status===401){
     current=await renew();
     response=await send(current.accessToken);
+  }
+  if(response.status===403){
+    const body=await response.clone().text().catch(()=>'');
+    if(/DEALIVRA_MFA_REQUIRED|mfa_required|multi-factor verification is required/i.test(body)){
+      window.dispatchEvent(new Event(mfaRequiredEvent));
+    }
   }
   return response;
 }

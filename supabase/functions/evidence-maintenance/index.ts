@@ -69,6 +69,12 @@ function maintenanceErrorResponse(error: unknown) {
   if (error instanceof MaintenanceError) {
     return json({ error: error.message, code: error.code }, error.status);
   }
+  if (error instanceof Error && /^Multi-factor verification is required$/i.test(error.message)) {
+    return json({
+      error: "Verify your authenticator before continuing.",
+      code: "mfa_required",
+    }, 403);
+  }
   return json({
     error: "Evidence maintenance could not complete safely.",
     code: "maintenance_failed",

@@ -1,11 +1,14 @@
 import {
   authPayload,
+  clearRefreshCookie,
+  hasVerifiedMfaFactor,
   logAuthFailure,
   prepareResponse,
   publicSession,
   readJsonBody,
   requirePost,
   requireSameOrigin,
+  safeMfaFactors,
   setRefreshCookie,
   supabaseAuthRequest,
 } from '../../server/authShared.mjs';
@@ -31,6 +34,25 @@ export default async function handler(request, response) {
     const session = publicSession(data);
     if (!upstream.ok || !session || !data.refresh_token) {
       response.status(401).json({ error: 'Invalid email or password.' });
+      return;
+    }
+
+    const factors = safeMfaFactors(data.user);
+    if (hasVerifiedMfaFactor(data.user) && factors.length === 0) {
+      clearRefreshCookie(response);
+      response.status(403).json({
+        error: 'This account uses an unsupported authenticator method. Contact Dealivra support without sharing any verification code.',
+      });
+      return;
+    }
+    if (factors.length > 0) {
+      clearRefreshCookie(response);
+      response.status(200).json({
+        mfa_required: true,
+        pending_access_token: data.access_token,
+        expires_in: data.expires_in,
+        factors,
+      });
       return;
     }
 

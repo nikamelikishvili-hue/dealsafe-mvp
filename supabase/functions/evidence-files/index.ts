@@ -92,6 +92,9 @@ function endpointError(error: unknown) {
     return json({ error: error.message, code: error.code }, error.status);
   }
   const message = error instanceof Error ? error.message : "";
+  if (/^Multi-factor verification is required$/i.test(message)) {
+    return json({ error: "Verify your authenticator before continuing.", code: "mfa_required" }, 403);
+  }
   if (/session|sign in/i.test(message)) {
     return json({ error: "Your session is invalid or expired.", code: "session_expired" }, 401);
   }
