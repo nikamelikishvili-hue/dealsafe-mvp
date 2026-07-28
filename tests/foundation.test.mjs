@@ -181,6 +181,7 @@ test('the production-readiness specification is complete and linked', () => {
     '18_PAYMENT_PROVIDER_OBSERVABILITY.md',
     '19_SECURITY_DEFINER_GOVERNANCE.md',
     '20_AUTH_PASSWORD_SECURITY.md',
+    '21_AUTHENTICATED_RPC_MATRIX.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -1196,6 +1197,27 @@ test('SECURITY DEFINER advisor exceptions are explicit, bounded, and regression-
   assert.match(standard, /Any other anonymous elevated function is a release blocker/);
   assert.match(standard, /Auth leaked-password protection/);
   assert.match(readinessIndex, /19_SECURITY_DEFINER_GOVERNANCE\.md/);
+});
+
+test('signed-in SECURITY DEFINER functions have an exact cross-role matrix', () => {
+  const rollbackTests = readText('supabase/tests/authenticated_rpc_cross_role_rollback.sql');
+  const standard = readText('docs/production-readiness/21_AUTHENTICATED_RPC_MATRIX.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(rollbackTests, /DAT-004 signed-in SECURITY DEFINER inventory changed/);
+  assert.match(rollbackTests, /has_function_privilege\('public'/);
+  assert.match(rollbackTests, /has_function_privilege\('anon'/);
+  assert.match(rollbackTests, /get_admin_revenue_summary\(\)/);
+  assert.match(rollbackTests, /resolve_deal_dispute\(uuid,text,text\)/);
+  assert.match(rollbackTests, /DAT-004 outsider read a participant-only deal record/);
+  assert.match(rollbackTests, /DAT-004 seller positive access path failed/);
+  assert.match(rollbackTests, /DAT-004 buyer positive access path failed/);
+  assert.match(rollbackTests, /set local role authenticated/);
+  assert.match(rollbackTests, /rollback;/);
+  assert.match(standard, /full 63-signature signed-in elevated\s+inventory/);
+  assert.match(standard, /ordinary member is denied by all five administrator readers/);
+  assert.match(standard, /does not authorize public\s+launch/);
+  assert.match(readinessIndex, /21_AUTHENTICATED_RPC_MATRIX\.md/);
 });
 
 test('protected Edge Functions validate the Auth session row after JWT verification', () => {

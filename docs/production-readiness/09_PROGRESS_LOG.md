@@ -848,3 +848,56 @@ authorization, and output evidence.
   legacy public project alias remain detached. Real-money mode and automatic
   payout remain disabled.
 
+## DAT-004 signed-in authorization matrix
+
+### Implemented
+
+- Locked the exact 63-signature authenticated `SECURITY DEFINER` inventory.
+  Any added, removed, or changed signature now fails the rollback-only suite.
+- Added grant assertions proving `PUBLIC` and `anon` cannot execute any of the
+  signed-in-only functions, while the reviewed `authenticated` and
+  `service_role` grants remain explicit.
+- Added fixed-search-path and identity-boundary assertions for every governed
+  function.
+- Added a production-data role matrix for ordinary members, administrators,
+  sellers, buyers, and an unrelated signed-in user.
+- Proved all five administrator readers and all three administrator mutators
+  reject an ordinary member with `Admin access required`.
+- Proved an administrator passes those role gates and each mutator then reaches
+  its reviewed safe object-not-found guard.
+- Proved an unrelated user cannot read participant-only action, delivery,
+  inspection, message, offer, participant, payment, timeline, protected
+  payment, or shipping-evidence records for an accepted deal.
+- Proved the selected deal's seller and buyer retain their positive participant
+  access.
+
+### Verification evidence
+
+- `supabase/tests/authenticated_rpc_cross_role_rollback.sql` passed against
+  production and returned no identity values. It used transaction-local role
+  and JWT settings and completed with a full rollback.
+- No authorization gap was found, so no production DDL or data migration was
+  required.
+- The repository foundation suite contains a regression gate for the exact
+  inventory, role matrix, rollback guarantee, and linked operating standard.
+- The post-test security advisor contained only the already-reviewed
+  deny-by-default no-policy tables, the exact eight anonymous public projection
+  exceptions, the governed signed-in elevated inventory, and the known
+  plan-limited leaked-password warning. It exposed no new unreviewed elevated
+  endpoint.
+- Performance advisor findings are recorded as the next database-hardening
+  batch: foreign-key coverage and per-row Auth RLS initialization plans will be
+  measured and remediated separately rather than mixed into this authorization
+  release.
+
+### DAT-004 state
+
+**Complete for elevated-function governance.** The unnecessary anonymous
+elevated hook is removed; the public projection allowlist and full signed-in
+inventory are exact; grants, search paths, identity boundaries, and
+representative cross-role deny/allow behavior are production-tested. Any
+governed function change automatically reopens this gate.
+
+This does not authorize public launch, real-money processing, or automatic
+payout. Leaked-password screening remains a separate public-launch blocker on
+the current Supabase plan.

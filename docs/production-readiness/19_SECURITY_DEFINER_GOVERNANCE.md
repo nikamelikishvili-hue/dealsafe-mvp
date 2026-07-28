@@ -57,7 +57,10 @@ functions must check one of:
 
 Administrative RPCs remain callable by the signed-in API role so that the
 application can reach them, but must deny ordinary members inside the function.
-Cross-role allow/deny tests remain mandatory before public beta.
+The exact signed-in inventory and cross-role allow/deny proof are governed by
+[21_AUTHENTICATED_RPC_MATRIX.md](21_AUTHENTICATED_RPC_MATRIX.md). Any inventory,
+grant, search-path, identity-boundary, or role-matrix change reopens DAT-004 and
+blocks release until the production rollback suite passes again.
 
 ## Advisor interpretation
 
