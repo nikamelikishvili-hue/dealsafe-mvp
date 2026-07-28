@@ -14,6 +14,7 @@ import { AddressAutocomplete } from './AddressAutocomplete';
 import { AccountSessionSecurity } from './AccountSessionSecurity';
 import { BrandLogo } from './BrandLogo';
 import { EvidenceViewer } from './EvidenceViewer';
+import { EvidenceLifecycleCenter } from './EvidenceLifecycleCenter';
 import { CatalogSearchPanel } from './CatalogSearchPanel';
 import { SmartCatalogFields } from './SmartCatalogFields';
 import type { Deal, DealDraft } from './domain';
@@ -2198,7 +2199,7 @@ export function App() {
       {view==='verify'&&<section className="agreement-verifier-page"><button className="back" onClick={()=>goHomeSection()}>← {t('Back to home')}</button><p className="eyebrow">{t('Agreement verification')}</p><h1>{t('Verify an agreement')}</h1><p className="lede small">{t('Use the Deal ID and SHA-256 agreement code saved with the record.')}</p><AgreementVerifier/></section>}
       {Object.prototype.hasOwnProperty.call(publicInfoPaths,view)&&<PublicInfoPage view={view as PublicInfoView} onBack={()=>goHomeSection()} onCreate={openCreate}/>}
       {view==='home'&&<InstallApp/>}
-      {view==='admin'&&session&&isAdmin&&<><AdminCatalogCenter session={session}/><AdminRevenueCenter session={session} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/><AdminDisputeCenter session={session}/><AdminReportCenter session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/></>}
+      {view==='admin'&&session&&isAdmin&&<><EvidenceLifecycleCenter session={session}/><AdminCatalogCenter session={session}/><AdminRevenueCenter session={session} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/><AdminDisputeCenter session={session}/><AdminReportCenter session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/></>}
       {view==='published'&&active&&<PublishedDealSuccess deal={active} warning={authMessage} session={session} acceptanceProtected={acceptanceProtected} onProtectionChanged={setAcceptanceProtected} onOpen={()=>{setAuthMessage('');setView('deal')}} onDashboard={()=>goHomeSection()} onCreateAnother={openCreate}/>}
       {view==='create'&&authMessage&&<div className="creation-error notice">{t(authMessage)}</div>}
       {view==='create'&&creating&&<div className="creation-progress notice">{t('Creating your Deal Link…')}</div>}
