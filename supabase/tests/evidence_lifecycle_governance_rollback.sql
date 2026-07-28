@@ -299,7 +299,6 @@ begin
   );
 
   if hold_key is null
-     or not dealsafe_private.evidence_has_active_legal_hold(target_evidence_id)
      or not exists (
        select 1
        from public.evidence_lifecycle_jobs as job
@@ -342,8 +341,7 @@ begin
     gen_random_uuid()
   );
 
-  if dealsafe_private.evidence_has_active_legal_hold(target_evidence_id)
-     or not exists (
+  if not exists (
        select 1
        from public.evidence_lifecycle_jobs as job
        where job.evidence_id = target_evidence_id
