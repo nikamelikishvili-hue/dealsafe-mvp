@@ -116,7 +116,9 @@ export interface TrustPassportSettings { public_id:string;enabled:boolean }
 export interface TrustPassport { display_name:string;verification_status:'not_started'|'pending'|'verified'|'failed';member_since:string;completed_deals:number;completed_sales:number;completed_purchases:number;rating_count:number;average_rating:number|null;recent_ratings:{stars:number;created_at:string}[] }
 export interface DealInspection { agreement_version:number;item_reviewed:boolean;price_confirmed:boolean;handoff_confirmed:boolean;reference_checked:boolean;inspected_at:string;buyer_name:string }
 export type EvidenceType=EvidenceUploadType;
-export interface DealEvidence { id:string;deal_id:string;dispute_id:string|null;uploader_role:'seller'|'buyer'|'admin';evidence_type:EvidenceType|string;file_name:string|null;mime_type:string|null;detected_mime_type:string|null;file_size_bytes:number|null;sha256:string|null;scan_status:'clean'|'legacy_unscanned';scanned_at:string|null;created_at:string }
+export type EvidenceIntegrityStatus='unverified'|'verified'|'missing'|'mismatch'|'invalid';
+export interface DealEvidence { id:string;deal_id:string;dispute_id:string|null;uploader_role:'seller'|'buyer'|'admin';evidence_type:EvidenceType|string;file_name:string|null;mime_type:string|null;detected_mime_type:string|null;file_size_bytes:number|null;sha256:string|null;scan_status:'clean'|'legacy_unscanned';scanned_at:string|null;integrity_status:EvidenceIntegrityStatus;integrity_checked_at:string|null;created_at:string }
+export interface DealEvidenceViewer { objectUrl:string;expiresAt:string;mimeType:'image/webp'|'video/mp4'|'video/webm'|'video/quicktime';fileName:string;fileSizeBytes:number;sha256:string;scanStatus:'clean';scannedAt:string;integrityStatus:'verified';integrityCheckedAt:string }
 export interface AdminDispute { dispute_id:string;deal_id:string;public_id:string;title:string;reason:string;dispute_status:'open'|'evidence_requested'|'under_review'|'resolved_buyer'|'resolved_seller'|'refunded'|'cancelled';response_deadline:string;opened_at:string;opened_by_name:string;seller_name:string;buyer_name:string;payment_status:string;item_amount_cents:number;currency:CurrencyCode;resolution_note:string|null }
 export interface SellerDeclarationRecord { attested:boolean;attested_at:string|null }
 export interface AgreementHistoryVersion { version:number;price_cents:number;currency:CurrencyCode;condition:'Like new'|'Good'|'Fair';delivery_method:'Meet in person'|'Ship to buyer';content_hash:string;created_at:string;acceptance_count:number;is_current:boolean }
@@ -574,7 +576,80 @@ export async function uploadDealEvidence(session:StoredSession,dealId:string,upl
   return result.evidence;
 }
 export async function listDealEvidence(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_evidence_safe?deal_id=eq.${encodeURIComponent(dealId)}&select=*&order=created_at.desc`,{headers:headers(session.accessToken)});if(!response.ok){const data=await response.json().catch(()=>null);throw new Error(data?.message||'Could not load evidence');}return await response.json() as DealEvidence[]}
-export async function createDealEvidenceSignedUrl(session:StoredSession,evidenceId:string){const data=await invokeEvidenceFiles<{url:string;expiresAt:string;mimeType:string|null}>(session,{action:'signed-url',evidenceId});return data.url}
+async function evidenceViewerSha256(bytes:ArrayBuffer){
+  if(!globalThis.crypto?.subtle)throw new Error('Secure file verification is unavailable in this browser.');
+  const digest=await globalThis.crypto.subtle.digest('SHA-256',bytes);
+  return Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+export async function loadDealEvidenceViewer(session:StoredSession,evidenceId:string){
+  const data=await invokeEvidenceFiles<{
+    url:string;
+    expiresAt:string;
+    mimeType:string;
+    fileName:string|null;
+    fileSizeBytes:number;
+    sha256:string;
+    scanStatus:string;
+    scannedAt:string|null;
+    integrityStatus:string;
+    integrityCheckedAt:string;
+  }>(session,{action:'signed-url',evidenceId});
+  const allowedMimeTypes=new Set(['image/webp','video/mp4','video/webm','video/quicktime']);
+  if(
+    typeof data.url!=='string'
+    || typeof data.expiresAt!=='string'
+    || typeof data.mimeType!=='string'
+    || (data.fileName!==null&&typeof data.fileName!=='string')
+    || typeof data.sha256!=='string'
+    || typeof data.scannedAt!=='string'
+    || typeof data.integrityCheckedAt!=='string'
+    || !allowedMimeTypes.has(data.mimeType)
+    || data.scanStatus!=='clean'
+    || data.integrityStatus!=='verified'
+    || !/^[0-9a-f]{64}$/.test(data.sha256)
+    || !Number.isSafeInteger(data.fileSizeBytes)
+    || data.fileSizeBytes<=0
+    || data.fileSizeBytes>50*1024*1024
+    || !data.integrityCheckedAt
+    || !data.scannedAt
+    || !data.expiresAt
+    || !Number.isFinite(Date.parse(data.integrityCheckedAt))
+    || !Number.isFinite(Date.parse(data.scannedAt))
+    || !Number.isFinite(Date.parse(data.expiresAt))
+    || Date.parse(data.expiresAt)<=Date.now()
+  )throw new Error('The evidence verification response was invalid.');
+  let signedUrl:URL;
+  try{signedUrl=new URL(data.url)}catch{throw new Error('The evidence verification response was invalid.')}
+  if(!supabaseUrl)throw new Error(configurationUnavailableMessage);
+  const expectedStorageOrigin=supabaseUrl;
+  if(
+    signedUrl.protocol!=='https:'
+    || signedUrl.origin!==expectedStorageOrigin
+    || !signedUrl.pathname.startsWith('/storage/v1/object/sign/deal-evidence/')
+  )throw new Error('The secure evidence source was invalid.');
+  const response=await fetch(signedUrl,{cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'});
+  if(!response.ok)throw new Error('The verified evidence file could not be loaded.');
+  const responseMimeType=(response.headers.get('Content-Type')||'').split(';')[0].trim().toLowerCase();
+  if(responseMimeType&&responseMimeType!==data.mimeType)throw new Error('The evidence file type changed during secure viewing.');
+  const responseLength=Number(response.headers.get('Content-Length')||data.fileSizeBytes);
+  if(!Number.isSafeInteger(responseLength)||responseLength!==data.fileSizeBytes)throw new Error('The evidence file size changed during secure viewing.');
+  const bytes=await response.arrayBuffer();
+  if(bytes.byteLength!==data.fileSizeBytes)throw new Error('The evidence file size changed during secure viewing.');
+  if(await evidenceViewerSha256(bytes)!==data.sha256)throw new Error('The evidence fingerprint changed during secure viewing.');
+  const fileName=(data.fileName||'evidence-file').replace(/[\u0000-\u001f\u007f/\\]+/gu,'-').slice(0,160)||'evidence-file';
+  return {
+    objectUrl:URL.createObjectURL(new Blob([bytes],{type:data.mimeType})),
+    expiresAt:data.expiresAt,
+    mimeType:data.mimeType,
+    fileName,
+    fileSizeBytes:data.fileSizeBytes,
+    sha256:data.sha256,
+    scanStatus:'clean',
+    scannedAt:data.scannedAt,
+    integrityStatus:'verified',
+    integrityCheckedAt:data.integrityCheckedAt
+  } as DealEvidenceViewer;
+}
 
 export async function deleteDealMedia(session:StoredSession,dealId:string,publicUrl:string){const marker='/storage/v1/object/public/deal-media/';const encodedPath=publicUrl.split(marker)[1];if(!encodedPath)throw new Error('Invalid media URL');const path=encodedPath.split('/').map(decodeURIComponent).join('/');const removeObject=await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/deal-media/${path.split('/').map(encodeURIComponent).join('/')}`,{method:'DELETE',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`}});if(!removeObject.ok)throw new Error('Could not remove the stored file');const removeRecord=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_media?deal_id=eq.${dealId}&storage_path=eq.${encodeURIComponent(path)}`,{method:'DELETE',headers:{...headers(session.accessToken),Prefer:'return=minimal'}});if(!removeRecord.ok)throw new Error('File removed, but its record could not be cleaned up')}
 export async function reorderDealMedia(session:StoredSession,dealId:string,publicUrls:string[]){const marker='/storage/v1/object/public/deal-media/';const paths=publicUrls.map(url=>{const encoded=url.split(marker)[1];if(!encoded)throw new Error('Invalid media URL');return encoded.split('/').map(decodeURIComponent).join('/')});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/reorder_deal_media`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_paths:paths})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not reorder media')}}
