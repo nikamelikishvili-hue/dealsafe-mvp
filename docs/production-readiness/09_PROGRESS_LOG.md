@@ -2,6 +2,33 @@
 
 This log records completed delivery evidence. A backlog item is not marked complete from code alone when it also requires staging, provider, legal, accessibility, security, or operational evidence.
 
+## 2026-07-28 — Privacy-safe CSP reporting and header hardening
+
+### Implemented locally for review
+
+- Added a same-origin CSP reporting group with modern `report-to` and
+  compatibility `report-uri` routing.
+- Added a 16 KiB, 20-event maximum CSP reporting endpoint for legacy and modern
+  browser payloads.
+- Treated every report as hostile input and excluded samples, original policy,
+  referrer, cookies, headers, query strings, fragments, and identifier-like URL
+  path segments from structured logs.
+- Added `Reporting-Endpoints` and
+  `X-Permitted-Cross-Domain-Policies: none`.
+- Added exact header, inline-script hash, negative request, payload-limit, and
+  privacy-redaction regression tests.
+- Added the operating, monitoring, environment-validation, and rollback
+  runbook.
+
+### Release boundary
+
+- SEC-004 remains in progress until a protected Vercel Preview proves the actual
+  response headers and one synthetic sanitized event.
+- Alert ownership, retention ownership, and rollback evidence are still
+  required before the control is release-complete.
+- The production custom domain remains unbound and real-money mode remains
+  disabled.
+
 ## 2026-07-26 — Phase 1 specification and foundation batch
 
 ### Completed
