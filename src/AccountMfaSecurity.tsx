@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import {
+  cancelMfaEnrollment,
   getMfaStatus,
   startMfaEnrollment,
   unenrollMfaFactor,
@@ -108,7 +109,7 @@ export function AccountMfaSecurity({
     setBusy('cancel');
     setError('');
     try{
-      const updated=await unenrollMfaFactor(session,enrollment.factorId);
+      const updated=await cancelMfaEnrollment(session,enrollment.factorId);
       onSessionUpdated(updated);
       setEnrollment(null);
       setCode('');
@@ -148,6 +149,11 @@ export function AccountMfaSecurity({
   };
 
   const protectedByMfa=Boolean(status?.factors.length||status?.unsupportedVerifiedFactor);
+  const factorFloorReached=Boolean(
+    status
+    && status.minimumVerifiedFactors > 0
+    && status.factors.length <= status.minimumVerifiedFactors,
+  );
 
   return <section className="account-mfa-security" aria-labelledby="account-mfa-title">
     <header className="mfa-security-heading">
@@ -174,11 +180,21 @@ export function AccountMfaSecurity({
         <span className="mfa-factor-icon"><KeyRound aria-hidden="true"/></span>
         <span><strong>{factor.friendlyName}</strong><small>Authenticator app · Added {formatFactorDate(factor.createdAt)}</small></span>
         <b>{status.assuranceLevel==='aal2'?'Verified this session':'Verification required'}</b>
-        <button type="button" onClick={()=>setConfirmRemove(factor.id)} disabled={Boolean(busy)} aria-label={`Remove ${factor.friendlyName}`}>
+        <button
+          type="button"
+          onClick={()=>setConfirmRemove(factor.id)}
+          disabled={Boolean(busy)||factorFloorReached}
+          aria-label={`Remove ${factor.friendlyName}`}
+          title={factorFloorReached?'Add and verify another authenticator before removing this one.':undefined}
+        >
           <Trash2 aria-hidden="true"/>
         </button>
       </li>)}
     </ul>:null}
+
+    {!loading&&factorFloorReached?<div className="mfa-feedback protected" role="status">
+      This privileged account must keep at least {status?.minimumVerifiedFactors} verified authenticators. Add a replacement before removing one.
+    </div>:null}
 
     {!loading&&!enrollment&&!status?.unsupportedVerifiedFactor?<div className="mfa-enroll-start">
       <div>
@@ -239,7 +255,7 @@ export function AccountMfaSecurity({
     <p className="mfa-recovery-note"><ShieldCheck aria-hidden="true"/>Losing every enrolled authenticator requires a controlled account-recovery review. Dealivra support will never ask for your current code or setup key.</p>
 
     {confirmRemove?<div className="mfa-remove-confirmation" role="alert" aria-labelledby="mfa-remove-title">
-      <div><strong id="mfa-remove-title">Remove this authenticator?</strong><span>Make sure another verified method is available before continuing.</span></div>
+      <div><strong id="mfa-remove-title">Remove this authenticator?</strong><span>You will need a freshly verified session. Protected operator accounts must retain two independent authenticators.</span></div>
       <div>
         <button type="button" onClick={()=>setConfirmRemove(null)} disabled={Boolean(busy)}>Keep it</button>
         <button type="button" className="confirm-danger" onClick={()=>removeFactor(confirmRemove)} disabled={Boolean(busy)}>{busy==='remove'?'Removing…':'Remove authenticator'}</button>
