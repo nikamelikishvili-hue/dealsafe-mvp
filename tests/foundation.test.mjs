@@ -184,6 +184,7 @@ test('the production-readiness specification is complete and linked', () => {
     '21_AUTHENTICATED_RPC_MATRIX.md',
     '22_RLS_POLICY_PERFORMANCE.md',
     '23_FOREIGN_KEY_INDEX_GOVERNANCE.md',
+    '24_IMMUTABLE_AUDIT_EVENTS.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -1282,6 +1283,38 @@ test('measured foreign-key indexes cover only governed production hot paths', ()
   assert.match(standard, /remaining foreign-key notices stay visible/i);
   assert.match(standard, /changes only physical access paths/i);
   assert.match(readinessIndex, /23_FOREIGN_KEY_INDEX_GOVERNANCE\.md/);
+});
+
+test('material audit events are append-only and correlation-ready', () => {
+  const migration = readText('supabase/immutable_material_audit_events.sql');
+  const rollbackTests = readText('supabase/tests/immutable_material_audit_events_rollback.sql');
+  const standard = readText('docs/production-readiness/24_IMMUTABLE_AUDIT_EVENTS.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(migration, /add column if not exists correlation_id uuid/);
+  assert.match(migration, /alter column correlation_id set default gen_random_uuid\(\)/);
+  assert.match(migration, /alter column correlation_id set not null/);
+  assert.match(migration, /audit_events_correlation_idx[\s\S]*\(correlation_id\)/);
+  assert.match(migration, /security invoker[\s\S]*set search_path = ''/);
+  assert.match(migration, /before update or delete on public\.audit_events/);
+  assert.match(migration, /before truncate on public\.audit_events/);
+  assert.match(migration, /revoke insert, update, delete, truncate, trigger[\s\S]*from public, anon, authenticated/);
+  assert.match(migration, /revoke update, delete, truncate, trigger[\s\S]*from service_role/);
+  assert.match(migration, /grant select, insert[\s\S]*to service_role/);
+
+  assert.match(rollbackTests, /DAT-005 correlation column contract changed/);
+  assert.match(rollbackTests, /DAT-005 append-only trigger inventory changed/);
+  assert.match(rollbackTests, /DAT-005 ordinary roles gained direct audit mutation privileges/);
+  assert.match(rollbackTests, /DAT-005 service-role append-only privileges changed/);
+  assert.match(rollbackTests, /DAT-005 UPDATE unexpectedly succeeded/);
+  assert.match(rollbackTests, /DAT-005 DELETE unexpectedly succeeded/);
+  assert.match(rollbackTests, /DAT-005 TRUNCATE unexpectedly succeeded/);
+  assert.match(rollbackTests, /rollback;/);
+
+  assert.match(standard, /append-only for every application role/i);
+  assert.match(standard, /not a cryptographic ledger/i);
+  assert.match(standard, /does not authorize public launch/i);
+  assert.match(readinessIndex, /24_IMMUTABLE_AUDIT_EVENTS\.md/);
 });
 
 test('protected Edge Functions validate the Auth session row after JWT verification', () => {

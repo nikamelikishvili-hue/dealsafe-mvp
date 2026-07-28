@@ -1007,3 +1007,65 @@ production deployment.
 
 This work does not authorize public launch, real-money processing, or
 automatic payout.
+
+## DAT-005 immutable material audit events
+
+### Measured scope
+
+- Production contained 179 audit events across 27 event types.
+- All existing events had deal and actor relationships, but no dedicated or
+  common metadata correlation identifier.
+- RLS was enabled with no direct policies. `anon` and `authenticated` had no
+  table privileges, while `service_role` retained select, insert, update,
+  delete, truncate, references, and trigger privileges.
+- Thirty-five current public functions reference the audit table. Reviewed
+  application writes use elevated, server-authoritative functions; the browser
+  has no direct mutation path.
+- No user trigger prevented a privileged runtime role from altering or
+  deleting recorded history.
+
+### Implemented controls
+
+- Added a non-null UUID `correlation_id`, backfilled existing rows
+  transactionally, and added a database-generated default for every future
+  event.
+- Added an operator lookup index without forcing uniqueness, so a future
+  reviewed command can correlate multiple events from one operation.
+- Added fixed-search-path `SECURITY INVOKER` triggers that reject update,
+  delete, and truncate with SQLSTATE `55000`.
+- Removed direct mutation and trigger privileges from ordinary roles and
+  removed update, delete, truncate, and trigger privileges from
+  `service_role`; retained only its reviewed read/append boundary.
+- Kept RLS enabled and introduced no direct mutation policy or browser writer.
+
+### Verification evidence
+
+- The schema, correlation default, insert path, and blocked update, delete, and
+  truncate attempts first passed inside one production transaction.
+- The dry-run rolled back completely: no correlation column, helper function,
+  or user trigger remained.
+- Migration `immutable_material_audit_events` applied successfully as version
+  `20260728121644`.
+- The post-migration catalog verification found 179/179 events with a
+  correlation ID, one valid lookup index, two enabled mutation-denial
+  triggers, zero mutation policies, and the exact append-only grants.
+- A transaction-local probe received a generated correlation ID; update,
+  delete, and truncate each failed with the governed exception; the final
+  rollback retained zero probe rows and all 179 original events.
+- The security advisor reported no new warning class or unreviewed exposure.
+  Its `audit_events` information notice remains the intentional deny-by-default
+  no-policy state.
+- The performance advisor retained the 21 deliberately deferred foreign-key
+  notices. Correlation lookup is an operator requirement, not an automatic
+  advisor-driven index.
+
+### DAT-005 state
+
+**Complete in the production database; repository release pending.** The
+append-only triggers, least-privilege grants, and correlation identifiers are
+active. The full repository gate, protected Preview, reviewed merge, and exact
+protected production deployment remain required before the batch is closed.
+
+This work does not authorize public launch, real-money processing, automatic
+payout, or deletion of production history.
+

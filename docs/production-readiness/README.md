@@ -32,6 +32,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [21_AUTHENTICATED_RPC_MATRIX.md](21_AUTHENTICATED_RPC_MATRIX.md) | Exact signed-in elevated-function inventory, ordinary-member/participant/admin authorization matrix, and rollback-only production proof |
 | [22_RLS_POLICY_PERFORMANCE.md](22_RLS_POLICY_PERFORMANCE.md) | Statement-level Auth evaluation for protected RLS policies with production seller/buyer/outsider allow-deny proof |
 | [23_FOREIGN_KEY_INDEX_GOVERNANCE.md](23_FOREIGN_KEY_INDEX_GOVERNANCE.md) | Measured foreign-key index selection, exact query-plan evidence, deferred notices, and write-cost governance |
+| [24_IMMUTABLE_AUDIT_EVENTS.md](24_IMMUTABLE_AUDIT_EVENTS.md) | Append-only material audit history, database-generated correlation IDs, mutation denial, and rollback proof |
 
 ## Authority and change control
 
