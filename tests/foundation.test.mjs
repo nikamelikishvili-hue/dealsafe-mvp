@@ -179,6 +179,8 @@ test('the production-readiness specification is complete and linked', () => {
     '16_STRIPE_WEBHOOK_REPLAY_SAFETY.md',
     '17_TRUSTED_PAYMENT_COMMANDS.md',
     '18_PAYMENT_PROVIDER_OBSERVABILITY.md',
+    '19_SECURITY_DEFINER_GOVERNANCE.md',
+    '20_AUTH_PASSWORD_SECURITY.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -300,7 +302,7 @@ test('signup rejects cross-origin requests before contacting the auth provider',
   }, () => signup(authRequest({
     displayName: 'Test User',
     email: 'user@example.com',
-    password: 'ExamplePass123',
+    password: 'ExamplePass123!',
   }, {
     origin: 'https://attacker.example',
   }), response));
@@ -312,21 +314,41 @@ test('signup rejects cross-origin requests before contacting the auth provider',
 
 test('signup validates password strength before contacting the auth provider', async () => {
   const { default: signup } = await import('../api/auth/signup.mjs');
-  const response = createResponse();
   let providerCalled = false;
 
-  await withAuthProvider(async () => {
-    providerCalled = true;
-    throw new Error('The provider must not be called.');
-  }, () => signup(authRequest({
-    displayName: 'Test User',
-    email: 'user@example.com',
-    password: 'weak',
-  }), response));
+  for (const password of ['weak', 'ExamplePass123']) {
+    const response = createResponse();
+    await withAuthProvider(async () => {
+      providerCalled = true;
+      throw new Error('The provider must not be called.');
+    }, () => signup(authRequest({
+      displayName: 'Test User',
+      email: 'user@example.com',
+      password,
+    }), response));
 
-  assert.equal(response.statusCode, 400);
-  assert.match(response.payload.error, /12\+ characters/);
+    assert.equal(response.statusCode, 400);
+    assert.match(response.payload.error, /12\+ characters/);
+    assert.match(response.payload.error, /symbol/);
+  }
   assert.equal(providerCalled, false);
+});
+
+test('password guidance and every application mutation require the provider symbol class', () => {
+  const signup = readText('api/auth/signup.mjs');
+  const client = readText('src/services/supabaseRest.ts');
+  const app = readText('src/app.tsx');
+  const standard = readText('docs/production-readiness/20_AUTH_PASSWORD_SECURITY.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(signup, /number, and a symbol/);
+  assert.match(client, /number, and a symbol/);
+  assert.match(app, /12 characters with uppercase, lowercase, a number, and a symbol/);
+  assert.match(app, /12\+ characters with uppercase, lowercase, a number, and a symbol/);
+  assert.match(standard, /Minimum password length \| `12`/);
+  assert.match(standard, /Leaked-password protection \| Unavailable on the current Free plan/);
+  assert.match(standard, /must not claim compromised-password screening/);
+  assert.match(readinessIndex, /20_AUTH_PASSWORD_SECURITY\.md/);
 });
 
 test('auth endpoints reject oversized parsed JSON before contacting the provider', async () => {
@@ -367,7 +389,7 @@ test('signup keeps email-confirmation accounts signed out without creating a ref
   }, () => signup(authRequest({
     displayName: '  Test User  ',
     email: '  USER@EXAMPLE.COM  ',
-    password: 'ExamplePass123',
+    password: 'ExamplePass123!',
   }), response));
 
   assert.equal(response.statusCode, 202);
@@ -1114,6 +1136,8 @@ test('Data API and Storage require a currently active authenticated session with
   const enforcement = readText('supabase/active_session_enforcement.sql');
   const rollback = readText('supabase/active_session_enforcement_rollback.sql');
 
+  assert.match(enforcement, /security invoker/);
+  assert.doesNotMatch(enforcement, /security definer/);
   assert.match(enforcement, /request_role in \('', 'anon', 'service_role'\)/);
   assert.match(enforcement, /raise sqlstate 'PGRST'/);
   assert.match(enforcement, /'status', 401/);
@@ -1123,6 +1147,24 @@ test('Data API and Storage require a currently active authenticated session with
   assert.match(rollback, /reset pgrst\.db_pre_request/);
   assert.match(rollback, /drop policy if exists "authenticated sessions must be active"/);
   assert.match(rollback, /notify pgrst, 'reload config'/);
+});
+
+test('SECURITY DEFINER advisor exceptions are explicit, bounded, and regression-tested', () => {
+  const migration = readText('supabase/security_definer_advisor_hardening.sql');
+  const rollbackTests = readText('supabase/tests/security_definer_advisor_hardening_rollback.sql');
+  const standard = readText('docs/production-readiness/19_SECURITY_DEFINER_GOVERNANCE.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(migration, /alter function public\.enforce_active_auth_session\(\)[\s\S]*security invoker/);
+  assert.match(migration, /revoke all on function public\.enforce_active_auth_session\(\)[\s\S]*from public, anon, authenticated, service_role/);
+  assert.match(migration, /grant execute on function public\.enforce_active_auth_session\(\)[\s\S]*to anon, authenticated, service_role/);
+  assert.match(rollbackTests, /DAT-004 pre-request hook still uses SECURITY DEFINER/);
+  assert.match(rollbackTests, /DAT-004 anonymous SECURITY DEFINER allowlist changed/);
+  assert.match(rollbackTests, /verify_agreement_record\(text,text\)/);
+  assert.match(rollbackTests, /pgrst\.db_pre_request=public\.enforce_active_auth_session/);
+  assert.match(standard, /Any other anonymous elevated function is a release blocker/);
+  assert.match(standard, /Auth leaked-password protection/);
+  assert.match(readinessIndex, /19_SECURITY_DEFINER_GOVERNANCE\.md/);
 });
 
 test('protected Edge Functions validate the Auth session row after JWT verification', () => {

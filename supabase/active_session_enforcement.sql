@@ -5,7 +5,7 @@ create or replace function public.enforce_active_auth_session()
 returns void
 language plpgsql
 stable
-security definer
+security invoker
 set search_path = ''
 as $$
 declare
@@ -48,4 +48,3 @@ create policy "authenticated sessions must be active"
   with check ((select public.is_current_auth_session_active()));
 
 notify pgrst, 'reload config';
-

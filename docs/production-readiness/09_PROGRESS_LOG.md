@@ -760,3 +760,48 @@ Preview, GitHub CI, and exact-commit protected production evidence passed.
 The public custom domain, real-money mode, and automatic payout remain
 disabled.
 
+## DAT-004 elevated-function governance and password baseline
+
+### Implemented
+
+- Converted the Data API active-session pre-request hook from
+  `SECURITY DEFINER` to `SECURITY INVOKER` without changing its exact
+  anonymous, authenticated, and service grants.
+- Preserved the protected active-session helper as an empty-search-path,
+  authenticated/service-only `SECURITY DEFINER` boundary.
+- Defined and regression-tested the exact eight-function anonymous public
+  Deal Link projection allowlist. `PUBLIC` has no execute grant and any ninth
+  anonymous elevated function now fails the DAT-004 rollback suite.
+- Documented why the public projections remain elevated, what each may return,
+  and how advisor exceptions must be reviewed.
+- Raised the managed Auth minimum to 12 characters and selected the strongest
+  lowercase, uppercase, digit, and symbol requirement.
+- Aligned account creation, recovery, account-change validation, and visible
+  password guidance with the provider requirement.
+
+### Verification evidence
+
+- The DAT-004 migration and all assertions first passed inside a production
+  transaction that was fully rolled back.
+- Migration `security_definer_advisor_hardening` then applied successfully.
+- The post-migration rollback-only suite passed the pre-request mode/grants,
+  PostgREST role setting, protected helper, fixed search paths, and exact
+  anonymous allowlist.
+- Anonymous and service-role pre-request smoke completed successfully after
+  migration.
+- The security advisor no longer reports
+  `enforce_active_auth_session()` as an anonymous `SECURITY DEFINER` function.
+- Supabase Email Auth settings were saved and reopened with minimum length 12
+  and all four required character classes.
+- The current Supabase organization is on the Free plan. Supabase documents
+  leaked-password protection as Pro-only, so that advisor warning remains an
+  explicit public-launch blocker rather than an unverified claim.
+
+### DAT-004 state
+
+**In progress.** The unnecessary elevated pre-request boundary is removed and
+the anonymous exception allowlist is governed. DAT-004 remains open until the
+full signed-in RPC cross-role matrix proves ordinary members cannot invoke
+administrator effects and every elevated function has reviewed input,
+authorization, and output evidence.
+
