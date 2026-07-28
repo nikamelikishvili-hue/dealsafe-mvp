@@ -1,3 +1,5 @@
 [functions.stripe-webhook]
 verify_jwt = false
 
+[functions.evidence-files]
+verify_jwt = true

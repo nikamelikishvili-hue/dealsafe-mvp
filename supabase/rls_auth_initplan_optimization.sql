@@ -132,43 +132,17 @@ create policy "participants read deal disputes"
   );
 
 drop policy if exists "participants upload deal evidence" on public.deal_evidence;
-create policy "participants upload deal evidence"
-  on public.deal_evidence
-  for insert
-  to authenticated
-  with check (
-    uploaded_by = (select auth.uid())
-    and (
-      (
-        uploader_role = 'seller'
-        and exists (
-          select 1
-          from public.deals deal
-          where deal.id = deal_evidence.deal_id
-            and deal.seller_id = (select auth.uid())
-        )
-      )
-      or (
-        uploader_role = 'buyer'
-        and exists (
-          select 1
-          from public.deals deal
-          where deal.id = deal_evidence.deal_id
-            and deal.buyer_id = (select auth.uid())
-        )
-      )
-    )
-  );
 
 drop policy if exists "participants and admins read deal evidence"
   on public.deal_evidence;
-create policy "participants and admins read deal evidence"
+drop policy if exists "participants and case admins read safe evidence"
+  on public.deal_evidence;
+create policy "participants and case admins read safe evidence"
   on public.deal_evidence
   for select
   to authenticated
   using (
-    (select public.is_dealsafe_admin())
-    or exists (
+    exists (
       select 1
       from public.deals deal
       where deal.id = deal_evidence.deal_id
@@ -176,5 +150,13 @@ create policy "participants and admins read deal evidence"
           deal.seller_id = (select auth.uid())
           or deal.buyer_id = (select auth.uid())
         )
+    )
+    or (
+      (select public.is_dealsafe_admin())
+      and exists (
+        select 1
+        from public.deal_disputes dispute
+        where dispute.deal_id = deal_evidence.deal_id
+      )
     )
   );

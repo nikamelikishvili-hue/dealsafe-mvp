@@ -2,31 +2,30 @@
 -- This records a decision but never moves Stripe money by itself.
 
 drop policy if exists "participants read deal evidence" on public.deal_evidence;
-create policy "participants and admins read deal evidence" on public.deal_evidence
+drop policy if exists "participants and admins read deal evidence" on public.deal_evidence;
+drop policy if exists "participants and case admins read safe evidence" on public.deal_evidence;
+create policy "participants and case admins read safe evidence" on public.deal_evidence
   for select to authenticated
   using (
-    public.is_dealsafe_admin()
-    or exists (
+    exists (
       select 1 from public.deals d
       where d.id = deal_evidence.deal_id
         and (d.seller_id = auth.uid() or d.buyer_id = auth.uid())
     )
-  );
-
-drop policy if exists "participants read deal evidence files" on storage.objects;
-create policy "participants and admins read deal evidence files" on storage.objects
-  for select to authenticated
-  using (
-    bucket_id = 'deal-evidence'
-    and (
+    or (
       public.is_dealsafe_admin()
-      or exists (
-        select 1 from public.deals d
-        where d.id = (storage.foldername(name))[2]::uuid
-          and (d.seller_id = auth.uid() or d.buyer_id = auth.uid())
+      and exists (
+        select 1 from public.deal_disputes dispute
+        where dispute.deal_id = deal_evidence.deal_id
       )
     )
   );
+
+drop policy if exists "participants read deal evidence files" on storage.objects;
+drop policy if exists "participants and admins read deal evidence files" on storage.objects;
+-- Final evidence objects are opened only through the evidence-files Edge
+-- Function, which performs participant/dispute-case authorization and issues a
+-- 60-second URL. Never restore a direct authenticated Storage SELECT policy.
 
 drop function if exists public.get_admin_disputes(text);
 create function public.get_admin_disputes(p_status text default 'open')
