@@ -34,6 +34,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [23_FOREIGN_KEY_INDEX_GOVERNANCE.md](23_FOREIGN_KEY_INDEX_GOVERNANCE.md) | Measured foreign-key index selection, exact query-plan evidence, deferred notices, and write-cost governance |
 | [24_IMMUTABLE_AUDIT_EVENTS.md](24_IMMUTABLE_AUDIT_EVENTS.md) | Append-only material audit history, database-generated correlation IDs, mutation denial, and rollback proof |
 | [25_EVIDENCE_FILE_SECURITY.md](25_EVIDENCE_FILE_SECURITY.md) | Quarantine, shared file policy, byte validation, fail-closed malware scanning, clean-only promotion, and short-lived case/participant access |
+| [26_EVIDENCE_INTEGRITY_VIEWER.md](26_EVIDENCE_INTEGRITY_VIEWER.md) | Open-time byte/hash verification, append-only integrity inventory, and the non-active private evidence viewer |
 
 ## Authority and change control
 

@@ -1142,3 +1142,42 @@ uploads can be enabled for external testers.
 
 This work does not authorize public launch, external private beta, real-money
 processing, or automatic payout.
+
+## 2026-07-28 — EVD-004 evidence integrity inventory and safe viewer
+
+### Implemented on the review branch
+
+- Added a service-only atomic integrity writer and append-only event inventory.
+- Added latest participant/case-safe `unverified`, `verified`, `missing`,
+  `mismatch`, or `invalid` status without exposing object paths or scanner
+  internals.
+- Re-downloads and reparses private evidence, recomputes SHA-256, and compares
+  type and byte length before every signed viewing URL.
+- Missing, malformed, changed, or mismatched objects fail closed and do not
+  receive a viewing URL.
+- Replaced direct new-tab viewing and admin URL prefetch with one shared modal
+  that renders only local allowlisted image/video blobs.
+- The viewer shows scan/integrity status, full SHA-256, file size/type, and
+  timestamps, and supports keyboard close, focus restoration, mobile layout,
+  and reduced motion.
+
+### Verification target
+
+- The rollback-only database suite must prove service/browser grants,
+  append-only event mutation denial, matching verification, mismatch denial,
+  and the safe metadata projection.
+- Repository tests must lock private download and byte/hash verification before
+  signed URL creation, and prohibit active-document rendering or direct signed
+  URL opening in the client.
+- The full repository gate, protected Preview, exact reviewed commit, migration,
+  Edge deployment, live rollback suite, reviewed merge, and protected production
+  deployment must pass before this state is marked complete.
+
+### EVD-004 state
+
+**Implementation in progress.** The scanner gateway remains deliberately
+unconfigured, so external evidence upload and the clean-object staging scenario
+remain disabled.
+
+This work does not authorize public launch, external private beta, real-money
+processing, automatic payout, or evidence upload activation.
