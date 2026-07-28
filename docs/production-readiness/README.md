@@ -36,6 +36,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [25_EVIDENCE_FILE_SECURITY.md](25_EVIDENCE_FILE_SECURITY.md) | Quarantine, shared file policy, byte validation, fail-closed malware scanning, clean-only promotion, and short-lived case/participant access |
 | [26_EVIDENCE_INTEGRITY_VIEWER.md](26_EVIDENCE_INTEGRITY_VIEWER.md) | Open-time byte/hash verification, append-only integrity inventory, and the non-active private evidence viewer |
 | [27_EVIDENCE_LIFECYCLE_GOVERNANCE.md](27_EVIDENCE_LIFECYCLE_GOVERNANCE.md) | Retention classification, Legal Hold, scheduled integrity/quarantine work, operator-reviewed verified deletion, and alert ownership |
+| [28_MFA_AND_PRIVILEGED_STEP_UP.md](28_MFA_AND_PRIVILEGED_STEP_UP.md) | TOTP enrollment and login challenge, AAL2 enforcement across every protected boundary, privileged-role rollout, recovery limits, and rollback |
 
 ## Authority and change control
 
