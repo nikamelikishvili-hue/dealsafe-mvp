@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import cspReportHandler from '../api/security/csp-report.mjs';
 
 const root = new URL('../', import.meta.url);
 const rootPath = fileURLToPath(root);
@@ -15,6 +16,13 @@ const authRequest = (body = {}, headers = {}) => ({
     origin: 'https://dealivra.test',
     host: 'dealivra.test',
     ...headers,
+  },
+  body,
+});
+const cspRequest = (body, contentType = 'application/csp-report', method = 'POST') => ({
+  method,
+  headers: {
+    'content-type': contentType,
   },
   body,
 });
@@ -108,6 +116,8 @@ test('Vercel configuration includes the minimum browser security headers', () =>
     'x-frame-options',
     'referrer-policy',
     'permissions-policy',
+    'reporting-endpoints',
+    'x-permitted-cross-domain-policies',
   ]) {
     assert.ok(values.has(required), `Missing ${required}`);
   }
@@ -120,12 +130,16 @@ test('Vercel configuration includes the minimum browser security headers', () =>
     "frame-ancestors 'none'",
     "script-src 'self'",
     "connect-src 'self'",
+    'report-uri /api/security/csp-report',
+    'report-to csp-endpoint',
   ]) {
     assert.ok(csp.includes(directive), `CSP must contain ${directive}`);
   }
 
   const scriptPolicy = csp.match(/script-src[^;]*/)?.[0] ?? '';
   assert.equal(scriptPolicy.includes("'unsafe-inline'"), false);
+  assert.equal(values.get('reporting-endpoints'), 'csp-endpoint="/api/security/csp-report"');
+  assert.equal(values.get('x-permitted-cross-domain-policies'), 'none');
 
   const html = readText('index.html');
   const inlineScripts = [...html.matchAll(/<script(?:\s+[^>]*)?>([\s\S]*?)<\/script>/g)]
@@ -149,6 +163,88 @@ test('Vercel configuration includes the minimum browser security headers', () =>
       permanent: false,
     },
   ]);
+});
+
+test('CSP report endpoint fails safely for invalid request shapes', async () => {
+  const methodResponse = createResponse();
+  await cspReportHandler(cspRequest({}, 'application/csp-report', 'GET'), methodResponse);
+  assert.equal(methodResponse.statusCode, 405);
+  assert.equal(methodResponse.headers.get('allow'), 'POST');
+
+  const contentTypeResponse = createResponse();
+  await cspReportHandler(cspRequest({}, 'text/plain'), contentTypeResponse);
+  assert.equal(contentTypeResponse.statusCode, 415);
+
+  const invalidResponse = createResponse();
+  await cspReportHandler(cspRequest('{invalid'), invalidResponse);
+  assert.equal(invalidResponse.statusCode, 400);
+
+  const oversizedResponse = createResponse();
+  await cspReportHandler(
+    cspRequest('x'.repeat(16_385), 'application/reports+json'),
+    oversizedResponse,
+  );
+  assert.equal(oversizedResponse.statusCode, 413);
+  assert.equal(oversizedResponse.headers.get('cache-control'), 'no-store, max-age=0');
+});
+
+test('CSP report endpoint records only bounded privacy-safe diagnostics', async () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = value => warnings.push(String(value));
+
+  try {
+    const legacyResponse = createResponse();
+    await cspReportHandler(cspRequest({
+      'csp-report': {
+        'document-uri': 'https://dealivra.com/deals/550e8400-e29b-41d4-a716-446655440000?token=secret#details',
+        'blocked-uri': 'https://evil.example/payload.js?account=user@example.com',
+        'source-file': 'https://dealivra.com/assets/app.js?v=private',
+        'effective-directive': 'script-src-elem',
+        'violated-directive': "script-src 'self'",
+        disposition: 'enforce',
+        'status-code': 200,
+        'line-number': 12,
+        'column-number': 8,
+        sample: 'document.cookie',
+        referrer: 'https://private.example/user@example.com',
+        'original-policy': 'secret-policy',
+      },
+    }), legacyResponse);
+    assert.equal(legacyResponse.statusCode, 204);
+    assert.equal(legacyResponse.ended, true);
+
+    const modernResponse = createResponse();
+    await cspReportHandler(cspRequest([{
+      type: 'csp-violation',
+      body: {
+        documentURL: 'https://dealivra.com/account/123456789?session=secret',
+        blockedURL: 'inline',
+        effectiveDirective: 'style-src-elem',
+        disposition: 'enforce',
+        sample: 'private inline style',
+      },
+    }], 'application/reports+json'), modernResponse);
+    assert.equal(modernResponse.statusCode, 204);
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.equal(warnings.length, 2);
+  const combined = warnings.join('\n');
+  assert.doesNotMatch(combined, /token=|session=|document\.cookie|private inline|user@example|secret-policy/);
+  assert.doesNotMatch(combined, /original.policy|referrer|sample/i);
+
+  const legacyLog = JSON.parse(warnings[0]);
+  assert.equal(legacyLog.schema, 'dealivra.csp-violation.v1');
+  assert.equal(legacyLog.document_url, 'https://dealivra.com/deals/:id');
+  assert.equal(legacyLog.blocked_url, 'https://evil.example/payload.js');
+  assert.equal(legacyLog.source_url, 'https://dealivra.com/assets/app.js');
+  assert.equal(legacyLog.effective_directive, 'script-src-elem');
+
+  const modernLog = JSON.parse(warnings[1]);
+  assert.equal(modernLog.document_url, 'https://dealivra.com/account/:id');
+  assert.equal(modernLog.blocked_url, 'inline');
 });
 
 test('private analytics removes query strings before collection', () => {
@@ -193,6 +289,7 @@ test('the production-readiness specification is complete and linked', () => {
     '26_EVIDENCE_INTEGRITY_VIEWER.md',
     '27_EVIDENCE_LIFECYCLE_GOVERNANCE.md',
     '28_MFA_AND_PRIVILEGED_STEP_UP.md',
+    '29_CSP_REPORTING_AND_BROWSER_HEADERS.md',
   ];
 
   for (const document of requiredDocuments) {

@@ -2,6 +2,51 @@
 
 This log records completed delivery evidence. A backlog item is not marked complete from code alone when it also requires staging, provider, legal, accessibility, security, or operational evidence.
 
+## 2026-07-28 — Privacy-safe CSP reporting and header hardening
+
+### Implemented locally for review
+
+- Added a same-origin CSP reporting group with modern `report-to` and
+  compatibility `report-uri` routing.
+- Added a 16 KiB, 20-event maximum CSP reporting endpoint for legacy and modern
+  browser payloads.
+- Treated every report as hostile input and excluded samples, original policy,
+  referrer, cookies, headers, query strings, fragments, and identifier-like URL
+  path segments from structured logs.
+- Added `Reporting-Endpoints` and
+  `X-Permitted-Cross-Domain-Policies: none`.
+- Added exact header, inline-script hash, negative request, payload-limit, and
+  privacy-redaction regression tests.
+- Added the operating, monitoring, environment-validation, and rollback
+  runbook.
+
+### Release boundary
+
+- SEC-004 remains in progress until a protected Vercel Preview proves the actual
+  response headers and one synthetic sanitized event.
+- Alert ownership, retention ownership, and rollback evidence are still
+  required before the control is release-complete.
+- The production custom domain remains unbound and real-money mode remains
+  disabled.
+
+### Review and protected Preview evidence
+
+- Draft PR [#73](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/73)
+  contains exactly seven governed files with no database, payment, or public
+  access change.
+- GitHub workflow `30393806517` (run 95) passed on exact review head
+  `29554cd86e314b11ac248caa788c6d33192b9791`.
+- Protected Preview `dpl_7VHDFr7aPLdY59AdqasRUgg1u5Vb` is READY on that
+  exact head; its errors-only build output and warning/error/fatal runtime scan
+  are clean.
+- Anonymous requests to both the immutable deployment and branch alias return
+  Vercel Authentication `302`, `noindex`, HSTS, and frame-denial headers.
+- The authenticated Preview renders the Dealivra application, and
+  `GET /api/security/csp-report` reaches the deployed Function and fails safely
+  with `Method not allowed`.
+- An authenticated raw application-header capture and one synthetic sanitized
+  CSP POST are still required before SEC-004 can be marked complete.
+
 ## 2026-07-26 — Phase 1 specification and foundation batch
 
 ### Completed
