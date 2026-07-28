@@ -53,7 +53,17 @@ complete.
 
 ### Removal
 
-- Supabase requires an `aal2` session to remove a verified factor.
+- Dealivra requires a freshly issued `aal2` session (maximum age ten minutes)
+  before a verified factor can be removed.
+- The server loads the application role from the server-controlled
+  `profiles.app_role` RPC and repeats the factor-count check at the mutation
+  boundary.
+- `support`, `compliance`, and `admin` accounts may never remove a verified
+  factor when the action would leave fewer than two verified TOTP factors.
+  Replacing a factor therefore means enrolling a third factor first, verifying
+  it, and only then removing the old factor.
+- Cancelling an unverified setup is a separate action and cannot be used to
+  remove a verified factor.
 - Dealivra asks for explicit confirmation.
 - After removal, the server refreshes the session so the JWT reflects the
   current factor state.
@@ -170,13 +180,16 @@ the privileged administrative recovery command are implemented and rehearsed.
 - Unit tests cover pending password login, challenge/verify, input rejection,
   AAL2-only session acceptance, unsupported-factor fail-closed behavior, and
   refresh-secret confidentiality.
+- Mutation tests prove that a privileged account cannot cross the two-factor
+  floor, an old AAL2 session cannot remove a factor, and the unverified
+  cancellation action rejects verified factors.
 - Repository tests require the shared Data API, Storage, Edge Function, client,
   and UI enforcement paths.
 - The rollback-only SQL proof checks the private helper boundary, exact role and
   factor logic, fail-closed 403 response, and restrictive Storage policy.
 - The emergency rollback removes the Storage policy and restores the prior
   active-session-only pre-request hook.
-- The complete release gate passes catalog validation, TypeScript, 72 automated
+- The complete release gate passes catalog validation, TypeScript, 77 automated
   tests, repository secret scanning, production build, and Preview smoke.
 - Browser verification passes at 1280px and 390px without error overlays,
   console warnings, or horizontal overflow. The step-two button remains
