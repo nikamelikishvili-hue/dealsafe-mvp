@@ -589,3 +589,48 @@ SEC-005 is fully closed.
   `noindex`, `DENY`, and `no-store`.
 - `dealivra.com` remains detached/404 and real-money mode remains disabled.
 
+## 2026-07-28 — PAY-002 atomic Stripe webhook foundation
+
+### Implemented
+
+- Replaced the read-before-write duplicate check with a service-only atomic
+  event claim and a five-minute recovery lease.
+- Added random fencing tokens so an expired worker cannot finalize a reclaimed
+  event.
+- Moved payment-state mutation, provider-event finalization, participant
+  payment record, and material audit insertion into one database transaction.
+- Added provider-time and legal-transition guards that prevent late
+  processing, failure, expiry, or success events from regressing terminal
+  financial state.
+- Added strict identifier consistency checks and a retryable failure when a
+  supported event arrives before its protected-payment record.
+- Rejected live-mode events and replaced raw provider failure messages with a
+  reviewed customer-safe message allowlist.
+- Kept raw Stripe payloads and payment credentials out of the event ledger.
+
+### Verification evidence
+
+- Supabase migrations `stripe_webhook_replay_safety` and
+  `stripe_webhook_replay_safety_indexes` applied successfully.
+- Function inspection confirmed `SECURITY DEFINER`, empty `search_path`, and
+  execute grants limited to `postgres` and `service_role`.
+- Both financial tables remain RLS-enabled and unavailable to anonymous or
+  authenticated browser roles.
+- A rollback-only production transaction passed claim, fresh duplicate,
+  failure, reclaim, fencing-token, processed replay, success transition,
+  one-audit-event, late-success-after-refund, and identifier-conflict checks.
+- Two genuinely concurrent database calls produced exactly one `claimed` and
+  one `in_progress` result; the synthetic ledger row was then removed.
+- Deployed Stripe webhook version 8 is active with `verify_jwt=false`, the new
+  RPC boundary, constant-time signature comparison, and bounded request size.
+- Live HTTP checks returned 405 for GET, 400 for an invalid signature, and 413
+  for an oversized body, all with `no-store` and without a browser CORS grant.
+- The full local release gate passed with 50 repository tests before release.
+
+### PAY-002 state
+
+**In progress.** The database and webhook controls are deployed and verified.
+GitHub CI, exact-commit protected release evidence, and a Stripe Dashboard
+Sandbox resend/concurrency record are still required before PAY-002 is marked
+complete.
+
