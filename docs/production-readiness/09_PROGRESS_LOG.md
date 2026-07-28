@@ -560,3 +560,32 @@ negative HTTP evidence. Cookie-session CSRF protection remains coupled to the
 future SEC-001 server-managed session architecture and must be completed before
 SEC-005 is fully closed.
 
+## 2026-07-28 — production alias access closure
+
+### Finding
+
+- The unique production deployment URL, team-scoped aliases, and all Preview
+  deployment URLs required Vercel Authentication.
+- The project-default alias `dealsafe-mvp.vercel.app` still served the app
+  publicly even though `dealivra.com` remained detached and returned 404.
+- A protected unique URL alone was therefore insufficient evidence that every
+  active route to the current production deployment was private.
+
+### Control
+
+- The project-default alias redirects every path to the stable team-scoped
+  production alias, where Vercel Authentication is enforced.
+- The redirect is host-specific, temporary, query-compatible, and leaves
+  protected Preview and deployment URLs unchanged.
+- The release gate now checks both the unique deployment URL and every assigned
+  production alias. A single public alias fails the private-beta gate.
+
+### Verification target
+
+- The next protected Preview must accept the Vercel configuration and pass the
+  full repository release gate.
+- After merge, `dealsafe-mvp.vercel.app` must redirect to the team-scoped alias,
+  which must then redirect an unauthenticated request to Vercel SSO with
+  `noindex`, `DENY`, and `no-store`.
+- `dealivra.com` remains detached/404 and real-money mode remains disabled.
+

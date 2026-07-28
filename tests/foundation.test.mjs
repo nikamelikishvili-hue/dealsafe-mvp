@@ -131,6 +131,21 @@ test('Vercel configuration includes the minimum browser security headers', () =>
     const hash = createHash('sha256').update(source).digest('base64');
     assert.ok(scriptPolicy.includes(`'sha256-${hash}'`), 'Every inline script must have a CSP hash');
   }
+
+  assert.deepEqual(vercel.redirects, [
+    {
+      source: '/:path*',
+      has: [
+        {
+          type: 'header',
+          key: 'host',
+          value: 'dealsafe-mvp.vercel.app',
+        },
+      ],
+      destination: 'https://dealsafe-mvp-nika13.vercel.app/:path*',
+      permanent: false,
+    },
+  ]);
 });
 
 test('private analytics removes query strings before collection', () => {
