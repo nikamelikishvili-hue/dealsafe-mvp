@@ -79,6 +79,8 @@ export interface MfaLoginChallenge {
 export interface MfaStatus {
   assuranceLevel:'aal1'|'aal2';
   factors:MfaFactor[];
+  minimumVerifiedFactors:number;
+  canRemoveVerifiedFactor:boolean;
   unsupportedVerifiedFactor:boolean;
 }
 export interface MfaEnrollment {
@@ -487,6 +489,14 @@ export async function verifyMfaEnrollment(session:StoredSession,factorId:string,
 export async function unenrollMfaFactor(session:StoredSession,factorId:string){
   const current=await sessionForRemoteRevocation(session);
   const data=await mfaRequest<AuthResponse>(current.accessToken,{action:'unenroll',factorId});
+  const user=toUser(data)||current.user;
+  if(!data.access_token)throw new Error('The updated session could not be created.');
+  return storeSession(data,user,current);
+}
+
+export async function cancelMfaEnrollment(session:StoredSession,factorId:string){
+  const current=await sessionForRemoteRevocation(session);
+  const data=await mfaRequest<AuthResponse>(current.accessToken,{action:'cancel_enrollment',factorId});
   const user=toUser(data)||current.user;
   if(!data.access_token)throw new Error('The updated session could not be created.');
   return storeSession(data,user,current);
