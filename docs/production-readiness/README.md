@@ -29,6 +29,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [18_PAYMENT_PROVIDER_OBSERVABILITY.md](18_PAYMENT_PROVIDER_OBSERVABILITY.md) | Safe provider-error normalization, customer support references, sanitized structured logs, and a service-only payment exception queue |
 | [19_SECURITY_DEFINER_GOVERNANCE.md](19_SECURITY_DEFINER_GOVERNANCE.md) | Reviewed elevated-function allowlists, public projection exceptions, active-session hook boundary, and advisor interpretation |
 | [20_AUTH_PASSWORD_SECURITY.md](20_AUTH_PASSWORD_SECURITY.md) | Application/provider password rules, verified managed configuration, plan-limited compromised-password screening, and remaining launch gates |
+| [21_AUTHENTICATED_RPC_MATRIX.md](21_AUTHENTICATED_RPC_MATRIX.md) | Exact signed-in elevated-function inventory, ordinary-member/participant/admin authorization matrix, and rollback-only production proof |
 
 ## Authority and change control
 
