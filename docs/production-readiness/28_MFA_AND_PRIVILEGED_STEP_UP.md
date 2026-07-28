@@ -53,8 +53,9 @@ complete.
 
 ### Removal
 
-- Dealivra requires a freshly issued `aal2` session (maximum age ten minutes)
-  before a verified factor can be removed.
+- Dealivra requires `aal2` plus a TOTP verification recorded within the last
+  ten minutes in the signed JWT `amr` claim before a verified factor can be
+  removed. A refreshed access token does not reset this verification window.
 - The server loads the application role from the server-controlled
   `profiles.app_role` RPC and repeats the factor-count check at the mutation
   boundary.
@@ -181,8 +182,8 @@ the privileged administrative recovery command are implemented and rehearsed.
   AAL2-only session acceptance, unsupported-factor fail-closed behavior, and
   refresh-secret confidentiality.
 - Mutation tests prove that a privileged account cannot cross the two-factor
-  floor, an old AAL2 session cannot remove a factor, and the unverified
-  cancellation action rejects verified factors.
+  floor, a token refresh cannot replace recent TOTP verification, and the
+  unverified cancellation action rejects verified factors.
 - Repository tests require the shared Data API, Storage, Edge Function, client,
   and UI enforcement paths.
 - The rollback-only SQL proof checks the private helper boundary, exact role and
