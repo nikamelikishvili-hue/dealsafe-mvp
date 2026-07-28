@@ -805,3 +805,46 @@ full signed-in RPC cross-role matrix proves ordinary members cannot invoke
 administrator effects and every elevated function has reviewed input,
 authorization, and output evidence.
 
+## DAT-004 release evidence and runtime follow-up
+
+### Security and password baseline release
+
+- GitHub PR #60 contained only the reviewed database execution, password
+  policy, documentation, and regression-test changes. An accidental
+  line-ending-only application diff was removed before release.
+- Exact PR head `9f58ef2065e44739f034d5388bfe3759bd53746d`
+  passed `Quality and security foundation` run 63 and the Vercel status check.
+- Protected Preview deployment `dpl_CqN33y9hCmeTSB2mLTbYh9FGrNsd` reached
+  `READY`, matched the reviewed head SHA, and denied unauthenticated access
+  through Vercel Authentication with `noindex` and `no-store`.
+- PR #60 merged as
+  `5263e46c9ed21975d271e942bbf122d74010be8f`. Exact production deployment
+  `dpl_GkKNcegrpjVA8vFqXMsFvMGZFnf1` reached `READY` from `main`.
+
+### Runtime warning remediation
+
+- Vercel's exact-major syntax now pins the application and lockfile to Node
+  `24.x`, matching `.nvmrc`, CI, and the Vercel project runtime.
+- The catalog endpoint no longer accesses the deprecated
+  `request.query` compatibility path. It reads the first bounded category
+  parameter with the standard WHATWG `URL` API.
+- Regression tests fail if the catalog handler accesses the legacy query
+  getter or if the three runtime-version declarations diverge.
+- The full local release gate passed with catalog checksum verification,
+  type checking, 57 repository tests, secret scanning, production build, and
+  Preview navigation smoke.
+- Exact PR #61 head `64a3d473c0248852cf65abf14bcc75ab4445d5d2`
+  passed `Quality and security foundation` run 65 and the Vercel status check.
+  Preview deployment `dpl_8x5egY5JSm4JSDP6xYkiMUv6kfZv` reached `READY`;
+  its build completed without the open-ended Node-major warning, `DEP0169`,
+  fatal, or error output.
+- PR #61 merged as
+  `77069356fa9c7f3452b0e67c52644786f668df94`. Exact production deployment
+  `dpl_8W86wZJGFJqpHKGdkDiK1zNdT2ni` reached `READY` from `main`.
+- The exact production deployment reports Node `24.x` and no build or runtime
+  `DEP0169`, warning, error, or fatal record in the post-release window.
+- The Vercel project remains `live=false`. Its only attached domains are the
+  protected team-scoped aliases; `dealivra.com`, `www.dealivra.com`, and the
+  legacy public project alias remain detached. Real-money mode and automatic
+  payout remain disabled.
+
