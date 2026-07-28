@@ -406,8 +406,13 @@ export async function updateAccountPassword(session:StoredSession,password:strin
 
 function validatePassword(password:string){
   if(password.length<12)throw new Error('Password must contain at least 12 characters.');
-  if(!/[a-z]/.test(password)||!/[A-Z]/.test(password)||!/\d/.test(password)){
-    throw new Error('Password must include uppercase, lowercase, and a number.');
+  if(
+    !/[a-z]/.test(password)
+    || !/[A-Z]/.test(password)
+    || !/\d/.test(password)
+    || !/[!@#$%^&*()_+\-=\[\]{};'\\:"|<>?,.\/`~]/.test(password)
+  ){
+    throw new Error('Password must include uppercase, lowercase, a number, and a symbol.');
   }
 }
 

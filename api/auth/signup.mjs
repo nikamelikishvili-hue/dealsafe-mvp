@@ -28,8 +28,11 @@ export default async function handler(request, response) {
     || !/[a-z]/.test(password)
     || !/[A-Z]/.test(password)
     || !/\d/.test(password)
+    || !/[!@#$%^&*()_+\-=\[\]{};'\\:"|<>?,.\/`~]/.test(password)
   ) {
-    response.status(400).json({ error: 'Use 12+ characters with uppercase, lowercase, and a number.' });
+    response.status(400).json({
+      error: 'Use 12+ characters with uppercase, lowercase, a number, and a symbol.',
+    });
     return;
   }
 
