@@ -33,6 +33,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [22_RLS_POLICY_PERFORMANCE.md](22_RLS_POLICY_PERFORMANCE.md) | Statement-level Auth evaluation for protected RLS policies with production seller/buyer/outsider allow-deny proof |
 | [23_FOREIGN_KEY_INDEX_GOVERNANCE.md](23_FOREIGN_KEY_INDEX_GOVERNANCE.md) | Measured foreign-key index selection, exact query-plan evidence, deferred notices, and write-cost governance |
 | [24_IMMUTABLE_AUDIT_EVENTS.md](24_IMMUTABLE_AUDIT_EVENTS.md) | Append-only material audit history, database-generated correlation IDs, mutation denial, and rollback proof |
+| [25_EVIDENCE_FILE_SECURITY.md](25_EVIDENCE_FILE_SECURITY.md) | Quarantine, shared file policy, byte validation, fail-closed malware scanning, clean-only promotion, and short-lived case/participant access |
 
 ## Authority and change control
 

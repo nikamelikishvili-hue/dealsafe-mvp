@@ -1059,20 +1059,57 @@ automatic payout.
   notices. Correlation lookup is an operator requirement, not an automatic
   advisor-driven index.
 
-### DAT-005 release evidence
-
-- Reviewed repository change: PR [#67](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/67), limited to the six governed DAT-005 files.
-- GitHub workflow `30361415168` (run 77) completed successfully for exact head commit `eddfdb630eb5f9e7da78b17f46c7574c04adac75`.
-- Protected Preview `dpl_J2qEGVovpc2SxL72Rdmd5BUzY2bJ` was READY on that exact head commit with clean errors-only build output and no warning, error, or fatal runtime logs.
-- Squash merge produced exact main commit `e52c015f0adc3e2d7703552f2ec305090f159ee9`.
-- Protected production deployment `dpl_DKuZWY1UyX6unmhgirJ9C94gGrhF` was READY on that exact merge commit with clean errors-only build output and no warning, error, or fatal runtime logs.
-- The Vercel project remained `live: false`, on Node.js 24.x, with no public/custom domain attached.
-
 ### DAT-005 state
 
-**Complete.** The production database, repository gate, protected Preview,
-reviewed merge, and exact protected production deployment all passed.
+**Complete in the production database; repository release pending.** The
+append-only triggers, least-privilege grants, and correlation identifiers are
+active. The full repository gate, protected Preview, reviewed merge, and exact
+protected production deployment remain required before the batch is closed.
 
 This work does not authorize public launch, real-money processing, automatic
 payout, or deletion of production history.
+
+## 2026-07-28 — EVD-001/002/003 evidence-file security implementation
+
+### Implemented on the review branch
+
+- Added one shared seller/buyer evidence policy for category/media pairing,
+  canonical MIME types, 10 MB photo and 50 MB video limits, intake expiry, and
+  60-second signed access.
+- Added byte-structure validation for metadata-free WebP, ISO base-media
+  MP4/MOV, and WebM instead of trusting a filename, extension, browser MIME
+  value, or Storage metadata.
+- Added browser photo privacy processing and the same declaration/byte policy
+  before an upload is requested.
+- Added a private quarantine bucket, server-approved one-time intake paths,
+  rate-limited intake creation, and no browser read/update/delete path.
+- Added a fail-closed malware-scanner gateway contract with SHA-256 binding,
+  bounded response parsing, timeout handling, and an EICAR pre-check.
+- Added clean-only promotion to the final private vault. Legacy evidence is
+  labeled `legacy_unscanned` and cannot count toward shipping readiness.
+- Removed direct authenticated final-bucket access and direct evidence-record
+  inserts. Safe metadata excludes object paths, uploader IDs, raw metadata, and
+  scanner internals.
+- Added server-issued participant/dispute-case access and an append-only log
+  for every 60-second evidence URL.
+
+### Verification target
+
+- Unit fixtures cover valid WebP, metadata-bearing WebP, role/type mismatch,
+  size limits, EICAR, and scanner hash/verdict validation.
+- The rollback-only database suite covers the bucket/policy/grant/view/trigger
+  inventory and seller/buyer/outsider/case-admin metadata authorization.
+- Full typecheck, repository tests, secret scan, production build, Preview,
+  database dry-run, external scanner staging scenarios, cross-account signed
+  access, and expired-URL verification are still required.
+
+### EVD state
+
+**Implementation in progress.** The scanner remains fail-closed. A reviewed
+scanner vendor or internally operated gateway, staging secrets, and the live
+negative test matrix are mandatory before evidence uploads can be enabled for
+external testers.
+
+This work does not authorize public launch, external private beta, real-money
+processing, or automatic payout.
 
