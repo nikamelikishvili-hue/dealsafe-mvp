@@ -30,6 +30,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [19_SECURITY_DEFINER_GOVERNANCE.md](19_SECURITY_DEFINER_GOVERNANCE.md) | Reviewed elevated-function allowlists, public projection exceptions, active-session hook boundary, and advisor interpretation |
 | [20_AUTH_PASSWORD_SECURITY.md](20_AUTH_PASSWORD_SECURITY.md) | Application/provider password rules, verified managed configuration, plan-limited compromised-password screening, and remaining launch gates |
 | [21_AUTHENTICATED_RPC_MATRIX.md](21_AUTHENTICATED_RPC_MATRIX.md) | Exact signed-in elevated-function inventory, ordinary-member/participant/admin authorization matrix, and rollback-only production proof |
+| [22_RLS_POLICY_PERFORMANCE.md](22_RLS_POLICY_PERFORMANCE.md) | Statement-level Auth evaluation for protected RLS policies with production seller/buyer/outsider allow-deny proof |
 
 ## Authority and change control
 
