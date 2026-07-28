@@ -7,8 +7,7 @@ do $dbp_001_policy_inventory$
 declare
   expected_policies constant text[] := array[
     'deal_disputes.participants read deal disputes.SELECT',
-    'deal_evidence.participants and admins read deal evidence.SELECT',
-    'deal_evidence.participants upload deal evidence.INSERT',
+    'deal_evidence.participants and case admins read safe evidence.SELECT',
     'deal_media.participants read media records.SELECT',
     'deal_media.seller deletes media records.DELETE',
     'deal_media.seller inserts media records.INSERT',
@@ -33,10 +32,8 @@ begin
       (policy.tablename = 'deal_disputes'
         and policy.policyname = 'participants read deal disputes')
       or (policy.tablename = 'deal_evidence'
-        and policy.policyname in (
-          'participants and admins read deal evidence',
-          'participants upload deal evidence'
-        ))
+        and policy.policyname =
+          'participants and case admins read safe evidence')
       or (policy.tablename = 'deal_media'
         and policy.policyname in (
           'participants read media records',
@@ -81,7 +78,8 @@ begin
     from pg_policies policy
     where policy.schemaname = 'public'
       and policy.tablename = 'deal_evidence'
-      and policy.policyname = 'participants and admins read deal evidence'
+      and policy.policyname =
+        'participants and case admins read safe evidence'
       and position(
         'SELECT is_dealsafe_admin() AS is_dealsafe_admin'
         in coalesce(policy.qual, '')
@@ -258,18 +256,6 @@ declare
   media_outsider_id uuid := current_setting(
     'dbp_001.deal_media.outsider_id'
   )::uuid;
-  evidence_deal_id uuid := current_setting(
-    'dbp_001.deal_evidence.deal_id'
-  )::uuid;
-  evidence_seller_id uuid := current_setting(
-    'dbp_001.deal_evidence.seller_id'
-  )::uuid;
-  evidence_buyer_id uuid := current_setting(
-    'dbp_001.deal_evidence.buyer_id'
-  )::uuid;
-  evidence_outsider_id uuid := current_setting(
-    'dbp_001.deal_evidence.outsider_id'
-  )::uuid;
   media_id uuid;
   affected_rows integer;
 begin
@@ -315,79 +301,13 @@ begin
     raise exception 'DBP-001 seller lost media delete access';
   end if;
 
-  perform set_config('request.jwt.claim.sub', evidence_seller_id::text, true);
-  perform set_config(
-    'request.jwt.claims',
-    jsonb_build_object('sub', evidence_seller_id, 'role', 'authenticated')::text,
-    true
-  );
-  insert into public.deal_evidence(
-    deal_id,
-    uploaded_by,
-    uploader_role,
-    evidence_type,
-    storage_path,
-    metadata
-  )
-  values(
-    evidence_deal_id,
-    evidence_seller_id,
-    'seller',
-    'other',
-    'dbp-001/seller-positive.txt',
-    '{}'::jsonb
-  );
-
-  perform set_config('request.jwt.claim.sub', evidence_buyer_id::text, true);
-  perform set_config(
-    'request.jwt.claims',
-    jsonb_build_object('sub', evidence_buyer_id, 'role', 'authenticated')::text,
-    true
-  );
-  insert into public.deal_evidence(
-    deal_id,
-    uploaded_by,
-    uploader_role,
-    evidence_type,
-    storage_path,
-    metadata
-  )
-  values(
-    evidence_deal_id,
-    evidence_buyer_id,
-    'buyer',
-    'other',
-    'dbp-001/buyer-positive.txt',
-    '{}'::jsonb
-  );
-
-  perform set_config('request.jwt.claim.sub', evidence_outsider_id::text, true);
-  perform set_config(
-    'request.jwt.claims',
-    jsonb_build_object('sub', evidence_outsider_id, 'role', 'authenticated')::text,
-    true
-  );
-  begin
-    insert into public.deal_evidence(
-      deal_id,
-      uploaded_by,
-      uploader_role,
-      evidence_type,
-      storage_path,
-      metadata
-    )
-    values(
-      evidence_deal_id,
-      evidence_outsider_id,
-      'seller',
-      'other',
-      'dbp-001/outsider-denied.txt',
-      '{}'::jsonb
-    );
-    raise exception 'DBP-001 outsider inserted a deal-evidence record';
-  exception when insufficient_privilege then
-    null;
-  end;
+  if has_table_privilege(
+    'authenticated',
+    'public.deal_evidence',
+    'INSERT'
+  ) then
+    raise exception 'DBP-001 browser evidence INSERT was restored';
+  end if;
 end
 $dbp_001_write_matrix$;
 
