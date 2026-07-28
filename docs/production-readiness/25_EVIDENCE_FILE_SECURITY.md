@@ -101,6 +101,23 @@ Repository tests cover:
 The rollback-only SQL suite is
 `supabase/tests/evidence_file_security_rollback.sql`.
 
+## Current deployment state (2026-07-28)
+
+- Draft PR
+  [#69](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/69)
+  passed workflow run 81 on exact reviewed head
+  `7ec467d057cb830b79408fd53d08ee779ddd4ab5`.
+- Protected Preview `dpl_CY1QTXNwmAPY1Wh2zZvho126yVkH` is READY on that
+  exact head with no build error and no warning/error/fatal runtime event.
+- Migration `evidence_file_security` is active as version `20260728135548`.
+- JWT-protected `evidence-files` version 1 is ACTIVE.
+- The live post-migration rollback matrix passed. Both buckets are private,
+  the final bucket has zero direct browser policies, and authenticated users
+  have no evidence insert or storage-path read grant.
+- Eleven existing records are marked `legacy_unscanned`.
+- The external scanner URL/token remain intentionally absent. Finalization
+  therefore fails closed and evidence upload is not enabled for testers.
+
 ## Remaining activation gates
 
 Before evidence uploads can be enabled for external testers:
