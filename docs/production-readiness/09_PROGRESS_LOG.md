@@ -1191,3 +1191,39 @@ evidence upload and the clean-object staging scenario remain disabled.
 
 This work does not authorize public launch, external private beta, real-money
 processing, automatic payout, or evidence upload activation.
+
+## 2026-07-28 — EVD-005 evidence lifecycle governance
+
+### Implemented on the review branch
+
+- Added provisional one-year routine and seven-year dispute-evidence retention
+  classification without converting an elapsed date into automatic deletion.
+- Added an append-only Legal Hold ledger. A hold blocks deletion immediately;
+  a release invalidates any earlier approval and returns elapsed retention to
+  fresh operator review.
+- Added private bounded lifecycle jobs for integrity checks, quarantine cleanup,
+  and retained-evidence deletion.
+- Added a two-phase deletion protocol: operator approval, fresh dispute/hold
+  guards, leased worker claim, Storage API removal, absence verification, then
+  atomic metadata redaction.
+- Added a Vault-authenticated Cron worker and a daily database inventory.
+- Added an administrator lifecycle center with alerts, ownership, safe-stop
+  codes, operator reasons, deletion approval, and Legal Hold actions.
+- Added a rollback-only production proof and repository gates for auth,
+  append-only history, lifecycle viewer blocking, Storage API ordering, and
+  redacted admin responses.
+
+### Release boundary
+
+- Rollout verification does not delete existing production evidence.
+- The eleven legacy-unscanned evidence records remain preserved and blocked
+  from shipping/viewing.
+- The malware scanner remains deliberately unconfigured and fail-closed.
+
+### EVD-005 state
+
+**Implementation prepared; repository, Preview, migration, scheduled worker,
+rollback suite, and closed-production verification pending.**
+
+This work does not authorize public launch, external private beta, real-money
+processing, automatic payout, or evidence upload activation.
