@@ -742,6 +742,7 @@ test('failed refresh clears the server-only cookie', async () => {
 test('MFA enforcement is shared by Data API, Storage, protected functions, and account UI', () => {
   const migration = readText('supabase/mfa_assurance_enforcement.sql');
   const rollback = readText('supabase/mfa_assurance_enforcement_rollback.sql');
+  const readiness = readText('supabase/mfa_privileged_enrollment_readiness.sql');
   const rollbackTests = readText('supabase/tests/mfa_assurance_enforcement_rollback.sql');
   const edgeCommon = readText('supabase/functions/_shared/common.ts');
   const paymentErrors = readText('supabase/functions/_shared/payment-observability.ts');
@@ -754,7 +755,10 @@ test('MFA enforcement is shared by Data API, Storage, protected functions, and a
 
   assert.match(migration, /auth\.mfa_factors/);
   assert.match(migration, /factor\.status = 'verified'/);
+  assert.match(migration, /factor\.factor_type = 'totp'/);
   assert.match(migration, /'support', 'compliance', 'admin'/);
+  assert.match(migration, /verified_totp_factors >= 2/);
+  assert.match(migration, /DEALIVRA_PRIVILEGED_MFA_ENROLLMENT_INCOMPLETE/);
   assert.match(migration, /request_aal = 'aal2'/);
   assert.match(migration, /DEALIVRA_MFA_REQUIRED/);
   assert.match(migration, /'status', 403/);
@@ -762,6 +766,10 @@ test('MFA enforcement is shared by Data API, Storage, protected functions, and a
   assert.match(rollback, /drop policy if exists "MFA assurance required for protected accounts"/);
   assert.match(rollback, /drop function if exists dealsafe_private\.is_current_mfa_assurance_sufficient/);
   assert.match(rollbackTests, /SEC-003 private assurance helper boundary is not exact/);
+  assert.match(readiness, /rollout_blocked_accounts/);
+  assert.match(readiness, /activation_state/);
+  assert.match(readiness, /verified_totp_factors >= 2/);
+  assert.doesNotMatch(readiness, /email|friendly_name|secret|phone/i);
 
   assert.match(edgeCommon, /data\.user\.factors\?\.some/);
   assert.match(edgeCommon, /\["support", "compliance", "admin"\]/);
@@ -781,6 +789,9 @@ test('MFA enforcement is shared by Data API, Storage, protected functions, and a
   assert.match(app, /<AccountMfaSecurity session=\{session\}/);
   assert.match(app, /<MfaLoginVerification challenge=\{mfaLogin\}/);
   assert.match(standard, /TOTP is not phishing-resistant/);
+  assert.match(standard, /Privileged enrollment runbook/);
+  assert.match(standard, /Privileged lost-factor matrix/);
+  assert.match(standard, /Secret material[\s\S]*Never recorded/);
   assert.match(standard, /does not authorize public launch/);
 });
 

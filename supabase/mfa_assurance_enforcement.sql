@@ -5,6 +5,44 @@ begin;
 
 create schema if not exists dealsafe_private;
 
+do $dealivra_privileged_mfa_activation_guard$
+declare
+  privileged_accounts integer := 0;
+  rollout_ready_accounts integer := 0;
+begin
+  select
+    count(*)::integer,
+    count(*) filter (where readiness.verified_totp_factors >= 2)::integer
+  into privileged_accounts, rollout_ready_accounts
+  from (
+    select
+      profile.id,
+      count(factor.id) filter (
+        where factor.status = 'verified'
+          and factor.factor_type = 'totp'
+      ) as verified_totp_factors
+    from public.profiles as profile
+    left join auth.mfa_factors as factor
+      on factor.user_id = profile.id
+    where profile.app_role in ('support', 'compliance', 'admin')
+    group by profile.id
+  ) as readiness;
+
+  if rollout_ready_accounts <> privileged_accounts then
+    raise exception
+      using
+        errcode = 'P0001',
+        message = 'DEALIVRA_PRIVILEGED_MFA_ENROLLMENT_INCOMPLETE',
+        detail = format(
+          '%s of %s privileged accounts have at least two verified TOTP factors.',
+          rollout_ready_accounts,
+          privileged_accounts
+        ),
+        hint = 'Enroll and verify two separate authenticators for every privileged account before applying SEC-003.';
+  end if;
+end
+$dealivra_privileged_mfa_activation_guard$;
+
 create or replace function dealsafe_private.is_current_mfa_assurance_sufficient()
 returns boolean
 language plpgsql

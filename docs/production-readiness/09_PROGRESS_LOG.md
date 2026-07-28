@@ -47,6 +47,29 @@ This log records completed delivery evidence. A backlog item is not marked compl
 - An authenticated raw application-header capture and one synthetic sanitized
   CSP POST are still required before SEC-004 can be marked complete.
 
+### Merge and protected Production evidence
+
+- PR #73 was squash-merged to `main` as verified commit
+  `4adc795b912ee3c209e431941c638607803e9eae`.
+- Exact Production deployment `dpl_3mciZGY7reBAQUndvsrcdf5hcX9L` reached
+  `READY` from that commit in `iad1`; the errors-only build output completed
+  cleanly in eight seconds.
+- The post-release warning, error, and fatal runtime scan returned no records.
+- Anonymous access to the immutable Production deployment continues to return
+  the Vercel Authentication boundary with HTTP 302, `noindex`, HSTS, and
+  frame denial.
+- The Vercel project remains `live: false`. Only protected team-scoped Vercel
+  aliases are attached; `dealivra.com` and `www.dealivra.com` remain detached.
+
+### SEC-004 state
+
+**Repository enforcement merged and protected Production verified; operational
+closure remains pending.** Raw authenticated application-header capture, one
+synthetic sanitized CSP report, alert/retention ownership, and rollback
+evidence are still required. This work does not authorize public launch,
+real-money processing, automatic payout, scanner activation, or removal of
+Vercel protection.
+
 ## 2026-07-26 — Phase 1 specification and foundation batch
 
 ### Completed
@@ -1344,3 +1367,43 @@ privileged-factor enrollment.** Activating the migration now would lock the
 current admin account out. This stage does not authorize public launch,
 external private beta, real-money processing, automatic payout, scanner
 activation, or removal of Vercel protection.
+
+## 2026-07-28 — SEC-003 privileged MFA activation safety
+
+### Implemented locally for review
+
+- Added an atomic activation guard to the staged SEC-003 database migration.
+  It aborts before enforcement changes when any `support`, `compliance`, or
+  `admin` account has fewer than two verified TOTP factors.
+- Added a read-only preflight that returns only privileged, ready, and blocked
+  aggregate counts. It does not return user, email, factor, or secret values.
+- Added the exact primary/secondary device enrollment and sign-in matrix.
+- Added a dual-control lost-factor matrix that explicitly blocks email-only,
+  one-person, notification-free, and unaudited privileged recovery.
+- Preserved the production activation boundary. No MFA enforcement migration,
+  factor creation, factor removal, recovery action, public-access change,
+  scanner activation, or payment-mode change is part of this batch.
+
+### Next gate
+
+- The current privileged administrator must enroll two independently
+  recoverable authenticators through the protected Dealivra security center.
+- A second authorized reviewer must record only non-secret pass/fail evidence.
+- The aggregate preflight and the two-device positive/password-only negative
+  matrix must pass before the database and Edge enforcement activation step.
+
+### Review and protected Preview evidence
+
+- Draft PR [#74](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/74)
+  contains exactly six reviewed files and is based on SEC-004 Production commit
+  `4adc795b912ee3c209e431941c638607803e9eae`.
+- GitHub workflow `30396370399` (run 98) passed on exact review head
+  `6f519b2514ca23c33911d5a6865e86973b1a1d85`.
+- Protected Preview `dpl_9x8fqdw5o7ANs2QhBsFDwwJHTo4b` is `READY` on
+  that exact head. Its errors-only build completed cleanly in eleven seconds
+  and the warning/error/fatal runtime scan returned no records.
+- Anonymous Preview access remains behind Vercel Authentication with HTTP 302,
+  `noindex`, HSTS, frame denial, and no-store.
+- The full local release gate passed catalog verification, TypeScript,
+  74 automated tests, repository secret scanning, production build, and
+  Preview smoke.

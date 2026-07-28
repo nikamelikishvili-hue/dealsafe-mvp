@@ -81,7 +81,11 @@ supported phishing-resistant privileged factor, approved lost-factor recovery,
 security notifications, and the protected two-device negative test matrix.
 The production enforcement migration is staged but intentionally unapplied:
 the current aggregate readiness check found one admin account with no verified
-factor, so activation would cause an administrative lockout.
+factor, so activation would cause an administrative lockout. The migration now
+contains an atomic rollout guard and refuses to activate unless every
+privileged account has at least two verified TOTP factors. A read-only,
+identifier-free aggregate preflight and the two-device/dual-control operating
+matrix are documented for enrollment.
 
 ## Epic 6 — Evidence and private files
 

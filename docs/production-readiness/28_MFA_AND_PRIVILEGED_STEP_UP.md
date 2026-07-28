@@ -94,6 +94,77 @@ Before external beta, the operating procedure must require:
 Until that procedure and notification channel are active, account recovery is
 a manual launch blocker rather than a bypass.
 
+## Privileged enrollment runbook
+
+The activation migration contains a database guard that refuses to run while
+any `support`, `compliance`, or `admin` account has fewer than two verified TOTP
+factors. The guard returns aggregate counts only and never returns an account
+identifier.
+
+Before enrollment:
+
+1. Keep Vercel Authentication enabled and custom domains detached.
+2. Confirm that the operator is using the intended privileged account and a
+   clean, fully updated browser.
+3. Prepare two independently recoverable authenticator stores. Do not place
+   both factors only in the same unsynchronized device or password-manager
+   vault.
+4. Assign a second authorized reviewer and an internal case reference.
+5. Do not copy a QR code, TOTP secret, current code, refresh token, or factor ID
+   into a ticket, chat, screenshot, log, or this runbook.
+
+For each privileged account:
+
+1. Sign in through the protected Dealivra deployment and open
+   **Profile → Authenticator protection**.
+2. Enroll the primary authenticator with a device-specific friendly label.
+   Scan the QR code directly into the intended authenticator and submit one
+   fresh six-digit code.
+3. Confirm that the factor is shown as verified and the current session has
+   reached `aal2`.
+4. Enroll the independently recoverable secondary authenticator and verify it
+   with a fresh code.
+5. Sign out. Complete a password-plus-primary-factor login in one protected
+   browser session.
+6. Sign out again. Complete a password-plus-secondary-factor login from the
+   second approved device or isolated browser profile.
+7. Confirm the factor inventory reports at least two verified TOTP factors.
+   Record only the non-secret results defined below.
+
+The reviewer records:
+
+| Field | Allowed value |
+|---|---|
+| Internal case reference | Non-secret ticket/reference number |
+| Application role | `support`, `compliance`, or `admin` |
+| Verified factor count | Aggregate integer; minimum `2` |
+| Primary login | Pass/fail and UTC timestamp |
+| Secondary login | Pass/fail and UTC timestamp |
+| Password-only protected request | Must fail with the governed MFA response |
+| Data API / Storage / protected Function matrix | Pass/fail only |
+| Operator and reviewer | Approved internal identities |
+| Secret material | Never recorded |
+
+Run `supabase/mfa_privileged_enrollment_readiness.sql` after every privileged
+account completes the matrix. Activation is permitted only when
+`rollout_blocked_accounts = 0` and `activation_state = 'ready'`. The migration
+repeats this check atomically and aborts if the state changes.
+
+## Privileged lost-factor matrix
+
+| Situation | Allowed response | Prohibited shortcut |
+|---|---|---|
+| One verified factor remains | Authenticate at `aal2`, revoke the lost factor, enroll and verify a replacement, revoke other sessions, and rerun both-device checks | Removing the remaining factor first |
+| No verified factor remains | Freeze privileged use, open an immutable recovery case, repeat approved identity proofing, require a second reviewer, revoke all sessions/factors through an approved administrative procedure, notify verified channels, apply the cooldown, then bind two new factors | Email-only reset, support-agent override, or temporary MFA disablement |
+| Suspected factor theft | Revoke sessions, freeze sensitive changes and financial actions, preserve evidence, notify the account owner, and follow incident response | Continuing to use the affected session |
+| Reviewer unavailable | Keep the account blocked and escalate to the named security owner | One-person privileged recovery |
+| Notification or audit unavailable | Stop recovery and treat the outage as a launch blocker | Completing an unrecorded recovery |
+
+Dealivra currently has no approved self-service all-factors-lost recovery and no
+recovery-code claim. The no-factor path therefore remains deliberately blocked
+until immutable case handling, notification delivery, cooldown enforcement, and
+the privileged administrative recovery command are implemented and rehearsed.
+
 ## Verification
 
 - Unit tests cover pending password login, challenge/verify, input rejection,
@@ -110,6 +181,11 @@ a manual launch blocker rather than a bypass.
 - Browser verification passes at 1280px and 390px without error overlays,
   console warnings, or horizontal overflow. The step-two button remains
   disabled until exactly six digits are present.
+- The activation migration aborts with
+  `DEALIVRA_PRIVILEGED_MFA_ENROLLMENT_INCOMPLETE` unless every privileged
+  account has at least two verified TOTP factors.
+- The read-only readiness query returns only aggregate ready/blocked counts and
+  no user, email, factor, or secret value.
 
 ## Release boundary
 
