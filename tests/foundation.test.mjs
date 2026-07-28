@@ -183,6 +183,7 @@ test('the production-readiness specification is complete and linked', () => {
     '20_AUTH_PASSWORD_SECURITY.md',
     '21_AUTHENTICATED_RPC_MATRIX.md',
     '22_RLS_POLICY_PERFORMANCE.md',
+    '23_FOREIGN_KEY_INDEX_GOVERNANCE.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -1247,6 +1248,40 @@ test('participant RLS policies evaluate Auth once without changing role semantic
   assert.match(standard, /performance remediation may never broaden visibility/i);
   assert.match(standard, /Foreign-key index recommendations are intentionally excluded/);
   assert.match(readinessIndex, /22_RLS_POLICY_PERFORMANCE\.md/);
+});
+
+test('measured foreign-key indexes cover only governed production hot paths', () => {
+  const migration = readText('supabase/foreign_key_hot_path_indexes.sql');
+  const rollbackTests = readText('supabase/tests/foreign_key_hot_path_indexes_rollback.sql');
+  const standard = readText('docs/production-readiness/23_FOREIGN_KEY_INDEX_GOVERNANCE.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.equal(
+    [...migration.matchAll(/create index if not exists/g)].length,
+    6,
+    'DBP-002 must create exactly six measured indexes',
+  );
+  assert.match(migration, /audit_events_deal_created_idx[\s\S]*\(deal_id, created_at desc\)/);
+  assert.match(migration, /deal_activity_reads_deal_idx[\s\S]*\(deal_id\)/);
+  assert.match(migration, /deal_media_deal_sort_idx[\s\S]*\(deal_id, sort_order\)/);
+  assert.match(migration, /deal_messages_deal_created_idx[\s\S]*\(deal_id, created_at\)/);
+  assert.match(migration, /deal_offers_deal_created_idx[\s\S]*\(deal_id, created_at desc\)/);
+  assert.match(migration, /ratings_subject_created_idx[\s\S]*\(subject_id, created_at desc\)/);
+  assert.doesNotMatch(migration, /\b(?:grant|revoke|policy|alter table|drop)\b/i);
+
+  assert.match(rollbackTests, /DBP-002 hot-path index inventory changed/);
+  assert.match(rollbackTests, /DBP-002 chat history query did not use its index/);
+  assert.match(rollbackTests, /DBP-002 media lookup did not use its index/);
+  assert.match(rollbackTests, /DBP-002 audit timeline query did not use its index/);
+  assert.match(rollbackTests, /DBP-002 offer history query did not use its index/);
+  assert.match(rollbackTests, /DBP-002 reputation history query did not use its index/);
+  assert.match(rollbackTests, /set local enable_seqscan = off/);
+  assert.match(rollbackTests, /rollback;/);
+
+  assert.match(standard, /Foreign-key advisor notices are candidates/i);
+  assert.match(standard, /remaining foreign-key notices stay visible/i);
+  assert.match(standard, /changes only physical access paths/i);
+  assert.match(readinessIndex, /23_FOREIGN_KEY_INDEX_GOVERNANCE\.md/);
 });
 
 test('protected Edge Functions validate the Auth session row after JWT verification', () => {

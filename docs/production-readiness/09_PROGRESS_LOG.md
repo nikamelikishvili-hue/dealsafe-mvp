@@ -943,3 +943,54 @@ boundaries are regression-tested.
 This optimization does not authorize public launch, real-money processing, or
 automatic payout. The project remains closed until the complete launch program
 passes.
+
+## DBP-002 measured foreign-key indexes
+
+### Measured scope
+
+- Reviewed all 27 current `unindexed_foreign_keys` advisor notices instead of
+  automatically indexing every foreign key.
+- Correlated the advisor inventory with table sizes, table scan/write
+  statistics, the production statistics reset window, normalized
+  `pg_stat_statements` activity, and current application/RPC query shapes.
+- Selected six query paths with demonstrated read, ordering, or reverse
+  maintenance value: chat, media, audit timeline, offers, activity reads, and
+  reputation history.
+- Deferred 21 notices without deleting or suppressing them. Their current
+  production value does not yet justify added write and maintenance cost.
+
+### Implemented controls
+
+- Added six compact B-tree indexes whose leading column covers the governed
+  foreign key and whose optional second column matches product ordering.
+- Added a read-only production verification suite that locks the exact index
+  inventory, column order, sort direction, validity, readiness, and planner
+  selection for all six real query shapes.
+- Kept unused-index review, constraint changes, grants, RLS, functions, and
+  customer-visible behavior outside this batch.
+
+### Verification evidence
+
+- All 60 repository foundation tests passed before the production dry-run.
+- The migration and all six forced planner assertions first passed inside one
+  production transaction that was completely rolled back.
+- A follow-up catalog check confirmed the dry-run retained zero indexes.
+- Migration `foreign_key_hot_path_indexes` applied successfully.
+- The standalone post-migration verification suite passed and rolled back all
+  transaction-local planner settings.
+- The Supabase performance advisor removed exactly the six governed
+  `unindexed_foreign_keys` findings, reducing that inventory from 27 to 21.
+- The six new indexes appear as unused immediately after creation, which is
+  expected before organic traffic reaches each path; the governance standard
+  forbids premature removal.
+- The security advisor reports no new warning class or unreviewed exposure.
+
+### DBP-002 state
+
+**Complete in the production database; repository release pending.** The six
+measured access paths are active and verified. The full repository gate,
+protected Preview, merge, and exact protected production deployment remain
+required before the batch is closed.
+
+This work does not authorize public launch, real-money processing, or
+automatic payout.
