@@ -169,6 +169,13 @@ function normalizeError(error: unknown) {
       401,
     );
   }
+  if (/^Multi-factor verification is required$/i.test(message)) {
+    return paymentError(
+      "mfa_required",
+      "Verify your authenticator before continuing.",
+      403,
+    );
+  }
   return paymentError(
     "payment_service_error",
     "Secure payment service is temporarily unavailable.",
