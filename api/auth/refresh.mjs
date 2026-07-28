@@ -1,6 +1,8 @@
 import {
   authPayload,
   clearRefreshCookie,
+  decodeAccessTokenClaims,
+  hasVerifiedMfaFactor,
   logAuthFailure,
   prepareResponse,
   publicSession,
@@ -31,6 +33,16 @@ export default async function handler(request, response) {
     if (!upstream.ok || !session || !data.refresh_token) {
       clearRefreshCookie(response);
       response.status(401).json({ error: 'Your session expired. Please sign in again.' });
+      return;
+    }
+
+    const claims = decodeAccessTokenClaims(data.access_token);
+    if (
+      hasVerifiedMfaFactor(data.user)
+      && claims.aal !== 'aal2'
+    ) {
+      clearRefreshCookie(response);
+      response.status(401).json({ error: 'Verify your authenticator by signing in again.' });
       return;
     }
 
