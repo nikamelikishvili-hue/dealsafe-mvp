@@ -670,7 +670,7 @@ test('versioned catalog endpoint returns a bounded vehicle catalog with CDN cach
 
   await catalog({
     method: 'GET',
-    query: { category: 'vehicle' },
+    url: '/api/catalog?category=vehicle',
     headers: {},
   }, response);
 
@@ -705,7 +705,7 @@ test('guided catalog endpoint serves every reviewed category with a manual fallb
     const response = createResponse();
     await catalog({
       method: 'GET',
-      query: { category },
+      url: `/api/catalog?category=${encodeURIComponent(category)}`,
       headers: {},
     }, response);
 
@@ -779,18 +779,49 @@ test('catalog endpoint rejects unsupported categories and write methods', async 
 
   await catalog({
     method: 'GET',
-    query: { category: 'unreviewed' },
+    url: '/api/catalog?category=unreviewed',
     headers: {},
   }, unsupportedResponse);
   await catalog({
     method: 'POST',
-    query: {},
+    url: '/api/catalog',
     headers: {},
   }, writeResponse);
 
   assert.equal(unsupportedResponse.statusCode, 400);
   assert.equal(writeResponse.statusCode, 405);
   assert.equal(writeResponse.headers.get('allow'), 'GET');
+});
+
+test('catalog endpoint uses the WHATWG URL API instead of the deprecated request query parser', async () => {
+  const { default: catalog } = await import('../api/catalog.mjs');
+  const response = createResponse();
+  const request = {
+    method: 'GET',
+    url: '/api/catalog?category=vehicle&category=phone',
+    headers: {},
+  };
+  Object.defineProperty(request, 'query', {
+    get() {
+      throw new Error('The deprecated query compatibility layer must not be accessed.');
+    },
+  });
+
+  await catalog(request, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.payload.category, 'vehicle');
+  assert.doesNotMatch(readText('api/catalog.mjs'), /request\.query/);
+});
+
+test('Node runtime is pinned to the reviewed Vercel major release', () => {
+  const packageJson = readJson('package.json');
+  const packageLock = readJson('package-lock.json');
+  const nodeVersion = readText('.nvmrc').trim();
+
+  assert.equal(packageJson.engines.node, '24.x');
+  assert.equal(packageLock.packages[''].engines.node, '24.x');
+  assert.equal(nodeVersion, '24');
 });
 
 test('VIN endpoint rejects invalid and cross-origin requests before contacting NHTSA', async () => {

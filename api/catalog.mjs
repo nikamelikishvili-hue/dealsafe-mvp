@@ -2,6 +2,18 @@ import { getCatalogCategory } from '../server/catalogShared.mjs';
 
 const defaultCategory = 'phone';
 
+function requestedCatalogCategory(request) {
+  if (typeof request?.url !== 'string') return defaultCategory;
+  try {
+    return new URL(request.url, 'https://dealivra.invalid').searchParams.get('category')
+      ?.trim()
+      .toLowerCase()
+      || defaultCategory;
+  } catch {
+    return defaultCategory;
+  }
+}
+
 export default async function handler(request, response) {
   response.setHeader('X-Content-Type-Options', 'nosniff');
   if (request.method !== 'GET') {
@@ -11,12 +23,7 @@ export default async function handler(request, response) {
     return;
   }
 
-  const requestedCategory = Array.isArray(request.query?.category)
-    ? request.query.category[0]
-    : request.query?.category;
-  const category = typeof requestedCategory === 'string'
-    ? requestedCategory.trim().toLowerCase()
-    : defaultCategory;
+  const category = requestedCatalogCategory(request);
 
   try {
     const catalog = getCatalogCategory(category);
