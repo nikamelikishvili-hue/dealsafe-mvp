@@ -7,10 +7,10 @@ unwanted sessions without accidentally signing out every device. Session
 controls must not expose precise location, IP addresses, refresh tokens, or
 another user's activity.
 
-This control supports SEC-002. It does not mark SEC-002 complete because a
-revoked Supabase session's already-issued access JWT can remain valid until its
-short expiry. Immediate denial for every sensitive action remains a separate
-release gate.
+This control supports SEC-002. Immediate active-session enforcement is defined
+in [14_IMMEDIATE_SESSION_REVOCATION.md](14_IMMEDIATE_SESSION_REVOCATION.md).
+SEC-002 remains open until the required two-device negative authorization test,
+security notification, and account-takeover recovery evidence are complete.
 
 ## User-facing behavior
 
@@ -72,12 +72,10 @@ Raw location and IP information are intentionally absent.
 
 Before SEC-002 can be marked complete:
 
-1. Require an active `session_id` lookup for sensitive RPCs and server actions,
-   or introduce an equivalent provider-supported immediate-revocation control.
-2. Add cross-device end-to-end tests proving a revoked device cannot perform a
+1. Add cross-device end-to-end tests proving a revoked device cannot perform a
    sensitive action before its original JWT expiry.
-3. Add a security notification when other or all devices are signed out.
-4. Define support evidence and recovery steps for suspected account takeover.
+2. Add a security notification when other or all devices are signed out.
+3. Define support evidence and recovery steps for suspected account takeover.
 
 Production access protection and real-money disablement remain in force while
 these release gates are open.
