@@ -57,6 +57,20 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "header",
+          "key": "host",
+          "value": "dealsafe-mvp.vercel.app"
+        }
+      ],
+      "destination": "https://dealsafe-mvp-nika13.vercel.app/:path*",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/((?!api/|_vercel/).*)",
