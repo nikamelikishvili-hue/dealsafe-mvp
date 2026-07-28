@@ -52,6 +52,7 @@ const authProviderSession = (refreshToken, options = {}) => ({
     exp: 4102444800,
     iat: options.iat ?? Math.floor(Date.now() / 1000),
     ...(options.aal ? { aal: options.aal } : {}),
+    ...(options.amr ? { amr: options.amr } : {}),
   })).toString('base64url')}.signature`,
   refresh_token: refreshToken,
   expires_in: 3600,
@@ -579,6 +580,10 @@ test('privileged MFA removal preserves the two-authenticator floor', async () =>
   const requested = [];
   const accessToken = authProviderSession('unused', {
     aal: 'aal2',
+    amr: [{
+      method: 'totp',
+      timestamp: Math.floor(Date.now() / 1000),
+    }],
     factors,
   }).access_token;
 
@@ -615,10 +620,11 @@ test('privileged MFA removal preserves the two-authenticator floor', async () =>
   ]);
 });
 
-test('verified MFA removal requires a recently issued AAL2 session', async () => {
+test('token refresh cannot replace recent TOTP verification for MFA removal', async () => {
   const { default: mfa } = await import('../api/auth/mfa.mjs');
   const response = createResponse();
   const factorId = '11111111-1111-4111-8111-111111111111';
+  const currentTime = Math.floor(Date.now() / 1000);
   const factors = [{
     id: factorId,
     factor_type: 'totp',
@@ -628,7 +634,11 @@ test('verified MFA removal requires a recently issued AAL2 session', async () =>
   const accessToken = authProviderSession('unused', {
     aal: 'aal2',
     factors,
-    iat: Math.floor(Date.now() / 1000) - (11 * 60),
+    iat: currentTime,
+    amr: [
+      { method: 'totp', timestamp: currentTime - (11 * 60) },
+      { method: 'token_refresh', timestamp: currentTime },
+    ],
   }).access_token;
   let providerCalls = 0;
 
