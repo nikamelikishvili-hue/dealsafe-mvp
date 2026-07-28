@@ -175,6 +175,9 @@ test('the production-readiness specification is complete and linked', () => {
     '11_LEGACY_IDENTIFIER_REGISTER.md',
     '12_CATALOG_GOVERNANCE.md',
     '13_SESSION_SECURITY.md',
+    '14_IMMEDIATE_SESSION_REVOCATION.md',
+    '15_EDGE_ORIGIN_SECURITY.md',
+    '16_STRIPE_WEBHOOK_REPLAY_SAFETY.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -1191,4 +1194,44 @@ test('Stripe webhook stays signature-authenticated and outside browser CORS', ()
   assert.match(originStandard, /never return `Access-Control-Allow-Origin: \*`/);
   assert.match(originStandard, /future SEC-001 server-managed session architecture/);
   assert.match(readinessIndex, /15_EDGE_ORIGIN_SECURITY\.md/);
+});
+
+test('Stripe webhook claims and applies each provider event through one fenced transaction', () => {
+  const webhook = readText('supabase/functions/stripe-webhook/index.ts');
+  const migration = readText('supabase/stripe_webhook_replay_safety.sql');
+  const standard = readText('docs/production-readiness/16_STRIPE_WEBHOOK_REPLAY_SAFETY.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(webhook, /\.rpc\("claim_stripe_webhook_event"/);
+  assert.match(webhook, /\.rpc\("apply_stripe_webhook_event"/);
+  assert.match(webhook, /\.rpc\("fail_stripe_webhook_event"/);
+  assert.match(webhook, /difference \|= signature\.charCodeAt\(index\) \^ expected\.charCodeAt\(index\)/);
+  assert.match(webhook, /maxWebhookBytes = 262_144/);
+  assert.match(webhook, /contentLength > maxWebhookBytes/);
+  assert.match(webhook, /Number\.isSafeInteger\(timestampNumber\)/);
+  assert.doesNotMatch(webhook, /\.from\("stripe_webhook_events"\)/);
+  assert.doesNotMatch(webhook, /\.from\("protected_payments"\)/);
+  assert.doesNotMatch(webhook, /\.from\("audit_events"\)/);
+  assert.match(webhook, /if \(event\.livemode\) return webhookError\(400\)/);
+  assert.match(webhook, /messages\[code\] \|\| "The payment was not completed/);
+  assert.doesNotMatch(webhook, /last_payment_error\?\.message/);
+
+  assert.match(migration, /for update/g);
+  assert.match(migration, /claim_token uuid/);
+  assert.match(migration, /v_event\.claim_token is distinct from p_claim_token/);
+  assert.match(migration, /v_event\.claimed_at >= now\(\) - make_interval/);
+  assert.match(migration, /on conflict \(id\) do nothing/);
+  assert.match(migration, /stripe_webhook_events_payment_id_idx/);
+  assert.match(migration, /payment_reference_not_found/);
+  assert.match(migration, /payment_identifier_mismatch/);
+  assert.match(migration, /v_event\.stripe_created_at >= v_state_time/);
+  assert.match(migration, /v_previous_status <> 'refunded'/);
+  assert.match(migration, /p_event_type = 'charge\.refunded'/);
+  assert.match(migration, /status = 'processed'[\s\S]*processed_at = now\(\)/);
+  assert.match(migration, /revoke all on function public\.claim_stripe_webhook_event[\s\S]*from public, anon, authenticated/);
+  assert.match(migration, /grant execute on function public\.apply_stripe_webhook_event[\s\S]*to service_role/);
+
+  assert.match(standard, /random fencing token/);
+  assert.match(standard, /raw\s+provider errors are not stored/);
+  assert.match(readinessIndex, /16_STRIPE_WEBHOOK_REPLAY_SAFETY\.md/);
 });

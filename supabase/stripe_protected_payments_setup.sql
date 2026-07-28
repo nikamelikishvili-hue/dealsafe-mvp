@@ -46,13 +46,16 @@ create table if not exists public.protected_payments (
 create table if not exists public.stripe_webhook_events (
   id text primary key,
   event_type text not null,
-  processed_at timestamptz not null default now()
+  processed_at timestamptz
 );
 
 alter table public.protected_payments enable row level security;
 alter table public.stripe_webhook_events enable row level security;
 revoke all on table public.protected_payments from public, anon, authenticated;
 revoke all on table public.stripe_webhook_events from public, anon, authenticated;
+
+-- Apply stripe_webhook_replay_safety.sql after this baseline. It adds the
+-- service-only claim/apply/fail workflow and preserves historical event rows.
 
 drop function if exists public.get_my_stripe_connect_status();
 create function public.get_my_stripe_connect_status()
