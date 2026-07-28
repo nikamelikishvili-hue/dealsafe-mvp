@@ -62,12 +62,17 @@ function rawFactor(account, factorId) {
 
 function hasFreshAal2(accessToken) {
   const claims = decodeAccessTokenClaims(accessToken);
-  const issuedAt = Number(claims.iat);
   const currentTime = Math.floor(Date.now() / 1000);
+  const hasRecentTotpVerification = Array.isArray(claims.amr)
+    && claims.amr.some((method) => {
+      const verifiedAt = Number(method?.timestamp);
+      return method?.method === 'totp'
+        && Number.isFinite(verifiedAt)
+        && verifiedAt <= currentTime + 60
+        && currentTime - verifiedAt <= sensitiveChangeFreshnessSeconds;
+    });
   return claims.aal === 'aal2'
-    && Number.isFinite(issuedAt)
-    && issuedAt <= currentTime + 60
-    && currentTime - issuedAt <= sensitiveChangeFreshnessSeconds;
+    && hasRecentTotpVerification;
 }
 
 export default async function handler(request, response) {
