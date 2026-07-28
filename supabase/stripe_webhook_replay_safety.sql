@@ -185,6 +185,10 @@ begin
 end;
 $$;
 
+drop function if exists public.apply_stripe_webhook_event(
+  text, uuid, text, uuid, text, text, text, text, text, text
+);
+
 create or replace function public.apply_stripe_webhook_event(
   p_event_id text,
   p_claim_token uuid,
@@ -195,7 +199,15 @@ create or replace function public.apply_stripe_webhook_event(
   p_charge_id text,
   p_payment_status text,
   p_failure_code text,
-  p_failure_message text
+  p_failure_message text,
+  p_amount_cents bigint,
+  p_currency text,
+  p_transfer_group text,
+  p_metadata_payment_id uuid,
+  p_metadata_buyer_id uuid,
+  p_metadata_seller_id uuid,
+  p_metadata_agreement_version integer,
+  p_metadata_fee_version text
 )
 returns jsonb
 language plpgsql
@@ -276,6 +288,52 @@ begin
          and v_payment.charge_id is not null
          and v_payment.charge_id <> p_charge_id) then
     raise exception using errcode = '23000', message = 'payment_identifier_mismatch';
+  end if;
+
+  if p_amount_cents is null
+     or p_amount_cents <= 0
+     or (
+       p_event_type = 'charge.dispute.created'
+       and p_amount_cents > v_payment.item_amount_cents
+     )
+     or (
+       p_event_type <> 'charge.dispute.created'
+       and p_amount_cents <> v_payment.item_amount_cents
+     ) then
+    raise exception using errcode = '23000', message = 'payment_amount_mismatch';
+  end if;
+  if p_currency is null or upper(p_currency) <> upper(v_payment.currency) then
+    raise exception using errcode = '23000', message = 'payment_currency_mismatch';
+  end if;
+  if (p_metadata_payment_id is not null and p_metadata_payment_id <> v_payment.id)
+     or (p_metadata_buyer_id is not null and p_metadata_buyer_id <> v_payment.buyer_id)
+     or (p_metadata_seller_id is not null and p_metadata_seller_id <> v_payment.seller_id)
+     or (p_metadata_agreement_version is not null
+         and p_metadata_agreement_version <> v_payment.agreement_version)
+     or (p_metadata_fee_version is not null
+         and p_metadata_fee_version <> v_payment.fee_version)
+     or (p_transfer_group is not null and p_transfer_group <> v_payment.transfer_group) then
+    raise exception using errcode = '23000', message = 'payment_snapshot_mismatch';
+  end if;
+
+  if v_payment.fee_version <> 'legacy_v1'
+     and (
+       p_event_type like 'checkout.session.%'
+       or p_event_type like 'payment_intent.%'
+     )
+     and (
+       p_deal_id is distinct from v_payment.deal_id
+       or p_metadata_payment_id is distinct from v_payment.id
+       or p_metadata_buyer_id is distinct from v_payment.buyer_id
+       or p_metadata_seller_id is distinct from v_payment.seller_id
+       or p_metadata_agreement_version is distinct from v_payment.agreement_version
+       or p_metadata_fee_version is distinct from v_payment.fee_version
+     ) then
+    raise exception using errcode = '23000', message = 'payment_metadata_incomplete';
+  end if;
+  if p_event_type like 'payment_intent.%'
+     and p_transfer_group is distinct from v_payment.transfer_group then
+    raise exception using errcode = '23000', message = 'payment_transfer_group_mismatch';
   end if;
 
   v_previous_status := v_payment.status;
@@ -441,7 +499,13 @@ $$;
 
 revoke all on function public.claim_stripe_webhook_event(text, text, timestamptz, boolean, integer) from public, anon, authenticated;
 revoke all on function public.fail_stripe_webhook_event(text, uuid, text) from public, anon, authenticated;
-revoke all on function public.apply_stripe_webhook_event(text, uuid, text, uuid, text, text, text, text, text, text) from public, anon, authenticated;
+revoke all on function public.apply_stripe_webhook_event(
+  text, uuid, text, uuid, text, text, text, text, text, text,
+  bigint, text, text, uuid, uuid, uuid, integer, text
+) from public, anon, authenticated;
 grant execute on function public.claim_stripe_webhook_event(text, text, timestamptz, boolean, integer) to service_role;
 grant execute on function public.fail_stripe_webhook_event(text, uuid, text) to service_role;
-grant execute on function public.apply_stripe_webhook_event(text, uuid, text, uuid, text, text, text, text, text, text) to service_role;
+grant execute on function public.apply_stripe_webhook_event(
+  text, uuid, text, uuid, text, text, text, text, text, text,
+  bigint, text, text, uuid, uuid, uuid, integer, text
+) to service_role;

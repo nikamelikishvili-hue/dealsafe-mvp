@@ -1235,3 +1235,90 @@ test('Stripe webhook claims and applies each provider event through one fenced t
   assert.match(standard, /raw\s+provider errors are not stored/);
   assert.match(readinessIndex, /16_STRIPE_WEBHOOK_REPLAY_SAFETY\.md/);
 });
+
+test('trusted payment commands freeze financial snapshots and fence every provider action', () => {
+  const migration = readText('supabase/stripe_trusted_payment_commands.sql');
+  const rollbackTests = readText('supabase/tests/stripe_trusted_payment_commands_rollback.sql');
+  const checkout = readText('supabase/functions/stripe-create-checkout/index.ts');
+  const release = readText('supabase/functions/stripe-release-payment/index.ts');
+  const dispute = readText('supabase/functions/stripe-resolve-dispute/index.ts');
+  const verification = readText('supabase/functions/_shared/financial.ts');
+  const app = readText('src/app.tsx');
+  const client = readText('src/services/supabaseRest.ts');
+  const standard = readText('docs/production-readiness/17_TRUSTED_PAYMENT_COMMANDS.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(migration, /create table if not exists public\.stripe_financial_commands/);
+  assert.match(migration, /alter table public\.stripe_financial_commands enable row level security/);
+  assert.match(migration, /revoke all on table public\.stripe_financial_commands from public, anon, authenticated/);
+  assert.match(migration, /grant select, insert, update, delete on table public\.stripe_financial_commands to service_role/);
+  assert.match(migration, /create or replace function public\.prepare_stripe_checkout/);
+  assert.match(migration, /create or replace function public\.prepare_stripe_financial_command/);
+  assert.match(migration, /create or replace function public\.finalize_stripe_financial_command/);
+  assert.match(migration, /create or replace function public\.fail_stripe_financial_command/);
+  assert.match(migration, /for update/g);
+  assert.match(migration, /checkout_snapshot_conflict/);
+  assert.match(migration, /payment_snapshot_mismatch/);
+  assert.match(migration, /illegal_payment_transition/);
+  assert.match(migration, /v_command\.claim_token is distinct from p_claim_token/);
+  assert.match(migration, /app_role <> 'admin' or not v_actor\.is_admin/);
+  assert.match(migration, /revoke all on function public\.prepare_stripe_financial_command[\s\S]*from public, anon, authenticated/);
+  assert.match(migration, /grant execute on function public\.finalize_stripe_financial_command[\s\S]*to service_role/);
+  assert.doesNotMatch(migration, /raw_provider/);
+
+  assert.match(rollbackTests, /concurrent checkout reservation was not fenced/);
+  assert.match(rollbackTests, /stale release worker finalized the payment/);
+  assert.match(rollbackTests, /amount mismatch was accepted/);
+  assert.match(rollbackTests, /currency mismatch was accepted/);
+  assert.match(rollbackTests, /seller account mismatch was accepted/);
+  assert.match(rollbackTests, /illegal payment transition was accepted/);
+  assert.match(rollbackTests, /refund did not atomically resolve payment, dispute, and deal/);
+
+  assert.match(checkout, /\.rpc\("prepare_stripe_checkout"/);
+  assert.match(checkout, /\.rpc\(\s*"attach_stripe_checkout_session"/);
+  assert.match(checkout, /DEALIVRA_PLATFORM_FEE_VERSION/);
+  assert.match(checkout, /dealivra_payment_id: reservation\.paymentId/);
+  assert.doesNotMatch(checkout, /\.upsert\(/);
+  assert.doesNotMatch(checkout, /\.from\("protected_payments"\)/);
+  assert.doesNotMatch(checkout, /\.from\("audit_events"\)/);
+
+  for (const source of [release, dispute]) {
+    assert.match(source, /\.rpc\(\s*"prepare_stripe_financial_command"/);
+    assert.match(source, /verifyTrustedStripePayment/);
+    assert.match(source, /\.rpc\(\s*"finalize_stripe_financial_command"/);
+    assert.match(source, /\.rpc\("fail_stripe_financial_command"/);
+    assert.doesNotMatch(source, /\.from\("protected_payments"\)/);
+    assert.doesNotMatch(source, /\.from\("audit_events"\)/);
+  }
+
+  assert.match(verification, /intent\.amount_received !== command\.itemAmountCents/);
+  assert.match(verification, /intent\.transfer_group !== command\.transferGroup/);
+  assert.match(verification, /account\.id !== command\.sellerStripeAccountId/);
+  assert.match(verification, /metadata\.dealivra_payment_id === command\.paymentId/);
+  assert.doesNotMatch(app, /Release funds to seller/);
+  assert.doesNotMatch(app, /releaseProtectedPayment/);
+  assert.doesNotMatch(client, /releaseProtectedPayment/);
+  assert.match(app, /waiting for Dealivra operations review/);
+  assert.match(standard, /provider-success\/recording-uncertain/);
+  assert.match(readinessIndex, /17_TRUSTED_PAYMENT_COMMANDS\.md/);
+});
+
+test('Stripe webhook rejects untrusted financial event fields before state transition', () => {
+  const webhook = readText('supabase/functions/stripe-webhook/index.ts');
+  const migration = readText('supabase/stripe_webhook_replay_safety.sql');
+
+  assert.match(webhook, /p_amount_cents: refs\.amountCents/);
+  assert.match(webhook, /p_currency: refs\.currency/);
+  assert.match(webhook, /p_transfer_group: refs\.transferGroup/);
+  assert.match(webhook, /p_metadata_payment_id: refs\.metadataPaymentId/);
+  assert.match(webhook, /event\.type === "charge\.refunded"[\s\S]*object\.amount_refunded/);
+  assert.match(webhook, /event\.type === "charge\.dispute\.created"[\s\S]*object\.charge/);
+
+  assert.match(migration, /payment_amount_mismatch/);
+  assert.match(migration, /payment_currency_mismatch/);
+  assert.match(migration, /payment_snapshot_mismatch/);
+  assert.match(migration, /payment_metadata_incomplete/);
+  assert.match(migration, /payment_transfer_group_mismatch/);
+  assert.match(migration, /p_event_type = 'charge\.dispute\.created'[\s\S]*p_amount_cents > v_payment\.item_amount_cents/);
+  assert.match(migration, /v_payment\.fee_version <> 'legacy_v1'/);
+});

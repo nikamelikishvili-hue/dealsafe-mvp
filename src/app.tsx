@@ -7,7 +7,7 @@ import { configureBuyerAccessCode, getDealAcceptanceProtection } from './service
 import { getDealParticipants, type DealParticipants } from './services/supabaseRest';
 import { getDealActionPlan, type DealActionPlan } from './services/supabaseRest';
 import { getDealDeliveryDetails, saveDealDeliveryDetails, type DealDeliveryDetails } from './services/supabaseRest';
-import { confirmDealPaymentMethod, createProtectedCheckout, getDealPaymentRecord, getProtectedPaymentStatus, getStripeConnectStatus, releaseProtectedPayment, startStripeConnectOnboarding, type DealPaymentMethod, type DealPaymentRecord, type ProtectedPaymentState, type ProtectedPaymentStatus, type StripeConnectStatus } from './services/supabaseRest';
+import { confirmDealPaymentMethod, createProtectedCheckout, getDealPaymentRecord, getProtectedPaymentStatus, getStripeConnectStatus, startStripeConnectOnboarding, type DealPaymentMethod, type DealPaymentRecord, type ProtectedPaymentState, type ProtectedPaymentStatus, type StripeConnectStatus } from './services/supabaseRest';
 import { getAppLanguage, t } from './i18n';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { AccountSessionSecurity } from './AccountSessionSecurity';
@@ -1038,12 +1038,11 @@ function printProtectedPaymentReceipt(deal:Deal,payment:ProtectedPaymentStatus){
   return true;
 }
 function ProtectedPaymentPanel({deal,session,onChanged}:{deal:Deal;session:StoredSession;onChanged:(ready:boolean)=>void}){
-  const [payment,setPayment]=useState<ProtectedPaymentStatus|null>(null);const [connect,setConnect]=useState<StripeConnectStatus|null>(null);const [plan,setPlan]=useState<DealActionPlan|null>(null);const [message,setMessage]=useState('');const [busy,setBusy]=useState<'connect'|'checkout'|'release'|''>('');const [loaded,setLoaded]=useState(false);
+  const [payment,setPayment]=useState<ProtectedPaymentStatus|null>(null);const [connect,setConnect]=useState<StripeConnectStatus|null>(null);const [plan,setPlan]=useState<DealActionPlan|null>(null);const [message,setMessage]=useState('');const [busy,setBusy]=useState<'connect'|'checkout'|''>('');const [loaded,setLoaded]=useState(false);
   const load=async()=>{try{const [next,account]=await Promise.all([getProtectedPaymentStatus(session,deal.id),getStripeConnectStatus(session)]);const actionPlan=await getDealActionPlan(session,deal.id).catch(()=>null);setPayment(next);setConnect(account);setPlan(actionPlan);onChanged(['funds_secured','release_pending','released'].includes(next.status))}catch(error){setMessage(error instanceof Error?error.message:'Could not load protected payment');onChanged(false)}finally{setLoaded(true)}};
   useEffect(()=>{setLoaded(false);void load();const timer=window.setInterval(()=>void load(),15000);return()=>window.clearInterval(timer)},[deal.id,session.accessToken]);
   const startOnboarding=async()=>{setBusy('connect');setMessage('');try{const result=await startStripeConnectOnboarding(session,deal.publicId);window.location.assign(result.url)}catch(error){setMessage(error instanceof Error?error.message:'Could not open Stripe onboarding')}finally{setBusy('')}};
   const checkout=async()=>{setBusy('checkout');setMessage('');try{const result=await createProtectedCheckout(session,deal.id);window.location.assign(result.url)}catch(error){setMessage(error instanceof Error?error.message:'Could not open secure checkout');setBusy('')}};
-  const release=async()=>{if(!window.confirm(t('Release the secured funds to the seller after confirming delivery?')))return;setBusy('release');setMessage('');try{await releaseProtectedPayment(session,deal.id);setMessage('Funds released to the seller.');await load()}catch(error){setMessage(error instanceof Error?error.message:'Could not release payment')}finally{setBusy('')}};
   if(!loaded)return null;
   const state=payment?.status||'not_started';
   const ready=Boolean(payment?.seller_payouts_ready||connect?.ready);
@@ -1092,7 +1091,7 @@ function ProtectedPaymentPanel({deal,session,onChanged}:{deal:Deal;session:Store
     {deal.viewerRole==='buyer'&&state==='not_started'&&ready&&deal.status==='accepted'&&<div className="payment-actions"><button className="primary" disabled={busy==='checkout'} onClick={checkout}><BadgeDollarSign size={17}/>{t(busy==='checkout'?'Opening Stripe Sandbox…':'Open Stripe Sandbox checkout')}</button></div>}
     {state==='checkout_created'&&deal.viewerRole==='buyer'&&<div className="payment-actions"><button className="primary" disabled={busy==='checkout'} onClick={checkout}>{t('Continue Stripe Sandbox checkout')}</button></div>}
     {state==='processing'&&<div className="payment-wait"><Clock3/>{t('Stripe is processing the payment. This page will update automatically.')}</div>}
-    {state==='funds_secured'&&deal.viewerRole==='buyer'&&deal.status==='completed'&&<div className="payment-actions"><button className="primary" disabled={busy==='release'} onClick={release}>{t(busy==='release'?'Releasing…':'Release funds to seller')}</button></div>}
+    {state==='funds_secured'&&deal.status==='completed'&&<div className="payment-wait"><ShieldCheck/>{t('Delivery is complete. Seller payout is waiting for Dealivra operations review.')}</div>}
     {state==='released'&&<div className="payment-wait"><Check/>{t('Payment has been released to the seller.')}</div>}
     {payment?.failure_message&&<div className="notice">{t(payment.failure_message)}</div>}
     {message&&<div className="notice">{t(message)}</div>}

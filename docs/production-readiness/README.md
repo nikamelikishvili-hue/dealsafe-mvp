@@ -25,6 +25,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [14_IMMEDIATE_SESSION_REVOCATION.md](14_IMMEDIATE_SESSION_REVOCATION.md) | Immediate active-session checks across the Data API, Storage, and protected Edge Functions, including safe rollback |
 | [15_EDGE_ORIGIN_SECURITY.md](15_EDGE_ORIGIN_SECURITY.md) | Exact production/Preview origin enforcement for browser-invoked payment functions and webhook separation |
 | [16_STRIPE_WEBHOOK_REPLAY_SAFETY.md](16_STRIPE_WEBHOOK_REPLAY_SAFETY.md) | Atomic Stripe event claiming, fencing, legal ordering, replay recovery, and service-only authorization |
+| [17_TRUSTED_PAYMENT_COMMANDS.md](17_TRUSTED_PAYMENT_COMMANDS.md) | Immutable Checkout snapshots, fenced release/refund commands, provider verification, and manual-beta authority |
 
 ## Authority and change control
 
