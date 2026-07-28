@@ -379,6 +379,32 @@ grant select, insert, update
   on table public.evidence_lifecycle_alerts
   to service_role;
 
+create index if not exists evidence_legal_hold_events_actor_idx
+  on public.evidence_legal_hold_events (actor_id);
+
+create index if not exists evidence_lifecycle_jobs_evidence_idx
+  on public.evidence_lifecycle_jobs (evidence_id);
+create index if not exists evidence_lifecycle_jobs_intake_idx
+  on public.evidence_lifecycle_jobs (intake_id);
+create index if not exists evidence_lifecycle_jobs_requested_by_idx
+  on public.evidence_lifecycle_jobs (requested_by);
+create index if not exists evidence_lifecycle_jobs_approved_by_idx
+  on public.evidence_lifecycle_jobs (approved_by);
+
+create index if not exists evidence_lifecycle_events_intake_idx
+  on public.evidence_lifecycle_events (intake_id);
+create index if not exists evidence_lifecycle_events_deal_idx
+  on public.evidence_lifecycle_events (deal_id);
+create index if not exists evidence_lifecycle_events_actor_idx
+  on public.evidence_lifecycle_events (actor_id);
+
+create index if not exists evidence_lifecycle_alerts_evidence_idx
+  on public.evidence_lifecycle_alerts (evidence_id);
+create index if not exists evidence_lifecycle_alerts_job_idx
+  on public.evidence_lifecycle_alerts (job_id);
+create index if not exists evidence_lifecycle_alerts_acknowledged_by_idx
+  on public.evidence_lifecycle_alerts (acknowledged_by);
+
 create table if not exists dealsafe_private.evidence_maintenance_settings (
   singleton boolean primary key default true check (singleton),
   secret_sha256 text not null check (secret_sha256 ~ '^[0-9a-f]{64}$'),
@@ -1301,7 +1327,7 @@ begin
     returning job.*
   ),
   deletion_events as (
-    insert into public.evidence_lifecycle_events (
+    insert into public.evidence_lifecycle_events as lifecycle_event (
       evidence_id,
       job_id,
       deal_id,
@@ -1320,7 +1346,7 @@ begin
     join public.deal_evidence as evidence
       on evidence.id = claimed.evidence_id
     where claimed.job_type = 'evidence_delete'
-    returning job_id
+    returning lifecycle_event.job_id
   ),
   lifecycle_updates as (
     update public.deal_evidence as evidence
