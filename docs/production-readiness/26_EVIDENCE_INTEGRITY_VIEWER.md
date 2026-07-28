@@ -89,10 +89,31 @@ It proves:
 Repository tests additionally lock the open-time order: private download and
 byte/hash verification must occur before signed URL creation.
 
+## Deployment evidence
+
+- Draft PR [#70](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/70)
+  contains exactly the 12 reviewed EVD-004 files.
+- GitHub workflow `30372585274` (run 84) completed successfully for exact head
+  `2211a4551fecbd5b79b4bcdd3eab913c8974f456`.
+- Protected Preview `dpl_Fe11mQ672ZQV4wMCeDqhzWnTm4jC` is READY on that exact
+  head, has no build error, redirects through Vercel Authentication, and
+  returns `x-robots-tag: noindex`.
+- Migration `evidence_integrity_inventory` applied as version
+  `20260728151953`.
+- JWT-protected Edge Function `evidence-files` version 2 is ACTIVE with bundle
+  SHA-256 `af110dfe15325bd925415b94add9db9f4f72b88516fe8b4a82d2e787355095d4`.
+- The post-migration rollback suite passed on the live schema.
+- Browser roles cannot read or insert integrity events and cannot execute the
+  integrity recorder. The service role can execute it, and two mutation-denial
+  triggers protect the event inventory.
+- The participant-safe view exposes the latest integrity status and timestamp
+  without storage path, scanner provider, or scanner reference.
+- Eleven pre-existing records remain `legacy_unscanned`; no existing record is
+  marked integrity-verified and no integrity event was fabricated during
+  rollout.
+
 ## Remaining release gates
 
-- Deploy the migration and updated Edge Function.
-- Run the rollback suite on the live schema.
 - Run a staging clean-object view and deliberate object-replacement negative
   test after a scanner gateway is selected.
 - Add scheduled full-vault integrity inventory, alert routing, and operator

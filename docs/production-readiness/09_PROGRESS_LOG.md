@@ -1161,23 +1161,33 @@ processing, or automatic payout.
   timestamps, and supports keyboard close, focus restoration, mobile layout,
   and reduced motion.
 
-### Verification target
+### Release evidence
 
-- The rollback-only database suite must prove service/browser grants,
-  append-only event mutation denial, matching verification, mismatch denial,
-  and the safe metadata projection.
-- Repository tests must lock private download and byte/hash verification before
-  signed URL creation, and prohibit active-document rendering or direct signed
-  URL opening in the client.
-- The full repository gate, protected Preview, exact reviewed commit, migration,
-  Edge deployment, live rollback suite, reviewed merge, and protected production
-  deployment must pass before this state is marked complete.
+- Draft PR [#70](https://github.com/nikamelikishvili-hue/dealsafe-mvp/pull/70)
+  contains exactly 12 reviewed files.
+- GitHub workflow `30372585274` (run 84) passed for exact head
+  `2211a4551fecbd5b79b4bcdd3eab913c8974f456`.
+- Protected Preview `dpl_Fe11mQ672ZQV4wMCeDqhzWnTm4jC` is READY on the same
+  head, has no build error, redirects through Vercel Authentication, and
+  returns `x-robots-tag: noindex`.
+- Migration `evidence_integrity_inventory` is active as version
+  `20260728151953`.
+- JWT-protected `evidence-files` version 2 is ACTIVE with bundle SHA-256
+  `af110dfe15325bd925415b94add9db9f4f72b88516fe8b4a82d2e787355095d4`.
+- The live rollback suite passed. Browser roles cannot read or insert integrity
+  events or execute the recorder; two mutation-denial triggers protect the raw
+  inventory.
+- The participant-safe view contains integrity status and timestamp without
+  storage paths or scanner-internal fields.
+- All 11 pre-existing evidence rows remain `legacy_unscanned`. No evidence row
+  is marked integrity-verified and no synthetic integrity event remains after
+  verification.
 
 ### EVD-004 state
 
-**Implementation in progress.** The scanner gateway remains deliberately
-unconfigured, so external evidence upload and the clean-object staging scenario
-remain disabled.
+**Backend active; reviewed merge and protected production verification
+pending.** The scanner gateway remains deliberately unconfigured, so external
+evidence upload and the clean-object staging scenario remain disabled.
 
 This work does not authorize public launch, external private beta, real-money
 processing, automatic payout, or evidence upload activation.
