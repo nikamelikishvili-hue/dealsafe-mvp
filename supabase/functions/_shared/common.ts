@@ -2,6 +2,7 @@ import { createClient, type User } from "npm:@supabase/supabase-js@2";
 import {
   correlationHeader,
   type PaymentOperationContext,
+  paymentError,
   paymentErrorResponse,
   stripeNetworkError,
   stripeProviderError,
@@ -226,6 +227,58 @@ export async function requireActiveUserSession(request: Request): Promise<Verifi
 
 export async function requireUser(request: Request): Promise<User> {
   return (await requireActiveUserSession(request)).user;
+}
+
+type SensitiveChangeScope = "payout" | "email" | "mfa";
+
+function sensitiveChangeProtectionMode() {
+  const mode = (Deno.env.get("DEALIVRA_RECOVERY_CONTROL_MODE") || "staged")
+    .trim()
+    .toLowerCase();
+  if (mode !== "staged" && mode !== "enforced") {
+    throw paymentError(
+      "recovery_protection_unavailable",
+      "Account recovery protection is temporarily unavailable.",
+      503,
+    );
+  }
+  return mode;
+}
+
+export async function requireSensitiveChangeAllowedForService(
+  userId: string,
+  scope: SensitiveChangeScope,
+) {
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)
+    || !["payout", "email", "mfa"].includes(scope)
+  ) {
+    throw paymentError(
+      "sensitive_change_request_invalid",
+      "The sensitive account change request is invalid.",
+      400,
+    );
+  }
+  if (sensitiveChangeProtectionMode() === "staged") return;
+
+  const { data, error } = await adminClient().rpc(
+    "is_sensitive_change_allowed_for_service",
+    { p_user_id: userId, p_scope: scope },
+  );
+  if (error) {
+    throw paymentError(
+      "recovery_protection_unavailable",
+      "Account recovery protection is temporarily unavailable.",
+      503,
+    );
+  }
+  if (data !== true) {
+    throw paymentError(
+      "recovery_cooldown_active",
+      "Payout changes are temporarily locked after account recovery.",
+      423,
+    );
+  }
 }
 
 type StripeRequestOptions = {

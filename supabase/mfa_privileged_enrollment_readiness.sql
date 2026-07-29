@@ -26,4 +26,3 @@ select
     else 'blocked'
   end as activation_state
 from privileged_factor_readiness;
-

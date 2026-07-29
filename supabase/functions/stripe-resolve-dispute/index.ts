@@ -1,4 +1,12 @@
-import { adminClient, errorResponse, handleBrowserRequest, json, requireUser, stripeRequest } from "../_shared/common.ts";
+import {
+  adminClient,
+  errorResponse,
+  handleBrowserRequest,
+  json,
+  requireSensitiveChangeAllowedForService,
+  requireUser,
+  stripeRequest,
+} from "../_shared/common.ts";
 import { type FinancialCommand, verifyTrustedStripePayment } from "../_shared/financial.ts";
 import { linkFinancialCommandObservation } from "../_shared/payment-ledger.ts";
 import {
@@ -106,6 +114,25 @@ Deno.serve((request) => {
       ? "dispute_refund"
       : "dispute_release";
     const action = decision === "resolved_buyer" ? "refund" : "transfer";
+    if (action === "transfer") {
+      const { data: payoutDeal, error: payoutDealError } = await admin
+        .from("deals")
+        .select("seller_id")
+        .eq("id", dispute.deal_id)
+        .single();
+      if (
+        payoutDealError
+        || !payoutDeal?.seller_id
+        || !uuidPattern.test(payoutDeal.seller_id)
+      ) {
+        throw paymentError(
+          "dispute_action_not_eligible",
+          "This dispute decision is not eligible for a financial action.",
+          409,
+        );
+      }
+      await requireSensitiveChangeAllowedForService(payoutDeal.seller_id, "payout");
+    }
     const { data, error: prepareError } = await admin.rpc(
       "prepare_stripe_financial_command",
       {

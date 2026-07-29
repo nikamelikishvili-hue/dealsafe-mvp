@@ -6,3 +6,6 @@ verify_jwt = true
 
 [functions.evidence-maintenance]
 verify_jwt = false
+
+[functions.security-notifications]
+verify_jwt = false

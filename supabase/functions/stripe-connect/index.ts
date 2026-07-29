@@ -1,4 +1,13 @@
-import { adminClient, errorResponse, handleBrowserRequest, json, requireUser, siteUrl, stripeRequest } from "../_shared/common.ts";
+import {
+  adminClient,
+  errorResponse,
+  handleBrowserRequest,
+  json,
+  requireSensitiveChangeAllowedForService,
+  requireUser,
+  siteUrl,
+  stripeRequest,
+} from "../_shared/common.ts";
 import {
   paymentError,
   recordPaymentSuccess,
@@ -31,6 +40,9 @@ Deno.serve((request) => {
     const body = await request.json().catch(() => ({})) as { action?: string; dealPublicId?: string };
     if (body.action !== "status" && body.action !== "onboard") {
       throw paymentError("invalid_connect_action", "Select a valid seller payout action.", 400);
+    }
+    if (body.action === "onboard") {
+      await requireSensitiveChangeAllowedForService(user.id, "payout");
     }
     const admin = adminClient();
     const { data: profile, error: profileError } = await admin

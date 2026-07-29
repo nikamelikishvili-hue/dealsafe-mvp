@@ -1,22 +1,21 @@
 import {
+  authProviderCode,
   authPayload,
   clearRefreshCookie,
   hasVerifiedMfaFactor,
+  isAuthProviderRateLimited,
   logAuthFailure,
+  logAuthRejection,
   prepareResponse,
   publicSession,
   readJsonBody,
   requirePost,
   requireSameOrigin,
+  respondAuthRateLimited,
   safeMfaFactors,
   setRefreshCookie,
   supabaseAuthRequest,
 } from '../../server/authShared.mjs';
-
-function providerCode(data) {
-  const value = typeof data?.code === 'string' ? data.code : '';
-  return /^[a-z0-9_]{1,64}$/.test(value) ? value : 'unknown';
-}
 
 export default async function handler(request, response) {
   prepareResponse(response);
@@ -34,15 +33,20 @@ export default async function handler(request, response) {
     const upstream = await supabaseAuthRequest('token?grant_type=password', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
-    });
+    }, request);
     const data = await authPayload(upstream);
     const session = publicSession(data);
     if (!upstream.ok || !session || !data.refresh_token) {
-      console.warn('[dealivra-auth-rejection]', {
-        operation: 'login',
-        status: upstream.status,
-        code: providerCode(data),
-      });
+      const code = authProviderCode(data);
+      logAuthRejection('login', upstream.status, code);
+      if (isAuthProviderRateLimited(upstream, data)) {
+        respondAuthRateLimited(
+          response,
+          upstream,
+          'Too many sign-in attempts were made. Wait at least one minute, then try again or securely reset your password.',
+        );
+        return;
+      }
       response.status(401).json({
         error: 'We could not sign you in. Check your email and password, or choose Forgot password to securely reset it.',
       });

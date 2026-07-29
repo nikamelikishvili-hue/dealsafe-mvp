@@ -1,14 +1,18 @@
 import {
+  authProviderCode,
   authPayload,
   clearRefreshCookie,
   decodeAccessTokenClaims,
   hasVerifiedMfaFactor,
+  isAuthProviderRateLimited,
   logAuthFailure,
+  logAuthRejection,
   prepareResponse,
   publicSession,
   readRefreshToken,
   requirePost,
   requireSameOrigin,
+  respondAuthRateLimited,
   setRefreshCookie,
   supabaseAuthRequest,
 } from '../../server/authShared.mjs';
@@ -27,10 +31,20 @@ export default async function handler(request, response) {
     const upstream = await supabaseAuthRequest('token?grant_type=refresh_token', {
       method: 'POST',
       body: JSON.stringify({ refresh_token: refreshToken }),
-    });
+    }, request);
     const data = await authPayload(upstream);
     const session = publicSession(data);
     if (!upstream.ok || !session || !data.refresh_token) {
+      const code = authProviderCode(data);
+      logAuthRejection('refresh', upstream.status, code);
+      if (isAuthProviderRateLimited(upstream, data)) {
+        respondAuthRateLimited(
+          response,
+          upstream,
+          'Too many session refresh requests were made. Wait briefly, then try again.',
+        );
+        return;
+      }
       clearRefreshCookie(response);
       response.status(401).json({ error: 'Your session expired. Please sign in again.' });
       return;

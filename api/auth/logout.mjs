@@ -1,11 +1,15 @@
 import {
+  authProviderCode,
   authPayload,
   clearRefreshCookie,
+  isAuthProviderRateLimited,
   logAuthFailure,
+  logAuthRejection,
   prepareResponse,
   readJsonBody,
   requirePost,
   requireSameOrigin,
+  respondAuthRateLimited,
   supabaseAuthRequest,
 } from '../../server/authShared.mjs';
 
@@ -37,13 +41,23 @@ export default async function handler(request, response) {
       method: 'POST',
       headers: { Authorization: authorization },
       body: '{}',
-    });
-    await authPayload(upstream);
+    }, request);
+    const data = await authPayload(upstream);
 
     if (!upstream.ok) {
       if (scope === 'local') {
         clearRefreshCookie(response);
         response.status(204).end();
+        return;
+      }
+      const code = authProviderCode(data);
+      logAuthRejection(`logout:${scope}`, upstream.status, code);
+      if (isAuthProviderRateLimited(upstream, data)) {
+        respondAuthRateLimited(
+          response,
+          upstream,
+          'Too many session security requests were made. Wait briefly, then try again.',
+        );
         return;
       }
       response.status(502).json({ error: 'Could not sign out the selected sessions. Please try again.' });

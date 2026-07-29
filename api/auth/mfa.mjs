@@ -1,9 +1,12 @@
 import {
+  authProviderCode,
   authPayload,
   currentUserAppRole,
   decodeAccessTokenClaims,
   hasVerifiedMfaFactor,
+  isAuthProviderRateLimited,
   logAuthFailure,
+  logAuthRejection,
   prepareResponse,
   publicSession,
   readBearerToken,
@@ -11,25 +14,43 @@ import {
   readRefreshToken,
   requirePost,
   requireSameOrigin,
+  respondAuthRateLimited,
   safeMfaFactors,
   setRefreshCookie,
   supabaseAuthRequest,
 } from '../../server/authShared.mjs';
+import {
+  assertSensitiveChangeAllowed,
+  SensitiveChangeProtectionError,
+} from '../../server/sensitiveChangeProtection.mjs';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const totpPattern = /^\d{6}$/;
 const privilegedRoles = new Set(['support', 'compliance', 'admin']);
+const challengePurposes = new Set(['login', 'enrollment', 'step_up']);
 const sensitiveChangeFreshnessSeconds = 10 * 60;
 
 function invalidRequest(response) {
   response.status(400).json({ error: 'The authenticator request is invalid.' });
 }
 
-async function loadAccount(accessToken) {
+function respondMfaRateLimited(response, upstream, data, operation) {
+  if (!isAuthProviderRateLimited(upstream, data)) return false;
+  const code = authProviderCode(data);
+  logAuthRejection(`mfa:${operation}`, upstream.status, code);
+  respondAuthRateLimited(
+    response,
+    upstream,
+    'Too many authenticator requests were made. Wait briefly for a new code, then try again.',
+  );
+  return true;
+}
+
+async function loadAccount(accessToken, request) {
   const upstream = await supabaseAuthRequest('user', {
     method: 'GET',
     headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  }, request);
   const account = await authPayload(upstream);
   return { upstream, account };
 }
@@ -43,10 +64,11 @@ async function refreshAfterFactorChange(request, response) {
   const upstream = await supabaseAuthRequest('token?grant_type=refresh_token', {
     method: 'POST',
     body: JSON.stringify({ refresh_token: refreshToken }),
-  });
+  }, request);
   const data = await authPayload(upstream);
   const session = publicSession(data);
   if (!upstream.ok || !session || !data.refresh_token) {
+    if (respondMfaRateLimited(response, upstream, data, 'refresh')) return;
     response.status(401).json({ error: 'Sign in again to finish updating account security.' });
     return;
   }
@@ -89,8 +111,9 @@ export default async function handler(request, response) {
 
   try {
     if (action === 'list') {
-      const { upstream, account } = await loadAccount(accessToken);
+      const { upstream, account } = await loadAccount(accessToken, request);
       if (!upstream.ok || !account?.id) {
+        if (respondMfaRateLimited(response, upstream, account, 'list')) return;
         response.status(401).json({ error: 'Your session could not be verified.' });
         return;
       }
@@ -114,6 +137,7 @@ export default async function handler(request, response) {
         invalidRequest(response);
         return;
       }
+      await assertSensitiveChangeAllowed(accessToken, 'mfa');
       const upstream = await supabaseAuthRequest('factors', {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -122,7 +146,7 @@ export default async function handler(request, response) {
           friendly_name: friendlyName,
           issuer: 'Dealivra',
         }),
-      });
+      }, request);
       const data = await authPayload(upstream);
       if (
         !upstream.ok
@@ -131,6 +155,7 @@ export default async function handler(request, response) {
         || typeof data.totp?.qr_code !== 'string'
         || typeof data.totp?.secret !== 'string'
       ) {
+        if (respondMfaRateLimited(response, upstream, data, 'enroll')) return;
         response.status(400).json({
           error: 'Authenticator setup could not start. Remove an unfinished setup or use a different device name.',
         });
@@ -149,17 +174,40 @@ export default async function handler(request, response) {
     if (action === 'challenge_and_verify') {
       const factorId = typeof body.factorId === 'string' ? body.factorId : '';
       const code = typeof body.code === 'string' ? body.code.trim() : '';
-      if (!uuidPattern.test(factorId) || !totpPattern.test(code)) {
+      const purpose = typeof body.purpose === 'string' ? body.purpose : '';
+      if (
+        !uuidPattern.test(factorId)
+        || !totpPattern.test(code)
+        || !challengePurposes.has(purpose)
+      ) {
         invalidRequest(response);
         return;
+      }
+      const { upstream: accountUpstream, account } = await loadAccount(accessToken, request);
+      if (!accountUpstream.ok || !account?.id) {
+        if (respondMfaRateLimited(response, accountUpstream, account, 'challenge_account')) return;
+        response.status(401).json({ error: 'Your session could not be verified.' });
+        return;
+      }
+      const factor = rawFactor(account, factorId);
+      const expectedStatus = purpose === 'enrollment' ? 'unverified' : 'verified';
+      if (factor?.factor_type !== 'totp' || factor.status !== expectedStatus) {
+        response.status(409).json({
+          error: 'This authenticator is not valid for the requested security step.',
+        });
+        return;
+      }
+      if (purpose === 'enrollment') {
+        await assertSensitiveChangeAllowed(accessToken, 'mfa');
       }
       const challengeUpstream = await supabaseAuthRequest(`factors/${factorId}/challenge`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}` },
         body: '{}',
-      });
+      }, request);
       const challenge = await authPayload(challengeUpstream);
       if (!challengeUpstream.ok || typeof challenge.id !== 'string') {
+        if (respondMfaRateLimited(response, challengeUpstream, challenge, 'challenge')) return;
         response.status(400).json({ error: 'A new authenticator challenge could not be created. Try again.' });
         return;
       }
@@ -167,10 +215,11 @@ export default async function handler(request, response) {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ challenge_id: challenge.id, code }),
-      });
+      }, request);
       const verified = await authPayload(verifyUpstream);
       const session = publicSession(verified);
       if (!verifyUpstream.ok || !session || !verified.refresh_token) {
+        if (respondMfaRateLimited(response, verifyUpstream, verified, 'verify')) return;
         response.status(400).json({
           error: 'The authenticator code was not accepted. Wait for a new code and try again.',
         });
@@ -192,8 +241,9 @@ export default async function handler(request, response) {
         invalidRequest(response);
         return;
       }
-      const { upstream: accountUpstream, account } = await loadAccount(accessToken);
+      const { upstream: accountUpstream, account } = await loadAccount(accessToken, request);
       if (!accountUpstream.ok || !account?.id) {
+        if (respondMfaRateLimited(response, accountUpstream, account, 'cancel_account')) return;
         response.status(401).json({ error: 'Your session could not be verified.' });
         return;
       }
@@ -206,9 +256,10 @@ export default async function handler(request, response) {
       const upstream = await supabaseAuthRequest(`factors/${factorId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      await authPayload(upstream);
+      }, request);
+      const data = await authPayload(upstream);
       if (!upstream.ok) {
+        if (respondMfaRateLimited(response, upstream, data, 'cancel')) return;
         response.status(400).json({
           error: 'The unfinished authenticator setup could not be removed.',
         });
@@ -224,8 +275,9 @@ export default async function handler(request, response) {
         invalidRequest(response);
         return;
       }
-      const { upstream: accountUpstream, account } = await loadAccount(accessToken);
+      const { upstream: accountUpstream, account } = await loadAccount(accessToken, request);
       if (!accountUpstream.ok || !account?.id) {
+        if (respondMfaRateLimited(response, accountUpstream, account, 'unenroll_account')) return;
         response.status(401).json({ error: 'Your session could not be verified.' });
         return;
       }
@@ -251,12 +303,14 @@ export default async function handler(request, response) {
         });
         return;
       }
+      await assertSensitiveChangeAllowed(accessToken, 'mfa');
       const upstream = await supabaseAuthRequest(`factors/${factorId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      await authPayload(upstream);
+      }, request);
+      const data = await authPayload(upstream);
       if (!upstream.ok) {
+        if (respondMfaRateLimited(response, upstream, data, 'unenroll')) return;
         response.status(403).json({
           error: 'Verify with your authenticator before removing this sign-in method.',
         });
@@ -268,6 +322,10 @@ export default async function handler(request, response) {
 
     invalidRequest(response);
   } catch (error) {
+    if (error instanceof SensitiveChangeProtectionError) {
+      response.status(error.status).json({ error: error.message, code: error.code });
+      return;
+    }
     logAuthFailure(`mfa:${action || 'unknown'}`, error);
     response.status(503).json({ error: 'Authenticator security is temporarily unavailable.' });
   }

@@ -66,6 +66,22 @@ This backlog turns the production specification into controlled delivery work. P
 | SEC-006 | P0 | Add route/action rate limits, CAPTCHA, and abuse telemetry | Defined burst/velocity tests create alerts/blocks |
 | SEC-007 | P1 | Add security notifications and sensitive-change cooldowns | Email/payout/MFA changes are recorded and alerted |
 
+SEC-006 now has a same-origin server boundary for signup, password login, and
+password recovery. Provider throttling is preserved as a bounded `Retry-After`
+response, recovery remains non-enumerating, and rejected-request telemetry
+excludes user and credential data. The same-origin Auth proxy now has an
+inactive, fail-closed boundary for forwarding only Vercel's exact client IP
+with a separate server secret, avoiding accidental shared provider bucketing
+after reviewed activation. Refresh and MFA throttles preserve the current
+session. The proposed route/method firewall limits and Auth IP forwarding
+remain inactive documentation/configuration; SEC-006 stays open until real
+traffic is observed, Preview enforcement passes, Production alert/rollback
+ownership is assigned, and measured abuse justifies any accessible CAPTCHA.
+Password completion now also uses a same-origin server boundary. Recovery
+remains available, while signed-in change fails closed until the provider's
+current-password verification and the matching Preview switch are explicitly
+enabled. Successful changes clear the local session and require fresh sign-in.
+
 SEC-004 now has repository-level enforcement and regression coverage for CSP,
 HSTS, frame, MIME, referrer, permissions, cross-domain-policy, and reporting
 headers. Its bounded same-origin reporting endpoint removes query strings,
@@ -77,20 +93,33 @@ retention ownership are recorded, and rollback is rehearsed.
 SEC-003A now provides TOTP enrollment, enrolled-user login challenge, and
 mandatory `aal2` enforcement for `support`, `compliance`, and `admin` across the
 Data API, Storage, and protected Edge Functions. SEC-003 remains open for a
-supported phishing-resistant privileged factor, approved lost-factor recovery,
-security notifications, and the protected two-device negative test matrix.
-The production enforcement migration is staged but intentionally unapplied:
-the current aggregate readiness check found one admin account with no verified
-factor, so activation would cause an administrative lockout. The migration now
-contains an atomic rollout guard and refuses to activate unless every
-privileged account has at least two verified TOTP factors. A read-only,
-identifier-free aggregate preflight and the two-device/dual-control operating
-matrix are documented for enrollment. The same two-factor floor is now
-enforced at the verified-factor removal API, which also requires `aal2` with a
-recent TOTP timestamp from the signed JWT `amr` claim and separates unfinished
-enrollment cancellation from verified-factor removal. The account UI now
-performs the required challenge and verification inline before deletion so a
-routine security change does not force a full sign-out/sign-in loop.
+supported phishing-resistant privileged factor and final production activation
+evidence. The protected checkpoint now records one ready privileged account,
+zero blocked accounts, two verified TOTP factors, and successful primary and
+backup login checks. The production enforcement migration remains staged and
+intentionally unapplied until the password-only negative matrix passes across
+every protected surface and a second authorized reviewer is assigned.
+
+SEC-003B now stages a dual-control lost-factor recovery state machine. A recent
+TOTP-backed `aal2` operator opens the case, an independent compliance/admin
+reviewer decides it, and only a service workflow may complete it after session
+and verified-factor revocation. Completion creates 72-hour payout, email, and
+MFA-change holds, immutable audit events, and security-notification outbox jobs.
+Direct access to the private recovery tables is revoked. The migration and its
+rollback-only proof are not active in Production.
+
+SEC-007 now has a repository-level notification/cooldown foundation through the
+same recovery workflow. MFA enrollment/removal, Stripe payout onboarding,
+ordinary seller release, and seller-favoring dispute release now call one
+staged cooldown boundary; the current product exposes no email-change mutation.
+SEC-007 remains open until the migration is applied in a non-production
+environment and the switches are enforced. A private staged delivery worker now
+resolves only a confirmed Auth email, renders fixed templates, uses provider
+idempotency, records bounded delivery results, and exposes privacy-safe queue
+health counts with an explicit dead-letter signal. Sender-domain verification,
+Vault/Cron activation, bounce/complaint handling, external alert routing and
+ownership, live hold/expiry tests, and a supervised rollback rehearsal remain
+required.
 
 ## Epic 6 — Evidence and private files
 

@@ -14,9 +14,12 @@ managed Auth provider:
 - password values never enter application logs or browser-persisted profile
   data.
 
-The server validates account creation before contacting the Auth provider.
-Account changes and recovery validate in the client for immediate feedback,
-while the Auth provider remains the authoritative enforcement boundary.
+The server validates account creation, recovery completion, and signed-in
+password changes before contacting the Auth provider. The browser also
+validates for immediate feedback, while the server and Auth provider remain
+the authoritative enforcement boundaries. Signed-in changes require a current
+password field and remain staged until the matching managed provider control
+is verified.
 Existing users may continue signing in with an older password; the stronger
 rule applies when a password is created or changed.
 
@@ -44,9 +47,9 @@ until the provider control is enabled and verified.
    advisor warning is gone.
 3. Add a controlled test proving a known compromised password is rejected
    without logging or retaining it.
-4. Implement the supported reauthentication/current-password UX before
-   enabling either provider password-change switch. Enabling those switches
-   before the matching UX exists would break legitimate account recovery.
+4. Enable the supported provider current-password control in protected Preview,
+   enforce the staged server switch, and pass the full positive/negative matrix
+   in [37_PASSWORD_MUTATION_BOUNDARY.md](37_PASSWORD_MUTATION_BOUNDARY.md).
 5. Add customer-facing password-change security notifications and suspected
    account-takeover recovery evidence.
 

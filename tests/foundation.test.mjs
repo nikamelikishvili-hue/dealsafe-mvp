@@ -49,8 +49,10 @@ const createResponse = () => ({
 });
 const authProviderSession = (refreshToken, options = {}) => ({
   access_token: `header.${Buffer.from(JSON.stringify({
-    exp: 4102444800,
+    exp: options.exp ?? 4102444800,
     iat: options.iat ?? Math.floor(Date.now() / 1000),
+    ...(options.sub ? { sub: options.sub } : {}),
+    ...(options.role ? { role: options.role } : {}),
     ...(options.aal ? { aal: options.aal } : {}),
     ...(options.amr ? { amr: options.amr } : {}),
   })).toString('base64url')}.signature`,
@@ -68,8 +70,14 @@ const withAuthProvider = async (fetchImplementation, callback) => {
   const originalFetch = globalThis.fetch;
   const originalUrl = process.env.SUPABASE_URL;
   const originalKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+  const originalForwardingMode = process.env.DEALIVRA_AUTH_IP_FORWARDING_MODE;
+  const originalAuthSecretKey = process.env.SUPABASE_AUTH_SECRET_KEY;
+  const originalCurrentPasswordMode = process.env.DEALIVRA_CURRENT_PASSWORD_MODE;
   process.env.SUPABASE_URL = '  https://project.example.supabase.co/  ';
   process.env.SUPABASE_PUBLISHABLE_KEY = '  sb_publishable_\n test  ';
+  process.env.DEALIVRA_AUTH_IP_FORWARDING_MODE = 'disabled';
+  process.env.DEALIVRA_CURRENT_PASSWORD_MODE = 'staged';
+  delete process.env.SUPABASE_AUTH_SECRET_KEY;
   globalThis.fetch = fetchImplementation;
 
   try {
@@ -80,6 +88,18 @@ const withAuthProvider = async (fetchImplementation, callback) => {
     else process.env.SUPABASE_URL = originalUrl;
     if (originalKey === undefined) delete process.env.SUPABASE_PUBLISHABLE_KEY;
     else process.env.SUPABASE_PUBLISHABLE_KEY = originalKey;
+    if (originalForwardingMode === undefined) {
+      delete process.env.DEALIVRA_AUTH_IP_FORWARDING_MODE;
+    } else {
+      process.env.DEALIVRA_AUTH_IP_FORWARDING_MODE = originalForwardingMode;
+    }
+    if (originalAuthSecretKey === undefined) delete process.env.SUPABASE_AUTH_SECRET_KEY;
+    else process.env.SUPABASE_AUTH_SECRET_KEY = originalAuthSecretKey;
+    if (originalCurrentPasswordMode === undefined) {
+      delete process.env.DEALIVRA_CURRENT_PASSWORD_MODE;
+    } else {
+      process.env.DEALIVRA_CURRENT_PASSWORD_MODE = originalCurrentPasswordMode;
+    }
   }
 };
 
@@ -292,6 +312,9 @@ test('the production-readiness specification is complete and linked', () => {
     '27_EVIDENCE_LIFECYCLE_GOVERNANCE.md',
     '28_MFA_AND_PRIVILEGED_STEP_UP.md',
     '29_CSP_REPORTING_AND_BROWSER_HEADERS.md',
+    '30_PRIVILEGED_MFA_ROLLOUT_EVIDENCE.md',
+    '31_PRIVILEGED_MFA_RECOVERY_CONTROL.md',
+    '32_MFA_PASSWORD_ONLY_NEGATIVE_MATRIX.md',
   ];
 
   for (const document of requiredDocuments) {
@@ -504,7 +527,23 @@ test('MFA challenge verification promotes the session and keeps its refresh toke
   const requested = [];
 
   await withAuthProvider(async (url, init) => {
-    requested.push({ url: String(url), body: JSON.parse(init.body) });
+    requested.push({
+      url: String(url),
+      body: init.body ? JSON.parse(init.body) : null,
+    });
+    if (String(url).endsWith('/auth/v1/user')) {
+      return new Response(JSON.stringify({
+        id: '00000000-0000-0000-0000-000000000001',
+        factors: [{
+          id: factorId,
+          factor_type: 'totp',
+          status: 'verified',
+        }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     if (String(url).endsWith(`/factors/${factorId}/challenge`)) {
       return new Response(JSON.stringify({ id: '22222222-2222-4222-8222-222222222222' }), {
         status: 200,
@@ -519,6 +558,7 @@ test('MFA challenge verification promotes the session and keeps its refresh toke
     });
   }, () => mfa(authRequest({
     action: 'challenge_and_verify',
+    purpose: 'login',
     factorId,
     code: '123456',
   }, {
@@ -527,10 +567,11 @@ test('MFA challenge verification promotes the session and keeps its refresh toke
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(requested.map(item => item.url), [
+    'https://project.example.supabase.co/auth/v1/user',
     `https://project.example.supabase.co/auth/v1/factors/${factorId}/challenge`,
     `https://project.example.supabase.co/auth/v1/factors/${factorId}/verify`,
   ]);
-  assert.deepEqual(requested[1].body, {
+  assert.deepEqual(requested[2].body, {
     challenge_id: '22222222-2222-4222-8222-222222222222',
     code: '123456',
   });
@@ -702,7 +743,9 @@ test('account MFA removal performs fresh step-up before factor deletion', () => 
   const styles = readText('src/mfa-step-up.css');
 
   assert.match(client, /export async function verifyMfaStepUp/);
-  assert.match(client, /action:'challenge_and_verify'/);
+  assert.match(client, /action:'challenge_and_verify'[\s\S]*purpose:'login'/);
+  assert.match(client, /verifyMfaFactor\(session,factorId,code,'enrollment'\)/);
+  assert.match(client, /verifyMfaFactor\(session,factorId,code,'step_up'\)/);
   assert.match(
     accountMfa,
     /await verifyMfaStepUp\([\s\S]*await unenrollMfaFactor\(verifiedSession,confirmRemove\)/,
@@ -794,8 +837,408 @@ test('signup preserves provider throttling as an actionable retry response', asy
   }), response));
 
   assert.equal(response.statusCode, 429);
+  assert.equal(response.headers.get('retry-after'), '60');
+  assert.equal(response.payload.retryAfter, 60);
   assert.match(response.payload.error, /Wait at least one minute/);
   assert.match(response.payload.error, /reset your password/);
+});
+
+test('password recovery stays same-origin and does not reveal account existence', async () => {
+  const { default: recover } = await import('../api/auth/recover.mjs');
+  const response = createResponse();
+  let providerUrl = '';
+  let providerBody = null;
+
+  await withAuthProvider(async (url, init) => {
+    providerUrl = String(url);
+    providerBody = JSON.parse(init.body);
+    return new Response(JSON.stringify({
+      code: 'user_not_found',
+      message: 'Sensitive provider detail must not reach the browser.',
+    }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, () => recover(authRequest({
+    email: 'USER@example.com',
+  }), response));
+
+  assert.equal(response.statusCode, 202);
+  assert.match(response.payload.message, /If an account exists/);
+  assert.doesNotMatch(response.payload.message, /user_not_found|Sensitive provider detail/);
+  assert.match(providerUrl, /\/auth\/v1\/recover\?redirect_to=https%3A%2F%2Fdealivra\.test$/);
+  assert.deepEqual(providerBody, { email: 'user@example.com' });
+});
+
+test('password recovery rejects cross-origin abuse before contacting the provider', async () => {
+  const { default: recover } = await import('../api/auth/recover.mjs');
+  const response = createResponse();
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, () => recover(authRequest({
+    email: 'user@example.com',
+  }, {
+    origin: 'https://attacker.example',
+  }), response));
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(providerCalled, false);
+});
+
+test('password recovery and sign-in preserve bounded provider retry guidance', async () => {
+  const { default: recover } = await import('../api/auth/recover.mjs');
+  const { default: login } = await import('../api/auth/login.mjs');
+
+  for (const [handler, body] of [
+    [recover, { email: 'user@example.com' }],
+    [login, { email: 'user@example.com', password: 'ExamplePass123!' }],
+  ]) {
+    const response = createResponse();
+    await withAuthProvider(async () => new Response(JSON.stringify({
+      code: 'over_request_rate_limit',
+    }), {
+      status: 429,
+      headers: {
+        'Content-Type': 'application/json',
+        'Retry-After': '999999',
+      },
+    }), () => handler(authRequest(body), response));
+
+    assert.equal(response.statusCode, 429);
+    assert.equal(response.headers.get('retry-after'), '300');
+    assert.equal(response.payload.retryAfter, 300);
+    assert.match(response.payload.error, /Wait at least one minute/);
+  }
+});
+
+test('Auth proxy IP forwarding is disabled by default and never trusts an inbound address silently', async () => {
+  const { supabaseAuthRequest } = await import('../server/authShared.mjs');
+  let providerHeaders;
+
+  await withAuthProvider(async (_input, init) => {
+    providerHeaders = init.headers;
+    return new Response('{}', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, () => supabaseAuthRequest('token?grant_type=password', {
+    method: 'POST',
+    body: '{}',
+  }, authRequest({}, {
+    'x-vercel-forwarded-for': '198.51.100.24',
+  })));
+
+  assert.equal(providerHeaders.apikey, 'sb_publishable_test');
+  assert.equal('Sb-Forwarded-For' in providerHeaders, false);
+});
+
+test('enforced Auth proxy forwarding uses only the server secret and exact Vercel client IP', async () => {
+  const { supabaseAuthRequest } = await import('../server/authShared.mjs');
+  const secretKey = ['sb', 'secret', 'X'.repeat(32)].join('_');
+  let providerHeaders;
+
+  await withAuthProvider(async (_input, init) => {
+    providerHeaders = init.headers;
+    return new Response('{}', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, async () => {
+    process.env.DEALIVRA_AUTH_IP_FORWARDING_MODE = 'enforced';
+    process.env.SUPABASE_AUTH_SECRET_KEY = secretKey;
+    await supabaseAuthRequest('token?grant_type=password', {
+      method: 'POST',
+      headers: {
+        apikey: 'untrusted-override',
+        'Sb-Forwarded-For': '203.0.113.9',
+      },
+      body: '{}',
+    }, authRequest({}, {
+      'x-vercel-forwarded-for': '198.51.100.24',
+    }));
+  });
+
+  assert.equal(providerHeaders.apikey, secretKey);
+  assert.equal(providerHeaders['Sb-Forwarded-For'], '198.51.100.24');
+  assert.equal('Authorization' in providerHeaders, false);
+});
+
+test('enforced Auth proxy forwarding fails closed for missing or ambiguous client IPs', async () => {
+  const { supabaseAuthRequest } = await import('../server/authShared.mjs');
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, async () => {
+    process.env.DEALIVRA_AUTH_IP_FORWARDING_MODE = 'enforced';
+    process.env.SUPABASE_AUTH_SECRET_KEY = ['sb', 'secret', 'Y'.repeat(32)].join('_');
+
+    for (const forwardedIp of [undefined, '198.51.100.24, 203.0.113.8', 'not-an-ip']) {
+      const headers = forwardedIp === undefined
+        ? {}
+        : { 'x-vercel-forwarded-for': forwardedIp };
+      await assert.rejects(
+        () => supabaseAuthRequest('token?grant_type=password', {
+          method: 'POST',
+          body: '{}',
+        }, authRequest({}, headers)),
+        /client address could not be verified/,
+      );
+    }
+  });
+
+  assert.equal(providerCalled, false);
+});
+
+test('session refresh and MFA preserve provider throttling without destroying the current session', async () => {
+  const { default: refresh } = await import('../api/auth/refresh.mjs');
+  const { default: mfa } = await import('../api/auth/mfa.mjs');
+  const refreshResponse = createResponse();
+
+  await withAuthProvider(async () => new Response(JSON.stringify({
+    code: 'over_request_rate_limit',
+  }), {
+    status: 429,
+    headers: {
+      'Content-Type': 'application/json',
+      'Retry-After': '30',
+    },
+  }), () => refresh(authRequest({}, {
+    cookie: '__Host-dealivra-refresh=current-secret',
+  }), refreshResponse));
+
+  assert.equal(refreshResponse.statusCode, 429);
+  assert.equal(refreshResponse.headers.get('retry-after'), '30');
+  assert.equal(refreshResponse.headers.has('set-cookie'), false);
+
+  const mfaResponse = createResponse();
+  let providerCall = 0;
+  await withAuthProvider(async () => {
+    providerCall += 1;
+    if (providerCall === 1) {
+      return new Response(JSON.stringify({
+        id: '00000000-0000-0000-0000-000000000001',
+        factors: [{
+          id: '11111111-1111-4111-8111-111111111111',
+          factor_type: 'totp',
+          status: 'verified',
+        }],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({
+      code: 'over_request_rate_limit',
+    }), {
+      status: 429,
+      headers: {
+        'Content-Type': 'application/json',
+        'Retry-After': '45',
+      },
+    });
+  }, () => mfa(authRequest({
+    action: 'challenge_and_verify',
+    factorId: '11111111-1111-4111-8111-111111111111',
+    code: '123456',
+    purpose: 'login',
+  }, {
+    authorization: 'Bearer pending-mfa-token',
+  }), mfaResponse));
+
+  assert.equal(mfaResponse.statusCode, 429);
+  assert.equal(mfaResponse.headers.get('retry-after'), '45');
+  assert.equal(mfaResponse.headers.has('set-cookie'), false);
+  assert.equal(providerCall, 2);
+});
+
+test('password recovery completion uses the same-origin server boundary and clears old session state', async () => {
+  const { default: password } = await import('../api/auth/password.mjs');
+  const response = createResponse();
+  let providerBody;
+  let providerAuthorization = '';
+
+  await withAuthProvider(async (input, init) => {
+    assert.match(String(input), /\/auth\/v1\/user$/);
+    providerBody = JSON.parse(init.body);
+    providerAuthorization = init.headers.Authorization;
+    return new Response(JSON.stringify({
+      id: '00000000-0000-0000-0000-000000000001',
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, () => password(authRequest({
+    action: 'recovery',
+    newPassword: 'RecoveredPassword123!',
+  }, {
+    authorization: 'Bearer recovery-access-token',
+  }), response));
+
+  assert.equal(response.statusCode, 204);
+  assert.equal(response.ended, true);
+  assert.deepEqual(providerBody, { password: 'RecoveredPassword123!' });
+  assert.equal(providerAuthorization, 'Bearer recovery-access-token');
+  assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+});
+
+test('signed-in password changes fail closed until provider current-password verification is approved', async () => {
+  const { default: password } = await import('../api/auth/password.mjs');
+  const response = createResponse();
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, () => password(authRequest({
+    action: 'change',
+    currentPassword: 'CurrentPassword123!',
+    newPassword: 'DifferentPassword123!',
+  }, {
+    authorization: 'Bearer signed-in-access-token',
+  }), response));
+
+  assert.equal(response.statusCode, 503);
+  assert.match(response.payload.error, /temporarily unavailable/);
+  assert.match(response.payload.error, /Password recovery remains available/);
+  assert.equal(providerCalled, false);
+});
+
+test('enforced signed-in password change sends current password only to the Auth provider', async () => {
+  const { default: password } = await import('../api/auth/password.mjs');
+  const response = createResponse();
+  let providerBody;
+
+  await withAuthProvider(async (_input, init) => {
+    providerBody = JSON.parse(init.body);
+    return new Response(JSON.stringify({
+      id: '00000000-0000-0000-0000-000000000001',
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, async () => {
+    process.env.DEALIVRA_CURRENT_PASSWORD_MODE = 'enforced';
+    await password(authRequest({
+      action: 'change',
+      currentPassword: 'CurrentPassword123!',
+      newPassword: 'DifferentPassword123!',
+    }, {
+      authorization: 'Bearer signed-in-access-token',
+    }), response);
+  });
+
+  assert.equal(response.statusCode, 204);
+  assert.deepEqual(providerBody, {
+    password: 'DifferentPassword123!',
+    current_password: 'CurrentPassword123!',
+  });
+  assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+  assert.equal(response.payload, undefined);
+});
+
+test('password mutation validates inputs and preserves bounded provider throttling', async () => {
+  const { default: password } = await import('../api/auth/password.mjs');
+  const weakResponse = createResponse();
+  let providerCalls = 0;
+
+  await withAuthProvider(async () => {
+    providerCalls += 1;
+    return new Response(JSON.stringify({
+      code: 'over_request_rate_limit',
+      message: 'Raw provider message must not reach the browser.',
+    }), {
+      status: 429,
+      headers: {
+        'Content-Type': 'application/json',
+        'Retry-After': '25',
+      },
+    });
+  }, async () => {
+    await password(authRequest({
+      action: 'recovery',
+      newPassword: 'weak',
+    }, {
+      authorization: 'Bearer recovery-access-token',
+    }), weakResponse);
+    assert.equal(weakResponse.statusCode, 400);
+    assert.equal(providerCalls, 0);
+
+    const limitedResponse = createResponse();
+    await password(authRequest({
+      action: 'recovery',
+      newPassword: 'RecoveredPassword123!',
+    }, {
+      authorization: 'Bearer recovery-access-token',
+    }), limitedResponse);
+    assert.equal(limitedResponse.statusCode, 429);
+    assert.equal(limitedResponse.headers.get('retry-after'), '25');
+    assert.equal(limitedResponse.payload.retryAfter, 25);
+    assert.doesNotMatch(
+      JSON.stringify(limitedResponse.payload),
+      /Raw provider message|RecoveredPassword123|recovery-access-token/,
+    );
+  });
+
+  assert.equal(providerCalls, 1);
+});
+
+test('auth abuse telemetry and firewall rollout remain privacy-safe and staged', () => {
+  const shared = readText('server/authShared.mjs');
+  const client = readText('src/services/supabaseRest.ts');
+  const app = readText('src/app.tsx');
+  const recovery = readText('api/auth/recover.mjs');
+  const forwarding = readText('docs/production-readiness/36_AUTH_PROXY_CLIENT_IP_BOUNDARY.md');
+  const passwordBoundary = readText('docs/production-readiness/37_PASSWORD_MUTATION_BOUNDARY.md');
+  const standard = readText('docs/production-readiness/35_AUTH_ABUSE_AND_RATE_LIMIT_ROLLOUT.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+  const rejectionLogger = shared.match(
+    /export function logAuthRejection[\s\S]*?\n}\n/,
+  )?.[0] ?? '';
+
+  assert.match(shared, /schema: 'dealivra\.auth\.rejection\.v1'/);
+  assert.match(shared, /Math\.min\(Math\.max\(parsedRetryAfter, 1\), 300\)/);
+  assert.match(shared, /response\.setHeader\('Retry-After'/);
+  assert.ok(rejectionLogger);
+  assert.doesNotMatch(rejectionLogger, /email|password|token|cookie|x-forwarded-for/i);
+  assert.match(client, /fetch\('\/api\/auth\/recover'/);
+  assert.doesNotMatch(client, /auth\/v1\/recover\?/);
+  assert.match(client, /class AuthenticationApiError extends Error/);
+  assert.match(client, /Try again in \$\{retryAfterSeconds\}/);
+  assert.match(client, /isTransientAuthenticationError\(error\)/);
+  assert.match(client, /if\(isTransientAuthenticationError\(error\)\)throw error;[\s\S]*expireSession\(\)/);
+  assert.match(app, /if\(isTransientAuthenticationError\(error\)\)\{setAuthMessage\(error\.message\);return\}/);
+  const recoveredPassword = client.match(
+    /export async function updateRecoveredPassword[\s\S]*?\n}/,
+  )?.[0] ?? '';
+  const accountPassword = client.match(
+    /export async function updateAccountPassword[\s\S]*?\n}/,
+  )?.[0] ?? '';
+  assert.match(recoveredPassword, /fetch\('\/api\/auth\/password'/);
+  assert.doesNotMatch(recoveredPassword, /auth\/v1\/user|supabaseUrl/);
+  assert.match(accountPassword, /currentPassword/);
+  assert.match(accountPassword, /fetch\('\/api\/auth\/password'/);
+  assert.doesNotMatch(accountPassword, /auth\/v1\/user|supabaseUrl/);
+  assert.match(app, /autoComplete="current-password"/);
+  assert.match(recovery, /requireSameOrigin/);
+  assert.match(recovery, /requestOrigin\(request\)/);
+  assert.match(recovery, /If an account exists for this email/);
+  assert.match(standard, /first live firewall stage is \*\*log-only\*\*/i);
+  assert.match(standard, /POST `?\/api\/auth\/signup`?/);
+  assert.match(standard, /Preview enforcement/);
+  assert.match(standard, /No rule is created or published/i);
+  assert.match(forwarding, /DEALIVRA_AUTH_IP_FORWARDING_MODE/);
+  assert.match(forwarding, /x-vercel-forwarded-for/);
+  assert.match(forwarding, /not active/i);
+  assert.match(passwordBoundary, /DEALIVRA_CURRENT_PASSWORD_MODE/);
+  assert.match(passwordBoundary, /not active/i);
+  assert.match(readinessIndex, /35_AUTH_ABUSE_AND_RATE_LIMIT_ROLLOUT\.md/);
+  assert.match(readinessIndex, /36_AUTH_PROXY_CLIENT_IP_BOUNDARY\.md/);
+  assert.match(readinessIndex, /37_PASSWORD_MUTATION_BOUNDARY\.md/);
 });
 
 test('failed password login directs the user to secure account recovery', async () => {
@@ -1013,6 +1456,475 @@ test('MFA enforcement is shared by Data API, Storage, protected functions, and a
   assert.match(standard, /Privileged lost-factor matrix/);
   assert.match(standard, /Secret material[\s\S]*Never recorded/);
   assert.match(standard, /does not authorize public launch/);
+});
+
+test('privileged MFA recovery request policy rejects secrets and requires recent TOTP AAL2', async () => {
+  const {
+    hasRecentTotpAal2,
+    parseRecoveryRequest,
+    RecoveryRequestError,
+  } = await import('../server/mfaRecoveryPolicy.mjs');
+  const now = Math.floor(Date.now() / 1000);
+  const targetUserId = '22222222-2222-4222-8222-222222222222';
+
+  assert.deepEqual(parseRecoveryRequest({
+    action: 'open',
+    targetUserId,
+    caseReference: 'SEC-2026-0042',
+    reasonCode: 'lost_all_factors',
+    evidenceReference: 'IDENTITY-REPROOF-0042',
+  }), {
+    action: 'open',
+    rpc: 'open_privileged_mfa_recovery_case',
+    parameters: {
+      p_target_user_id: targetUserId,
+      p_case_reference: 'SEC-2026-0042',
+      p_reason_code: 'lost_all_factors',
+      p_evidence_reference: 'IDENTITY-REPROOF-0042',
+    },
+  });
+
+  for (const evidenceReference of [
+    'token=do-not-store',
+    'person@example.com',
+    'TOTP secret value',
+  ]) {
+    assert.throws(() => parseRecoveryRequest({
+      action: 'open',
+      targetUserId,
+      caseReference: 'SEC-2026-0042',
+      reasonCode: 'lost_all_factors',
+      evidenceReference,
+    }), RecoveryRequestError);
+  }
+
+  const recentAal2 = authProviderSession('unused', {
+    aal: 'aal2',
+    amr: [
+      { method: 'password', timestamp: now - 60 },
+      { method: 'totp', timestamp: now - 30 },
+    ],
+  }).access_token;
+  const staleAal2 = authProviderSession('unused', {
+    aal: 'aal2',
+    amr: [{ method: 'totp', timestamp: now - 11 * 60 }],
+  }).access_token;
+  const passwordOnly = authProviderSession('unused', {
+    aal: 'aal1',
+    amr: [{ method: 'password', timestamp: now }],
+  }).access_token;
+
+  assert.equal(hasRecentTotpAal2(recentAal2, now), true);
+  assert.equal(hasRecentTotpAal2(staleAal2, now), false);
+  assert.equal(hasRecentTotpAal2(passwordOnly, now), false);
+  assert.equal(hasRecentTotpAal2('not-a-jwt', now), false);
+});
+
+test('MFA recovery endpoint validates before provider access and rejects password-only operators', async () => {
+  const { default: recovery } = await import('../api/security/mfa-recovery.mjs');
+  const now = Math.floor(Date.now() / 1000);
+  const passwordOnly = authProviderSession('unused', {
+    aal: 'aal1',
+    amr: [{ method: 'password', timestamp: now }],
+  }).access_token;
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, async () => {
+    const malformedResponse = createResponse();
+    await recovery(authRequest({
+      action: 'open',
+      targetUserId: 'not-a-uuid',
+      caseReference: 'SEC-2026-0042',
+      reasonCode: 'lost_all_factors',
+      evidenceReference: 'IDENTITY-REPROOF-0042',
+    }, {
+      authorization: `Bearer ${passwordOnly}`,
+    }), malformedResponse);
+    assert.equal(malformedResponse.statusCode, 400);
+
+    const aal1Response = createResponse();
+    await recovery(authRequest({
+      action: 'open',
+      targetUserId: '22222222-2222-4222-8222-222222222222',
+      caseReference: 'SEC-2026-0042',
+      reasonCode: 'lost_all_factors',
+      evidenceReference: 'IDENTITY-REPROOF-0042',
+    }, {
+      authorization: `Bearer ${passwordOnly}`,
+    }), aal1Response);
+    assert.equal(aal1Response.statusCode, 403);
+    assert.match(aal1Response.payload.error, /authenticator/i);
+  });
+
+  assert.equal(providerCalled, false);
+});
+
+test('recent TOTP AAL2 recovery operator reaches only the validated RPC', async () => {
+  const { default: recovery } = await import('../api/security/mfa-recovery.mjs');
+  const now = Math.floor(Date.now() / 1000);
+  const accessToken = authProviderSession('unused', {
+    aal: 'aal2',
+    amr: [{ method: 'totp', timestamp: now }],
+  }).access_token;
+  const targetUserId = '22222222-2222-4222-8222-222222222222';
+  const createdCaseId = '33333333-3333-4333-8333-333333333333';
+  const providerCalls = [];
+
+  await withAuthProvider(async (input, init) => {
+    providerCalls.push({
+      url: String(input),
+      authorization: init?.headers?.Authorization,
+      body: init?.body,
+    });
+    if (String(input).endsWith('/rest/v1/rpc/current_user_app_role')) {
+      return new Response(JSON.stringify('admin'), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify(createdCaseId), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, async () => {
+    const response = createResponse();
+    await recovery(authRequest({
+      action: 'open',
+      targetUserId,
+      caseReference: 'SEC-2026-0042',
+      reasonCode: 'lost_all_factors',
+      evidenceReference: 'IDENTITY-REPROOF-0042',
+    }, {
+      authorization: `Bearer ${accessToken}`,
+    }), response);
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.payload, { result: createdCaseId });
+  });
+
+  assert.equal(providerCalls.length, 2);
+  assert.match(providerCalls[0].url, /\/rest\/v1\/rpc\/current_user_app_role$/);
+  assert.match(providerCalls[1].url, /\/rest\/v1\/rpc\/open_privileged_mfa_recovery_case$/);
+  assert.equal(providerCalls[1].authorization, `Bearer ${accessToken}`);
+  assert.deepEqual(JSON.parse(providerCalls[1].body), {
+    p_target_user_id: targetUserId,
+    p_case_reference: 'SEC-2026-0042',
+    p_reason_code: 'lost_all_factors',
+    p_evidence_reference: 'IDENTITY-REPROOF-0042',
+  });
+});
+
+test('password-only negative matrix records status-only evidence for every protected surface', async () => {
+  const {
+    runMfaPasswordOnlyMatrix,
+    validateMatrixTokens,
+  } = await import('../scripts/run-mfa-password-only-matrix.mjs');
+  const now = Math.floor(Date.now() / 1000);
+  const subject = '44444444-4444-4444-8444-444444444444';
+  const aal1Token = authProviderSession('unused', {
+    sub: subject,
+    role: 'authenticated',
+    exp: now + 15 * 60,
+    aal: 'aal1',
+    amr: [{ method: 'password', timestamp: now }],
+  }).access_token;
+  const aal2Token = authProviderSession('unused', {
+    sub: subject,
+    role: 'authenticated',
+    exp: now + 15 * 60,
+    aal: 'aal2',
+    amr: [
+      { method: 'password', timestamp: now },
+      { method: 'totp', timestamp: now },
+    ],
+  }).access_token;
+  const storageObject = 'deal-evidence/mfa-matrix/control-object.txt';
+
+  assert.deepEqual(validateMatrixTokens(aal1Token, aal2Token), { subject });
+  assert.throws(
+    () => validateMatrixTokens(aal2Token, aal1Token),
+    /short-lived same-account AAL1 password and AAL2 password-plus-TOTP sessions/,
+  );
+
+  const fetchImplementation = async (input, init) => {
+    const url = String(input);
+    const passwordOnly = init?.headers?.Authorization === `Bearer ${aal1Token}`;
+    if (url.includes('/rest/v1/')) {
+      return new Response(
+        passwordOnly ? '{"message":"DEALIVRA_MFA_REQUIRED"}' : '"admin"',
+        { status: passwordOnly ? 403 : 200 },
+      );
+    }
+    if (url.includes('/storage/v1/')) {
+      return new Response(passwordOnly ? 'not permitted' : 'x', {
+        status: passwordOnly ? 403 : 206,
+      });
+    }
+    if (url.includes('/functions/v1/')) {
+      return new Response(
+        passwordOnly ? '{"code":"mfa_required"}' : '{"code":"invalid_body"}',
+        { status: passwordOnly ? 403 : 400 },
+      );
+    }
+    throw new Error(`Unexpected matrix URL: ${url}`);
+  };
+
+  const report = await runMfaPasswordOnlyMatrix({
+    fetchImplementation,
+    supabaseUrl: 'https://project.example.supabase.co',
+    publishableKey: 'sb_publishable_test',
+    aal1Token,
+    aal2Token,
+    origin: 'https://preview.dealivra.com',
+    storageObject,
+  });
+
+  assert.equal(report.passed, true);
+  assert.equal(report.results.length, 7);
+  assert.equal(report.results.every(row => row.outcome === 'PASS'), true);
+  const serialized = JSON.stringify(report);
+  assert.equal(serialized.includes(aal1Token), false);
+  assert.equal(serialized.includes(aal2Token), false);
+  assert.equal(serialized.includes(subject), false);
+  assert.equal(serialized.includes(storageObject), false);
+  assert.equal(serialized.includes('DEALIVRA_MFA_REQUIRED'), false);
+  assert.equal(serialized.includes('invalid_body'), false);
+});
+
+test('privileged MFA recovery SQL is private, dual-control, immutable, and unapplied by design', () => {
+  const migration = readText('supabase/privileged_mfa_recovery_control.sql');
+  const rollbackTests = readText('supabase/tests/privileged_mfa_recovery_control_rollback.sql');
+  const negativeDatabaseTest = readText('supabase/tests/mfa_password_only_negative_matrix_rollback.sql');
+  const endpoint = readText('api/security/mfa-recovery.mjs');
+  const policy = readText('server/mfaRecoveryPolicy.mjs');
+  const matrix = readText('scripts/run-mfa-password-only-matrix.mjs');
+  const hardening = readText('supabase/production_auth_rbac_hardening.sql');
+  const recoveryStandard = readText('docs/production-readiness/31_PRIVILEGED_MFA_RECOVERY_CONTROL.md');
+  const matrixStandard = readText('docs/production-readiness/32_MFA_PASSWORD_ONLY_NEGATIVE_MATRIX.md');
+
+  assert.match(migration, /enable row level security/g);
+  assert.match(migration, /revoke all on table[\s\S]*from public, anon, authenticated, service_role/);
+  assert.match(migration, /current_user_has_recent_totp_step_up/);
+  assert.match(migration, /now\(\) - interval '10 minutes'/);
+  assert.match(migration, /DEALIVRA_RECOVERY_SECOND_REVIEWER_REQUIRED/);
+  assert.match(migration, /reviewed_by is null or reviewed_by <> requested_by/);
+  assert.match(migration, /from auth\.sessions/);
+  assert.match(migration, /from auth\.mfa_factors/);
+  assert.match(migration, /interval '72 hours'/);
+  assert.match(migration, /array\['payout', 'email', 'mfa'\]/);
+  assert.match(migration, /security_notification_outbox/);
+  assert.match(migration, /insert into public\.audit_events/);
+  assert.match(migration, /to authenticated/);
+  assert.match(migration, /to service_role/);
+  assert.match(migration, /set search_path = ''/);
+
+  assert.match(rollbackTests, /private recovery table gained direct role access/);
+  assert.match(rollbackTests, /dual-control review state changed/);
+  assert.match(rollbackTests, /immutable recovery event dependency is missing/);
+  assert.match(rollbackTests, /rollback;/);
+  assert.match(negativeDatabaseTest, /password-only privileged request was accepted/);
+  assert.match(negativeDatabaseTest, /AAL2 control request was unexpectedly rejected/);
+  assert.match(negativeDatabaseTest, /rollback;/);
+
+  assert.match(endpoint, /requireSameOrigin/);
+  assert.match(endpoint, /hasRecentTotpAal2/);
+  assert.match(endpoint, /privilegedRoles/);
+  assert.match(policy, /forbiddenReferencePattern/);
+  assert.match(policy, /nowSeconds - timestamp <= 10 \* 60/);
+  assert.match(matrix, /Response bodies, user IDs|password_only_status/);
+  assert.doesNotMatch(matrix, /process\.stdout\.write\([^)]*aal1Token/);
+
+  for (const rpc of [
+    'assert_my_sensitive_change_allowed',
+    'get_my_sensitive_change_holds',
+    'get_privileged_mfa_recovery_cases',
+    'open_privileged_mfa_recovery_case',
+    'record_privileged_recovery_identity_proof',
+    'review_privileged_mfa_recovery_case',
+  ]) {
+    assert.match(hardening, new RegExp(`'${rpc}'`));
+  }
+
+  assert.match(recoveryStandard, /deliberately not active in\s+production/i);
+  assert.match(recoveryStandard, /does not authorize/i);
+  assert.match(matrixStandard, /Any `SKIP` is a failed activation gate/);
+});
+
+test('sensitive-change recovery enforcement is staged safely and fails closed when activated', async () => {
+  const {
+    assertSensitiveChangeAllowed,
+    sensitiveChangeProtectionMode,
+  } = await import('../server/sensitiveChangeProtection.mjs');
+
+  let stagedProviderCalled = false;
+  const staged = await assertSensitiveChangeAllowed('access-token', 'mfa', {
+    environment: {},
+    request: async () => {
+      stagedProviderCalled = true;
+      return new Response(null, { status: 204 });
+    },
+  });
+  assert.deepEqual(staged, { enforced: false });
+  assert.equal(stagedProviderCalled, false);
+
+  const enforced = await assertSensitiveChangeAllowed('access-token', 'payout', {
+    environment: { DEALIVRA_RECOVERY_CONTROL_MODE: 'enforced' },
+    request: async (token, rpc, parameters) => {
+      assert.equal(token, 'access-token');
+      assert.equal(rpc, 'assert_my_sensitive_change_allowed');
+      assert.deepEqual(parameters, { p_scope: 'payout' });
+      return new Response(null, { status: 204 });
+    },
+  });
+  assert.deepEqual(enforced, { enforced: true });
+
+  await assert.rejects(
+    () => assertSensitiveChangeAllowed('access-token', 'mfa', {
+      environment: { DEALIVRA_RECOVERY_CONTROL_MODE: 'enforced' },
+      request: async () => new Response(JSON.stringify({
+        message: 'DEALIVRA_SENSITIVE_CHANGE_COOLDOWN',
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    }),
+    error => error?.code === 'recovery_cooldown_active' && error?.status === 423,
+  );
+
+  assert.throws(
+    () => sensitiveChangeProtectionMode({
+      DEALIVRA_RECOVERY_CONTROL_MODE: 'disabled',
+    }),
+    error => error?.code === 'recovery_protection_unavailable' && error?.status === 503,
+  );
+});
+
+test('MFA and payout mutations are wired to the staged recovery cooldown boundary', () => {
+  const mfa = readText('api/auth/mfa.mjs');
+  const authClient = readText('src/services/supabaseRest.ts');
+  const common = readText('supabase/functions/_shared/common.ts');
+  const connect = readText('supabase/functions/stripe-connect/index.ts');
+  const release = readText('supabase/functions/stripe-release-payment/index.ts');
+  const dispute = readText('supabase/functions/stripe-resolve-dispute/index.ts');
+  const environmentStandard = readText('docs/production-readiness/10_ENVIRONMENT_CONFIGURATION.md');
+  const enforcementStandard = readText('docs/production-readiness/33_SENSITIVE_CHANGE_ENFORCEMENT.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(mfa, /action === 'enroll'[\s\S]*assertSensitiveChangeAllowed\(accessToken, 'mfa'\)/);
+  assert.match(mfa, /purpose === 'enrollment'[\s\S]*assertSensitiveChangeAllowed\(accessToken, 'mfa'\)/);
+  assert.match(mfa, /action === 'unenroll'[\s\S]*assertSensitiveChangeAllowed\(accessToken, 'mfa'\)[\s\S]*method: 'DELETE'/);
+  assert.match(mfa, /expectedStatus = purpose === 'enrollment' \? 'unverified' : 'verified'/);
+  assert.match(authClient, /purpose:'login'/);
+  assert.match(authClient, /purpose:'enrollment'\|'step_up'/);
+  assert.match(authClient, /verifyMfaFactor\(session,factorId,code,'enrollment'\)/);
+  assert.match(authClient, /verifyMfaFactor\(session,factorId,code,'step_up'\)/);
+
+  assert.match(common, /DEALIVRA_RECOVERY_CONTROL_MODE/);
+  assert.match(common, /mode !== "staged" && mode !== "enforced"/);
+  assert.match(common, /\.rpc\(\s*"is_sensitive_change_allowed_for_service"/);
+  assert.match(common, /data !== true[\s\S]*"recovery_cooldown_active"[\s\S]*423/);
+  assert.match(connect, /body\.action === "onboard"[\s\S]*requireSensitiveChangeAllowedForService\(user\.id, "payout"\)/);
+  assert.match(release, /\.from\("deals"\)[\s\S]*requireSensitiveChangeAllowedForService\(payoutDeal\.seller_id, "payout"\)[\s\S]*"prepare_stripe_financial_command"/);
+  assert.match(dispute, /if \(action === "transfer"\)[\s\S]*requireSensitiveChangeAllowedForService\(payoutDeal\.seller_id, "payout"\)/);
+
+  assert.match(environmentStandard, /DEALIVRA_RECOVERY_CONTROL_MODE/);
+  assert.match(enforcementStandard, /refund remains available/i);
+  assert.match(enforcementStandard, /must not be set to `enforced`/i);
+  assert.match(readinessIndex, /33_SENSITIVE_CHANGE_ENFORCEMENT\.md/);
+});
+
+test('security notification templates are bounded, non-secret, and case-specific', async () => {
+  const { renderSecurityNotification } = await import(
+    '../supabase/functions/_shared/security-notification.ts'
+  );
+  const caseReference = 'SEC-2026-0001';
+  const templates = [
+    'privileged_mfa_recovery_opened',
+    'privileged_mfa_recovery_identity_verified',
+    'privileged_mfa_recovery_approved',
+    'privileged_mfa_recovery_rejected',
+    'privileged_mfa_recovery_completed',
+  ];
+
+  for (const template of templates) {
+    const content = renderSecurityNotification(template, {
+      case_reference: caseReference,
+      cooldown_until: '2026-08-01T12:00:00.000Z',
+    });
+    assert.match(content.subject, /^Security notice:/);
+    assert.match(content.text, new RegExp(caseReference));
+    assert.match(content.html, new RegExp(caseReference));
+    assert.match(content.text, /never ask for your password/i);
+    assert.equal(content.subject.length < 100, true);
+    assert.equal(content.text.length < 1200, true);
+    assert.equal(content.html.length < 5000, true);
+  }
+
+  assert.throws(
+    () => renderSecurityNotification('unknown_template', {
+      case_reference: caseReference,
+    }),
+    /security_notification_template_invalid/,
+  );
+  assert.throws(
+    () => renderSecurityNotification('privileged_mfa_recovery_opened', {
+      case_reference: '<script>alert(1)</script>',
+    }),
+    /security_notification_payload_invalid/,
+  );
+  assert.throws(
+    () => renderSecurityNotification('privileged_mfa_recovery_completed', {
+      case_reference: caseReference,
+      cooldown_until: 'not-a-date',
+    }),
+    /security_notification_payload_invalid/,
+  );
+});
+
+test('security notification worker is authenticated, idempotent, staged, and privacy-safe', () => {
+  const worker = readText('supabase/functions/security-notifications/index.ts');
+  const renderer = readText('supabase/functions/_shared/security-notification.ts');
+  const config = readText('supabase/config.toml');
+  const recoverySql = readText('supabase/privileged_mfa_recovery_control.sql');
+  const rollbackProof = readText('supabase/tests/privileged_mfa_recovery_control_rollback.sql');
+  const environmentStandard = readText('docs/production-readiness/10_ENVIRONMENT_CONFIGURATION.md');
+  const operatingStandard = readText('docs/production-readiness/34_SECURITY_NOTIFICATION_DELIVERY.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(worker, /DEALIVRA_SECURITY_NOTIFICATION_WORKER_SECRET/);
+  assert.match(worker, /crypto\.subtle\.digest\("SHA-256"/);
+  assert.match(worker, /DEALIVRA_SECURITY_NOTIFICATION_MODE/);
+  assert.match(worker, /notificationMode\(\) !== "enforced"[\s\S]*503/);
+  assert.match(worker, /"claim_security_notification_delivery_batch"/);
+  assert.match(worker, /admin\.auth\.admin\.getUserById\(job\.target_user_id\)/);
+  assert.match(worker, /data\.user\.email_confirmed_at/);
+  assert.match(worker, /https:\/\/api\.resend\.com\/emails/);
+  assert.match(worker, /"Idempotency-Key": `dealivra_security_\$\{job\.notification_id\}`/);
+  assert.match(worker, /AbortSignal\.timeout\(10_000\)/);
+  assert.match(worker, /readBoundedJson\(response\)/);
+  assert.match(worker, /"complete_security_notification_delivery"/);
+  assert.match(worker, /"get_security_notification_delivery_health_for_service"/);
+  assert.match(worker, /event: "queue_attention_required"/);
+  assert.match(worker, /code: "dead_letter_present"/);
+  assert.match(worker, /attention_required: attentionRequired/);
+  assert.doesNotMatch(worker, /console\.(?:log|warn|error)\([^)]*(?:email|target_user_id|payload)/);
+  assert.doesNotMatch(worker, /Access-Control-Allow-Origin/);
+
+  assert.match(renderer, /supportedTemplates/);
+  assert.match(renderer, /escapeHtml/);
+  assert.match(renderer, /will never ask for your password/);
+  assert.match(config, /\[functions\.security-notifications\][\s\S]*verify_jwt = false/);
+  assert.match(environmentStandard, /RESEND_API_KEY/);
+  assert.match(operatingStandard, /must remain `staged`/i);
+  assert.match(operatingStandard, /SPF and DKIM[\s\S]*DMARC/i);
+  assert.match(operatingStandard, /dead_letter_present/);
+  assert.match(recoverySql, /get_security_notification_delivery_health_for_service/);
+  assert.match(recoverySql, /delivery_attempts >= 5/);
+  assert.match(rollbackProof, /delivery health privacy or dead-letter boundary changed/);
+  assert.match(readinessIndex, /34_SECURITY_NOTIFICATION_DELIVERY\.md/);
 });
 
 test('malformed refresh cookies fail safely without contacting the auth provider', async () => {
