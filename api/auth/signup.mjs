@@ -10,6 +10,43 @@ import {
   supabaseAuthRequest,
 } from '../../server/authShared.mjs';
 
+function providerCode(data) {
+  const value = typeof data?.code === 'string' ? data.code : '';
+  return /^[a-z0-9_]{1,64}$/.test(value) ? value : 'unknown';
+}
+
+function signupRejection(upstream, data) {
+  const code = providerCode(data);
+  console.warn('[dealivra-auth-rejection]', {
+    operation: 'signup',
+    status: upstream.status,
+    code,
+  });
+
+  if (code === 'over_email_send_rate_limit' || code === 'over_request_rate_limit') {
+    return {
+      status: 429,
+      error: 'Too many account requests were made. Wait at least one minute, then try again. If you have used this email before, sign in or reset your password.',
+    };
+  }
+  if (code === 'email_address_invalid' || code === 'email_address_not_authorized') {
+    return {
+      status: 400,
+      error: 'This email address could not be used. Check the spelling or use another email address.',
+    };
+  }
+  if (code === 'signup_disabled') {
+    return {
+      status: 503,
+      error: 'New account creation is temporarily unavailable. Please try again later.',
+    };
+  }
+  return {
+    status: 400,
+    error: 'We could not create this account. If you have used this email before, sign in or choose Forgot password. Otherwise, wait one minute and try again.',
+  };
+}
+
 export default async function handler(request, response) {
   prepareResponse(response);
   if (!requirePost(request, response) || !requireSameOrigin(request, response)) return;
@@ -47,7 +84,8 @@ export default async function handler(request, response) {
     });
     const data = await authPayload(upstream);
     if (!upstream.ok) {
-      response.status(400).json({ error: 'Account creation could not be completed.' });
+      const rejection = signupRejection(upstream, data);
+      response.status(rejection.status).json({ error: rejection.error });
       return;
     }
 
