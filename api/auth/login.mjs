@@ -13,6 +13,11 @@ import {
   supabaseAuthRequest,
 } from '../../server/authShared.mjs';
 
+function providerCode(data) {
+  const value = typeof data?.code === 'string' ? data.code : '';
+  return /^[a-z0-9_]{1,64}$/.test(value) ? value : 'unknown';
+}
+
 export default async function handler(request, response) {
   prepareResponse(response);
   if (!requirePost(request, response) || !requireSameOrigin(request, response)) return;
@@ -33,7 +38,14 @@ export default async function handler(request, response) {
     const data = await authPayload(upstream);
     const session = publicSession(data);
     if (!upstream.ok || !session || !data.refresh_token) {
-      response.status(401).json({ error: 'Invalid email or password.' });
+      console.warn('[dealivra-auth-rejection]', {
+        operation: 'login',
+        status: upstream.status,
+        code: providerCode(data),
+      });
+      response.status(401).json({
+        error: 'We could not sign you in. Check your email and password, or choose Forgot password to securely reset it.',
+      });
       return;
     }
 
