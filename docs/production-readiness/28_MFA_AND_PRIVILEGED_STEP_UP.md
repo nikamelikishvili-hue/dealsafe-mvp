@@ -66,6 +66,10 @@ complete.
 - Cancelling an unverified setup is a separate action and cannot be used to
   remove a verified factor.
 - Dealivra asks for explicit confirmation.
+- The account security UI performs a fresh challenge and verification inline,
+  then passes the newly issued session directly to the removal request. When
+  another verified authenticator is available it is selected by default, while
+  the user can choose a different enrolled factor.
 - After removal, the server refreshes the session so the JWT reflects the
   current factor state.
 - Users are prompted to keep a second enrolled authenticator before replacing
@@ -190,7 +194,7 @@ the privileged administrative recovery command are implemented and rehearsed.
   factor logic, fail-closed 403 response, and restrictive Storage policy.
 - The emergency rollback removes the Storage policy and restores the prior
   active-session-only pre-request hook.
-- The complete release gate passes catalog validation, TypeScript, 77 automated
+- The complete release gate passes catalog validation, TypeScript, 78 automated
   tests, repository secret scanning, production build, and Preview smoke.
 - Browser verification passes at 1280px and 390px without error overlays,
   console warnings, or horizontal overflow. The step-two button remains
