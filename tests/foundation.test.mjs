@@ -757,6 +757,67 @@ test('signup validates password strength before contacting the auth provider', a
   assert.equal(providerCalled, false);
 });
 
+test('signup rejection gives recovery guidance without exposing account existence', async () => {
+  const { default: signup } = await import('../api/auth/signup.mjs');
+  const response = createResponse();
+
+  await withAuthProvider(async () => new Response(JSON.stringify({
+    code: 'user_already_exists',
+    message: 'Sensitive provider detail must not reach the browser.',
+  }), {
+    status: 422,
+    headers: { 'Content-Type': 'application/json' },
+  }), () => signup(authRequest({
+    displayName: 'Test User',
+    email: 'user@example.com',
+    password: 'ExamplePass123!',
+  }), response));
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.payload.error, /sign in or choose Forgot password/);
+  assert.doesNotMatch(response.payload.error, /already exists|Sensitive provider detail/);
+});
+
+test('signup preserves provider throttling as an actionable retry response', async () => {
+  const { default: signup } = await import('../api/auth/signup.mjs');
+  const response = createResponse();
+
+  await withAuthProvider(async () => new Response(JSON.stringify({
+    code: 'over_email_send_rate_limit',
+  }), {
+    status: 429,
+    headers: { 'Content-Type': 'application/json' },
+  }), () => signup(authRequest({
+    displayName: 'Test User',
+    email: 'user@example.com',
+    password: 'ExamplePass123!',
+  }), response));
+
+  assert.equal(response.statusCode, 429);
+  assert.match(response.payload.error, /Wait at least one minute/);
+  assert.match(response.payload.error, /reset your password/);
+});
+
+test('failed password login directs the user to secure account recovery', async () => {
+  const { default: login } = await import('../api/auth/login.mjs');
+  const response = createResponse();
+
+  await withAuthProvider(async () => new Response(JSON.stringify({
+    code: 'invalid_credentials',
+    message: 'Sensitive provider detail must not reach the browser.',
+  }), {
+    status: 400,
+    headers: { 'Content-Type': 'application/json' },
+  }), () => login(authRequest({
+    email: 'user@example.com',
+    password: 'WrongPassword123!',
+  }), response));
+
+  assert.equal(response.statusCode, 401);
+  assert.match(response.payload.error, /choose Forgot password/);
+  assert.doesNotMatch(response.payload.error, /invalid_credentials|Sensitive provider detail/);
+});
+
 test('password guidance and every application mutation require the provider symbol class', () => {
   const signup = readText('api/auth/signup.mjs');
   const client = readText('src/services/supabaseRest.ts');
