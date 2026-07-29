@@ -1,5 +1,6 @@
 import {
   authPayload,
+  currentUserAppRole,
   decodeAccessTokenClaims,
   hasVerifiedMfaFactor,
   logAuthFailure,
@@ -17,6 +18,8 @@ import {
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const totpPattern = /^\d{6}$/;
+const privilegedRoles = new Set(['support', 'compliance', 'admin']);
+const sensitiveChangeFreshnessSeconds = 10 * 60;
 
 function invalidRequest(response) {
   response.status(400).json({ error: 'The authenticator request is invalid.' });
@@ -51,6 +54,27 @@ async function refreshAfterFactorChange(request, response) {
   response.status(200).json(session);
 }
 
+function rawFactor(account, factorId) {
+  return Array.isArray(account?.factors)
+    ? account.factors.find((factor) => factor?.id === factorId)
+    : undefined;
+}
+
+function hasFreshAal2(accessToken) {
+  const claims = decodeAccessTokenClaims(accessToken);
+  const currentTime = Math.floor(Date.now() / 1000);
+  const hasRecentTotpVerification = Array.isArray(claims.amr)
+    && claims.amr.some((method) => {
+      const verifiedAt = Number(method?.timestamp);
+      return method?.method === 'totp'
+        && Number.isFinite(verifiedAt)
+        && verifiedAt <= currentTime + 60
+        && currentTime - verifiedAt <= sensitiveChangeFreshnessSeconds;
+    });
+  return claims.aal === 'aal2'
+    && hasRecentTotpVerification;
+}
+
 export default async function handler(request, response) {
   prepareResponse(response);
   if (!requirePost(request, response) || !requireSameOrigin(request, response)) return;
@@ -72,9 +96,13 @@ export default async function handler(request, response) {
       }
       const claims = decodeAccessTokenClaims(accessToken);
       const factors = safeMfaFactors(account);
+      const applicationRole = await currentUserAppRole(accessToken);
+      const minimumVerifiedFactors = privilegedRoles.has(applicationRole) ? 2 : 0;
       response.status(200).json({
         assuranceLevel: claims.aal === 'aal2' ? 'aal2' : 'aal1',
         factors,
+        minimumVerifiedFactors,
+        canRemoveVerifiedFactor: factors.length > minimumVerifiedFactors,
         unsupportedVerifiedFactor: hasVerifiedMfaFactor(account) && factors.length === 0,
       });
       return;
@@ -158,10 +186,69 @@ export default async function handler(request, response) {
       return;
     }
 
+    if (action === 'cancel_enrollment') {
+      const factorId = typeof body.factorId === 'string' ? body.factorId : '';
+      if (!uuidPattern.test(factorId)) {
+        invalidRequest(response);
+        return;
+      }
+      const { upstream: accountUpstream, account } = await loadAccount(accessToken);
+      if (!accountUpstream.ok || !account?.id) {
+        response.status(401).json({ error: 'Your session could not be verified.' });
+        return;
+      }
+      if (rawFactor(account, factorId)?.status !== 'unverified') {
+        response.status(409).json({
+          error: 'Only an unfinished authenticator setup can be cancelled here.',
+        });
+        return;
+      }
+      const upstream = await supabaseAuthRequest(`factors/${factorId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      await authPayload(upstream);
+      if (!upstream.ok) {
+        response.status(400).json({
+          error: 'The unfinished authenticator setup could not be removed.',
+        });
+        return;
+      }
+      await refreshAfterFactorChange(request, response);
+      return;
+    }
+
     if (action === 'unenroll') {
       const factorId = typeof body.factorId === 'string' ? body.factorId : '';
       if (!uuidPattern.test(factorId)) {
         invalidRequest(response);
+        return;
+      }
+      const { upstream: accountUpstream, account } = await loadAccount(accessToken);
+      if (!accountUpstream.ok || !account?.id) {
+        response.status(401).json({ error: 'Your session could not be verified.' });
+        return;
+      }
+      const factor = rawFactor(account, factorId);
+      if (factor?.status !== 'verified' || factor.factor_type !== 'totp') {
+        response.status(409).json({
+          error: 'This verified authenticator could not be confirmed for removal.',
+        });
+        return;
+      }
+      if (!hasFreshAal2(accessToken)) {
+        response.status(403).json({
+          error: 'Sign in again and verify an authenticator before removing a sign-in method.',
+        });
+        return;
+      }
+      const factors = safeMfaFactors(account);
+      const applicationRole = await currentUserAppRole(accessToken);
+      const minimumVerifiedFactors = privilegedRoles.has(applicationRole) ? 2 : 0;
+      if (factors.length <= minimumVerifiedFactors) {
+        response.status(409).json({
+          error: 'Add and verify another authenticator before removing this one.',
+        });
         return;
       }
       const upstream = await supabaseAuthRequest(`factors/${factorId}`, {
