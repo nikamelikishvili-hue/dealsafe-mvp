@@ -15,7 +15,16 @@ function configuredSupabase() {
     .trim()
     .replace(/\/+$/, '');
   const key = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '')
-    .replace(/\s+/g, '');
+    .split(/\r?\n/)
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .reduce((normalized, line, index, lines) => {
+      if (index > 0) return normalized;
+      const completePublishableKey = /^sb_publishable_[A-Za-z0-9_-]{20,}$/.test(line);
+      const completeLegacyKey = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(line)
+        && line.length > 100;
+      return completePublishableKey || completeLegacyKey ? line : lines.join('');
+    }, '');
   if (!url || !key) throw new Error('Authentication service is not configured.');
   if (/^sb_secret_/i.test(key)) {
     throw new Error('Authentication service publishable key is invalid.');
