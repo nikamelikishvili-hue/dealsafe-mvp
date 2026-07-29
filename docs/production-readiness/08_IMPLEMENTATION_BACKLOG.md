@@ -88,7 +88,9 @@ identifier-free aggregate preflight and the two-device/dual-control operating
 matrix are documented for enrollment. The same two-factor floor is now
 enforced at the verified-factor removal API, which also requires `aal2` with a
 recent TOTP timestamp from the signed JWT `amr` claim and separates unfinished
-enrollment cancellation from verified-factor removal.
+enrollment cancellation from verified-factor removal. The account UI now
+performs the required challenge and verification inline before deletion so a
+routine security change does not force a full sign-out/sign-in loop.
 
 ## Epic 6 — Evidence and private files
 

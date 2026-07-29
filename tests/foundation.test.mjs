@@ -696,6 +696,24 @@ test('unfinished MFA enrollment cancellation cannot remove a verified factor', a
   assert.equal(providerCalls, 1);
 });
 
+test('account MFA removal performs fresh step-up before factor deletion', () => {
+  const accountMfa = readText('src/AccountMfaSecurity.tsx');
+  const client = readText('src/services/supabaseRest.ts');
+  const styles = readText('src/mfa-step-up.css');
+
+  assert.match(client, /export async function verifyMfaStepUp/);
+  assert.match(client, /action:'challenge_and_verify'/);
+  assert.match(
+    accountMfa,
+    /await verifyMfaStepUp\([\s\S]*await unenrollMfaFactor\(verifiedSession,confirmRemove\)/,
+  );
+  assert.match(accountMfa, /autoComplete="one-time-code"/);
+  assert.match(accountMfa, /role="region"[\s\S]*aria-labelledby="mfa-remove-title"/);
+  assert.match(accountMfa, /factor\.id!==factorId/);
+  assert.match(styles, /focus-visible/);
+  assert.match(styles, /max-width: 430px/);
+});
+
 test('signup rejects cross-origin requests before contacting the auth provider', async () => {
   const { default: signup } = await import('../api/auth/signup.mjs');
   const response = createResponse();

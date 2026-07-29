@@ -1,0 +1,140 @@
+.account-mfa-security .mfa-remove-confirmation {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(320px, 1.25fr);
+  align-items: end;
+  gap: 16px 22px;
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid #e8c8cc;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 100% 0, rgba(49, 95, 208, 0.08), transparent 36%),
+    #fffafa;
+  box-shadow: 0 14px 30px rgba(64, 25, 31, 0.07);
+}
+
+.account-mfa-security .mfa-remove-copy {
+  display: grid;
+  align-self: start;
+  gap: 5px;
+}
+
+.account-mfa-security .mfa-remove-copy .eyebrow {
+  margin: 0;
+  color: #a1333d;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.14em;
+}
+
+.account-mfa-security .mfa-remove-copy strong {
+  color: #701f27;
+  font: 800 16px/1.25 Manrope, sans-serif;
+}
+
+.account-mfa-security .mfa-remove-copy span {
+  max-width: 48ch;
+  color: #76575c;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.account-mfa-security .mfa-remove-fields {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(140px, 0.72fr);
+  gap: 10px;
+}
+
+.account-mfa-security .mfa-remove-fields label {
+  display: grid;
+  gap: 6px;
+  color: #52393e;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.account-mfa-security .mfa-remove-fields select,
+.account-mfa-security .mfa-remove-fields input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #d9c6ca;
+  border-radius: 10px;
+  padding: 0 11px;
+  background: #fff;
+  color: #17233a;
+  font: 700 13px Manrope, sans-serif;
+}
+
+.account-mfa-security .mfa-remove-fields input {
+  font-size: 17px;
+  letter-spacing: 0.16em;
+}
+
+.account-mfa-security .mfa-remove-fields select:focus-visible,
+.account-mfa-security .mfa-remove-fields input:focus-visible {
+  outline: 3px solid rgba(49, 95, 208, 0.2);
+  outline-offset: 2px;
+  border-color: #315fd0;
+}
+
+.account-mfa-security .mfa-remove-actions {
+  display: flex;
+  grid-column: 2;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.account-mfa-security .mfa-remove-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid #d8c5c8;
+  border-radius: 10px;
+  background: #fff;
+  color: #54383d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.account-mfa-security .mfa-remove-actions .confirm-danger {
+  border-color: #a72832;
+  background: #a72832;
+  color: #fff;
+}
+
+.account-mfa-security .mfa-remove-actions svg {
+  width: 17px;
+}
+
+.account-mfa-security .mfa-remove-confirmation > small {
+  grid-column: 1 / -1;
+  color: #75585d;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .account-mfa-security .mfa-remove-confirmation {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .account-mfa-security .mfa-remove-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .account-mfa-security .mfa-remove-actions {
+    grid-column: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 430px) {
+  .account-mfa-security .mfa-remove-actions {
+    grid-template-columns: 1fr;
+  }
+}

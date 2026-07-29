@@ -1459,3 +1459,27 @@ ready accounts, and one blocked account. MFA enforcement remains unapplied.
 This batch does not create, verify, or remove a factor; change public access;
 enable real-money processing; activate the scanner; or remove Vercel
 Authentication.
+
+## 2026-07-28 — SEC-003 inline factor-removal step-up
+
+### Implemented locally for review
+
+- Replaced the removal dead end with an inline six-digit TOTP verification
+  panel in Account Security.
+- Reused the provider challenge-and-verify boundary to mint a newly verified
+  AAL2 session before the client requests factor deletion.
+- Defaulted confirmation to a different verified authenticator when one is
+  available, while retaining a selectable factor list for legitimate recovery
+  cases.
+- Kept the server-side recent-TOTP and privileged two-factor-floor checks as
+  the authoritative mutation controls.
+- Added keyboard focus styling, one-time-code semantics, bounded numeric input,
+  responsive actions, and explicit support-scam guidance.
+- Added release-gate coverage that proves verification is ordered before
+  deletion in the client flow.
+
+### Activation boundary
+
+This UI batch does not apply the privileged enforcement migration, create or
+remove a real factor, expose a public domain, enable real payments, or weaken
+Vercel Authentication.

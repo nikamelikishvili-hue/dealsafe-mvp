@@ -476,7 +476,7 @@ export async function startMfaEnrollment(session:StoredSession,friendlyName:stri
   });
 }
 
-export async function verifyMfaEnrollment(session:StoredSession,factorId:string,code:string){
+async function verifyMfaFactor(session:StoredSession,factorId:string,code:string){
   const current=await sessionForRemoteRevocation(session);
   const data=await mfaRequest<AuthResponse>(current.accessToken,{
     action:'challenge_and_verify',
@@ -484,6 +484,14 @@ export async function verifyMfaEnrollment(session:StoredSession,factorId:string,
     code:code.trim(),
   });
   return storeVerifiedMfaSession(data,current);
+}
+
+export async function verifyMfaEnrollment(session:StoredSession,factorId:string,code:string){
+  return verifyMfaFactor(session,factorId,code);
+}
+
+export async function verifyMfaStepUp(session:StoredSession,factorId:string,code:string){
+  return verifyMfaFactor(session,factorId,code);
 }
 
 export async function unenrollMfaFactor(session:StoredSession,factorId:string){

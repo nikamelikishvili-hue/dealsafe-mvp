@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import './mfa-step-up.css';
 import {
   CheckCircle2,
   Copy,
@@ -15,6 +16,7 @@ import {
   startMfaEnrollment,
   unenrollMfaFactor,
   verifyMfaEnrollment,
+  verifyMfaStepUp,
   type MfaEnrollment,
   type MfaStatus,
   type StoredSession,
@@ -43,6 +45,8 @@ export function AccountMfaSecurity({
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
   const [confirmRemove,setConfirmRemove]=useState<string|null>(null);
+  const [removeVerificationFactorId,setRemoveVerificationFactorId]=useState('');
+  const [removeCode,setRemoveCode]=useState('');
 
   const loadStatus=async(activeSession=session)=>{
     setLoading(true);
@@ -121,14 +125,45 @@ export function AccountMfaSecurity({
     }
   };
 
-  const removeFactor=async(factorId:string)=>{
+  const beginFactorRemoval=(factorId:string)=>{
+    const verificationFactor=status?.factors.find(factor=>factor.id!==factorId)
+      ??status?.factors.find(factor=>factor.id===factorId);
+    if(!verificationFactor){
+      setError('A verified authenticator is required before a sign-in method can be removed.');
+      return;
+    }
+    setMessage('');
+    setError('');
+    setConfirmRemove(factorId);
+    setRemoveVerificationFactorId(verificationFactor.id);
+    setRemoveCode('');
+  };
+
+  const cancelFactorRemoval=()=>{
+    if(busy)return;
+    setConfirmRemove(null);
+    setRemoveVerificationFactorId('');
+    setRemoveCode('');
+  };
+
+  const removeFactor=async(event:React.FormEvent)=>{
+    event.preventDefault();
+    if(!confirmRemove||!removeVerificationFactorId||removeCode.length!==6)return;
     setBusy('remove');
     setMessage('');
     setError('');
     try{
-      const updated=await unenrollMfaFactor(session,factorId);
+      const verifiedSession=await verifyMfaStepUp(
+        session,
+        removeVerificationFactorId,
+        removeCode,
+      );
+      onSessionUpdated(verifiedSession);
+      const updated=await unenrollMfaFactor(verifiedSession,confirmRemove);
       onSessionUpdated(updated);
       setConfirmRemove(null);
+      setRemoveVerificationFactorId('');
+      setRemoveCode('');
       setMessage('Authenticator method removed. Review the remaining protection before signing out.');
       await loadStatus(updated);
     }catch(actionError){
@@ -182,7 +217,7 @@ export function AccountMfaSecurity({
         <b>{status.assuranceLevel==='aal2'?'Verified this session':'Verification required'}</b>
         <button
           type="button"
-          onClick={()=>setConfirmRemove(factor.id)}
+          onClick={()=>beginFactorRemoval(factor.id)}
           disabled={Boolean(busy)||factorFloorReached}
           aria-label={`Remove ${factor.friendlyName}`}
           title={factorFloorReached?'Add and verify another authenticator before removing this one.':undefined}
@@ -254,12 +289,56 @@ export function AccountMfaSecurity({
 
     <p className="mfa-recovery-note"><ShieldCheck aria-hidden="true"/>Losing every enrolled authenticator requires a controlled account-recovery review. Dealivra support will never ask for your current code or setup key.</p>
 
-    {confirmRemove?<div className="mfa-remove-confirmation" role="alert" aria-labelledby="mfa-remove-title">
-      <div><strong id="mfa-remove-title">Remove this authenticator?</strong><span>You will need a freshly verified session. Protected operator accounts must retain two independent authenticators.</span></div>
-      <div>
-        <button type="button" onClick={()=>setConfirmRemove(null)} disabled={Boolean(busy)}>Keep it</button>
-        <button type="button" className="confirm-danger" onClick={()=>removeFactor(confirmRemove)} disabled={Boolean(busy)}>{busy==='remove'?'Removing…':'Remove authenticator'}</button>
+    {confirmRemove?<form
+      className="mfa-remove-confirmation"
+      role="region"
+      aria-labelledby="mfa-remove-title"
+      aria-describedby="mfa-remove-description"
+      onSubmit={removeFactor}
+    >
+      <div className="mfa-remove-copy">
+        <p className="eyebrow">SENSITIVE CHANGE</p>
+        <strong id="mfa-remove-title">Confirm it’s you before removal</strong>
+        <span id="mfa-remove-description">
+          Enter a fresh code from an enrolled authenticator. Dealivra never asks you to send this code to support.
+        </span>
       </div>
-    </div>:null}
+      <div className="mfa-remove-fields">
+        <label>
+          Verification authenticator
+          <select
+            value={removeVerificationFactorId}
+            onChange={event=>setRemoveVerificationFactorId(event.target.value)}
+            disabled={Boolean(busy)}
+          >
+            {status?.factors.map(factor=><option value={factor.id} key={factor.id}>
+              {factor.friendlyName}{factor.id===confirmRemove?' (being removed)':''}
+            </option>)}
+          </select>
+        </label>
+        <label>
+          Six-digit code
+          <input
+            required
+            autoFocus
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            placeholder="000000"
+            value={removeCode}
+            onChange={event=>setRemoveCode(event.target.value.replace(/\D/g,'').slice(0,6))}
+            disabled={Boolean(busy)}
+          />
+        </label>
+      </div>
+      <div className="mfa-remove-actions">
+        <button type="button" onClick={cancelFactorRemoval} disabled={Boolean(busy)}>Keep authenticator</button>
+        <button type="submit" className="confirm-danger" disabled={Boolean(busy)||removeCode.length!==6}>
+          <ShieldCheck aria-hidden="true"/>{busy==='remove'?'Verifying and removing…':'Verify and remove'}
+        </button>
+      </div>
+      <small>Protected operator accounts must retain two independent authenticators.</small>
+    </form>:null}
   </section>;
 }
