@@ -10,7 +10,15 @@ Dealivra must use separate configuration for Local, Preview, Staging, and Produc
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Browser | Yes | Browser-safe Supabase publishable or legacy anon key | Account and live Deal Link operations remain disabled |
 | `SUPABASE_URL` | Server | Yes outside local static demo | Supabase project origin used by same-origin Auth Functions | Auth Function returns a generic `503` and logs a safe diagnostic |
 | `SUPABASE_PUBLISHABLE_KEY` | Server | Yes outside local static demo | Browser-safe publishable key used by Auth Functions | Auth Function returns a generic `503` and logs a safe diagnostic |
+| `DEALIVRA_AUTH_IP_FORWARDING_MODE` | Vercel Auth Function | Required before trusted IP forwarding | Exact `disabled` or `enforced` switch for Supabase Auth proxy client-IP forwarding | Missing defaults to `disabled`; an invalid value or incomplete enforced configuration fails Auth closed |
+| `SUPABASE_AUTH_SECRET_KEY` | Vercel Auth Function | Required only when trusted IP forwarding is enforced | Server-only new-format `sb_secret_` key used exclusively as the Auth request `apikey` with `Sb-Forwarded-For` | Missing, malformed, or browser-exposed key blocks enforced Auth proxy requests |
+| `DEALIVRA_CURRENT_PASSWORD_MODE` | Vercel Auth Function | Required before signed-in password changes | Exact `staged` or `enforced` switch paired with the Supabase **Require current password** Auth setting | Missing defaults to `staged`; signed-in change fails closed while recovery remains available |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase Edge Function | Platform-provided | Server-only database and private Storage boundary after explicit user authorization | Protected function fails without exposing the key or bypassing the operation |
+| `DEALIVRA_RECOVERY_CONTROL_MODE` | Vercel Auth Function and Supabase Edge Function | Required before recovery activation | Exact `staged` or `enforced` switch for the 72-hour MFA/email/payout cooldown boundary | Missing defaults to `staged` during integration; an invalid value blocks the sensitive mutation |
+| `DEALIVRA_SECURITY_NOTIFICATION_MODE` | Supabase Edge Function | Required before notification activation | Exact `staged` or `enforced` switch for custom privileged-recovery notifications | Missing remains `staged`; invalid or staged mode sends nothing |
+| `DEALIVRA_SECURITY_NOTIFICATION_WORKER_SECRET` | Supabase Edge Function and scheduler Vault | Required before notification activation | High-entropy bearer secret authenticating the private worker invocation | Missing, short, or mismatched credentials deny the worker before a job is claimed |
+| `DEALIVRA_SECURITY_NOTIFICATION_FROM` | Supabase Edge Function | Required before notification activation | Verified sender such as `Dealivra Security <security@notify.dealivra.com>` | Invalid sender blocks delivery without exposing recipient data |
+| `RESEND_API_KEY` | Supabase Edge Function | Required before notification activation | Server-only Resend transactional-email credential | Missing or invalid credential blocks delivery and is never returned or logged |
 | `VITE_GOOGLE_MAPS_API_KEY` | Browser | No | Address autocomplete restricted to approved web origins | Structured manual US address fields remain available |
 | `SITE_URL` | Supabase Edge Function | Yes for payment flows | Canonical HTTPS origin used for Stripe redirects and the protected-function origin allowlist | Defaults to `https://dealivra.com`; nonmatching browser calls are denied |
 | `DEALIVRA_ALLOWED_ORIGINS` | Supabase Edge Function | No | Comma-separated additional exact HTTPS origins for an approved environment | Invalid entries are ignored and cannot broaden access |
@@ -46,6 +54,18 @@ Preview, Staging, and Production must not share a Supabase project, Stripe accou
 
 - Supabase URLs must be an HTTPS origin without credentials, query parameters, fragments, or an extra path. Plain HTTP is accepted only for `localhost` or `127.0.0.1`.
 - Browser and Auth Function configuration rejects keys beginning with `sb_secret_`.
+- The one reviewed exception is `SUPABASE_AUTH_SECRET_KEY`, which is available
+  only to server-side Vercel Auth Functions and is never used by browser code,
+  the Data API, or as a user bearer token.
+- Auth client-IP forwarding remains disabled unless the mode is exactly
+  `enforced`, the secret key is valid, and one exact IPv4/IPv6 address is
+  present in Vercel's `x-vercel-forwarded-for` system header. Arbitrary
+  `x-forwarded-for` chains are not trusted.
+- Signed-in password changes remain unavailable unless
+  `DEALIVRA_CURRENT_PASSWORD_MODE` is exactly `enforced`. Enforced mode is
+  permitted only after the matching Supabase project verifies the current
+  password server-side. Recovery-token password completion does not use this
+  switch.
 - Protected payment Edge Functions require an exact allowed browser `Origin`.
   Missing, opaque, malformed, HTTP, foreign, or unexpected Vercel origins are
   denied before user/session and payment logic runs.
@@ -55,6 +75,22 @@ Preview, Staging, and Production must not share a Supabase project, Stripe accou
 - Server diagnostics may name the failing configuration category but must not log URLs, keys, tokens, cookies, passwords, or submitted identity data.
 - Address autocomplete is optional. State, ZIP code, apartment/suite/unit, and the remaining address fields must continue to work without Google Maps.
 - NHTSA vPIC is optional at runtime. VIN decoding failure must not block manual vehicle entry or publishing.
+- Recovery controls may move from `staged` to `enforced` only after the
+  reviewed recovery migration and rollback proof pass in that environment.
+  The value must be identical in Vercel and Supabase Edge Functions. Recovery
+  completion is prohibited while either runtime remains `staged`.
+- Security notification delivery may move to `enforced` only after the sender
+  subdomain is verified, the worker secret is stored in Supabase Vault, the
+  retry/dead-letter alert has an owner, and controlled delivery/bounce tests
+  pass. These secrets must never use a `VITE_` prefix.
+- Auth client-IP forwarding may move to `enforced` only after the matching
+  Supabase project setting is explicitly enabled, the environment-specific
+  secret key is stored in Vercel, Preview journey/rate-limit tests pass, and
+  raw IP/key absence is verified in browser bundles and logs.
+- Signed-in password changes may move to `enforced` only after the provider's
+  current-password control is enabled, the protected Preview negative matrix
+  passes, and successful changes force a fresh sign-in. Password values must
+  not appear in any release evidence.
 
 ## Change procedure
 

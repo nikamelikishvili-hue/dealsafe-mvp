@@ -38,6 +38,14 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [27_EVIDENCE_LIFECYCLE_GOVERNANCE.md](27_EVIDENCE_LIFECYCLE_GOVERNANCE.md) | Retention classification, Legal Hold, scheduled integrity/quarantine work, operator-reviewed verified deletion, and alert ownership |
 | [28_MFA_AND_PRIVILEGED_STEP_UP.md](28_MFA_AND_PRIVILEGED_STEP_UP.md) | TOTP enrollment and login challenge, AAL2 enforcement across every protected boundary, privileged-role rollout, recovery limits, and rollback |
 | [29_CSP_REPORTING_AND_BROWSER_HEADERS.md](29_CSP_REPORTING_AND_BROWSER_HEADERS.md) | Enforced browser headers, privacy-safe CSP violation reporting, monitoring, environment proof, and rollback |
+| [30_PRIVILEGED_MFA_ROLLOUT_EVIDENCE.md](30_PRIVILEGED_MFA_ROLLOUT_EVIDENCE.md) | Non-secret privileged MFA enrollment, two-device login, aggregate readiness, and outstanding activation evidence |
+| [31_PRIVILEGED_MFA_RECOVERY_CONTROL.md](31_PRIVILEGED_MFA_RECOVERY_CONTROL.md) | Dual-control lost-factor recovery, immutable evidence, service-only completion, notification outbox, and 72-hour sensitive-change holds |
+| [32_MFA_PASSWORD_ONLY_NEGATIVE_MATRIX.md](32_MFA_PASSWORD_ONLY_NEGATIVE_MATRIX.md) | Password-only denial and same-account AAL2 control tests for the Data API, protected Storage, and protected Edge Functions |
+| [33_SENSITIVE_CHANGE_ENFORCEMENT.md](33_SENSITIVE_CHANGE_ENFORCEMENT.md) | Staged fail-closed wiring for post-recovery MFA, payout onboarding, seller release, and buyer-refund availability |
+| [34_SECURITY_NOTIFICATION_DELIVERY.md](34_SECURITY_NOTIFICATION_DELIVERY.md) | Private staged recovery-notification worker, fixed templates, idempotent delivery, domain requirements, and activation gates |
+| [35_AUTH_ABUSE_AND_RATE_LIMIT_ROLLOUT.md](35_AUTH_ABUSE_AND_RATE_LIMIT_ROLLOUT.md) | Same-origin password recovery, privacy-safe Auth rejection telemetry, bounded retry guidance, and staged Vercel Firewall thresholds |
+| [36_AUTH_PROXY_CLIENT_IP_BOUNDARY.md](36_AUTH_PROXY_CLIENT_IP_BOUNDARY.md) | Staged, fail-closed Supabase Auth client-IP forwarding through the trusted Vercel proxy boundary |
+| [37_PASSWORD_MUTATION_BOUNDARY.md](37_PASSWORD_MUTATION_BOUNDARY.md) | Same-origin recovery completion and fail-closed current-password verification for signed-in changes |
 
 ## Authority and change control
 

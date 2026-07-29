@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, Bookmark, Boxes, Briefcase, CalendarClock, CalendarDays, Camera, Car, Check, ChevronDown, CircleCheckBig, Clock3, Copy, CreditCard, Eye, EyeOff, FileCheck2, FileDown, FileSignature, Fingerprint, Flag, Gamepad2, Gem, ImagePlus, Laptop, Link2, LockKeyhole, MailCheck, MapPinned, Menu, MessageCircle, Package, PackageCheck, Pencil, Plus, QrCode, Route, Scale, ScanSearch, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Tablet, Trash2, Truck, Watch, Wrench, X, ZoomIn } from 'lucide-react';
 import { DEMO_DEAL_PUBLIC_ID, demoRepository } from './services/demoRepository';
-import { acceptPublicDeal, askDealQuestion, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminCatalogAdoption, getAdminDisputes, getAdminReports, getAdminRevenueSummary, getAdminRevenueTransactions, getDealInquiries, getDealInspection, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicAgreementHistory, getPublicDeal, getPublicSellerDeclaration, getPublicSellerTrustProfile, getPublicTrustPassport, getSellerShippingEvidenceReadiness, getStoredSession, getTrustPassportSettings, isCurrentUserDealSeller, isDealSaved, isSupabaseConfigured, listDealEvidence, listUserDeals, makeDealOffer, markArrived, markSessionActivity, openDealDispute, proposeMeeting, publishUserDealDraft, recordDealInspection, refreshSession, renewDealLink, reorderDealMedia, replyDealInquiry, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminDispute, resolveAdminDisputeFinancial, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, setDealSaved, setTrustPassportEnabled, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealEvidence, uploadDealPhotos, verifyAgreementRecord, type AdminCatalogAdoption, type AdminDispute, type AdminReport, type AdminRevenueSummary, type AdminRevenueTransaction, type AgreementHistoryVersion, type AgreementVerificationResult, type DealEvidence, type DealInquiry, type DealInspection, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type EvidenceType, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type SellerDeclarationRecord, type SellerShippingEvidenceReadiness, type StoredSession, type TimelineEvent, type TrustPassport, type TrustPassportSettings } from './services/supabaseRest';
+import { acceptPublicDeal, askDealQuestion, cancelDeal, checkSupabaseConnection, completeHandoff, confirmMeeting, confirmShipmentDelivery, createDealShipment, createUserDeal, deleteDealMedia, generateHandoffPin, getAdminAccess, getAdminCatalogAdoption, getAdminDisputes, getAdminReports, getAdminRevenueSummary, getAdminRevenueTransactions, getDealInquiries, getDealInspection, getDealMeeting, getDealMessages, getDealOffers, getDealRiskAssessment, getDealShipment, getDealTimeline, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicAgreementHistory, getPublicDeal, getPublicSellerDeclaration, getPublicSellerTrustProfile, getPublicTrustPassport, getSellerShippingEvidenceReadiness, getStoredSession, getTrustPassportSettings, isCurrentUserDealSeller, isDealSaved, isSupabaseConfigured, isTransientAuthenticationError, listDealEvidence, listUserDeals, makeDealOffer, markArrived, markSessionActivity, openDealDispute, proposeMeeting, publishUserDealDraft, recordDealInspection, refreshSession, renewDealLink, reorderDealMedia, replyDealInquiry, reportPublicDeal, requestIdentityVerification, requestPasswordReset, resolveAdminDispute, resolveAdminDisputeFinancial, resolveAdminReport, respondToOffer, saveUserDealDraft, sendDealMessage, sessionExpiredEvent, sessionUpdatedEvent, setAdminDealVisibility, setDealSaved, setTrustPassportEnabled, signIn, signOut, signUp, submitRating, updateAccountName, updateAccountPassword, updatePublishedDeal, updateRecoveredPassword, updateUserDealDraft, uploadDealEvidence, uploadDealPhotos, verifyAgreementRecord, type AdminCatalogAdoption, type AdminDispute, type AdminReport, type AdminRevenueSummary, type AdminRevenueTransaction, type AgreementHistoryVersion, type AgreementVerificationResult, type DealEvidence, type DealInquiry, type DealInspection, type DealMeeting, type DealMessage, type DealNotification, type DealOffer, type DealShipment, type EvidenceType, type ProfileSummary, type PublicTrustProfile, type RiskAssessment, type SellerDeclarationRecord, type SellerShippingEvidenceReadiness, type StoredSession, type TimelineEvent, type TrustPassport, type TrustPassportSettings } from './services/supabaseRest';
 import { evidenceInputAccept } from '../supabase/functions/_shared/evidence-policy';
 import { markAllNotificationsRead, markDealNotificationsRead } from './services/supabaseRest';
 import { configureBuyerAccessCode, getDealAcceptanceProtection } from './services/supabaseRest';
@@ -328,7 +328,82 @@ function SecurityCenter({email,status,message,onRequest}:{email:string;status:Pr
   return <section className="security-center"><div className="security-heading"><ShieldCheck/><div><p className="eyebrow">{t('Account protection')}</p><h2>{t('Verification & Security Center')}</h2></div></div><div className="security-checks"><article><Check/><div><b>{t('Email account active')}</b><span>{email}</span></div></article><article className={status==='verified'?'verified':''}><BadgeCheck/><div><b>{t('Identity verification')}</b><span>{t(status.replace('_',' '))}</span></div>{status==='not_started'&&<button className="secondary" onClick={onRequest}>{t('Request verification')}</button>}</article><article><LockKeyhole/><div><b>{t('Secure handoff enabled')}</b><span>{t('Meeting confirmation and one-time PIN protect in-person deals.')}</span></div></article></div>{status==='pending'&&<div className="notice">{t('Identity verification is pending. Approval requires a licensed verification provider, which is not connected in this beta.')}</div>}{message&&<div className="notice">{t(message)}</div>}<p className="security-warning"><LockKeyhole/> {t('Dealivra does not hold or insure payments in this beta. Never send deposits outside the agreed process.')}</p></section>
 }
 
-function AccountSettings({session,displayName,onNameUpdated}:{session:StoredSession;displayName:string;onNameUpdated:(name:string)=>void}){const [name,setName]=useState(displayName);const [password,setPassword]=useState('');const [confirmPassword,setConfirmPassword]=useState('');const [nameMessage,setNameMessage]=useState('');const [passwordMessage,setPasswordMessage]=useState('');const [savingName,setSavingName]=useState(false);const [savingPassword,setSavingPassword]=useState(false);useEffect(()=>setName(displayName),[displayName]);const saveName=async(e:React.FormEvent)=>{e.preventDefault();setNameMessage('');setSavingName(true);try{await updateAccountName(session,name);onNameUpdated(name.trim());setNameMessage('Your display name was updated.')}catch(error){setNameMessage(error instanceof Error?error.message:'Could not update name')}finally{setSavingName(false)}};const savePassword=async(e:React.FormEvent)=>{e.preventDefault();setPasswordMessage('');if(password!==confirmPassword){setPasswordMessage('Passwords do not match.');return}setSavingPassword(true);try{await updateAccountPassword(session,password);setPassword('');setConfirmPassword('');setPasswordMessage('Your password was updated securely.')}catch(error){setPasswordMessage(error instanceof Error?error.message:'Could not update password')}finally{setSavingPassword(false)}};return <section className="account-settings no-print"><div className="settings-heading"><Pencil/><div><p className="eyebrow">{t('Account settings')}</p><h2>{t('Manage your account')}</h2></div></div><div className="settings-grid"><form onSubmit={saveName}><h3>{t('Public display name')}</h3><p>{t('This name appears on your profile and Deal Links.')}</p><label>{t('Your name')}<input required minLength={2} maxLength={80} autoComplete="name" value={name} onChange={e=>setName(e.target.value)}/></label>{nameMessage&&<div className="notice">{t(nameMessage)}</div>}<button className="primary" disabled={savingName||name.trim()===displayName}>{t(savingName?'Saving…':'Save name')}</button></form><form onSubmit={savePassword}><h3>{t('Change password')}</h3><p>{t('Use at least 12 characters with uppercase, lowercase, a number, and a symbol.')}</p><label>{t('New password')}<input required minLength={12} autoComplete="new-password" type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label><label>{t('Confirm password')}<input required minLength={12} autoComplete="new-password" type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></label>{passwordMessage&&<div className="notice">{t(passwordMessage)}</div>}<button className="primary" disabled={savingPassword}>{t(savingPassword?'Updating…':'Update password')}</button></form></div></section>}
+function AccountSettings({
+  session,
+  displayName,
+  onNameUpdated,
+  onPasswordUpdated,
+}:{
+  session:StoredSession;
+  displayName:string;
+  onNameUpdated:(name:string)=>void;
+  onPasswordUpdated:()=>void;
+}){
+  const [name,setName]=useState(displayName);
+  const [currentPassword,setCurrentPassword]=useState('');
+  const [password,setPassword]=useState('');
+  const [confirmPassword,setConfirmPassword]=useState('');
+  const [nameMessage,setNameMessage]=useState('');
+  const [passwordMessage,setPasswordMessage]=useState('');
+  const [savingName,setSavingName]=useState(false);
+  const [savingPassword,setSavingPassword]=useState(false);
+  useEffect(()=>setName(displayName),[displayName]);
+  const saveName=async(e:React.FormEvent)=>{
+    e.preventDefault();
+    setNameMessage('');
+    setSavingName(true);
+    try{
+      await updateAccountName(session,name);
+      onNameUpdated(name.trim());
+      setNameMessage('Your display name was updated.');
+    }catch(error){
+      setNameMessage(error instanceof Error?error.message:'Could not update name');
+    }finally{
+      setSavingName(false);
+    }
+  };
+  const savePassword=async(e:React.FormEvent)=>{
+    e.preventDefault();
+    setPasswordMessage('');
+    if(password!==confirmPassword){
+      setPasswordMessage('Passwords do not match.');
+      return;
+    }
+    setSavingPassword(true);
+    try{
+      await updateAccountPassword(session,currentPassword,password);
+      setCurrentPassword('');
+      setPassword('');
+      setConfirmPassword('');
+      onPasswordUpdated();
+    }catch(error){
+      setPasswordMessage(error instanceof Error?error.message:'Could not update password');
+    }finally{
+      setSavingPassword(false);
+    }
+  };
+  return <section className="account-settings no-print">
+    <div className="settings-heading"><Pencil/><div><p className="eyebrow">{t('Account settings')}</p><h2>{t('Manage your account')}</h2></div></div>
+    <div className="settings-grid">
+      <form onSubmit={saveName}>
+        <h3>{t('Public display name')}</h3>
+        <p>{t('This name appears on your profile and Deal Links.')}</p>
+        <label>{t('Your name')}<input required minLength={2} maxLength={80} autoComplete="name" value={name} onChange={e=>setName(e.target.value)}/></label>
+        {nameMessage&&<div className="notice" role="status">{t(nameMessage)}</div>}
+        <button className="primary" disabled={savingName||name.trim()===displayName}>{t(savingName?'Saving…':'Save name')}</button>
+      </form>
+      <form onSubmit={savePassword}>
+        <h3>{t('Change password')}</h3>
+        <p>{t('Confirm your current password. Use at least 12 characters with uppercase, lowercase, a number, and a symbol.')}</p>
+        <label>{t('Current password')}<input required maxLength={256} autoComplete="current-password" type="password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)}/></label>
+        <label>{t('New password')}<input required minLength={12} maxLength={256} autoComplete="new-password" type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label>
+        <label>{t('Confirm password')}<input required minLength={12} maxLength={256} autoComplete="new-password" type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></label>
+        {passwordMessage&&<div className="notice" role="alert">{t(passwordMessage)}</div>}
+        <button className="primary" disabled={savingPassword||!currentPassword||!password||!confirmPassword}>{t(savingPassword?'Updating…':'Update password')}</button>
+      </form>
+    </div>
+  </section>;
+}
 
 function TrustPassportControls({session}:{session:StoredSession}){
   const [settings,setSettings]=useState<TrustPassportSettings|null>(null);const [message,setMessage]=useState('');const [saving,setSaving]=useState(false);
@@ -1234,7 +1309,7 @@ function EvidencePanel({deal,session,onChanged}:{deal:Deal;session:StoredSession
 
 function InstallApp(){const [prompt,setPrompt]=useState<InstallPromptEvent|null>(null);useEffect(()=>{const handler=(event:Event)=>{event.preventDefault();setPrompt(event as InstallPromptEvent)};window.addEventListener('beforeinstallprompt',handler);return()=>window.removeEventListener('beforeinstallprompt',handler)},[]);if(!prompt)return null;const install=async()=>{await prompt.prompt();const choice=await prompt.userChoice;if(choice.outcome==='accepted')setPrompt(null)};return <aside className="install-app no-print"><Smartphone/><div><b>{t('Install Dealivra')}</b><span>{t('Add it to your home screen for faster access.')}</span></div><button className="primary" onClick={install}>{t('Install app')}</button></aside>}
 
-function ForgotPassword({onBack}:{onBack:()=>void}){const [email,setEmail]=useState('');const [message,setMessage]=useState('');const [sending,setSending]=useState(false);const submit=async(e:React.FormEvent)=>{e.preventDefault();setSending(true);setMessage('');try{await requestPasswordReset(email,location.origin);setMessage('If an account exists for this email, a password reset link has been sent.')}catch(error){setMessage(error instanceof Error?error.message:'Could not send reset email')}finally{setSending(false)}};return <section className="recovery-page"><button className="back" onClick={onBack}>← {t('Back to sign in')}</button><p className="eyebrow">{t('Account recovery')}</p><h1>{t('Reset your password')}</h1><p>{t('Enter your account email. For privacy, the result will not reveal whether an account exists.')}</p><form onSubmit={submit}><label>{t('Email')}<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/></label>{message&&<div className="notice">{t(message)}</div>}<button className="primary full" disabled={sending}>{t(sending?'Sending…':'Send reset link')}</button></form></section>}
+function ForgotPassword({onBack}:{onBack:()=>void}){const [email,setEmail]=useState('');const [message,setMessage]=useState('');const [sending,setSending]=useState(false);const submit=async(e:React.FormEvent)=>{e.preventDefault();setSending(true);setMessage('');try{await requestPasswordReset(email);setMessage('If an account exists for this email, a password reset link has been sent.')}catch(error){setMessage(error instanceof Error?error.message:'Could not send reset email')}finally{setSending(false)}};return <section className="recovery-page"><button className="back" onClick={onBack}>← {t('Back to sign in')}</button><p className="eyebrow">{t('Account recovery')}</p><h1>{t('Reset your password')}</h1><p>{t('Enter your account email. For privacy, the result will not reveal whether an account exists.')}</p><form onSubmit={submit}><label>{t('Email')}<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/></label>{message&&<div className="notice">{t(message)}</div>}<button className="primary full" disabled={sending}>{t(sending?'Sending…':'Send reset link')}</button></form></section>}
 
 function ResetPassword({token,onDone}:{token:string;onDone:()=>void}){const [password,setPassword]=useState('');const [confirmPassword,setConfirmPassword]=useState('');const [message,setMessage]=useState('');const submit=async(e:React.FormEvent)=>{e.preventDefault();setMessage('');if(password!==confirmPassword){setMessage('Passwords do not match.');return}try{await updateRecoveredPassword(token,password);history.replaceState(null,'',location.pathname);setMessage('Password updated. You can now sign in.');setTimeout(onDone,1000)}catch(error){setMessage(error instanceof Error?error.message:'Could not update password')}};return <section className="recovery-page"><p className="eyebrow">{t('Secure recovery')}</p><h1>{t('Choose a new password')}</h1><form onSubmit={submit}><label>{t('New password')}<input required minLength={12} autoComplete="new-password" type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label><label>{t('Confirm password')}<input required minLength={12} autoComplete="new-password" type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></label><small>{t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}</small>{message&&<div className="notice">{t(message)}</div>}<button className="primary full">{t('Update password')}</button></form></section>}
 
@@ -1957,7 +2032,7 @@ export function App() {
     },450);
     return()=>window.clearTimeout(timer);
   },[draft,dealTemplate,catalogSelection,createStep,reviewingDraft,session]);
-  useEffect(()=>{if(!session)return;const renew=()=>{if(!session.expiresAt||session.expiresAt-Date.now()<10*60*1000)refreshSession(session).then(setSession).catch(()=>{void signOut(session);setSession(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')})};renew();const timer=setInterval(renew,5*60*1000);return()=>clearInterval(timer)},[session?.user.id,session?.expiresAt]);
+  useEffect(()=>{if(!session)return;const renew=()=>{if(!session.expiresAt||session.expiresAt-Date.now()<10*60*1000)refreshSession(session).then(setSession).catch(error=>{if(isTransientAuthenticationError(error)){setAuthMessage(error.message);return}void signOut(session);setSession(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')})};renew();const timer=setInterval(renew,5*60*1000);return()=>clearInterval(timer)},[session?.user.id,session?.expiresAt]);
   useEffect(()=>{catalogSelectionRef.current=catalogSelection},[catalogSelection]);
   useEffect(()=>{if(!session){setNotifications([]);return}const load=()=>getMyNotifications(session).then(setNotifications).catch(()=>setNotifications([]));void load();const timer=window.setInterval(()=>void load(),30_000);return()=>window.clearInterval(timer)},[session?.accessToken]);
   useEffect(()=>{if(view!=='deal'||!active||!session)return;setNotifications(items=>items.map(item=>item.deal_id===active.id?{...item,is_read:true}:item));void markDealNotificationsRead(session,active.id).catch(()=>{})},[view,active?.id,session?.accessToken]);
@@ -2288,7 +2363,7 @@ export function App() {
       {view==='profile'&&session&&<AccountMfaSecurity session={session} onSessionUpdated={setSession}/>}
       {view==='profile'&&session&&<AccountSessionSecurity session={session} onSignedOut={finishSignedOutSession}/>}
       {view==='profile'&&session&&<TrustPassportControls session={session}/>}
-      {view==='profile'&&profile&&session&&<AccountSettings session={session} displayName={profile.display_name} onNameUpdated={name=>setProfile({...profile,display_name:name})}/>}
+      {view==='profile'&&profile&&session&&<AccountSettings session={session} displayName={profile.display_name} onNameUpdated={name=>setProfile({...profile,display_name:name})} onPasswordUpdated={()=>{setSession(null);setMfaLogin(null);setAuthMode('signin');setAuthMessage('Your password was updated. Sign in again with the new password.');setView('auth')}}/>}
       {view==='passport'&&<PublicTrustPassportPage profile={publicPassport} message={passportMessage} onBack={()=>goHomeSection()}/>}
       {view==='home'&&!user&&<GlobalHome onCreate={openCreate} onDemo={openDemo} onInfo={openInfo}/>}
       {view==='profile'&&<section className="profile-page"><button className="back" onClick={()=>setView('home')}>← {t('Dashboard')}</button><p className="eyebrow">{t('Trust profile')}</p><h1>{profile?.display_name||user?.displayName}</h1>{authMessage&&<div className="notice">{t(authMessage)}</div>}{profile&&<><div className="profile-stats"><article><span>{t('Average rating')}</span><strong>{profile.average_rating??'—'} <Star size={22}/></strong><small>{profile.rating_count} {t('received')}</small></article><article><span>{t('Completed deals')}</span><strong>{profile.completed_deals}</strong><small>{t('Successful handoffs')}</small></article><article><span>{t('Verification')}</span><strong className="verification-value"><BadgeCheck size={22}/>{t(profile.verification_status.replace('_',' '))}</strong><small>{t('Identity verification comes next')}</small></article></div><div className="profile-details"><h2>{t('Reputation history')}</h2><p>{t('Member since')} {new Date(profile.member_since).toLocaleDateString(getAppLanguage())}</p>{profile.recent_ratings.length?<div className="review-list">{profile.recent_ratings.map((rating,index)=><article key={`${rating.created_at}-${index}`}><div>{'★'.repeat(rating.stars)}{'☆'.repeat(5-rating.stars)}</div><p>{rating.comment||t('No written comment.')}</p><small>{new Date(rating.created_at).toLocaleDateString(getAppLanguage())}</small></article>)}</div>:<div className="empty-state"><Star/><b>{t('No ratings yet')}</b><span>{t('Ratings received after completed deals will appear here.')}</span></div>}</div></>}</section>}

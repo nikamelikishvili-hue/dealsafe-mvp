@@ -1,34 +1,21 @@
 import {
+  authProviderCode,
   authPayload,
+  isStrongPassword,
+  isAuthProviderRateLimited,
   logAuthFailure,
+  logAuthRejection,
   prepareResponse,
   publicSession,
   readJsonBody,
   requirePost,
   requireSameOrigin,
+  respondAuthRateLimited,
   setRefreshCookie,
   supabaseAuthRequest,
 } from '../../server/authShared.mjs';
 
-function providerCode(data) {
-  const value = typeof data?.code === 'string' ? data.code : '';
-  return /^[a-z0-9_]{1,64}$/.test(value) ? value : 'unknown';
-}
-
-function signupRejection(upstream, data) {
-  const code = providerCode(data);
-  console.warn('[dealivra-auth-rejection]', {
-    operation: 'signup',
-    status: upstream.status,
-    code,
-  });
-
-  if (code === 'over_email_send_rate_limit' || code === 'over_request_rate_limit') {
-    return {
-      status: 429,
-      error: 'Too many account requests were made. Wait at least one minute, then try again. If you have used this email before, sign in or reset your password.',
-    };
-  }
+function signupRejection(code) {
   if (code === 'email_address_invalid' || code === 'email_address_not_authorized') {
     return {
       status: 400,
@@ -59,14 +46,7 @@ export default async function handler(request, response) {
     response.status(400).json({ error: 'Enter a valid name and email.' });
     return;
   }
-  if (
-    password.length < 12
-    || password.length > 256
-    || !/[a-z]/.test(password)
-    || !/[A-Z]/.test(password)
-    || !/\d/.test(password)
-    || !/[!@#$%^&*()_+\-=\[\]{};'\\:"|<>?,.\/`~]/.test(password)
-  ) {
+  if (!isStrongPassword(password)) {
     response.status(400).json({
       error: 'Use 12+ characters with uppercase, lowercase, a number, and a symbol.',
     });
@@ -81,10 +61,20 @@ export default async function handler(request, response) {
         password,
         data: { display_name: displayName },
       }),
-    });
+    }, request);
     const data = await authPayload(upstream);
     if (!upstream.ok) {
-      const rejection = signupRejection(upstream, data);
+      const code = authProviderCode(data);
+      logAuthRejection('signup', upstream.status, code);
+      if (isAuthProviderRateLimited(upstream, data)) {
+        respondAuthRateLimited(
+          response,
+          upstream,
+          'Too many account requests were made. Wait at least one minute, then try again. If you have used this email before, sign in or reset your password.',
+        );
+        return;
+      }
+      const rejection = signupRejection(code);
       response.status(rejection.status).json({ error: rejection.error });
       return;
     }

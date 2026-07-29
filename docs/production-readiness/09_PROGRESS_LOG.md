@@ -2,6 +2,85 @@
 
 This log records completed delivery evidence. A backlog item is not marked complete from code alone when it also requires staging, provider, legal, accessibility, security, or operational evidence.
 
+## 2026-07-29 — SEC-007 staged sensitive-change enforcement
+
+### Completed in the repository
+
+- Added one exact `staged`/`enforced` control shared by Vercel Auth Functions
+  and Supabase Edge Functions.
+- Guarded MFA enrollment, enrollment verification, and verified-factor removal.
+  Login, fresh step-up, and cancellation of an unfinished factor remain
+  available.
+- Guarded Stripe Connect onboarding, ordinary seller payout release, and
+  seller-favoring dispute release before provider or financial-command
+  mutation. Buyer refunds remain available.
+- Added stable `423` cooldown and fail-closed `503` unavailable behavior.
+- Added regression tests and a controlled activation/rollback runbook.
+
+### Safety state
+
+- The runtime mode remains `staged`.
+- The recovery migration remains unapplied in Production.
+- No factor, session, payout, Stripe account, environment variable, domain,
+  public-access setting, or production database object was changed.
+
+## 2026-07-29 — SEC-007 staged security-notification worker
+
+### Completed in the repository
+
+- Added fixed recovery-event email templates that contain only a non-secret
+  case reference and, for completion, the cooldown deadline.
+- Added a private, bearer-authenticated Supabase Edge worker with exact staged
+  activation, verified Auth-email lookup, 10-job claims, 10-second provider
+  timeout, 16 KiB response cap, deterministic Resend idempotency, and bounded
+  delivery results.
+- Added regression tests for all five templates, payload rejection, worker
+  authentication, privacy, provider idempotency, and no-CORS behavior.
+- Documented SPF, DKIM, DMARC, Vault, Cron, bounce/complaint, retry alert, DPA,
+  and controlled-delivery activation gates.
+
+### Safety state
+
+- Notification mode remains `staged`.
+- No Resend account, API key, sender-domain record, Vault secret, Cron job,
+  Edge deployment, recipient email, or Production configuration was created or
+  changed.
+
+## 2026-07-29 — SEC-003B dual-control recovery and password-only matrix foundation
+
+### Completed in the repository
+
+- Added a fail-closed same-origin recovery API with bounded request validation,
+  recent TOTP-backed `aal2` checks, and exact privileged-role authorization.
+- Added a staged, unapplied database migration for dual-control privileged MFA
+  recovery. The request operator cannot approve the same case, service-only
+  completion requires sessions and verified factors to be revoked, and
+  successful recovery creates 72-hour payout, email, and MFA-change holds.
+- Added immutable material audit events and a private security-notification
+  outbox without storing passwords, tokens, TOTP secrets, one-time codes, email
+  addresses, or raw identity evidence.
+- Added rollback-only database contracts for recovery state, grants, RLS,
+  immutable audit dependencies, reviewer separation, revocation checks, and
+  cooldown creation.
+- Added a same-account live negative-test harness for password-only denial and
+  AAL2 controls across the Data API, protected Storage, and five protected Edge
+  Functions.
+- Documented the recovery operating boundary and the non-secret matrix evidence
+  format.
+- A read-only, identifier-free Production dependency check confirmed the
+  profiles table, immutable audit table/trigger, role RPC, and required
+  database roles are present. No recovery object was created or activated.
+
+### Safety state
+
+- `supabase/privileged_mfa_recovery_control.sql` is staged but unapplied.
+- `supabase/mfa_assurance_enforcement.sql` remains unapplied.
+- No session, factor, user, payout, domain, Vercel protection, or public-access
+  state was changed.
+- Production activation remains blocked on second-reviewer assignment, live
+  negative-matrix evidence, notification delivery, hold enforcement at every
+  sensitive mutation, and a supervised rollback rehearsal.
+
 ## 2026-07-28 — Privacy-safe CSP reporting and header hardening
 
 ### Implemented locally for review
@@ -1483,3 +1562,109 @@ Authentication.
 This UI batch does not apply the privileged enforcement migration, create or
 remove a real factor, expose a public domain, enable real payments, or weaken
 Vercel Authentication.
+
+## 2026-07-29 — SEC-007 staged notification delivery and queue health
+
+### Implemented locally for review
+
+- Added fixed, bounded security-notification templates for every privileged MFA
+  recovery transition without storing recipient addresses or authentication
+  secrets in the recovery outbox.
+- Added a private, bearer-authenticated Edge worker that remains disabled unless
+  `DEALIVRA_SECURITY_NOTIFICATION_MODE=enforced`.
+- Limited each claim to ten jobs, required confirmed Auth email ownership,
+  bounded provider reads and timeouts, and reused one deterministic Resend
+  idempotency key per outbox record.
+- Added a service-only aggregate health RPC for ready, retrying, and
+  dead-letter jobs plus a bounded oldest-pending age.
+- Added a fixed `dead_letter_present` operational signal without logging user,
+  recipient, case, payload, message, provider-response, or secret values.
+- Passed the complete local release gate with 90 automated tests, repository
+  secret scanning, a Production build, and the Preview navigation smoke test.
+
+### Activation boundary
+
+No Resend account, sender domain, DNS record, Supabase Vault secret, Cron job,
+Edge deployment, migration, environment switch, or real email delivery was
+created or activated. Sender verification, bounce/complaint handling, external
+alert routing, non-production delivery tests, and supervised rollback evidence
+remain mandatory before enforcement.
+
+## 2026-07-29 — SEC-006 account abuse boundary
+
+### Implemented locally for review
+
+- Moved password-reset initiation behind a same-origin Dealivra API instead of
+  allowing browser code to call the Auth provider directly.
+- Derived the reset redirect from the verified request origin and retained a
+  non-enumerating response for unknown or existing accounts.
+- Preserved provider throttling for signup, login, and password recovery as
+  HTTP 429 with a bounded `Retry-After` value.
+- Standardized rejected Auth telemetry to fixed operation, status, and provider
+  codes without email, password, IP, token, cookie, request-body, or raw
+  provider-message logging.
+- Documented generous route-and-method-specific Vercel Firewall thresholds and
+  the required log-only, Preview-enforcement, and Production-review sequence.
+
+### Activation boundary
+
+No firewall rule, block, challenge, CAPTCHA, provider, project setting, or
+Production limit was created or published. Real protected traffic observation,
+false-positive review, alert ownership, Preview burst tests, and a measured
+CAPTCHA decision remain required.
+
+## 2026-07-29 — SEC-006 staged Auth proxy client-IP boundary
+
+### Implemented locally for review
+
+- Added an explicit disabled/enforced switch for trusted client-IP forwarding
+  through the same-origin Vercel Auth proxy.
+- Kept the browser-safe publishable key and no forwarded IP as the default.
+- Required a separate server-only new-format Supabase secret API key before
+  enforced mode can send `Sb-Forwarded-For`.
+- Accepted only one valid address from Vercel's system
+  `x-vercel-forwarded-for` header and rejected missing, malformed, or ambiguous
+  values before contacting Supabase.
+- Preserved provider 429 responses and bounded retry guidance for session
+  refresh and MFA operations without deleting the current refresh cookie.
+- Added browser-side transient Auth errors with exact bounded retry guidance,
+  keeping the current session during provider throttling or temporary 5xx
+  failure while still clearing a confirmed invalid 401 session.
+- Added negative tests for disabled-mode isolation, secret/IP fail-closed
+  behavior, ambiguous chains, refresh throttling, and MFA throttling.
+
+### Activation boundary
+
+No Supabase secret API key was created or stored, no Auth rate-limit setting was
+changed, no Vercel environment variable was activated, and no Preview or
+Production deployment was changed. Dedicated Preview configuration,
+two-network rate-limit evidence, log/bundle secret and IP checks, alert
+ownership, and rollback proof remain required before enforcement.
+
+## 2026-07-29 — Password mutation server boundary
+
+### Implemented locally for review
+
+- Moved reset-link password completion from the browser's direct Supabase call
+  to a same-origin Dealivra endpoint.
+- Reused one server password-strength rule for signup, recovery completion, and
+  signed-in password change.
+- Added a current-password field and exact provider `current_password`
+  forwarding for signed-in changes.
+- Kept signed-in changes fail-closed in `staged` mode until the managed
+  provider verification setting is confirmed.
+- Cleared the refresh cookie and browser session after successful password
+  mutation, requiring a fresh sign-in.
+- Preserved bounded 429 guidance and excluded passwords, bearer tokens, raw
+  provider messages, and user identity from Auth rejection telemetry.
+- Added tests for recovery success, weak-input rejection, staged denial,
+  enforced current-password forwarding, throttling, cookie clearing, and
+  browser direct-call removal.
+
+### Activation boundary
+
+No Supabase password setting, Vercel environment value, account password,
+session, deployment, or Production configuration was changed. Protected
+Preview activation, correct/incorrect current-password tests, expired/reused
+recovery-link tests, notification ownership, and log/storage absence proof
+remain required.

@@ -49,6 +49,54 @@ function requireSupabaseConfiguration() {
   if (!isSupabaseConfigured) throw new Error(configurationUnavailableMessage);
 }
 
+export class AuthenticationApiError extends Error {
+  readonly status:number;
+  readonly retryAfterSeconds:number|null;
+  readonly sessionInvalid:boolean;
+
+  constructor(message:string,status:number,retryAfterSeconds:number|null){
+    super(message);
+    this.name='AuthenticationApiError';
+    this.status=status;
+    this.retryAfterSeconds=retryAfterSeconds;
+    this.sessionInvalid=status===401;
+  }
+}
+
+function boundedRetryAfter(response:Response,data:unknown){
+  const payload=data&&typeof data==='object'?data as {retryAfter?:unknown}:null;
+  const payloadValue=typeof payload?.retryAfter==='number'?payload.retryAfter:Number.NaN;
+  const header=response.headers.get('Retry-After');
+  const headerValue=header&&/^\d{1,10}$/.test(header)?Number(header):Number.NaN;
+  const value=Number.isInteger(payloadValue)?payloadValue:headerValue;
+  return Number.isInteger(value)?Math.min(Math.max(value,1),300):null;
+}
+
+function authenticationApiError(
+  response:Response,
+  data:unknown,
+  fallback:string,
+){
+  const payload=data&&typeof data==='object'?data as {error?:unknown}:null;
+  const providerMessage=typeof payload?.error==='string'&&payload.error.trim()
+    ?payload.error.trim()
+    :fallback;
+  const retryAfterSeconds=response.status===429?boundedRetryAfter(response,data):null;
+  const retryGuidance=retryAfterSeconds
+    ?` Try again in ${retryAfterSeconds} ${retryAfterSeconds===1?'second':'seconds'}.`
+    :'';
+  return new AuthenticationApiError(
+    `${providerMessage}${retryGuidance}`,
+    response.status,
+    retryAfterSeconds,
+  );
+}
+
+export function isTransientAuthenticationError(error:unknown){
+  return error instanceof AuthenticationApiError
+    && (error.status===429||error.status>=500);
+}
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -272,8 +320,8 @@ async function revokeServerSession(accessToken?:string,scope:SignOutScope='local
     keepalive:true,
   });
   if(!response.ok){
-    const data=await response.json().catch(()=>null) as {error?:string}|null;
-    throw new Error(data?.error||'Could not update your signed-in devices.');
+    const data=await response.json().catch(()=>null);
+    throw authenticationApiError(response,data,'Could not update your signed-in devices.');
   }
 }
 
@@ -388,7 +436,7 @@ export async function signUp(email: string, password: string, displayName: strin
     needsEmailConfirmation?:boolean;
     error?:string;
   };
-  if (!response.ok) throw new Error(result.error || 'Sign up failed');
+  if (!response.ok) throw authenticationApiError(response,result,'Sign up failed');
   if (result.session) {
     const user=toUser(result.session);
     if(!user)throw new Error('Account session could not be verified.');
@@ -410,7 +458,7 @@ export async function signIn(email: string, password: string) {
     pending_access_token?:string;
     factors?:MfaFactor[];
   };
-  if (!response.ok) throw new Error(data.error || 'Invalid email or password.');
+  if (!response.ok) throw authenticationApiError(response,data,'Invalid email or password.');
   if(data.mfa_required){
     if(
       typeof data.pending_access_token!=='string'
@@ -440,7 +488,7 @@ async function mfaRequest<T>(accessToken:string,body:Record<string,unknown>){
     body:JSON.stringify(body),
   });
   const data=await response.json().catch(()=>null) as (T&{error?:string})|null;
-  if(!response.ok)throw new Error(data?.error||'Authenticator security could not be updated.');
+  if(!response.ok)throw authenticationApiError(response,data,'Authenticator security could not be updated.');
   if(!data)throw new Error('Authenticator security returned an invalid response.');
   return data;
 }
@@ -457,6 +505,7 @@ export async function verifyMfaLogin(challenge:MfaLoginChallenge,factorId:string
   if(Date.now()>=challenge.expiresAt)throw new Error('This sign-in attempt expired. Enter your password again.');
   const data=await mfaRequest<AuthResponse>(challenge.pendingAccessToken,{
     action:'challenge_and_verify',
+    purpose:'login',
     factorId,
     code:code.trim(),
   });
@@ -476,10 +525,16 @@ export async function startMfaEnrollment(session:StoredSession,friendlyName:stri
   });
 }
 
-async function verifyMfaFactor(session:StoredSession,factorId:string,code:string){
+async function verifyMfaFactor(
+  session:StoredSession,
+  factorId:string,
+  code:string,
+  purpose:'enrollment'|'step_up',
+){
   const current=await sessionForRemoteRevocation(session);
   const data=await mfaRequest<AuthResponse>(current.accessToken,{
     action:'challenge_and_verify',
+    purpose,
     factorId,
     code:code.trim(),
   });
@@ -487,11 +542,11 @@ async function verifyMfaFactor(session:StoredSession,factorId:string,code:string
 }
 
 export async function verifyMfaEnrollment(session:StoredSession,factorId:string,code:string){
-  return verifyMfaFactor(session,factorId,code);
+  return verifyMfaFactor(session,factorId,code,'enrollment');
 }
 
 export async function verifyMfaStepUp(session:StoredSession,factorId:string,code:string){
-  return verifyMfaFactor(session,factorId,code);
+  return verifyMfaFactor(session,factorId,code,'step_up');
 }
 
 export async function unenrollMfaFactor(session:StoredSession,factorId:string){
@@ -522,7 +577,8 @@ export async function refreshSession(session:StoredSession){
       body:'{}',
     });
     const data=await response.json() as AuthResponse&{error?:string};
-    if(!response.ok||!data.access_token)throw new Error(data.error||data.error_description||data.msg||'Your session expired. Please sign in again.');
+    if(!response.ok)throw authenticationApiError(response,data,'Your session expired. Please sign in again.');
+    if(!data.access_token)throw new AuthenticationApiError('Your session expired. Please sign in again.',401,null);
     return storeSession(data,toUser(data)||current.user,current);
   })();
   try{return await refreshPromise}finally{refreshPromise=null}
@@ -543,6 +599,7 @@ async function authenticatedFetch(session:StoredSession,input:RequestInfo|URL,in
   }
   const renew=async()=>{
     try{return await refreshSession(current!)}catch(error){
+      if(isTransientAuthenticationError(error))throw error;
       expireSession();
       throw error instanceof Error?error:new Error('Your session expired. Please sign in again.');
     }
@@ -568,8 +625,24 @@ async function authenticatedFetch(session:StoredSession,input:RequestInfo|URL,in
   return response;
 }
 
-export async function requestPasswordReset(email:string,redirectTo:string){const response=await fetch(`${supabaseUrl}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`,{method:'POST',headers:headers(),body:JSON.stringify({email:email.trim().toLowerCase()})});if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not send reset email')}}
-export async function updateRecoveredPassword(accessToken:string,password:string){validatePassword(password);const response=await fetch(`${supabaseUrl}/auth/v1/user`,{method:'PUT',headers:headers(accessToken),body:JSON.stringify({password})});if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not update password')}}
+export async function requestPasswordReset(email:string){const response=await fetch('/api/auth/recover',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({email:email.trim().toLowerCase()})});const data=await response.json().catch(()=>null);if(!response.ok)throw authenticationApiError(response,data,'Could not send reset email')}
+export async function updateRecoveredPassword(accessToken:string,password:string){
+  validatePassword(password);
+  const response=await fetch('/api/auth/password',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      Authorization:`Bearer ${accessToken}`,
+    },
+    credentials:'same-origin',
+    body:JSON.stringify({action:'recovery',newPassword:password}),
+  });
+  if(!response.ok){
+    const data=await response.json().catch(()=>null);
+    throw authenticationApiError(response,data,'Could not update password.');
+  }
+  clearStoredSession();
+}
 
 export async function updateAccountName(session:StoredSession,displayName:string){
   const name=displayName.trim();
@@ -585,10 +658,27 @@ export async function updateAccountName(session:StoredSession,displayName:string
   return updated;
 }
 
-export async function updateAccountPassword(session:StoredSession,password:string){
+export async function updateAccountPassword(session:StoredSession,currentPassword:string,password:string){
   validatePassword(password);
-  const response=await authenticatedFetch(session,`${supabaseUrl}/auth/v1/user`,{method:'PUT',headers:headers(session.accessToken),body:JSON.stringify({password})});
-  if(!response.ok){const data=await response.json();throw new Error(data?.msg||data?.error_description||'Could not update password')}
+  if(!currentPassword||currentPassword.length>256)throw new Error('Enter your current password.');
+  const response=await fetch('/api/auth/password',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      Authorization:`Bearer ${session.accessToken}`,
+    },
+    credentials:'same-origin',
+    body:JSON.stringify({
+      action:'change',
+      currentPassword,
+      newPassword:password,
+    }),
+  });
+  if(!response.ok){
+    const data=await response.json().catch(()=>null);
+    throw authenticationApiError(response,data,'Could not update password.');
+  }
+  clearStoredSession();
 }
 
 function validatePassword(password:string){

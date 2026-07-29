@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 const refreshCookieName = '__Host-dealivra-refresh';
 // The __Host- prefix is accepted by browsers only when Path is exactly "/"
 // and no Domain attribute is present.
@@ -10,21 +12,34 @@ function header(request, name) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+export function requestOrigin(request) {
+  const value = header(request, 'origin');
+  if (typeof value !== 'string' || value.length > 2048) return null;
+  try {
+    const parsed = new URL(value);
+    const isLocalDevelopment = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    if (
+      (parsed.protocol !== 'https:' && !(isLocalDevelopment && parsed.protocol === 'http:'))
+      || parsed.username
+      || parsed.password
+      || parsed.pathname !== '/'
+      || parsed.search
+      || parsed.hash
+    ) {
+      return null;
+    }
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
 function configuredSupabase() {
   const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '')
     .trim()
     .replace(/\/+$/, '');
   const key = (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '')
-    .split(/\r?\n/)
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .reduce((normalized, line, index, lines) => {
-      if (index > 0) return normalized;
-      const completePublishableKey = /^sb_publishable_[A-Za-z0-9_-]{20,}$/.test(line);
-      const completeLegacyKey = /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(line)
-        && line.length > 100;
-      return completePublishableKey || completeLegacyKey ? line : lines.join('');
-    }, '');
+    .replace(/\s+/g, '');
   if (!url || !key) throw new Error('Authentication service is not configured.');
   if (/^sb_secret_/i.test(key)) {
     throw new Error('Authentication service publishable key is invalid.');
@@ -50,6 +65,46 @@ function configuredSupabase() {
   }
 
   return { url, key };
+}
+
+function configuredAuthProvider(request) {
+  const configured = configuredSupabase();
+  const mode = (process.env.DEALIVRA_AUTH_IP_FORWARDING_MODE || 'disabled')
+    .trim()
+    .toLowerCase();
+  if (mode === 'disabled') {
+    return { ...configured, forwardedIp: null };
+  }
+  if (mode !== 'enforced') {
+    throw new Error('Authentication IP forwarding mode is invalid.');
+  }
+
+  const secretKey = (process.env.SUPABASE_AUTH_SECRET_KEY || '').trim();
+  if (
+    !secretKey.startsWith('sb_secret_')
+    || secretKey.length < 32
+    || secretKey.length > 512
+    || /\s/.test(secretKey)
+  ) {
+    throw new Error('Authentication IP forwarding is not configured.');
+  }
+
+  const forwardedIp = header(request, 'x-vercel-forwarded-for');
+  if (
+    typeof forwardedIp !== 'string'
+    || forwardedIp.length > 64
+    || forwardedIp !== forwardedIp.trim()
+    || forwardedIp.includes(',')
+    || isIP(forwardedIp) === 0
+  ) {
+    throw new Error('Authentication client address could not be verified.');
+  }
+
+  return {
+    url: configured.url,
+    key: secretKey,
+    forwardedIp,
+  };
 }
 
 function providerFailureCode(error) {
@@ -155,6 +210,16 @@ export function readBearerToken(request) {
   return token && token.length <= 8192 ? token : null;
 }
 
+export function isStrongPassword(password) {
+  return typeof password === 'string'
+    && password.length >= 12
+    && password.length <= 256
+    && /[a-z]/.test(password)
+    && /[A-Z]/.test(password)
+    && /\d/.test(password)
+    && /[!@#$%^&*()_+\-=\[\]{};'\\:"|<>?,.\/`~]/.test(password);
+}
+
 export function decodeAccessTokenClaims(accessToken) {
   try {
     const encoded = accessToken.split('.')[1];
@@ -210,15 +275,16 @@ export function clearRefreshCookie(response) {
   );
 }
 
-export async function supabaseAuthRequest(path, init) {
-  const { url, key } = configuredSupabase();
+export async function supabaseAuthRequest(path, init, request) {
+  const { url, key, forwardedIp } = configuredAuthProvider(request);
   try {
     return await fetch(`${url}/auth/v1/${path}`, {
       ...init,
       headers: {
+        ...(init?.headers || {}),
         apikey: key,
         'Content-Type': 'application/json',
-        ...(init?.headers || {}),
+        ...(forwardedIp ? { 'Sb-Forwarded-For': forwardedIp } : {}),
       },
     });
   } catch (error) {
@@ -259,9 +325,86 @@ export async function currentUserAppRole(accessToken) {
   }
 }
 
+export async function supabaseRestRpcRequest(accessToken, functionName, parameters = {}) {
+  if (
+    typeof accessToken !== 'string'
+    || !accessToken
+    || typeof functionName !== 'string'
+    || !/^[a-z][a-z0-9_]{2,95}$/.test(functionName)
+    || !parameters
+    || typeof parameters !== 'object'
+    || Array.isArray(parameters)
+  ) {
+    throw new Error('Database function request is invalid.');
+  }
+
+  const { url, key } = configuredSupabase();
+  try {
+    return await fetch(`${url}/rest/v1/rpc/${functionName}`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(parameters),
+    });
+  } catch (error) {
+    const providerError = new Error('Database function provider request failed.', { cause: error });
+    providerError.code = providerFailureCode(error);
+    throw providerError;
+  }
+}
+
 export async function authPayload(upstream) {
   const data = await upstream.json().catch(() => null);
   return data && typeof data === 'object' ? data : {};
+}
+
+export function authProviderCode(data) {
+  const value = typeof data?.code === 'string' ? data.code : '';
+  return /^[a-z0-9_]{1,64}$/.test(value) ? value : 'unknown';
+}
+
+export function isAuthProviderRateLimited(upstream, data) {
+  const code = authProviderCode(data);
+  return upstream?.status === 429
+    || code === 'over_email_send_rate_limit'
+    || code === 'over_request_rate_limit';
+}
+
+export function respondAuthRateLimited(
+  response,
+  upstream,
+  message = 'Too many authentication requests were made. Wait at least one minute, then try again.',
+) {
+  const retryHeader = upstream?.headers?.get?.('retry-after');
+  const parsedRetryAfter = typeof retryHeader === 'string' && /^\d{1,10}$/.test(retryHeader.trim())
+    ? Number(retryHeader)
+    : Number.NaN;
+  const retryAfter = Number.isInteger(parsedRetryAfter)
+    ? Math.min(Math.max(parsedRetryAfter, 1), 300)
+    : 60;
+  response.setHeader('Retry-After', String(retryAfter));
+  response.status(429).json({ error: message, retryAfter });
+}
+
+export function logAuthRejection(operation, status, code) {
+  const safeOperation = typeof operation === 'string' && /^[a-z][a-z0-9:_-]{1,63}$/.test(operation)
+    ? operation
+    : 'unknown';
+  const safeStatus = Number.isInteger(status) && status >= 400 && status <= 599
+    ? status
+    : 500;
+  const safeCode = typeof code === 'string' && /^[a-z0-9_]{1,64}$/.test(code)
+    ? code
+    : 'unknown';
+  console.warn('[dealivra-auth-rejection]', {
+    schema: 'dealivra.auth.rejection.v1',
+    operation: safeOperation,
+    status: safeStatus,
+    code: safeCode,
+  });
 }
 
 export function publicSession(data) {

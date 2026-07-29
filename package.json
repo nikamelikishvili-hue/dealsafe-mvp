@@ -9,6 +9,7 @@
     "test": "node --test --test-isolation=none tests/foundation.test.mjs",
     "catalog:verify": "node scripts/validate-catalog-release.mjs",
     "security:secrets": "node scripts/scan-repository-secrets.mjs",
+    "security:mfa-matrix": "node scripts/run-mfa-password-only-matrix.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "smoke:preview": "node scripts/smoke-preview.mjs",
