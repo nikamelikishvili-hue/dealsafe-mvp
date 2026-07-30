@@ -4210,6 +4210,17 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   assert.match(fulfillment, /if \(!current\) return/);
   assert.match(fulfillment, /Address line 2 \(optional\)/);
   assert.match(fulfillment, /Apartment, suite, unit, building, or floor/);
+  assert.match(
+    fulfillment,
+    /form\.addressLine2\.trim\(\)[\s\S]*?\.join\('\\n'\)/,
+  );
+  assert.match(fulfillment, /meeting-field meeting-field-line-two/);
+  const addressAutocomplete = readText('src/AddressAutocomplete.tsx');
+  assert.match(addressAutocomplete, /gmp-error/);
+  assert.match(
+    addressAutocomplete,
+    /Address suggestions are unavailable\. Enter the address manually\./,
+  );
   assert.match(fulfillment, /\^\\d\{5\}\(\?:-\\d\{4\}\)\?\$/);
   assert.match(fulfillment, /getElementById\('deal-evidence-vault'\)/);
   assert.match(

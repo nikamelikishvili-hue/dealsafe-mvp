@@ -42,8 +42,9 @@
 }
 
 .view-deal .meeting-field{display:flex;min-width:0;flex-direction:column;gap:7px;margin:0}
-.view-deal .meeting-field-place{grid-column:span 6}
-.view-deal .meeting-field-street{grid-column:span 6}
+.view-deal .meeting-field-place{grid-column:span 4}
+.view-deal .meeting-field-street{grid-column:span 5}
+.view-deal .meeting-field-line-two{grid-column:span 3}
 .view-deal .meeting-field-city{grid-column:span 5}
 .view-deal .meeting-field-state{grid-column:span 4}
 .view-deal .meeting-field-zip{grid-column:span 3}
@@ -97,6 +98,7 @@
 
 .view-deal .meeting-summary>div>svg{color:#3176d2}
 .view-deal .meeting-summary small{color:#657991;overflow-wrap:anywhere}
+.view-deal .meeting-summary .meeting-address{white-space:pre-line}
 .view-deal .meeting-status.confirmed{background:#e8f2ff;color:#2367bf}
 
 .view-deal .meeting-safety{
@@ -240,7 +242,8 @@
 
 @media(max-width:880px){
   .view-deal .meeting-field-place,
-  .view-deal .meeting-field-street{grid-column:span 12}
+  .view-deal .meeting-field-street{grid-column:span 6}
+  .view-deal .meeting-field-line-two{grid-column:span 6}
   .view-deal .meeting-field-city{grid-column:span 5}
   .view-deal .meeting-field-state{grid-column:span 4}
   .view-deal .meeting-field-zip{grid-column:span 3}
@@ -255,6 +258,7 @@
   .view-deal .meeting-panel .meeting-form{grid-template-columns:1fr;gap:13px}
   .view-deal .meeting-field-place,
   .view-deal .meeting-field-street,
+  .view-deal .meeting-field-line-two,
   .view-deal .meeting-field-city,
   .view-deal .meeting-field-state,
   .view-deal .meeting-field-zip,
