@@ -19,8 +19,9 @@
     "smoke:preview": "node scripts/smoke-preview.mjs",
     "smoke:protected": "node scripts/run-protected-synthetic.mjs",
     "incident:drill": "node scripts/run-incident-control-drill.mjs",
+    "release:sbom": "node scripts/create-dependency-sbom.mjs",
     "release:evidence": "node scripts/create-release-evidence.mjs",
-    "verify": "npm run catalog:verify && npm run dependency:policy && npm run security:browser-storage && npm run security:transport && npm run typecheck && npm test && npm run incident:drill && npm run security:secrets && npm run build && npm run smoke:preview"
+    "verify": "npm run catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run typecheck && npm test && npm run incident:drill && npm run security:secrets && npm run build && npm run smoke:preview"
   },
   "dependencies": {
     "lucide-react": "1.25.0",

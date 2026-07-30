@@ -23,6 +23,10 @@ import {
   buildReleaseEvidence,
   requiredReleaseChecks,
 } from '../server/releaseEvidencePolicy.mjs';
+import {
+  buildDependencySbom,
+  serializeDependencySbom,
+} from '../server/dependencySbomPolicy.mjs';
 
 const root = new URL('../', import.meta.url);
 const rootPath = fileURLToPath(root);
@@ -10099,7 +10103,9 @@ test('application services are split into cacheable bounded chunks', () => {
 
 test('release evidence binds a clean exact commit to bounded file hashes', () => {
   const requiredPaths = [
+    '.github/CODEOWNERS',
     '.github/workflows/ci.yml',
+    '.github/workflows/codeql.yml',
     '.nvmrc',
     'catalog/active-release.json',
     'dist/assets/app.css',
@@ -10107,12 +10113,15 @@ test('release evidence binds a clean exact commit to bounded file hashes', () =>
     'dist/index.html',
     'package-lock.json',
     'package.json',
+    'release-evidence/dependency-sbom.cdx.json',
+    'scripts/create-dependency-sbom.mjs',
     'scripts/create-release-evidence.mjs',
     'scripts/scan-repository-secrets.mjs',
     'scripts/verify-browser-storage-policy.mjs',
     'scripts/verify-build-budgets.mjs',
     'scripts/verify-dependency-policy.mjs',
     'scripts/verify-outbound-transport-policy.mjs',
+    'server/dependencySbomPolicy.mjs',
     'server/releaseEvidencePolicy.mjs',
     'src/catalog.v1.json',
     'vercel.json',
@@ -10196,7 +10205,14 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
     packageJson.scripts['release:evidence'],
     'node scripts/create-release-evidence.mjs',
   );
-  assert.match(workflow, /npm audit --audit-level=high[\s\S]+npm run release:evidence/);
+  assert.equal(
+    packageJson.scripts['release:sbom'],
+    'node scripts/create-dependency-sbom.mjs',
+  );
+  assert.match(
+    workflow,
+    /npm audit --audit-level=high[\s\S]+npm run release:sbom[\s\S]+npm run release:evidence/,
+  );
   assert.match(workflow, /DEALIVRA_RELEASE_COMMIT: \$\{\{ github\.sha \}\}/);
   assert.match(workflow, /actions\/upload-artifact@v4/);
   assert.match(workflow, /if-no-files-found: error/);
@@ -10208,6 +10224,10 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
   assert.match(policy, /production_authorization: 'not_granted'/);
   assert.match(policy, /'browser_storage_policy_passed'/);
   assert.match(policy, /'outbound_transport_policy_passed'/);
+  assert.match(policy, /'dependency_sbom_created'/);
+  assert.match(script, /'release-evidence\/dependency-sbom\.cdx\.json'/);
+  assert.match(script, /'scripts\/create-dependency-sbom\.mjs'/);
+  assert.match(script, /'server\/dependencySbomPolicy\.mjs'/);
   assert.match(script, /'scripts\/verify-browser-storage-policy\.mjs'/);
   assert.match(script, /'scripts\/verify-outbound-transport-policy\.mjs'/);
   assert.match(ignore, /^release-evidence\/$/m);
@@ -10228,7 +10248,7 @@ test('locked dependencies follow the reviewed offline supply-chain policy', () =
   );
   assert.match(
     packageJson.scripts.verify,
-    /catalog:verify && npm run dependency:policy && npm run security:browser-storage && npm run security:transport && npm run typecheck/,
+    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run typecheck/,
   );
   assert.match(policy, /lockfile\.lockfileVersion !== 3/);
   assert.match(policy, /url\.protocol === 'https:'/);
@@ -10243,6 +10263,103 @@ test('locked dependencies follow the reviewed offline supply-chain policy', () =
   assert.doesNotMatch(
     policy,
     /fetch\(|https?:\/\/(?!registry\.npmjs\.org)|node:child_process|writeFile|shell:\s*true/i,
+  );
+});
+
+test('CycloneDX dependency inventory is deterministic, bounded, and private', () => {
+  const packageJson = readJson('package.json');
+  const lockfile = readJson('package-lock.json');
+  const sbom = buildDependencySbom(packageJson, lockfile);
+  const reversedLockfile = {
+    ...lockfile,
+    packages: Object.fromEntries(Object.entries(lockfile.packages).reverse()),
+  };
+  const reversedSbom = buildDependencySbom(packageJson, reversedLockfile);
+  const serialized = serializeDependencySbom(sbom);
+
+  assert.ok(sbom);
+  assert.ok(serialized);
+  assert.equal(sbom.bomFormat, 'CycloneDX');
+  assert.equal(sbom.specVersion, '1.5');
+  assert.match(
+    sbom.serialNumber,
+    /^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
+  assert.equal(sbom.metadata.component.name, packageJson.name);
+  assert.equal(Object.hasOwn(sbom.metadata, 'timestamp'), false);
+  assert.equal(
+    sbom.components.length,
+    Object.keys(lockfile.packages).length - 1,
+  );
+  assert.equal(sbom.dependencies.length, sbom.components.length + 1);
+  assert.equal(serialized, serializeDependencySbom(reversedSbom));
+  assert.equal(
+    createHash('sha256').update(serialized).digest('hex'),
+    createHash('sha256')
+      .update(serializeDependencySbom(buildDependencySbom(packageJson, lockfile)))
+      .digest('hex'),
+  );
+  assert.ok(sbom.components.every(component => (
+    component.hashes[0].alg === 'SHA-512'
+    && /^[0-9a-f]{128}$/.test(component.hashes[0].content)
+    && component.externalReferences[0].url.startsWith('https://registry.npmjs.org/')
+  )));
+  assert.doesNotMatch(
+    serialized,
+    /customer@example|bearer\s|sk_(?:live|test)|token_value|[A-Z]:\\|absolute_path|environment_variable/i,
+  );
+
+  const tamperedIntegrity = structuredClone(lockfile);
+  const firstPackagePath = Object.keys(tamperedIntegrity.packages)
+    .find(path => path !== '');
+  tamperedIntegrity.packages[firstPackagePath].integrity = 'sha512-invalid';
+  assert.equal(buildDependencySbom(packageJson, tamperedIntegrity), null);
+
+  const duplicateComponent = structuredClone(lockfile);
+  duplicateComponent.packages['node_modules/react/node_modules/lucide-react'] = {
+    ...duplicateComponent.packages['node_modules/lucide-react'],
+  };
+  assert.equal(buildDependencySbom(packageJson, duplicateComponent), null);
+  assert.equal(serializeDependencySbom({ ...sbom, extra: true }), null);
+});
+
+test('CodeQL findings and dependency controls have scoped ownership and SLAs', () => {
+  const workflow = readText('.github/workflows/codeql.yml');
+  const owners = readText('.github/CODEOWNERS');
+  const governance = readText(
+    'docs/production-readiness/72_STATIC_ANALYSIS_AND_SBOM_GOVERNANCE.md',
+  );
+
+  assert.match(workflow, /pull_request:[\s\S]+branches:[\s\S]+- main/);
+  assert.match(workflow, /schedule:[\s\S]+cron:/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /contents: read/);
+  assert.match(workflow, /packages: read/);
+  assert.match(workflow, /security-events: write/);
+  assert.match(workflow, /github\/codeql-action\/init@v4/);
+  assert.match(workflow, /languages: javascript-typescript/);
+  assert.match(workflow, /build-mode: none/);
+  assert.match(workflow, /queries: security-extended/);
+  assert.match(workflow, /github\/codeql-action\/analyze@v4/);
+  assert.doesNotMatch(workflow, /pull_request_target|secrets\.|permissions:\s*write-all/);
+
+  for (const path of [
+    '/.github/workflows/codeql.yml',
+    '/package-lock.json',
+    '/scripts/create-dependency-sbom.mjs',
+    '/server/dependencySbomPolicy.mjs',
+  ]) {
+    assert.match(owners, new RegExp(
+      `${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} @nikamelikishvili-hue`,
+    ));
+  }
+  assert.match(governance, /Critical SAST\/dependency finding[\s\S]+3 calendar days/);
+  assert.match(governance, /High SAST\/dependency finding[\s\S]+7 calendar days/);
+  assert.match(governance, /Before a paid beta, a second independent security reviewer/);
+  assert.match(governance, /expiry no later than 30 days/);
+  assert.match(
+    governance,
+    /does not falsely claim that a\s+parallel CodeQL run passed/,
   );
 });
 

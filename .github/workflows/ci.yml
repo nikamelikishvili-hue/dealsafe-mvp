@@ -37,6 +37,9 @@ jobs:
       - name: Report high-severity dependency vulnerabilities
         run: npm audit --audit-level=high
 
+      - name: Recreate the deterministic CycloneDX dependency inventory
+        run: npm run release:sbom
+
       - name: Create deterministic release evidence
         run: npm run release:evidence
         env:

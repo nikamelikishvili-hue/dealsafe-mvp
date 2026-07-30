@@ -3764,3 +3764,29 @@ changed.
 No diagnostic was sent and no endpoint, environment, provider, deployment,
 migration, Supabase, Vercel, Preview, Production, public-access, customer,
 payment, payout, refund, dispute, or real-money state changed.
+
+## 2026-07-30 - FND-004 static analysis and deterministic SBOM governance
+
+### Implemented locally for review
+
+- Added CodeQL v4 JavaScript/TypeScript analysis for pull requests, `main`,
+  weekly scheduled review, and authorized manual runs using the
+  `security-extended` query suite and least-privilege workflow permissions.
+- Added a deterministic CycloneDX 1.5 SBOM generated from the exact npm
+  lockfile with stable identity, component/dependency ordering, SHA-512
+  integrity, reviewed licenses, provenance URLs, and a SHA-256 sidecar.
+- Bound the exact SBOM, generator, policy, CodeQL workflow, dependency
+  manifests, and scoped `CODEOWNERS` assignments into release evidence.
+- Added finding severity, triage/remediation SLAs, exception expiry,
+  independent approval, release blocking, failure, and rollback rules in
+  [72_STATIC_ANALYSIS_AND_SBOM_GOVERNANCE.md](72_STATIC_ANALYSIS_AND_SBOM_GOVERNANCE.md).
+- Added regression coverage for deterministic generation, tamper rejection,
+  workflow permissions/query scope, ownership, CI order, and release-evidence
+  binding.
+
+### Activation boundary
+
+No branch-protection rule or public access changed, no workflow was activated
+on GitHub, and no release was promoted. No endpoint, environment, deployment,
+migration, Supabase, Vercel, Preview, Production, customer data, payment,
+payout, refund, dispute, or real-money state changed.
