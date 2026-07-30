@@ -18,6 +18,7 @@ if (!existsSync(builtIndex)) {
 
 const server = await preview({
   root: workspaceRoot,
+  configLoader: 'native',
   logLevel: 'silent',
   preview: {
     host,
@@ -79,6 +80,16 @@ try {
   const serviceWorkerResponse = await fetch(`${origin}/sw.js`);
   if (!serviceWorkerResponse.ok) {
     throw new Error(`Service worker returned HTTP ${serviceWorkerResponse.status}.`);
+  }
+  const serviceWorker = await serviceWorkerResponse.text();
+  if (
+    !serviceWorker.includes("IMMUTABLE_ASSET_PATH")
+    || !serviceWorker.includes("request.method !== 'GET'")
+    || !serviceWorker.includes("url.origin === self.location.origin")
+    || /cache\.put\(\s*['"`]\/['"`]/.test(serviceWorker)
+    || /cache\.addAll/.test(serviceWorker)
+  ) {
+    throw new Error('Service worker does not preserve the reviewed private-cache boundary.');
   }
 
   console.log('Production preview smoke test passed.');

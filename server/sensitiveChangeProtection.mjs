@@ -1,4 +1,7 @@
-import { supabaseRestRpcRequest } from './authShared.mjs';
+import {
+  authProviderPayload,
+  supabaseRestRpcRequest,
+} from './authShared.mjs';
 
 const supportedModes = new Set(['staged', 'enforced']);
 const supportedScopes = new Set(['payout', 'email', 'mfa']);
@@ -60,7 +63,16 @@ export async function assertSensitiveChangeAllowed(
 
   if (upstream.ok) return { enforced: true };
 
-  const data = await upstream.json().catch(() => null);
+  let data;
+  try {
+    data = await authProviderPayload(upstream);
+  } catch {
+    throw new SensitiveChangeProtectionError(
+      'recovery_protection_unavailable',
+      'Account recovery protection is temporarily unavailable.',
+      503,
+    );
+  }
   const providerCode = [
     data?.code,
     data?.message,

@@ -1,4 +1,4 @@
-import { adminClient, errorResponse, handleBrowserRequest, json, requireUser, siteUrl, stripeRequest } from "../_shared/common.ts";
+import { adminClient, errorResponse, handleBrowserRequest, json, readPaymentJson, requireSandboxPaymentCapability, requireUser, siteUrl, stripeRequest } from "../_shared/common.ts";
 import { linkFinancialCommandObservation } from "../_shared/payment-ledger.ts";
 import {
   paymentError,
@@ -90,11 +90,15 @@ Deno.serve((request) => {
   let providerRequestStarted = false;
   try {
     const user = await requireUser(request);
-    const { dealId } = await request.json() as { dealId?: string };
+    const { dealId } = await readPaymentJson<{ dealId?: string }>(
+      request,
+      ["dealId"],
+    );
     if (!dealId || !uuidPattern.test(dealId)) {
       throw paymentError("deal_required", "Select a valid deal before starting checkout.", 400);
     }
     dealIdForLog = dealId;
+    requireSandboxPaymentCapability("checkout");
 
     const legacyFeeBps = integerSetting("DEALSAFE_PLATFORM_FEE_BPS", 0, 0, 2000);
     const feeBps = integerSetting("DEALIVRA_PLATFORM_FEE_BPS", legacyFeeBps, 0, 2000);

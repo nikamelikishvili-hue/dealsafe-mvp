@@ -40,6 +40,18 @@ function invariant(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+export function catalogDatasetDigest(source) {
+  const datasetText = Buffer.isBuffer(source)
+    ? source.toString('utf8')
+    : String(source);
+  const normalizedText = datasetText.replace(/\r\n/g, '\n');
+  invariant(
+    !normalizedText.includes('\r'),
+    'Catalog dataset contains an unsupported carriage-return line ending.',
+  );
+  return createHash('sha256').update(normalizedText, 'utf8').digest('hex');
+}
+
 function resolveInside(root, path, label) {
   invariant(typeof path === 'string' && path.length > 0, `${label} path is required.`);
   invariant(!isAbsolute(path), `${label} path must be repository-relative.`);
@@ -117,7 +129,7 @@ export function validateCatalogRelease(root = defaultRoot) {
   const datasetPath = resolveInside(root, manifest.dataset?.path, 'Dataset');
   invariant(manifest.dataset.path === 'src/catalog.v1.json', 'The active dataset path is unexpected.');
   const datasetBytes = readFileSync(datasetPath);
-  const digest = createHash('sha256').update(datasetBytes).digest('hex');
+  const digest = catalogDatasetDigest(datasetBytes);
   invariant(digest === manifest.dataset.sha256, 'Catalog checksum does not match the release manifest.');
 
   const catalog = JSON.parse(datasetBytes.toString('utf8'));

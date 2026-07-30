@@ -37,7 +37,7 @@ inventory. It fails if:
 - the definition no longer contains a reviewed `auth.uid()` or administrator
   boundary.
 
-The eight anonymous public-projection exceptions remain separately locked by
+The nine anonymous public-projection exceptions remain separately locked by
 `security_definer_advisor_hardening_rollback.sql`.
 
 ## Dynamic production proof

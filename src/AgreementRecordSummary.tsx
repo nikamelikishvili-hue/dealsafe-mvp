@@ -1,0 +1,327 @@
+import { useEffect, useState } from 'react';
+import {
+  BadgeCheck,
+  Clock3,
+  Copy,
+  Eye,
+  FileDown,
+  FileSignature,
+  Fingerprint,
+  LockKeyhole,
+  Share2,
+  ShieldCheck,
+} from 'lucide-react';
+import { formatMoney } from './currency';
+import type { Deal } from './domain';
+import { getAppLanguage, t } from './i18n';
+import {
+  getPublicAgreementDocument,
+  getPublicAgreementHistory,
+  isSupabaseConfigured,
+  type AgreementDocumentSnapshot,
+  type AgreementHistoryVersion,
+} from './services/supabaseRest';
+
+const formatDateTime = (value: string) =>
+  new Date(value).toLocaleString(getAppLanguage());
+
+export function useStoredAgreementDocument(deal: Deal) {
+  const [record, setRecord] = useState<AgreementDocumentSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let current = true;
+    setLoading(true);
+    setError('');
+    setRecord(null);
+    getPublicAgreementDocument(deal.publicId, deal.agreementVersion)
+      .then(value => {
+        if (current) setRecord(value);
+      })
+      .catch(cause => {
+        if (current) {
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : 'The stored agreement document is unavailable',
+          );
+        }
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [deal.publicId, deal.agreementVersion]);
+
+  return { record, loading, error };
+}
+
+export function AgreementExport({ deal }: { deal: Deal }) {
+  const [message, setMessage] = useState('');
+  const { record, loading, error } = useStoredAgreementDocument(deal);
+  const url = `${location.origin}/?deal=${deal.publicId}`;
+
+  const share = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Dealivra agreement: ${deal.title}`,
+          text: `Review Dealivra agreement ${deal.publicId}`,
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setMessage('Deal Link copied.');
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'AbortError') {
+        setMessage('Could not share this link.');
+      }
+    }
+  };
+
+  return (
+    <section className="agreement-export no-print">
+      <div className="agreement-export-icon">
+        <FileSignature aria-hidden="true" />
+      </div>
+      <div className="agreement-export-copy">
+        <p className="eyebrow">{t('Agreement document')}</p>
+        <h2>{t('Professional agreement copy')}</h2>
+        <p>
+          {t(
+            'A clean, dated PDF with the parties, item terms, agreement version, and verification code.',
+          )}
+        </p>
+        <div className="agreement-export-meta">
+          <span>
+            <b>{t('Deal ID')}</b>
+            {deal.publicId}
+          </span>
+          <span>
+            <b>{t('Version')}</b>
+            {deal.agreementVersion}
+          </span>
+          <span>
+            <b>{t('Stored record')}</b>
+            {record
+              ? `${record.content_hash.slice(0, 12).toUpperCase()}…`
+              : loading
+                ? t('Checking…')
+                : t('Unavailable')}
+          </span>
+        </div>
+      </div>
+      <div className="agreement-export-actions">
+        <button
+          type="button"
+          className="primary"
+          disabled={!record}
+          onClick={() => window.print()}
+        >
+          <FileDown size={17} aria-hidden="true" />
+          {t('Download agreement PDF')}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={!record}
+          onClick={() =>
+            window.open(
+              `${url}&document=1`,
+              '_blank',
+              'noopener,noreferrer',
+            )
+          }
+        >
+          <Eye size={17} aria-hidden="true" />
+          {t('Preview document')}
+        </button>
+        <button type="button" className="secondary" onClick={share}>
+          <Share2 size={17} aria-hidden="true" />
+          {t('Share Deal Link')}
+        </button>
+      </div>
+      {(message || error) && (
+        <div
+          className={`notice ${error ? 'agreement-record-error' : ''}`}
+          role="status"
+          aria-live="polite"
+        >
+          {t(message || error)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function AgreementFingerprint({ deal }: { deal: Deal }) {
+  const [fingerprint, setFingerprint] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let current = true;
+    setFingerprint('');
+    getPublicAgreementDocument(deal.publicId, deal.agreementVersion)
+      .then(record => {
+        if (current) setFingerprint(record.content_hash.toUpperCase());
+      })
+      .catch(() => {
+        if (current) setFingerprint('—');
+      });
+    return () => {
+      current = false;
+    };
+  }, [deal.publicId, deal.agreementVersion]);
+
+  const copy = async () => {
+    if (!fingerprint || fingerprint === '—') return;
+    await navigator.clipboard?.writeText(fingerprint);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  };
+
+  return (
+    <section className="agreement-fingerprint">
+      <div className="fingerprint-heading">
+        <Fingerprint aria-hidden="true" />
+        <div>
+          <p className="eyebrow">SERVER-RECORDED SHA-256</p>
+          <h2>{t('Agreement fingerprint')}</h2>
+          <span>
+            {t('Version')} {deal.agreementVersion}
+          </span>
+        </div>
+      </div>
+      <code>{fingerprint || 'Checking stored record…'}</code>
+      <div className="fingerprint-footer">
+        <p>
+          <ShieldCheck aria-hidden="true" />
+          {t(
+            'This code is generated from the immutable stored agreement version shown in the PDF. It is not a qualified electronic signature.',
+          )}
+        </p>
+        <button
+          type="button"
+          className="secondary no-print"
+          onClick={copy}
+          disabled={!fingerprint || fingerprint === '—'}
+        >
+          <Copy size={16} aria-hidden="true" />
+          {t(copied ? 'Fingerprint copied.' : 'Copy fingerprint')}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+export function AgreementHistory({ deal }: { deal: Deal }) {
+  const [versions, setVersions] = useState<AgreementHistoryVersion[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let current = true;
+    setLoaded(false);
+    getPublicAgreementHistory(deal.publicId)
+      .then(items => {
+        if (current) {
+          setVersions(items);
+          setLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (current) {
+          setVersions([]);
+          setLoaded(true);
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [deal.publicId, deal.agreementVersion]);
+
+  if (!isSupabaseConfigured || !loaded || !versions.length) return null;
+
+  const acceptanceLabel = (count: number) =>
+    count >= 2
+      ? 'Accepted by both parties'
+      : count === 1
+        ? 'Accepted by one party'
+        : 'No recorded acceptance';
+
+  return (
+    <section className="agreement-history">
+      <div className="agreement-history-heading">
+        <FileSignature aria-hidden="true" />
+        <div>
+          <p className="eyebrow">{t('Published versions')}</p>
+          <h2>{t('Agreement history')}</h2>
+          <span>{t('Privacy-safe record of published agreement changes.')}</span>
+        </div>
+      </div>
+      <div className="agreement-history-list">
+        {versions.map(item => {
+          const accepted = Number(item.acceptance_count) || 0;
+          return (
+            <details key={item.version} open={item.is_current}>
+              <summary>
+                <span className="agreement-history-version">
+                  <strong>
+                    {t('Version')} {item.version}
+                  </strong>
+                  {item.is_current && <em>{t('Current version')}</em>}
+                </span>
+                <time>{formatDateTime(item.created_at)}</time>
+              </summary>
+              <div className="agreement-history-body">
+                <div className="agreement-history-facts">
+                  <div>
+                    <span>{t('Price')}</span>
+                    <b>
+                      {formatMoney(
+                        Number(item.price_cents),
+                        item.currency,
+                        getAppLanguage(),
+                      )}
+                    </b>
+                  </div>
+                  <div>
+                    <span>{t('Condition')}</span>
+                    <b>{t(item.condition)}</b>
+                  </div>
+                  <div>
+                    <span>{t('Handoff')}</span>
+                    <b>{t(item.delivery_method)}</b>
+                  </div>
+                </div>
+                <p
+                  className={`agreement-history-acceptance ${
+                    accepted ? '' : 'pending'
+                  }`}
+                >
+                  {accepted ? (
+                    <BadgeCheck size={18} aria-hidden="true" />
+                  ) : (
+                    <Clock3 size={18} aria-hidden="true" />
+                  )}{' '}
+                  {t(acceptanceLabel(accepted))}
+                </p>
+                <span className="eyebrow">{t('Agreement code')}</span>
+                <code className="agreement-history-code">
+                  {item.content_hash.toUpperCase()}
+                </code>
+              </div>
+            </details>
+          );
+        })}
+      </div>
+      <p className="agreement-history-note">
+        <LockKeyhole size={16} aria-hidden="true" />
+        {t('This history does not reveal names, contact details, or signatures.')}
+      </p>
+    </section>
+  );
+}

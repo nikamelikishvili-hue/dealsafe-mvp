@@ -56,6 +56,10 @@ and related internal payment ID.
 
 - The webhook remains outside browser CORS because Stripe authenticates it
   with a raw-body signature and bounded timestamp.
+- The signed body is read incrementally under a 262,144-byte ceiling and
+  cancelled before a dishonest or missing declared length can cause
+  unbounded allocation. The exact bounded text is then used for HMAC
+  verification before JSON parsing or database access.
 - Claim, apply, and fail functions are executable only by `service_role`.
 - Tables remain RLS-enabled and unavailable to anonymous or ordinary signed-in
   users.

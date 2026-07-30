@@ -67,6 +67,9 @@ create table public.agreement_versions (
   version integer not null,
   terms_json jsonb not null,
   content_hash text not null,
+  schema_version text,
+  canonical_payload jsonb,
+  canonical_hash text,
   created_by uuid not null references public.profiles(id),
   created_at timestamptz not null default now(),
   unique(deal_id, version)

@@ -19,7 +19,14 @@ Dealivra must use separate configuration for Local, Preview, Staging, and Produc
 | `DEALIVRA_SECURITY_NOTIFICATION_WORKER_SECRET` | Supabase Edge Function and scheduler Vault | Required before notification activation | High-entropy bearer secret authenticating the private worker invocation | Missing, short, or mismatched credentials deny the worker before a job is claimed |
 | `DEALIVRA_SECURITY_NOTIFICATION_FROM` | Supabase Edge Function | Required before notification activation | Verified sender such as `Dealivra Security <security@notify.dealivra.com>` | Invalid sender blocks delivery without exposing recipient data |
 | `RESEND_API_KEY` | Supabase Edge Function | Required before notification activation | Server-only Resend transactional-email credential | Missing or invalid credential blocks delivery and is never returned or logged |
+| `DEALIVRA_SELLER_ONBOARDING_MODE` | Supabase Edge Function | Required before seller onboarding | Exact `disabled` or `sandbox` kill switch for Stripe Connect account/link creation | Missing, empty, disabled, or invalid values block provider mutation |
+| `DEALIVRA_CHECKOUT_MODE` | Supabase Edge Function | Required before checkout | Exact `disabled` or `sandbox` kill switch for Stripe Checkout creation | Missing, empty, disabled, or invalid values block provider mutation |
+| `DEALIVRA_PAYOUT_RELEASE_MODE` | Supabase Edge Function | Required before payout/release | Exact `disabled` or `sandbox` kill switch for seller-favoring transfers | Missing, empty, disabled, or invalid values block provider mutation before a financial command is claimed |
+| `DEALIVRA_REFUND_MODE` | Supabase Edge Function | Required before refunds | Exact `disabled` or `sandbox` kill switch for buyer-favoring refunds | Missing, empty, disabled, or invalid values block provider mutation before a financial command is claimed |
 | `VITE_GOOGLE_MAPS_API_KEY` | Browser | No | Address autocomplete restricted to approved web origins | Structured manual US address fields remain available |
+| `VITE_SUPPORT_CASES_ENABLED` | Browser | No | Exact `enabled` gate for the staged private support-case center | Missing, empty, or any other value keeps support cases hidden and makes no support RPC calls |
+| `DEALIVRA_RUNTIME_REJECTION_MODE` | Vercel Function | Required before rejection monitoring activation | Exact `staged` or `enforced` switch for the privacy-safe runtime rejection intake | Missing defaults to `staged` and records nothing; an invalid value returns `503` without accepting a report |
+| `DEALIVRA_CLIENT_FAILURE_MODE` | Vercel Function | Required before client-failure monitoring activation | Exact `staged` or `enforced` switch for fixed-category browser failure intake | Missing defaults to `staged` and records nothing; an invalid value returns `503` without accepting a report |
 | `SITE_URL` | Supabase Edge Function | Yes for payment flows | Canonical HTTPS origin used for Stripe redirects and the protected-function origin allowlist | Defaults to `https://dealivra.com`; nonmatching browser calls are denied |
 | `DEALIVRA_ALLOWED_ORIGINS` | Supabase Edge Function | No | Comma-separated additional exact HTTPS origins for an approved environment | Invalid entries are ignored and cannot broaden access |
 | `DEALIVRA_VERCEL_PROJECT_SLUG` | Supabase Edge Function | No | Expected Vercel project prefix for protected Preview deployments | Defaults to the current `dealsafe` project slug |
@@ -69,11 +76,44 @@ Preview, Staging, and Production must not share a Supabase project, Stripe accou
 - Protected payment Edge Functions require an exact allowed browser `Origin`.
   Missing, opaque, malformed, HTTP, foreign, or unexpected Vercel origins are
   denied before user/session and payment logic runs.
+- Stripe provider mutations require the exact capability switch value
+  `sandbox`. Missing, empty, `disabled`, unrecognized, or mixed-case values
+  fail closed. A switch is not authorization: active-session, AAL2, participant
+  or administrator role, recovery cooldown, trusted-command, Stripe test-key,
+  provider-object, and `livemode=false` checks remain mandatory.
+- Disabling new mutations does not disable the signed Stripe webhook. Provider
+  events for already-created Sandbox objects must continue to reconcile and
+  alert; operational shutdown uses the incident/financial freeze procedure.
 - Preview matching is limited to the configured project and team slugs. A
   wildcard such as `*.vercel.app` or `*` is prohibited.
 - Auth endpoints return generic user-facing errors and must never return configuration values.
 - Server diagnostics may name the failing configuration category but must not log URLs, keys, tokens, cookies, passwords, or submitted identity data.
 - Address autocomplete is optional. State, ZIP code, apartment/suite/unit, and the remaining address fields must continue to work without Google Maps.
+- Support cases may be enabled only with the exact browser value `enabled`
+  after the reviewed migration and rollback proof pass, the operator queue has
+  a named owner, and alert/SLA coverage is active. Any other value must fail
+  closed. This browser-visible switch is not authorization; database grants,
+  assignment, role checks, and AAL2 remain authoritative.
+- Runtime rejection monitoring may move from `staged` to `enforced` only after
+  the environment has an approved log drain, 30-day-or-shorter raw retention,
+  named alert ownership, a same-origin endpoint Firewall threshold, and a
+  synthetic event/rollback rehearsal. The intake may record only the reviewed
+  event schema, boundary, issue, count, environment, release, event ID, and
+  receipt time. URLs, headers, IP addresses, identifiers, rejected values, and
+  provider content are prohibited.
+- Client-failure monitoring follows the same drain, 30-day-or-shorter raw
+  retention, named ownership, Firewall, protected synthetic proof, and
+  rollback gates. It may record only a fixed render/bootstrap/runtime category,
+  bounded count, environment, release, random event ID, and receipt time.
+  Error objects/messages, stacks, component stacks, URLs, browser state,
+  customer identifiers, and provider content are prohibited.
+- Web Vital monitoring may move from `staged` to `enforced` only after the
+  approved drain, 30-day-or-shorter retention, named alert owner, same-origin
+  endpoint Firewall threshold, protected synthetic proof, and rollback
+  rehearsal pass. It may record only a fixed metric, rating, bucket, count,
+  environment, release, random event ID, and receipt time. Exact values, URLs,
+  routes, referrers, headers, IPs, devices, and customer/session identifiers
+  are prohibited.
 - NHTSA vPIC is optional at runtime. VIN decoding failure must not block manual vehicle entry or publishing.
 - Recovery controls may move from `staged` to `enforced` only after the
   reviewed recovery migration and rollback proof pass in that environment.

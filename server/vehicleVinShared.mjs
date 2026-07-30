@@ -1,4 +1,8 @@
 import { createHash } from 'node:crypto';
+import {
+  readBoundedResponseText,
+  ResponseBodyBoundaryError,
+} from './responseBodyBoundary.mjs';
 
 const vinPattern = /^[A-HJ-NPR-Z0-9]{17}$/;
 const providerTimeoutMs = 4_500;
@@ -113,20 +117,16 @@ export async function decodeVehicleVin(vinValue, modelYearValue = '', options = 
     if (!upstream.ok) {
       throw codedError('VIN_PROVIDER_UNAVAILABLE', 'The VIN provider is temporarily unavailable.');
     }
-    const declaredLength = Number(upstream.headers.get('content-length'));
-    if (Number.isFinite(declaredLength) && declaredLength > maximumProviderBytes) {
-      throw codedError('VIN_PROVIDER_INVALID_RESPONSE', 'The VIN provider returned an invalid response.');
-    }
-    const text = await upstream.text();
-    if (new TextEncoder().encode(text).byteLength > maximumProviderBytes) {
-      throw codedError('VIN_PROVIDER_INVALID_RESPONSE', 'The VIN provider returned an invalid response.');
-    }
+    const text = await readBoundedResponseText(upstream, maximumProviderBytes);
     const payload = JSON.parse(text);
     const vehicle = parseProviderPayload(payload, vin);
     const { vin: _uncachedVin, ...cacheValue } = vehicle;
     writeCached(cacheKey, cacheValue);
     return vehicle;
   } catch (error) {
+    if (error instanceof ResponseBodyBoundaryError) {
+      throw codedError('VIN_PROVIDER_INVALID_RESPONSE', 'The VIN provider returned an invalid response.');
+    }
     if (error?.code) throw error;
     if (error?.name === 'AbortError') {
       throw codedError('VIN_PROVIDER_TIMEOUT', 'The VIN provider took too long to respond.');

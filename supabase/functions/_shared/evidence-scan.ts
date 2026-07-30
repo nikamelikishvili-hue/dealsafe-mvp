@@ -1,4 +1,8 @@
 import { containsEicarTestPattern } from "./evidence-policy.ts";
+import {
+  readBoundedResponseText,
+  ResponseBodyBoundaryError,
+} from "./response-body-boundary.ts";
 
 export type EvidenceScanVerdict = {
   engine: string;
@@ -53,23 +57,30 @@ function configuredScannerUrl() {
   }
 }
 
-async function boundedJson(response: Response) {
-  const declaredLength = Number(response.headers.get("Content-Length") || "0");
-  if (declaredLength > 16_384) {
+export async function readBoundedScannerJson(response: Response) {
+  const contentType = response.headers.get("content-type")?.trim() || "";
+  if (!/^application\/json(?:\s*;.*)?$/i.test(contentType)) {
     throw new EvidenceScanError(
       "scanner_response_invalid",
       "The security scanner returned an invalid response.",
     );
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.length > 16_384) {
+  let text: string;
+  try {
+    text = await readBoundedResponseText(response, 16_384);
+  } catch (error) {
+    if (!(error instanceof ResponseBodyBoundaryError)) throw error;
     throw new EvidenceScanError(
       "scanner_response_invalid",
       "The security scanner returned an invalid response.",
     );
   }
   try {
-    return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("invalid shape");
+    }
+    return parsed as Record<string, unknown>;
   } catch {
     throw new EvidenceScanError(
       "scanner_response_invalid",
@@ -150,5 +161,5 @@ export async function scanEvidenceBytes(
       "Secure file scanning is temporarily unavailable. Please try again later.",
     );
   }
-  return validateScannerVerdict(await boundedJson(response), sha256);
+  return validateScannerVerdict(await readBoundedScannerJson(response), sha256);
 }

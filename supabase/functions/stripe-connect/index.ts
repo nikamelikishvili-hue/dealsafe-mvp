@@ -3,6 +3,8 @@ import {
   errorResponse,
   handleBrowserRequest,
   json,
+  readPaymentJson,
+  requireSandboxPaymentCapability,
   requireSensitiveChangeAllowedForService,
   requireUser,
   siteUrl,
@@ -16,10 +18,13 @@ import {
 
 type StripeAccount = {
   id: string;
+  livemode?: boolean;
   details_submitted: boolean;
   payouts_enabled: boolean;
   capabilities?: { transfers?: string };
 };
+
+const stripeAccountPattern = /^acct_[A-Za-z0-9_]{8,255}$/;
 
 function accountStatus(account: StripeAccount) {
   return {
@@ -37,11 +42,15 @@ Deno.serve((request) => {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   try {
     const user = await requireUser(request);
-    const body = await request.json().catch(() => ({})) as { action?: string; dealPublicId?: string };
+    const body = await readPaymentJson<{
+      action?: string;
+      dealPublicId?: string;
+    }>(request, ["action", "dealPublicId"]);
     if (body.action !== "status" && body.action !== "onboard") {
       throw paymentError("invalid_connect_action", "Select a valid seller payout action.", 400);
     }
     if (body.action === "onboard") {
+      requireSandboxPaymentCapability("seller_onboarding");
       await requireSensitiveChangeAllowedForService(user.id, "payout");
     }
     const admin = adminClient();
@@ -66,6 +75,17 @@ Deno.serve((request) => {
         `/v1/accounts/${encodeURIComponent(accountId)}`,
         { method: "GET", context },
       );
+      if (
+        account.id !== accountId
+        || !stripeAccountPattern.test(account.id)
+        || account.livemode === true
+      ) {
+        throw paymentError(
+          "seller_account_mismatch",
+          "Seller payout status could not be verified. Please contact support.",
+          409,
+        );
+      }
     }
 
     if (body.action === "status") {
@@ -105,6 +125,13 @@ Deno.serve((request) => {
         idempotencyKey: `dealsafe-connect-${user.id}`,
         context,
       });
+      if (!stripeAccountPattern.test(account.id) || account.livemode === true) {
+        throw paymentError(
+          "seller_account_mismatch",
+          "Seller payout status could not be verified. Please contact support.",
+          409,
+        );
+      }
       accountId = account.id;
       const status = accountStatus(account);
       const { error } = await admin.from("profiles").update({

@@ -1,4 +1,13 @@
 import { isIP } from 'node:net';
+import {
+  serializeBoundedAuthProviderJson,
+  validateAuthProviderRequest,
+} from './authProviderRequest.mjs';
+import {
+  AuthProviderResponseBoundaryError,
+  readBoundedAuthProviderJson,
+} from './authProviderResponse.mjs';
+import { recordServerFailure } from './serverFailureReporter.mjs';
 
 const refreshCookieName = '__Host-dealivra-refresh';
 // The __Host- prefix is accepted by browsers only when Path is exactly "/"
@@ -6,6 +15,7 @@ const refreshCookieName = '__Host-dealivra-refresh';
 const refreshCookiePath = '/';
 const refreshMaxAgeSeconds = 8 * 60 * 60;
 const maxJsonBodyBytes = 16_384;
+const authProviderTimeoutMs = 10_000;
 
 function header(request, name) {
   const value = request.headers?.[name] ?? request.headers?.[name.toLowerCase()];
@@ -108,6 +118,15 @@ function configuredAuthProvider(request) {
 }
 
 function providerFailureCode(error) {
+  if (error instanceof AuthProviderResponseBoundaryError) {
+    return 'PROVIDER_RESPONSE_INVALID';
+  }
+  if (
+    error instanceof DOMException
+    && (error.name === 'AbortError' || error.name === 'TimeoutError')
+  ) {
+    return 'PROVIDER_TIMEOUT';
+  }
   const message = error instanceof Error ? error.message : '';
   if (/invalid character|invalid header|header value|headers/i.test(message)) {
     return 'INVALID_HEADER_VALUE';
@@ -276,10 +295,16 @@ export function clearRefreshCookie(response) {
 }
 
 export async function supabaseAuthRequest(path, init, request) {
+  validateAuthProviderRequest(
+    path,
+    init,
+    request && typeof request === 'object' ? requestOrigin(request) : null,
+  );
   const { url, key, forwardedIp } = configuredAuthProvider(request);
   try {
     return await fetch(`${url}/auth/v1/${path}`, {
       ...init,
+      signal: AbortSignal.timeout(authProviderTimeoutMs),
       headers: {
         ...(init?.headers || {}),
         apikey: key,
@@ -299,6 +324,7 @@ export async function currentUserAppRole(accessToken) {
   try {
     const upstream = await fetch(`${url}/rest/v1/rpc/current_user_app_role`, {
       method: 'POST',
+      signal: AbortSignal.timeout(authProviderTimeoutMs),
       headers: {
         apikey: key,
         Authorization: `Bearer ${accessToken}`,
@@ -306,7 +332,7 @@ export async function currentUserAppRole(accessToken) {
       },
       body: '{}',
     });
-    const role = await upstream.json().catch(() => null);
+    const role = await readBoundedAuthProviderJson(upstream);
     if (
       !upstream.ok
       || typeof role !== 'string'
@@ -339,15 +365,17 @@ export async function supabaseRestRpcRequest(accessToken, functionName, paramete
   }
 
   const { url, key } = configuredSupabase();
+  const body = serializeBoundedAuthProviderJson(parameters);
   try {
     return await fetch(`${url}/rest/v1/rpc/${functionName}`, {
       method: 'POST',
+      signal: AbortSignal.timeout(authProviderTimeoutMs),
       headers: {
         apikey: key,
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(parameters),
+      body,
     });
   } catch (error) {
     const providerError = new Error('Database function provider request failed.', { cause: error });
@@ -356,9 +384,15 @@ export async function supabaseRestRpcRequest(accessToken, functionName, paramete
   }
 }
 
+export async function authProviderPayload(upstream) {
+  return readBoundedAuthProviderJson(upstream, {
+    allowEmpty: upstream?.status === 204,
+  });
+}
+
 export async function authPayload(upstream) {
-  const data = await upstream.json().catch(() => null);
-  return data && typeof data === 'object' ? data : {};
+  const data = await authProviderPayload(upstream);
+  return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
 }
 
 export function authProviderCode(data) {
@@ -425,41 +459,21 @@ export function publicSession(data) {
 
 export function logAuthFailure(operation, error) {
   const message = error instanceof Error ? error.message : '';
-  const safeMessage = message === 'Authentication service is not configured.'
-    ? message
+  const issue = message === 'Authentication service is not configured.'
+    ? 'configuration_missing'
     : /invalid url|failed to parse url|service url is invalid/i.test(message)
-      ? 'Authentication service URL is invalid.'
-      : /fetch failed|network|provider request failed/i.test(message)
-        ? 'Authentication provider request failed.'
-        : 'Unexpected authentication service error.';
-  const diagnosticTokens = [];
-  const pending = [error];
-  const visited = new Set();
-
-  while (pending.length > 0 && diagnosticTokens.length < 8) {
-    const current = pending.shift();
-    if (!current || typeof current !== 'object' || visited.has(current)) continue;
-    visited.add(current);
-
-    for (const property of ['name', 'code']) {
-      const value = current[property];
-      if (
-        (typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(value))
-        || (typeof value === 'number' && Number.isFinite(value))
-      ) {
-        diagnosticTokens.push(`${property}:${value}`);
-      }
-    }
-
-    if ('cause' in current) pending.push(current.cause);
-    if ('errors' in current && Array.isArray(current.errors)) {
-      pending.push(...current.errors.slice(0, 3));
-    }
-  }
-
-  console.error('[dealivra-auth]', {
-    operation,
-    error: safeMessage,
-    ...(diagnosticTokens.length > 0 ? { diagnostics: diagnosticTokens } : {}),
+      ? 'configuration_invalid'
+      : /fetch failed|network|provider request failed|provider response was rejected/i.test(message)
+        ? 'provider_unavailable'
+        : 'unexpected_failure';
+  const boundary = `auth_${String(operation || 'unknown')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 90) || 'unknown'}`;
+  recordServerFailure({
+    schema: 'dealivra.server-failure.v1',
+    boundary,
+    issue,
   });
 }

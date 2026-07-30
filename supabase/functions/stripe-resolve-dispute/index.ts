@@ -3,6 +3,8 @@ import {
   errorResponse,
   handleBrowserRequest,
   json,
+  readPaymentJson,
+  requireSandboxPaymentCapability,
   requireSensitiveChangeAllowedForService,
   requireUser,
   stripeRequest,
@@ -73,11 +75,11 @@ Deno.serve((request) => {
   let providerMayBeComplete = false;
   try {
     const user = await requireUser(request);
-    const body = await request.json() as {
+    const body = await readPaymentJson<{
       disputeId?: string;
       decision?: string;
       note?: string;
-    };
+    }>(request, ["disputeId", "decision", "note"]);
     const disputeId = body.disputeId?.trim() || "";
     const note = body.note?.trim() || "";
     const decision = body.decision as Decision;
@@ -114,6 +116,9 @@ Deno.serve((request) => {
       ? "dispute_refund"
       : "dispute_release";
     const action = decision === "resolved_buyer" ? "refund" : "transfer";
+    requireSandboxPaymentCapability(
+      action === "refund" ? "refund" : "payout_release",
+    );
     if (action === "transfer") {
       const { data: payoutDeal, error: payoutDealError } = await admin
         .from("deals")

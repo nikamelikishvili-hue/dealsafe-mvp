@@ -1,6 +1,10 @@
 import { adminClient, requiredSecret } from "../_shared/common.ts";
 import { linkWebhookObservation } from "../_shared/payment-ledger.ts";
 import {
+  readBoundedRequestText,
+  RequestBodyBoundaryError,
+} from "../_shared/request-body-boundary.ts";
+import {
   paymentJson,
   type PaymentOperationContext,
   recordPaymentLog,
@@ -158,17 +162,25 @@ Deno.serve(async (request) => {
   if (request.method !== "POST") {
     return webhookError(context, "method_not_allowed", 405, null, "Method not allowed");
   }
-  const contentLength = Number(request.headers.get("Content-Length") || "0");
-  if (!Number.isFinite(contentLength) || contentLength < 0 || contentLength > maxWebhookBytes) {
-    return webhookError(context, "request_too_large", 413, null, "Request is too large");
+  let payload: string;
+  try {
+    payload = await readBoundedRequestText(request, maxWebhookBytes);
+  } catch (error) {
+    if (error instanceof RequestBodyBoundaryError) {
+      const tooLarge = error.code === "body_too_large";
+      return webhookError(
+        context,
+        tooLarge ? "request_too_large" : "invalid_request_body",
+        tooLarge ? 413 : 400,
+        null,
+        tooLarge ? "Request is too large" : "Invalid webhook request",
+      );
+    }
+    return webhookError(context, "invalid_request_body", 400, null, "Invalid webhook request");
   }
   let eventId: string | null = null;
   let claimToken: string | null = null;
   try {
-    const payload = await request.text();
-    if (new TextEncoder().encode(payload).byteLength > maxWebhookBytes) {
-      return webhookError(context, "request_too_large", 413, null, "Request is too large");
-    }
     const signature = request.headers.get("Stripe-Signature") || "";
     if (!await verifyStripeSignature(payload, signature, requiredSecret("STRIPE_WEBHOOK_SECRET"))) {
       return webhookError(context, "invalid_signature", 400, null, "Invalid Stripe signature");

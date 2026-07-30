@@ -5,11 +5,20 @@ import {
   requireUser,
 } from "../_shared/common.ts";
 import {
+  evidenceVideoMaxBytes,
   detectEvidenceFile,
   validateEvidenceBytes,
   type EvidenceDeclaration,
 } from "../_shared/evidence-policy.ts";
 import { evidenceSha256 } from "../_shared/evidence-scan.ts";
+import {
+  EvidenceJsonBoundaryError,
+  readBoundedEvidenceJson,
+} from "../_shared/evidence-json-boundary.ts";
+import {
+  BinaryBodyBoundaryError,
+  readExactBinaryBody,
+} from "../_shared/binary-body-boundary.ts";
 
 type MaintenanceJob = {
   job_id: string;
@@ -50,6 +59,18 @@ type AdminAction =
   }
   | { action: "acknowledge-alert"; alertId?: string };
 
+const adminActionKeys = {
+  "snapshot": ["action"],
+  "refresh-inventory": ["action"],
+  "approve-deletion": ["action", "evidenceId", "reason"],
+  "place-legal-hold": ["action", "evidenceId", "reason"],
+  "release-legal-hold": ["action", "evidenceId", "holdKey", "reason"],
+  "acknowledge-alert": ["action", "alertId"],
+} as const;
+const scheduledActionKeys = {
+  "run": ["action", "limit"],
+} as const;
+
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const maintenanceHeader = "x-dealivra-maintenance-secret";
@@ -79,6 +100,28 @@ function maintenanceErrorResponse(error: unknown) {
     error: "Evidence maintenance could not complete safely.",
     code: "maintenance_failed",
   }, 500);
+}
+
+async function readMaintenanceAction<T extends object>(
+  request: Request,
+  actions: Readonly<Record<string, readonly string[]>>,
+) {
+  try {
+    return await readBoundedEvidenceJson(request, actions) as unknown as T;
+  } catch (error) {
+    if (error instanceof EvidenceJsonBoundaryError) {
+      throw new MaintenanceError(
+        "maintenance_request_invalid",
+        "The evidence lifecycle request is invalid.",
+        error.code === "body_too_large"
+          ? 413
+          : error.code === "content_type_invalid"
+            ? 415
+            : 400,
+      );
+    }
+    throw error;
+  }
 }
 
 function boundedReason(value: unknown) {
@@ -246,8 +289,6 @@ async function recordIntegrity(
   let observedMimeType: string | null = null;
 
   if (!downloadError && file) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const detected = detectEvidenceFile(bytes);
     const declaration: EvidenceDeclaration = {
       claimedMimeType: job.detected_mime_type || job.mime_type || "",
       evidenceType: job.evidence_type || "",
@@ -255,12 +296,25 @@ async function recordIntegrity(
       fileSize: Number(job.file_size_bytes || 0),
       role: job.uploader_role || "",
     };
-    const validation = validateEvidenceBytes(bytes, declaration);
     storagePresent = true;
-    structureValid = validation.ok;
-    observedSha256 = await evidenceSha256(bytes);
-    observedSizeBytes = bytes.byteLength;
-    observedMimeType = detected?.mimeType || null;
+    try {
+      const bytes = await readExactBinaryBody(
+        file,
+        declaration.fileSize,
+        evidenceVideoMaxBytes,
+      );
+      const detected = detectEvidenceFile(bytes);
+      const validation = validateEvidenceBytes(bytes, declaration);
+      structureValid = validation.ok;
+      observedSha256 = await evidenceSha256(bytes);
+      observedSizeBytes = bytes.byteLength;
+      observedMimeType = detected?.mimeType || null;
+    } catch (boundaryError) {
+      if (!(boundaryError instanceof BinaryBodyBoundaryError)) {
+        throw boundaryError;
+      }
+      observedSizeBytes = Number.isSafeInteger(file.size) ? file.size : null;
+    }
   }
 
   const { data, error } = await admin.rpc(
@@ -355,16 +409,12 @@ async function failJob(
 
 async function runScheduled(request: Request) {
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
-  const contentType = request.headers.get("Content-Type")?.toLowerCase() || "";
-  if (!contentType.startsWith("application/json")) {
-    return json({ error: "Unsupported content type" }, 415);
-  }
 
   const secret = request.headers.get(maintenanceHeader)?.trim() || "";
-  const body = await request.json().catch(() => ({})) as {
-    action?: string;
+  const body = await readMaintenanceAction<{
+    action: string;
     limit?: number;
-  };
+  }>(request, scheduledActionKeys);
   if (body.action !== "run") {
     throw new MaintenanceError(
       "action_invalid",
@@ -430,15 +480,11 @@ Deno.serve((request) => {
       return json({ error: "Method not allowed" }, 405);
     }
     try {
-      if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) {
-        throw new MaintenanceError(
-          "content_type_invalid",
-          "The evidence lifecycle request is invalid.",
-          415,
-        );
-      }
+      const body = await readMaintenanceAction<AdminAction>(
+        request,
+        adminActionKeys,
+      );
       const user = await requireUser(request);
-      const body = await request.json() as AdminAction;
       return await handleAdminAction(user.id, body);
     } catch (error) {
       return maintenanceErrorResponse(error);

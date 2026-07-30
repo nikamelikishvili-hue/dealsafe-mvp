@@ -1,11 +1,300 @@
 import type { Deal, DealDraft } from '../domain';
-import { toMinorUnits, type CurrencyCode } from '../currency';
+import { toMinorUnits } from '../currency';
 import { isVideoUpload, prepareMediaUpload } from '../mediaPrivacy';
+import {
+  fetchWithDeadline,
+  readBoundedJson,
+  readBoundedText,
+  readExactArrayBuffer,
+  readExactBlobArrayBuffer,
+} from './browserResponseBoundary';
 import {
   validateEvidenceBytes,
   validateEvidenceDeclaration,
   type EvidenceUploadType,
 } from '../../supabase/functions/_shared/evidence-policy';
+import {
+  parseDealActionPlanRows,
+  parsePublicDealRows,
+  parseSavedDealRows,
+  parseShippingEvidenceReadinessRows,
+  parseUserDealRows,
+  type DealActionPlanPayload,
+  type DealRowPayload,
+  type SellerShippingEvidenceReadinessPayload,
+} from './runtimeSchemas';
+import {
+  parseAuthSession,
+  parseLoginResponse,
+  parseMfaEnrollmentResponse,
+  parseMfaStatusResponse,
+  parseSignupResponse,
+  type AuthSessionPayload,
+  type MfaEnrollmentPayload,
+  type MfaFactorPayload,
+  type MfaStatusPayload,
+} from './authRuntimeSchemas';
+import {
+  parseAuthBearerToken,
+  parseAuthErrorEnvelope,
+  parseAuthLoginRequest,
+  parseAuthLogoutRequest,
+  parseAuthMfaRequest,
+  parseAuthPasswordRequest,
+  parseAuthRecoverRequest,
+  parseAuthRefreshRequest,
+  parseAuthSignupRequest,
+  type AuthErrorBoundary,
+} from './authBoundarySchemas';
+import {
+  parseProtectedPaymentStatusRows,
+  parseStripeCheckoutResponse,
+  parseStripeConnectOnboardingResponse,
+  parseStripeConnectStatusResponse,
+  parseStripeDisputeResolutionResponse,
+  type ProtectedPaymentStatePayload,
+  type ProtectedPaymentStatusPayload,
+  type StripeConnectStatusPayload,
+} from './paymentRuntimeSchemas';
+import {
+  parsePaymentErrorEnvelope,
+  parsePaymentPostgrestErrorEnvelope,
+  parseProtectedPaymentStatusRequest,
+  parseStripeCheckoutRequest,
+  parseStripeConnectRequest,
+  type PaymentErrorBoundary,
+} from './paymentBoundarySchemas';
+import {
+  parseAdminDisputeRows,
+  parseDealEvidenceRows,
+  parseEvidenceAlertAcknowledgementResponse,
+  parseEvidenceHoldKeyResponse,
+  parseEvidenceInventoryResponse,
+  parseEvidenceJobIdResponse,
+  parseEvidenceLifecycleSnapshotResponse,
+  parseEvidenceSignedViewerResponse,
+  parseEvidenceUploadIntakeResponse,
+  parseFinalizeEvidenceResponse,
+  type AdminDisputePayload,
+  type DealEvidencePayload,
+  type EvidenceIntegrityStatusPayload,
+  type EvidenceLifecycleAlertPayload,
+  type EvidenceLifecycleJobPayload,
+  type EvidenceLifecycleSnapshotPayload,
+  type EvidenceLifecycleStatusPayload,
+} from './evidenceRuntimeSchemas';
+import {
+  parseEvidenceEdgeErrorEnvelope,
+  parseEvidenceFilesRequest,
+  parseEvidenceMaintenanceRequest,
+  parseFinancialDisputeRequest,
+  parseOpenDisputeRequest,
+  parsePostgrestErrorEnvelope,
+  parseResolveDisputeRequest,
+  parseStorageErrorEnvelope,
+} from './evidenceBoundarySchemas';
+import {
+  parseAdminReportRows,
+  parseCurrentUserDealSellerResponse,
+  parseDealInquiryRows,
+  parseDealMessageRows,
+  parseDealNotificationRows,
+  parseDealOfferRows,
+  parseInquiryIdResponse,
+  parseSafetyReportIdResponse,
+  type AdminReportPayload,
+  type DealInquiryPayload,
+  type DealMessagePayload,
+  type DealNotificationPayload,
+  type DealOfferPayload,
+} from './interactionRuntimeSchemas';
+import {
+  parseAdminReportListRequest,
+  parseAdminReportResolutionRequest,
+  parseCreateInquiryRequest,
+  parseCreateOfferRequest,
+  parseCurrentUserDealSellerRequest,
+  parseDealModerationRequest,
+  parseInquiryListRequest,
+  parseInteractionPostgrestErrorEnvelope,
+  parseMessageListRequest,
+  parseNotificationAllReadRequest,
+  parseNotificationDealReadRequest,
+  parseNotificationListRequest,
+  parseOfferListRequest,
+  parseReplyInquiryRequest,
+  parseRespondOfferRequest,
+  parseSafetyReportRequest,
+  parseSendDealMessageRequest,
+} from './interactionBoundarySchemas';
+import {
+  parseAdminAccessResponse,
+  parseAdminCatalogAdoptionRows,
+  parseAdminRevenueSummaryRows,
+  parseAdminRevenueTransactionRows,
+  type AdminCatalogAdoptionPayload,
+  type AdminRevenueSummaryPayload,
+  type AdminRevenueTransactionPayload,
+} from './adminRuntimeSchemas';
+import {
+  parseAdminAccessRequest,
+  parseAdminCatalogAdoptionRequest,
+  parseAdminPostgrestErrorEnvelope,
+  parseAdminRevenueSummaryRequest,
+  parseAdminRevenueTransactionsRequest,
+} from './adminBoundarySchemas';
+import {
+  parseDealRiskAssessmentRows,
+  parsePublicSellerTrustProfileRows,
+  parsePublicTrustPassportRows,
+  parseTrustPassportSettingsRows,
+  parseTrustPassportToggleResponse,
+  type PublicTrustProfilePayload,
+  type RiskAssessmentPayload,
+  type TrustPassportPayload,
+  type TrustPassportSettingsPayload,
+} from './trustRuntimeSchemas';
+import {
+  parseDealRiskRequest,
+  parsePublicSellerTrustRequest,
+  parsePublicTrustPassportRequest,
+  parseTrustPassportSettingsRequest,
+  parseTrustPassportToggleRequest,
+  parseTrustPostgrestErrorEnvelope,
+} from './trustBoundarySchemas';
+import {
+  parseDealDeliveryDetailsRows,
+  parseDealInspectionRows,
+  parseDealMeetingRows,
+  parseDealShipmentRows,
+  parseHandoffPinResponse,
+  type DealDeliveryDetailsPayload,
+  type DealInspectionPayload,
+  type DealMeetingPayload,
+  type DealShipmentPayload,
+} from './deliveryRuntimeSchemas';
+import {
+  parseDealActionPlanRequest,
+  parseDealInspectionReadRequest,
+  parseDealInspectionRecordRequest,
+  parseDealMeetingReadRequest,
+  parseDealShipmentReadRequest,
+  parseDeliveryDetailsReadRequest,
+  parseDeliveryDetailsSaveRequest,
+  parseDeliveryPostgrestErrorEnvelope,
+  parseHandoffCompleteRequest,
+  parseHandoffPinGenerateRequest,
+  parseMeetingArrivalRequest,
+  parseMeetingConfirmationRequest,
+  parseMeetingProposalRequest,
+  parseShipmentCreateRequest,
+  parseShipmentDeliveryConfirmationRequest,
+  parseShippingEvidenceReadinessRequest,
+} from './deliveryBoundarySchemas';
+import {
+  parseAccountSessionRows,
+  parseDealParticipantsRows,
+  parseIdentityVerificationResponse,
+  parseProfileSummaryRows,
+  parseTimelineEventRows,
+  type AccountSessionPayload,
+  type DealParticipantsPayload,
+  type ProfileSummaryPayload,
+  type TimelineEventPayload,
+} from './accountActivityRuntimeSchemas';
+import {
+  parseAccountActivityPostgrestErrorEnvelope,
+  parseAccountSessionsRequest,
+  parseDealParticipantsRequest,
+  parseDealTimelineRequest,
+  parseIdentityVerificationRequest,
+  parseProfileSummaryRequest,
+  parseRatingSubmitRequest,
+} from './accountActivityBoundarySchemas';
+import {
+  parseAcceptanceProtectionResponse,
+  parseAgreementDocumentRows,
+  parseAgreementHistoryRows,
+  parseAgreementVerificationRows,
+  parseBuyerAccessCodeResponse,
+  parseDealRenewalRows,
+  parseSellerDeclarationRows,
+  parseWatchlistStateResponse,
+  type AgreementDocumentSnapshotPayload,
+  type AgreementHistoryVersionPayload,
+  type AgreementVerificationResultPayload,
+  type DealRenewalResultPayload,
+  type SellerDeclarationRecordPayload,
+} from './agreementRuntimeSchemas';
+import {
+  parseAcceptanceProtectionRequest,
+  parseAgreementDocumentRequest,
+  parseAgreementHistoryRequest,
+  parseAgreementPostgrestErrorEnvelope,
+  parseAgreementVerificationRequest,
+  parseBuyerAccessCodeRequest,
+  parseDealLinkRenewalRequest,
+  parseSellerDeclarationRequest,
+  parseWatchlistReadRequest,
+  parseWatchlistWriteRequest,
+} from './agreementBoundarySchemas';
+import {
+  parseDealCancelRequest,
+  parseDealDraftCreateRequest,
+  parseDealDraftUpdateRequest,
+  parseDealExpirationDays,
+  parseDealIdRequest,
+  parseDealMutationPostgrestErrorEnvelope,
+  parseDealOwnerContext,
+  parseDealPublishRequest,
+  parseMediaDeleteRequest,
+  parseMediaRecordInsertRequest,
+  parseMediaReorderRequest,
+  parseMediaUploadBatchRequest,
+  parsePublicDealAcceptRequest,
+  parsePublicDealRequest,
+  parsePublishedDealUpdateRequest,
+  parseSavedDealsRequest,
+} from './dealMutationBoundarySchemas';
+import {
+  parsePublicDealAcceptanceResponse,
+  parsePublishedDealVersionResponse,
+} from './dealMutationRuntimeSchemas';
+import {
+  parseAccountAuthErrorEnvelope,
+  parseAccountNameUpdateRequest,
+  parseAccountProfileErrorEnvelope,
+} from './accountMutationBoundarySchemas';
+import {
+  parseLegacyPaymentPostgrestErrorEnvelope,
+  parseLegacyPaymentRecordRequest,
+} from './legacyPaymentBoundarySchemas';
+import {
+  parseLegacyPaymentRecordRows,
+  type LegacyPaymentMethod,
+  type LegacyPaymentRecordPayload,
+} from './legacyPaymentRuntimeSchemas';
+import {
+  parseCreateSupportCaseRequest,
+  parseMySupportCasesRequest,
+  parseReplySupportCaseRequest,
+  parseResolveSupportCaseRequest,
+  parseSupportCaseClaimRequest,
+  parseSupportCaseReadRequest,
+  parseSupportPostgrestErrorEnvelope,
+  parseSupportQueueRequest,
+  type SupportCategory,
+} from './supportBoundarySchemas';
+import {
+  parseSupportCaseDetailRows,
+  parseSupportCaseSummaryRows,
+  parseSupportMutationResponse,
+  parseSupportQueueRows,
+  parseSupportReferenceResponse,
+  type SupportCaseDetailPayload,
+  type SupportCaseSummaryPayload,
+  type SupportQueueItemPayload,
+} from './supportRuntimeSchemas';
 
 // Vercel can preserve pasted line breaks in environment variables. Keep only
 // the first non-empty line so an accidental multi-line key never becomes an
@@ -63,30 +352,23 @@ export class AuthenticationApiError extends Error {
   }
 }
 
-function boundedRetryAfter(response:Response,data:unknown){
-  const payload=data&&typeof data==='object'?data as {retryAfter?:unknown}:null;
-  const payloadValue=typeof payload?.retryAfter==='number'?payload.retryAfter:Number.NaN;
-  const header=response.headers.get('Retry-After');
-  const headerValue=header&&/^\d{1,10}$/.test(header)?Number(header):Number.NaN;
-  const value=Number.isInteger(payloadValue)?payloadValue:headerValue;
-  return Number.isInteger(value)?Math.min(Math.max(value,1),300):null;
-}
-
 function authenticationApiError(
   response:Response,
   data:unknown,
-  fallback:string,
+  boundary:AuthErrorBoundary,
 ){
-  const payload=data&&typeof data==='object'?data as {error?:unknown}:null;
-  const providerMessage=typeof payload?.error==='string'&&payload.error.trim()
-    ?payload.error.trim()
-    :fallback;
-  const retryAfterSeconds=response.status===429?boundedRetryAfter(response,data):null;
+  const payload=parseAuthErrorEnvelope(
+    data,
+    response.status,
+    response.headers.get('Retry-After'),
+    boundary,
+  );
+  const retryAfterSeconds=payload.retryAfter;
   const retryGuidance=retryAfterSeconds
     ?` Try again in ${retryAfterSeconds} ${retryAfterSeconds===1?'second':'seconds'}.`
     :'';
   return new AuthenticationApiError(
-    `${providerMessage}${retryGuidance}`,
+    `${payload.error}${retryGuidance}`,
     response.status,
     retryAfterSeconds,
   );
@@ -111,168 +393,64 @@ export interface StoredSession {
   lastActivityAt:number;
   user:AuthUser;
 }
-export interface MfaFactor {
-  id:string;
-  factorType:'totp';
-  friendlyName:string;
-  createdAt:string|null;
-  updatedAt:string|null;
-}
+export type MfaFactor = MfaFactorPayload;
 export interface MfaLoginChallenge {
   mfaRequired:true;
   pendingAccessToken:string;
   expiresAt:number;
   factors:MfaFactor[];
 }
-export interface MfaStatus {
-  assuranceLevel:'aal1'|'aal2';
-  factors:MfaFactor[];
-  minimumVerifiedFactors:number;
-  canRemoveVerifiedFactor:boolean;
-  unsupportedVerifiedFactor:boolean;
-}
-export interface MfaEnrollment {
-  factorId:string;
-  friendlyName:string;
-  qrCodeSvg:string;
-  secret:string;
-  uri:string|null;
-}
-export interface ProfileSummary { display_name:string; verification_status:'not_started'|'pending'|'verified'|'failed'; member_since:string; completed_deals:number; rating_count:number; average_rating:number|null; recent_ratings:{stars:number;comment:string|null;created_at:string}[] }
-export interface TimelineEvent { id:string; event_type:string; created_at:string; is_mine:boolean }
-export interface DealNotification extends TimelineEvent { deal_id:string; public_id:string; title:string; is_read:boolean }
-export interface DealMessage { id:number; sender_id:string; sender_name:string; body:string; created_at:string; is_mine:boolean }
-export interface DealOffer { id:string;amount_cents:number;status:'pending'|'accepted'|'declined'|'withdrawn';buyer_name:string;created_at:string;is_mine:boolean }
-export interface DealInquiry { id:string;buyer_name:string;body:string;seller_reply:string|null;created_at:string;replied_at:string|null;is_mine:boolean }
-export interface DealShipment { id:string;deal_id:string;carrier:string;tracking_number:string;status:'shipped'|'delivered';shipped_at:string;delivered_at:string|null }
-export interface SellerShippingEvidenceReadiness {
-  item_photo_ready:boolean;
-  packing_video_ready:boolean;
-  package_weight_ready:boolean;
-  serial_required:boolean;
-  serial_photo_ready:boolean;
-  distinct_files_ready:boolean;
-  ready:boolean;
-}
-export interface DealDeliveryDetails { recipient_name:string;full_address:string;country:string;instructions:string|null;updated_at:string;locked:boolean }
-export type DealPaymentMethod='cash_at_handoff'|'bank_transfer'|'payment_app'|'card_invoice'|'other';
-export interface DealPaymentRecord { method:DealPaymentMethod;buyer_confirmed_at:string|null;buyer_marked_sent_at:string|null;seller_marked_received_at:string|null;updated_at:string;viewer_role:'seller'|'buyer' }
-export type ProtectedPaymentState='not_started'|'checkout_created'|'processing'|'funds_secured'|'release_pending'|'released'|'failed'|'expired'|'cancelled'|'refund_pending'|'refunded'|'disputed'|'release_failed';
-export interface ProtectedPaymentStatus { status:ProtectedPaymentState;item_amount_cents:number;platform_fee_cents:number;seller_amount_cents:number;currency:CurrencyCode;checkout_expires_at:string|null;paid_at:string|null;released_at:string|null;refunded_at:string|null;disputed_at:string|null;failure_message:string|null;seller_connected:boolean;seller_payouts_ready:boolean;viewer_role:'seller'|'buyer' }
-export interface StripeConnectStatus { connected:boolean;detailsSubmitted:boolean;payoutsEnabled:boolean;transfersActive:boolean;ready:boolean }
-export interface AdminReport { report_id:string;deal_id:string;public_id:string;title:string;reason:string;report_status:'open'|'reviewed'|'dismissed';moderation_status:'visible'|'hidden';created_at:string;reporter_name:string;seller_name:string;resolution_note:string|null }
-export interface AdminRevenueSummary { currency:CurrencyCode; total_payment_volume_cents:number; total_commission_earned_cents:number; total_released_to_sellers_cents:number; total_protected_cents:number; total_refunded_cents:number; payment_count:number; released_count:number; refunded_count:number; disputed_count:number }
-export interface AdminRevenueTransaction { transaction_id:string; deal_id:string; public_id:string; title:string; status:ProtectedPaymentState; currency:CurrencyCode; item_amount_cents:number; platform_fee_cents:number; seller_amount_cents:number; seller_name:string; buyer_name:string; created_at:string; updated_at:string }
-export interface AdminCatalogAdoption {
-  window_days:number;
-  catalog_version:string;
-  category_id:string;
-  deal_count:number;
-  structured_brand_count:number;
-  structured_model_count:number;
-  manual_fallback_count:number;
-  draft_count:number;
-  published_count:number;
-  accepted_count:number;
-  completed_count:number;
-  latest_deal_at:string;
-}
-export interface AccountSession {
-  session_id:string;
-  created_at:string;
-  last_active_at:string;
-  expires_at:string|null;
-  user_agent:string;
-  current_session:boolean;
-}
-export interface RiskAssessment { risk_score:number;risk_level:'low'|'medium'|'high';signals:string[] }
-export interface PublicTrustProfile { display_name:string;verification_status:'not_started'|'pending'|'verified'|'failed';member_since:string;completed_sales:number;rating_count:number;average_rating:number|null }
-export interface TrustPassportSettings { public_id:string;enabled:boolean }
-export interface TrustPassport { display_name:string;verification_status:'not_started'|'pending'|'verified'|'failed';member_since:string;completed_deals:number;completed_sales:number;completed_purchases:number;rating_count:number;average_rating:number|null;recent_ratings:{stars:number;created_at:string}[] }
-export interface DealInspection { agreement_version:number;item_reviewed:boolean;price_confirmed:boolean;handoff_confirmed:boolean;reference_checked:boolean;inspected_at:string;buyer_name:string }
+export type MfaStatus = MfaStatusPayload;
+export type MfaEnrollment = MfaEnrollmentPayload;
+export type ProfileSummary = ProfileSummaryPayload;
+export type TimelineEvent = TimelineEventPayload;
+export type DealNotification = DealNotificationPayload;
+export type DealMessage = DealMessagePayload;
+export type DealOffer = DealOfferPayload;
+export type DealInquiry = DealInquiryPayload;
+export type DealShipment = DealShipmentPayload;
+export type SellerShippingEvidenceReadiness =
+  SellerShippingEvidenceReadinessPayload;
+export type DealDeliveryDetails = DealDeliveryDetailsPayload;
+export type DealPaymentMethod = LegacyPaymentMethod;
+export type DealPaymentRecord = LegacyPaymentRecordPayload;
+export type SupportCaseCategory = SupportCategory;
+export type SupportCaseSummary = SupportCaseSummaryPayload;
+export type SupportCaseDetail = SupportCaseDetailPayload;
+export type SupportQueueItem = SupportQueueItemPayload;
+export type ProtectedPaymentState=ProtectedPaymentStatePayload;
+export type ProtectedPaymentStatus=ProtectedPaymentStatusPayload;
+export type StripeConnectStatus=StripeConnectStatusPayload;
+export type AdminReport = AdminReportPayload;
+export type AdminRevenueSummary = AdminRevenueSummaryPayload;
+export type AdminRevenueTransaction = AdminRevenueTransactionPayload;
+export type AdminCatalogAdoption = AdminCatalogAdoptionPayload;
+export type AccountSession = AccountSessionPayload;
+export type RiskAssessment = RiskAssessmentPayload;
+export type PublicTrustProfile = PublicTrustProfilePayload;
+export type TrustPassportSettings = TrustPassportSettingsPayload;
+export type TrustPassport = TrustPassportPayload;
+export type DealInspection = DealInspectionPayload;
 export type EvidenceType=EvidenceUploadType;
-export type EvidenceIntegrityStatus='unverified'|'verified'|'missing'|'mismatch'|'invalid'|'deleted';
-export type EvidenceLifecycleStatus='retained'|'deletion_review'|'deletion_approved'|'deletion_processing'|'deleted';
-export interface DealEvidence { id:string;deal_id:string;dispute_id:string|null;uploader_role:'seller'|'buyer'|'admin';evidence_type:EvidenceType|string;file_name:string|null;mime_type:string|null;detected_mime_type:string|null;file_size_bytes:number|null;sha256:string|null;scan_status:'clean'|'legacy_unscanned'|'deleted';scanned_at:string|null;integrity_status:EvidenceIntegrityStatus;integrity_checked_at:string|null;retention_class:'routine_evidence'|'dispute_evidence';retention_until:string|null;lifecycle_status:EvidenceLifecycleStatus;deleted_at:string|null;created_at:string }
+export type EvidenceIntegrityStatus=EvidenceIntegrityStatusPayload;
+export type EvidenceLifecycleStatus=EvidenceLifecycleStatusPayload;
+export type DealEvidence=DealEvidencePayload;
 export interface DealEvidenceViewer { objectUrl:string;expiresAt:string;mimeType:'image/webp'|'video/mp4'|'video/webm'|'video/quicktime';fileName:string;fileSizeBytes:number;sha256:string;scanStatus:'clean';scannedAt:string;integrityStatus:'verified';integrityCheckedAt:string }
-export interface EvidenceLifecycleJob {
-  jobId:string;
-  jobType:'integrity_check'|'quarantine_cleanup'|'evidence_delete';
-  status:'pending'|'pending_review'|'approved'|'processing'|'blocked'|'failed';
-  evidenceId:string|null;
-  publicId:string|null;
-  title:string|null;
-  retentionClass:'routine_evidence'|'dispute_evidence'|null;
-  retentionUntil:string|null;
-  lifecycleStatus:EvidenceLifecycleStatus|null;
-  reasonCode:string;
-  attempts:number;
-  lastErrorCode:string|null;
-  createdAt:string;
-  updatedAt:string;
-  activeHold:boolean;
-  holdKey:string|null;
-}
-export interface EvidenceLifecycleAlert {
-  alertId:string;
-  alertType:'deletion_review_required'|'integrity_failure'|'maintenance_failure'|'legal_hold_block';
-  severity:'info'|'warning'|'critical';
-  ownerRole:'admin'|'compliance';
-  status:'open'|'acknowledged';
-  summary:string;
-  evidenceId:string|null;
-  jobId:string|null;
-  createdAt:string;
-}
-export interface EvidenceLifecycleSnapshot {
-  generatedAt:string;
-  counts:{
-    openAlerts:number;
-    integrityQueued:number;
-    quarantineQueued:number;
-    deletionReviews:number;
-    activeLegalHolds:number;
-  };
-  jobs:EvidenceLifecycleJob[];
-  alerts:EvidenceLifecycleAlert[];
-}
-export interface AdminDispute { dispute_id:string;deal_id:string;public_id:string;title:string;reason:string;dispute_status:'open'|'evidence_requested'|'under_review'|'resolved_buyer'|'resolved_seller'|'refunded'|'cancelled';response_deadline:string;opened_at:string;opened_by_name:string;seller_name:string;buyer_name:string;payment_status:string;item_amount_cents:number;currency:CurrencyCode;resolution_note:string|null }
-export interface SellerDeclarationRecord { attested:boolean;attested_at:string|null }
-export interface AgreementHistoryVersion { version:number;price_cents:number;currency:CurrencyCode;condition:'Like new'|'Good'|'Fair';delivery_method:'Meet in person'|'Ship to buyer';content_hash:string;created_at:string;acceptance_count:number;is_current:boolean }
-export interface AgreementVerificationResult { matched:boolean;public_id:string;version:number;is_current:boolean;created_at:string }
-export interface DealRenewalResult { agreement_version:number;expires_at:string }
-export interface DealParticipants { seller_name:string;seller_verification:'not_started'|'pending'|'verified'|'failed';buyer_name:string;buyer_verification:'not_started'|'pending'|'verified'|'failed';accepted_at:string|null;viewer_role:'seller'|'buyer' }
-export interface DealActionPlan { viewer_role:'seller'|'buyer';deal_status:'accepted'|'completed'|'disputed'|'cancelled';meeting_status:'proposed'|'confirmed'|'cancelled'|null;seller_arrived:boolean;buyer_arrived:boolean;handoff_code_ready:boolean;shipment_status:'shipped'|'delivered'|null;inspection_recorded:boolean;rating_submitted:boolean;delivery_address_ready:boolean;payment_method_recorded:boolean;payment_method_confirmed:boolean;payment_marked_sent:boolean;payment_received:boolean }
-
-interface DealRow {
-  id: string; public_id: string; title: string; description: string;
-  price_cents: number; currency: CurrencyCode; condition: 'Like new' | 'Good' | 'Fair';
-  serial_last_four: string | null; delivery_method: 'Meet in person' | 'Ship to buyer';
-  category_id?: NonNullable<Deal['catalog']>['categoryId'];
-  catalog_version?: string;
-  catalog_brand_id?: string | null; catalog_brand_label?: string | null;
-  catalog_model_id?: string | null; catalog_model_label?: string | null;
-  model_year?: number | null;
-  catalog_variant_id?: string | null; catalog_variant_label?: string | null;
-  status: 'draft' | 'published' | 'accepted' | 'completed' | 'cancelled' | 'disputed';
-  current_agreement_version: number; created_at: string;
-  expires_at: string | null;
-  deal_media?: { storage_path: string; sort_order: number }[];
-  seller_id?: string; buyer_id?: string | null;
-}
-
-interface AuthResponse {
-  access_token?: string;
-  expires_in?: number;
-  user?: {
-    id: string;
-    email?: string;
-    email_confirmed_at?: string | null;
-    user_metadata?: { display_name?: string };
-  };
-  msg?: string;
-  error_description?: string;
-}
+export type EvidenceLifecycleJob=EvidenceLifecycleJobPayload;
+export type EvidenceLifecycleAlert=EvidenceLifecycleAlertPayload;
+export type EvidenceLifecycleSnapshot=EvidenceLifecycleSnapshotPayload;
+export type AdminDispute=AdminDisputePayload;
+export interface SellerDeclarationRecord
+  extends SellerDeclarationRecordPayload {}
+export interface AgreementHistoryVersion
+  extends AgreementHistoryVersionPayload {}
+export interface AgreementDocumentSnapshot
+  extends AgreementDocumentSnapshotPayload {}
+export interface AgreementVerificationResult
+  extends AgreementVerificationResultPayload {}
+export interface DealRenewalResult extends DealRenewalResultPayload {}
+export type DealParticipants = DealParticipantsPayload;
+export type DealActionPlan = DealActionPlanPayload;
 
 export const sessionStorageKey = 'dealivra_session_v2';
 export const legacySessionStorageKey = 'dealsafe_session';
@@ -309,19 +487,23 @@ function clearStoredSession(){
 type SignOutScope='local'|'others'|'global';
 
 async function revokeServerSession(accessToken?:string,scope:SignOutScope='local'){
-  const response=await fetch('/api/auth/logout',{
+  const requestBody=parseAuthLogoutRequest({scope});
+  const bearerToken=accessToken
+    ?parseAuthBearerToken(accessToken,'auth_logout_request')
+    :null;
+  const response=await fetchWithDeadline('/api/auth/logout',{
     method:'POST',
     headers:{
       'Content-Type':'application/json',
-      ...(accessToken?{Authorization:`Bearer ${accessToken}`}:{})
+      ...(bearerToken?{Authorization:`Bearer ${bearerToken}`}:{})
     },
     credentials:'same-origin',
-    body:JSON.stringify({scope}),
+    body:JSON.stringify(requestBody),
     keepalive:true,
   });
   if(!response.ok){
-    const data=await response.json().catch(()=>null);
-    throw authenticationApiError(response,data,'Could not update your signed-in devices.');
+    const data=await readBoundedJson(response);
+    throw authenticationApiError(response,data,'auth_logout_error');
   }
 }
 
@@ -364,11 +546,11 @@ function readStoredSession(){
   }
 }
 
-function storeSession(data:AuthResponse,user:AuthUser,previous?:StoredSession){
+function storeSession(data:AuthSessionPayload,user:AuthUser,previous?:StoredSession){
   const now=Date.now();
   const session:StoredSession={
-    accessToken:data.access_token!,
-    expiresAt:decodeJwtExpiry(data.access_token!)??now+(data.expires_in||3600)*1000,
+    accessToken:data.access_token,
+    expiresAt:decodeJwtExpiry(data.access_token)??now+data.expires_in*1000,
     createdAt:previous?.createdAt||now,
     lastActivityAt:previous?.lastActivityAt||now,
     user,
@@ -387,8 +569,7 @@ function headers(token?: string) {
   };
 }
 
-function toUser(data: AuthResponse): AuthUser | null {
-  if (!data.user?.id || !data.user.email) return null;
+function toUser(data: AuthSessionPayload): AuthUser {
   return {
     id: data.user.id,
     email: data.user.email,
@@ -423,48 +604,34 @@ export function markSessionActivity(){
 
 export async function signUp(email: string, password: string, displayName: string) {
   requireSupabaseConfiguration();
-  validatePassword(password);
-  const name=displayName.trim();
-  if(name.length<2||name.length>80)throw new Error('Name must contain 2 to 80 characters.');
-  const response = await fetch('/api/auth/signup', {
+  const requestBody=parseAuthSignupRequest({email,password,displayName});
+  const response = await fetchWithDeadline('/api/auth/signup', {
     method: 'POST', headers: {'Content-Type':'application/json'},
     credentials:'same-origin',
-    body: JSON.stringify({ email:email.trim().toLowerCase(), password, displayName:name }),
+    body: JSON.stringify(requestBody),
   });
-  const result = await response.json() as {
-    session?:AuthResponse|null;
-    needsEmailConfirmation?:boolean;
-    error?:string;
-  };
-  if (!response.ok) throw authenticationApiError(response,result,'Sign up failed');
+  const responseBody = await readBoundedJson(response);
+  if (!response.ok) throw authenticationApiError(response,responseBody,'auth_signup_error');
+  const result=parseSignupResponse(responseBody);
   if (result.session) {
     const user=toUser(result.session);
-    if(!user)throw new Error('Account session could not be verified.');
     const session = storeSession(result.session,user);
     return { session, needsEmailConfirmation: false };
   }
-  return { session: null, needsEmailConfirmation: result.needsEmailConfirmation!==false };
+  return { session: null, needsEmailConfirmation: true };
 }
 
 export async function signIn(email: string, password: string) {
   requireSupabaseConfiguration();
-  const response = await fetch('/api/auth/login', {
+  const requestBody=parseAuthLoginRequest({email,password});
+  const response = await fetchWithDeadline('/api/auth/login', {
     method: 'POST', headers: {'Content-Type':'application/json'}, credentials:'same-origin',
-    body: JSON.stringify({ email:email.trim().toLowerCase(), password }),
+    body: JSON.stringify(requestBody),
   });
-  const data = await response.json() as AuthResponse&{
-    error?:string;
-    mfa_required?:boolean;
-    pending_access_token?:string;
-    factors?:MfaFactor[];
-  };
-  if (!response.ok) throw authenticationApiError(response,data,'Invalid email or password.');
-  if(data.mfa_required){
-    if(
-      typeof data.pending_access_token!=='string'
-      ||!Array.isArray(data.factors)
-      ||data.factors.length===0
-    )throw new Error('Multi-factor sign-in could not be started.');
+  const responseBody=await readBoundedJson(response);
+  if (!response.ok) throw authenticationApiError(response,responseBody,'auth_login_error');
+  const data=parseLoginResponse(responseBody);
+  if('mfa_required' in data){
     return {
       mfaRequired:true,
       pendingAccessToken:data.pending_access_token,
@@ -472,57 +639,55 @@ export async function signIn(email: string, password: string) {
       factors:data.factors,
     } satisfies MfaLoginChallenge;
   }
-  const user = toUser(data);
-  if (!data.access_token || !user) throw new Error('No session returned');
-  return storeSession(data,user);
+  return storeSession(data,toUser(data));
 }
 
-async function mfaRequest<T>(accessToken:string,body:Record<string,unknown>){
-  const response=await fetch('/api/auth/mfa',{
+async function mfaRequest(accessToken:string,body:unknown):Promise<unknown>{
+  const bearerToken=parseAuthBearerToken(accessToken,'auth_mfa_request');
+  const requestBody=parseAuthMfaRequest(body);
+  const response=await fetchWithDeadline('/api/auth/mfa',{
     method:'POST',
     headers:{
       'Content-Type':'application/json',
-      Authorization:`Bearer ${accessToken}`,
+      Authorization:`Bearer ${bearerToken}`,
     },
     credentials:'same-origin',
-    body:JSON.stringify(body),
+    body:JSON.stringify(requestBody),
   });
-  const data=await response.json().catch(()=>null) as (T&{error?:string})|null;
-  if(!response.ok)throw authenticationApiError(response,data,'Authenticator security could not be updated.');
+  const data=await readBoundedJson(response);
+  if(!response.ok)throw authenticationApiError(response,data,'auth_mfa_error');
   if(!data)throw new Error('Authenticator security returned an invalid response.');
   return data;
 }
 
-function storeVerifiedMfaSession(data:AuthResponse,previous?:StoredSession){
-  const user=toUser(data)||previous?.user;
-  if(!data.access_token||!user)throw new Error('The verified session could not be created.');
+function storeVerifiedMfaSession(data:AuthSessionPayload,previous?:StoredSession){
   const claims=decodeJwtPayload(data.access_token);
   if(claims?.aal!=='aal2')throw new Error('Multi-factor verification did not reach the required security level.');
-  return storeSession(data,user,previous);
+  return storeSession(data,toUser(data),previous);
 }
 
 export async function verifyMfaLogin(challenge:MfaLoginChallenge,factorId:string,code:string){
   if(Date.now()>=challenge.expiresAt)throw new Error('This sign-in attempt expired. Enter your password again.');
-  const data=await mfaRequest<AuthResponse>(challenge.pendingAccessToken,{
+  const data=parseAuthSession(await mfaRequest(challenge.pendingAccessToken,{
     action:'challenge_and_verify',
     purpose:'login',
     factorId,
     code:code.trim(),
-  });
+  }),'mfa_session');
   return storeVerifiedMfaSession(data);
 }
 
 export async function getMfaStatus(session:StoredSession){
   const current=await sessionForRemoteRevocation(session);
-  return mfaRequest<MfaStatus>(current.accessToken,{action:'list'});
+  return parseMfaStatusResponse(await mfaRequest(current.accessToken,{action:'list'}));
 }
 
 export async function startMfaEnrollment(session:StoredSession,friendlyName:string){
   const current=await sessionForRemoteRevocation(session);
-  return mfaRequest<MfaEnrollment>(current.accessToken,{
+  return parseMfaEnrollmentResponse(await mfaRequest(current.accessToken,{
     action:'enroll',
     friendlyName:friendlyName.trim(),
-  });
+  }));
 }
 
 async function verifyMfaFactor(
@@ -532,12 +697,12 @@ async function verifyMfaFactor(
   purpose:'enrollment'|'step_up',
 ){
   const current=await sessionForRemoteRevocation(session);
-  const data=await mfaRequest<AuthResponse>(current.accessToken,{
+  const data=parseAuthSession(await mfaRequest(current.accessToken,{
     action:'challenge_and_verify',
     purpose,
     factorId,
     code:code.trim(),
-  });
+  }),'mfa_session');
   return storeVerifiedMfaSession(data,current);
 }
 
@@ -551,18 +716,20 @@ export async function verifyMfaStepUp(session:StoredSession,factorId:string,code
 
 export async function unenrollMfaFactor(session:StoredSession,factorId:string){
   const current=await sessionForRemoteRevocation(session);
-  const data=await mfaRequest<AuthResponse>(current.accessToken,{action:'unenroll',factorId});
-  const user=toUser(data)||current.user;
-  if(!data.access_token)throw new Error('The updated session could not be created.');
-  return storeSession(data,user,current);
+  const data=parseAuthSession(
+    await mfaRequest(current.accessToken,{action:'unenroll',factorId}),
+    'mfa_session',
+  );
+  return storeSession(data,toUser(data),current);
 }
 
 export async function cancelMfaEnrollment(session:StoredSession,factorId:string){
   const current=await sessionForRemoteRevocation(session);
-  const data=await mfaRequest<AuthResponse>(current.accessToken,{action:'cancel_enrollment',factorId});
-  const user=toUser(data)||current.user;
-  if(!data.access_token)throw new Error('The updated session could not be created.');
-  return storeSession(data,user,current);
+  const data=parseAuthSession(
+    await mfaRequest(current.accessToken,{action:'cancel_enrollment',factorId}),
+    'mfa_session',
+  );
+  return storeSession(data,toUser(data),current);
 }
 
 export async function refreshSession(session:StoredSession){
@@ -570,16 +737,17 @@ export async function refreshSession(session:StoredSession){
   if(!current||current.user.id!==session.user.id)throw new Error('Your session expired. Please sign in again.');
   if(refreshPromise)return refreshPromise;
   refreshPromise=(async()=>{
-    const response=await fetch('/api/auth/refresh',{
+    const requestBody=parseAuthRefreshRequest({});
+    const response=await fetchWithDeadline('/api/auth/refresh',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       credentials:'same-origin',
-      body:'{}',
+      body:JSON.stringify(requestBody),
     });
-    const data=await response.json() as AuthResponse&{error?:string};
-    if(!response.ok)throw authenticationApiError(response,data,'Your session expired. Please sign in again.');
-    if(!data.access_token)throw new AuthenticationApiError('Your session expired. Please sign in again.',401,null);
-    return storeSession(data,toUser(data)||current.user,current);
+    const responseBody=await readBoundedJson(response);
+    if(!response.ok)throw authenticationApiError(response,responseBody,'auth_refresh_error');
+    const data=parseAuthSession(responseBody,'auth_refresh');
+    return storeSession(data,toUser(data),current);
   })();
   try{return await refreshPromise}finally{refreshPromise=null}
 }
@@ -609,7 +777,7 @@ async function authenticatedFetch(session:StoredSession,input:RequestInfo|URL,in
     const requestHeaders=new Headers(init.headers);
     requestHeaders.set('apikey',publishableKey??'');
     requestHeaders.set('Authorization',`Bearer ${token}`);
-    return fetch(input,{...init,headers:requestHeaders});
+    return fetchWithDeadline(input,{...init,headers:requestHeaders});
   };
   let response=await send(current.accessToken);
   if(response.status===401){
@@ -617,7 +785,7 @@ async function authenticatedFetch(session:StoredSession,input:RequestInfo|URL,in
     response=await send(current.accessToken);
   }
   if(response.status===403){
-    const body=await response.clone().text().catch(()=>'');
+    const body=await readBoundedText(response.clone(),16_384).catch(()=>'');
     if(/DEALIVRA_MFA_REQUIRED|mfa_required|multi-factor verification is required/i.test(body)){
       window.dispatchEvent(new Event(mfaRequiredEvent));
     }
@@ -625,72 +793,133 @@ async function authenticatedFetch(session:StoredSession,input:RequestInfo|URL,in
   return response;
 }
 
-export async function requestPasswordReset(email:string){const response=await fetch('/api/auth/recover',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({email:email.trim().toLowerCase()})});const data=await response.json().catch(()=>null);if(!response.ok)throw authenticationApiError(response,data,'Could not send reset email')}
+export async function requestPasswordReset(email:string){
+  const requestBody=parseAuthRecoverRequest({email});
+  const response=await fetchWithDeadline('/api/auth/recover',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    credentials:'same-origin',
+    body:JSON.stringify(requestBody),
+  });
+  const data=await readBoundedJson(response);
+  if(!response.ok)throw authenticationApiError(response,data,'auth_recover_error');
+}
 export async function updateRecoveredPassword(accessToken:string,password:string){
-  validatePassword(password);
-  const response=await fetch('/api/auth/password',{
+  const bearerToken=parseAuthBearerToken(accessToken,'auth_password_request');
+  const requestBody=parseAuthPasswordRequest({
+    action:'recovery',
+    newPassword:password,
+  });
+  const response=await fetchWithDeadline('/api/auth/password',{
     method:'POST',
     headers:{
       'Content-Type':'application/json',
-      Authorization:`Bearer ${accessToken}`,
+      Authorization:`Bearer ${bearerToken}`,
     },
     credentials:'same-origin',
-    body:JSON.stringify({action:'recovery',newPassword:password}),
+    body:JSON.stringify(requestBody),
   });
   if(!response.ok){
-    const data=await response.json().catch(()=>null);
-    throw authenticationApiError(response,data,'Could not update password.');
+    const data=await readBoundedJson(response);
+    throw authenticationApiError(response,data,'auth_password_error');
   }
   clearStoredSession();
 }
 
 export async function updateAccountName(session:StoredSession,displayName:string){
-  const name=displayName.trim();
-  if(name.length<2)throw new Error('Name must contain at least 2 characters.');
-  const authResponse=await authenticatedFetch(session,`${supabaseUrl}/auth/v1/user`,{method:'PUT',headers:headers(session.accessToken),body:JSON.stringify({data:{display_name:name}})});
-  if(!authResponse.ok){const data=await authResponse.json();throw new Error(data?.msg||data?.error_description||'Could not update account name')}
-  const profileResponse=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(session.user.id)}`,{method:'PATCH',headers:{...headers(session.accessToken),Prefer:'return=minimal'},body:JSON.stringify({display_name:name})});
-  if(!profileResponse.ok){const data=await profileResponse.json();throw new Error(data?.message||'Could not update profile name')}
+  const request=parseAccountNameUpdateRequest({
+    userId:session.user.id,
+    displayName,
+  });
+  const authResponse=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/auth/v1/user`,
+    {
+      method:'PUT',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(request.authBody),
+    },
+  );
+  if(!authResponse.ok){
+    const data=await readBoundedJson(authResponse);
+    parseAccountAuthErrorEnvelope(data,authResponse.status);
+    throw new Error('Could not update account name. Please try again.');
+  }
+  const profileResponse=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/profiles?id=eq.${encodeURIComponent(request.userId)}`,
+    {
+      method:'PATCH',
+      headers:{...headers(session.accessToken),Prefer:'return=minimal'},
+      body:JSON.stringify(request.profileBody),
+    },
+  );
+  if(!profileResponse.ok){
+    const profileError=await readBoundedJson(profileResponse);
+    let authRollbackSucceeded=false;
+    try{
+      const rollbackRequest=parseAccountNameUpdateRequest({
+        userId:request.userId,
+        displayName:session.user.displayName,
+      });
+      const rollbackResponse=await authenticatedFetch(
+        session,
+        `${supabaseUrl}/auth/v1/user`,
+        {
+          method:'PUT',
+          headers:headers(session.accessToken),
+          body:JSON.stringify(rollbackRequest.authBody),
+        },
+      );
+      if(rollbackResponse.ok){
+        authRollbackSucceeded=true;
+      }else{
+        const rollbackError=await readBoundedJson(rollbackResponse);
+        parseAccountAuthErrorEnvelope(rollbackError,rollbackResponse.status);
+      }
+    }catch{
+      // Preserve the original profile failure. The next sign-in refreshes the
+      // canonical profile while operations can investigate the safe boundary
+      // diagnostic without exposing customer data.
+    }
+    parseAccountProfileErrorEnvelope(profileError,profileResponse.status);
+    throw new Error(
+      authRollbackSucceeded
+        ?'Could not update profile name. Please try again.'
+        :'Account name update could not be completed. Sign out and try again.',
+    );
+  }
   const current=getStoredSession()||session;
-  const updated:StoredSession={...current,user:{...current.user,displayName:name}};
+  const updated:StoredSession={
+    ...current,
+    user:{...current.user,displayName:request.displayName},
+  };
   sessionStorage.setItem(sessionStorageKey,JSON.stringify(updated));
   window.dispatchEvent(new CustomEvent<StoredSession>(sessionUpdatedEvent,{detail:updated}));
   return updated;
 }
 
 export async function updateAccountPassword(session:StoredSession,currentPassword:string,password:string){
-  validatePassword(password);
-  if(!currentPassword||currentPassword.length>256)throw new Error('Enter your current password.');
-  const response=await fetch('/api/auth/password',{
+  const bearerToken=parseAuthBearerToken(session.accessToken,'auth_password_request');
+  const requestBody=parseAuthPasswordRequest({
+    action:'change',
+    currentPassword,
+    newPassword:password,
+  });
+  const response=await fetchWithDeadline('/api/auth/password',{
     method:'POST',
     headers:{
       'Content-Type':'application/json',
-      Authorization:`Bearer ${session.accessToken}`,
+      Authorization:`Bearer ${bearerToken}`,
     },
     credentials:'same-origin',
-    body:JSON.stringify({
-      action:'change',
-      currentPassword,
-      newPassword:password,
-    }),
+    body:JSON.stringify(requestBody),
   });
   if(!response.ok){
-    const data=await response.json().catch(()=>null);
-    throw authenticationApiError(response,data,'Could not update password.');
+    const data=await readBoundedJson(response);
+    throw authenticationApiError(response,data,'auth_password_error');
   }
   clearStoredSession();
-}
-
-function validatePassword(password:string){
-  if(password.length<12)throw new Error('Password must contain at least 12 characters.');
-  if(
-    !/[a-z]/.test(password)
-    || !/[A-Z]/.test(password)
-    || !/\d/.test(password)
-    || !/[!@#$%^&*()_+\-=\[\]{};'\\:"|<>?,.\/`~]/.test(password)
-  ){
-    throw new Error('Password must include uppercase, lowercase, a number, and a symbol.');
-  }
 }
 
 export async function signOut(session:StoredSession|null=getStoredSession()){
@@ -722,11 +951,11 @@ export async function signOutEverywhere(session:StoredSession){
 async function accountEmailConfirmed(session:StoredSession){
   const response=await authenticatedFetch(session,`${supabaseUrl}/auth/v1/user`,{headers:headers(session.accessToken)});
   if(!response.ok)return false;
-  const account=await response.json() as {email_confirmed_at?:string|null};
+  const account=await readBoundedJson(response) as {email_confirmed_at?:string|null};
   return Boolean(account.email_confirmed_at);
 }
 
-function mapDeal(row: DealRow, sellerName: string, viewerId?: string, sellerContactVerified=false) {
+function mapDeal(row: DealRowPayload, sellerName: string, viewerId?: string, sellerContactVerified=false) {
   const viewerRole: Deal['viewerRole'] = viewerId ? (row.seller_id===viewerId?'seller':row.buyer_id===viewerId?'buyer':'visitor') : 'visitor';
   const catalog: Deal['catalog'] = {
     categoryId: row.category_id || 'general',
@@ -775,7 +1004,7 @@ export async function listUserDeals(session: StoredSession) {
     accountEmailConfirmed(session)
   ]);
   if (!response.ok) throw new Error('Could not load your deals');
-  const rows = await response.json() as DealRow[];
+  const rows = parseUserDealRows(await readBoundedJson(response));
   return rows.map(row => mapDeal(row, session.user.displayName, session.user.id, sellerContactVerified));
 }
 
@@ -784,6 +1013,15 @@ function publicMediaUrl(path: string) {
 }
 
 export async function uploadDealPhotos(session: StoredSession, dealId: string, files: File[], startIndex=0) {
+  const batch=parseMediaUploadBatchRequest({
+    dealId,
+    ownerId:session.user.id,
+    startIndex,
+    fileCount:files.length,
+  });
+  if(files.filter(file=>isVideoUpload(file)).length>1){
+    throw new Error('Only one item video is allowed per deal.');
+  }
   const urls: string[] = [];
   for (let index=0; index<files.length; index++) {
     const file=await prepareMediaUpload(files[index]);
@@ -791,53 +1029,77 @@ export async function uploadDealPhotos(session: StoredSession, dealId: string, f
     if(file.size>(isVideo?25:6)*1024*1024)throw new Error(`${isVideo?'Video':'Photo'} ${index+1} is too large`);
     if(!['image/jpeg','image/png','image/webp','image/heic','video/mp4','video/webm'].includes(file.type)&&!/^.+\.(jpe?g|png|webp|heic|mp4|webm)$/i.test(file.name))throw new Error(`File ${index+1} has an unsupported format`);
     const extension=file.name.split('.').pop()?.toLowerCase() || 'jpg';
-    const path=`${session.user.id}/${dealId}/${crypto.randomUUID()}.${extension}`;
+    const path=`${batch.ownerId}/${batch.dealId}/${crypto.randomUUID()}.${extension}`;
     const upload=await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/deal-media/${path}`,{method:'POST',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`,'Content-Type':file.type||(isVideo?'video/mp4':'image/jpeg'),'x-upsert':'false'},body:file});
     if(!upload.ok) throw new Error(`Photo ${index+1} could not be uploaded`);
-    const record=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_media`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=minimal'},body:JSON.stringify({deal_id:dealId,storage_path:path,sort_order:startIndex+index})});
-    if(!record.ok) throw new Error(`Photo ${index+1} could not be linked to the deal`);
+    const requestBody=parseMediaRecordInsertRequest({
+      deal_id:batch.dealId,
+      storage_path:path,
+      sort_order:batch.startIndex+index,
+    },batch.ownerId);
+    const record=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_media`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=minimal'},body:JSON.stringify(requestBody)});
+    if(!record.ok){
+      const errorPayload=await readBoundedJson(record);
+      await authenticatedFetch(
+        session,
+        `${supabaseUrl}/storage/v1/object/deal-media/${path.split('/').map(encodeURIComponent).join('/')}`,
+        {
+          method:'DELETE',
+          headers:{
+            apikey:publishableKey??'',
+            Authorization:`Bearer ${session.accessToken}`,
+          },
+        },
+      ).catch(()=>undefined);
+      parseDealMutationPostgrestErrorEnvelope(
+        errorPayload,
+        record.status,
+        'media_record_insert_error',
+      );
+      throw new Error(`Photo ${index+1} could not be linked to the deal`);
+    }
     urls.push(publicMediaUrl(path));
   }
   return urls;
 }
 
-async function invokeEvidenceFiles<T>(session:StoredSession,body:Record<string,unknown>){
-  const response=await authenticatedFetch(session,`${supabaseUrl}/functions/v1/evidence-files`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(body)});
-  const data=await response.json().catch(()=>null) as ({error?:unknown;code?:unknown}&T)|null;
+async function invokeEvidenceFiles(session:StoredSession,body:Record<string,unknown>):Promise<unknown>{
+  const requestBody=parseEvidenceFilesRequest(body);
+  const response=await authenticatedFetch(session,`${supabaseUrl}/functions/v1/evidence-files`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});
+  const data=await readBoundedJson(response);
   if(!response.ok){
-    const message=typeof data?.error==='string'&&data.error.length<=240?data.error:'The secure file service is temporarily unavailable.';
-    throw new Error(message);
+    throw new Error(parseEvidenceEdgeErrorEnvelope(data,response.status,'evidence_files_error').message);
   }
   if(!data)throw new Error('The secure file service returned an invalid response.');
-  return data as T;
+  return data;
 }
-async function invokeEvidenceMaintenance<T>(session:StoredSession,body:Record<string,unknown>){
-  const response=await authenticatedFetch(session,`${supabaseUrl}/functions/v1/evidence-maintenance`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(body)});
-  const data=await response.json().catch(()=>null) as ({error?:unknown;code?:unknown}&T)|null;
+async function invokeEvidenceMaintenance(session:StoredSession,body:Record<string,unknown>):Promise<unknown>{
+  const requestBody=parseEvidenceMaintenanceRequest(body);
+  const response=await authenticatedFetch(session,`${supabaseUrl}/functions/v1/evidence-maintenance`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});
+  const data=await readBoundedJson(response);
   if(!response.ok){
-    const message=typeof data?.error==='string'&&data.error.length<=240?data.error:'The evidence lifecycle service is temporarily unavailable.';
-    throw new Error(message);
+    throw new Error(parseEvidenceEdgeErrorEnvelope(data,response.status,'evidence_maintenance_error').message);
   }
   if(!data)throw new Error('The evidence lifecycle service returned an invalid response.');
-  return data as T;
+  return data;
 }
 export async function getEvidenceLifecycleSnapshot(session:StoredSession){
-  return await invokeEvidenceMaintenance<EvidenceLifecycleSnapshot>(session,{action:'snapshot'});
+  return parseEvidenceLifecycleSnapshotResponse(await invokeEvidenceMaintenance(session,{action:'snapshot'}));
 }
 export async function refreshEvidenceLifecycleInventory(session:StoredSession){
-  await invokeEvidenceMaintenance<{inventory:Record<string,unknown>}>(session,{action:'refresh-inventory'});
+  parseEvidenceInventoryResponse(await invokeEvidenceMaintenance(session,{action:'refresh-inventory'}));
 }
 export async function approveEvidenceDeletion(session:StoredSession,evidenceId:string,reason:string){
-  await invokeEvidenceMaintenance<{jobId:string}>(session,{action:'approve-deletion',evidenceId,reason});
+  parseEvidenceJobIdResponse(await invokeEvidenceMaintenance(session,{action:'approve-deletion',evidenceId,reason}));
 }
 export async function placeEvidenceLegalHold(session:StoredSession,evidenceId:string,reason:string){
-  return await invokeEvidenceMaintenance<{holdKey:string}>(session,{action:'place-legal-hold',evidenceId,reason});
+  return parseEvidenceHoldKeyResponse(await invokeEvidenceMaintenance(session,{action:'place-legal-hold',evidenceId,reason}));
 }
 export async function releaseEvidenceLegalHold(session:StoredSession,evidenceId:string,holdKey:string,reason:string){
-  await invokeEvidenceMaintenance<{holdKey:string}>(session,{action:'release-legal-hold',evidenceId,holdKey,reason});
+  parseEvidenceHoldKeyResponse(await invokeEvidenceMaintenance(session,{action:'release-legal-hold',evidenceId,holdKey,reason}),holdKey);
 }
 export async function acknowledgeEvidenceLifecycleAlert(session:StoredSession,alertId:string){
-  await invokeEvidenceMaintenance<{acknowledged:boolean}>(session,{action:'acknowledge-alert',alertId});
+  parseEvidenceAlertAcknowledgementResponse(await invokeEvidenceMaintenance(session,{action:'acknowledge-alert',alertId}));
 }
 function normalizeEvidenceVideo(file:File){
   const extension=file.name.split('.').pop()?.toLowerCase();
@@ -856,9 +1118,9 @@ export async function uploadDealEvidence(session:StoredSession,dealId:string,upl
   const declaration={claimedMimeType:preparedFile.type,evidenceType,fileName:preparedFile.name,fileSize:preparedFile.size,role:uploaderRole};
   const validation=validateEvidenceDeclaration(declaration);
   if(!validation.ok)throw new Error(validation.message);
-  const byteValidation=validateEvidenceBytes(new Uint8Array(await preparedFile.arrayBuffer()),declaration);
+  const byteValidation=validateEvidenceBytes(new Uint8Array(await readExactBlobArrayBuffer(preparedFile,preparedFile.size)),declaration);
   if(!byteValidation.ok)throw new Error(byteValidation.message);
-  const intake=await invokeEvidenceFiles<{intakeId:string;path:string;bucket:'deal-evidence-quarantine';expiresAt:string}>(session,{
+  const intake=parseEvidenceUploadIntakeResponse(await invokeEvidenceFiles(session,{
     action:'request-upload',
     dealId,
     uploaderRole,
@@ -866,73 +1128,34 @@ export async function uploadDealEvidence(session:StoredSession,dealId:string,upl
     fileName:preparedFile.name,
     claimedMimeType:preparedFile.type,
     fileSize:preparedFile.size
-  });
+  }),session.user.id,dealId);
   const encodedPath=intake.path.split('/').map(encodeURIComponent).join('/');
   const upload=await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/${intake.bucket}/${encodedPath}`,{method:'POST',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`,'Content-Type':preparedFile.type,'x-upsert':'false'},body:preparedFile});
-  if(!upload.ok){const data=await upload.json().catch(()=>null);throw new Error(data?.message||data?.error||'Could not upload evidence file');}
-  const result=await invokeEvidenceFiles<{evidence:DealEvidence}>(session,{action:'finalize-upload',intakeId:intake.intakeId});
+  if(!upload.ok){const data=await readBoundedJson(upload);throw new Error(parseStorageErrorEnvelope(data,upload.status).message);}
+  const result=parseFinalizeEvidenceResponse(await invokeEvidenceFiles(session,{action:'finalize-upload',intakeId:intake.intakeId}),dealId,uploaderRole);
   return result.evidence;
 }
-export async function listDealEvidence(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_evidence_safe?deal_id=eq.${encodeURIComponent(dealId)}&select=*&order=created_at.desc`,{headers:headers(session.accessToken)});if(!response.ok){const data=await response.json().catch(()=>null);throw new Error(data?.message||'Could not load evidence');}return await response.json() as DealEvidence[]}
+export async function listDealEvidence(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_evidence_safe?deal_id=eq.${encodeURIComponent(dealId)}&select=*&order=created_at.desc`,{headers:headers(session.accessToken)});if(!response.ok){const data=await readBoundedJson(response);throw new Error(parsePostgrestErrorEnvelope(data,response.status,'evidence_list_error').message);}return parseDealEvidenceRows(await readBoundedJson(response),dealId)}
 async function evidenceViewerSha256(bytes:ArrayBuffer){
   if(!globalThis.crypto?.subtle)throw new Error('Secure file verification is unavailable in this browser.');
   const digest=await globalThis.crypto.subtle.digest('SHA-256',bytes);
   return Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('');
 }
-export async function loadDealEvidenceViewer(session:StoredSession,evidenceId:string){
-  const data=await invokeEvidenceFiles<{
-    url:string;
-    expiresAt:string;
-    mimeType:string;
-    fileName:string|null;
-    fileSizeBytes:number;
-    sha256:string;
-    scanStatus:string;
-    scannedAt:string|null;
-    integrityStatus:string;
-    integrityCheckedAt:string;
-  }>(session,{action:'signed-url',evidenceId});
-  const allowedMimeTypes=new Set(['image/webp','video/mp4','video/webm','video/quicktime']);
-  if(
-    typeof data.url!=='string'
-    || typeof data.expiresAt!=='string'
-    || typeof data.mimeType!=='string'
-    || (data.fileName!==null&&typeof data.fileName!=='string')
-    || typeof data.sha256!=='string'
-    || typeof data.scannedAt!=='string'
-    || typeof data.integrityCheckedAt!=='string'
-    || !allowedMimeTypes.has(data.mimeType)
-    || data.scanStatus!=='clean'
-    || data.integrityStatus!=='verified'
-    || !/^[0-9a-f]{64}$/.test(data.sha256)
-    || !Number.isSafeInteger(data.fileSizeBytes)
-    || data.fileSizeBytes<=0
-    || data.fileSizeBytes>50*1024*1024
-    || !data.integrityCheckedAt
-    || !data.scannedAt
-    || !data.expiresAt
-    || !Number.isFinite(Date.parse(data.integrityCheckedAt))
-    || !Number.isFinite(Date.parse(data.scannedAt))
-    || !Number.isFinite(Date.parse(data.expiresAt))
-    || Date.parse(data.expiresAt)<=Date.now()
-  )throw new Error('The evidence verification response was invalid.');
-  let signedUrl:URL;
-  try{signedUrl=new URL(data.url)}catch{throw new Error('The evidence verification response was invalid.')}
+export async function loadDealEvidenceViewer(session:StoredSession,evidenceId:string):Promise<DealEvidenceViewer>{
   if(!supabaseUrl)throw new Error(configurationUnavailableMessage);
-  const expectedStorageOrigin=supabaseUrl;
-  if(
-    signedUrl.protocol!=='https:'
-    || signedUrl.origin!==expectedStorageOrigin
-    || !signedUrl.pathname.startsWith('/storage/v1/object/sign/deal-evidence/')
-  )throw new Error('The secure evidence source was invalid.');
-  const response=await fetch(signedUrl,{cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'});
+  const data=parseEvidenceSignedViewerResponse(await invokeEvidenceFiles(session,{action:'signed-url',evidenceId}),supabaseUrl);
+  const signedUrl=new URL(data.url);
+  const expectedStorageOrigin=new URL(supabaseUrl).origin;
+  if(signedUrl.origin!==expectedStorageOrigin||!signedUrl.pathname.startsWith('/storage/v1/object/sign/deal-evidence/')){
+    throw new Error('The verified evidence link is not trusted.');
+  }
+  const response=await fetchWithDeadline(signedUrl,{cache:'no-store',credentials:'omit',referrerPolicy:'no-referrer'});
   if(!response.ok)throw new Error('The verified evidence file could not be loaded.');
   const responseMimeType=(response.headers.get('Content-Type')||'').split(';')[0].trim().toLowerCase();
   if(responseMimeType&&responseMimeType!==data.mimeType)throw new Error('The evidence file type changed during secure viewing.');
-  const responseLength=Number(response.headers.get('Content-Length')||data.fileSizeBytes);
-  if(!Number.isSafeInteger(responseLength)||responseLength!==data.fileSizeBytes)throw new Error('The evidence file size changed during secure viewing.');
-  const bytes=await response.arrayBuffer();
-  if(bytes.byteLength!==data.fileSizeBytes)throw new Error('The evidence file size changed during secure viewing.');
+  const bytes=await readExactArrayBuffer(response,data.fileSizeBytes).catch(()=>{
+    throw new Error('The evidence file size changed during secure viewing.');
+  });
   if(await evidenceViewerSha256(bytes)!==data.sha256)throw new Error('The evidence fingerprint changed during secure viewing.');
   const fileName=(data.fileName||'evidence-file').replace(/[\u0000-\u001f\u007f/\\]+/gu,'-').slice(0,160)||'evidence-file';
   return {
@@ -946,12 +1169,122 @@ export async function loadDealEvidenceViewer(session:StoredSession,evidenceId:st
     scannedAt:data.scannedAt,
     integrityStatus:'verified',
     integrityCheckedAt:data.integrityCheckedAt
-  } as DealEvidenceViewer;
+  };
 }
 
-export async function deleteDealMedia(session:StoredSession,dealId:string,publicUrl:string){const marker='/storage/v1/object/public/deal-media/';const encodedPath=publicUrl.split(marker)[1];if(!encodedPath)throw new Error('Invalid media URL');const path=encodedPath.split('/').map(decodeURIComponent).join('/');const removeObject=await authenticatedFetch(session,`${supabaseUrl}/storage/v1/object/deal-media/${path.split('/').map(encodeURIComponent).join('/')}`,{method:'DELETE',headers:{apikey:publishableKey??'',Authorization:`Bearer ${session.accessToken}`}});if(!removeObject.ok)throw new Error('Could not remove the stored file');const removeRecord=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_media?deal_id=eq.${dealId}&storage_path=eq.${encodeURIComponent(path)}`,{method:'DELETE',headers:{...headers(session.accessToken),Prefer:'return=minimal'}});if(!removeRecord.ok)throw new Error('File removed, but its record could not be cleaned up')}
-export async function reorderDealMedia(session:StoredSession,dealId:string,publicUrls:string[]){const marker='/storage/v1/object/public/deal-media/';const paths=publicUrls.map(url=>{const encoded=url.split(marker)[1];if(!encoded)throw new Error('Invalid media URL');return encoded.split('/').map(decodeURIComponent).join('/')});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/reorder_deal_media`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_paths:paths})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not reorder media')}}
-export async function updatePublishedDeal(session:StoredSession,dealId:string,draft:DealDraft){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/update_published_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_title:draft.title,p_description:draft.description,p_price_cents:toMinorUnits(draft.price,draft.currency),p_condition:draft.condition,p_delivery_method:draft.deliveryMethod})});if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not update deal')}return await response.json() as number}
+export async function deleteDealMedia(
+  session:StoredSession,
+  dealId:string,
+  publicUrl:string,
+){
+  const request=parseMediaDeleteRequest({
+    dealId,
+    ownerId:session.user.id,
+    publicUrl,
+    supabaseUrl,
+  });
+  const encodedPath=request.storagePath
+    .split('/')
+    .map(encodeURIComponent)
+    .join('/');
+  const removeObject=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/storage/v1/object/deal-media/${encodedPath}`,
+    {
+      method:'DELETE',
+      headers:{
+        apikey:publishableKey??'',
+        Authorization:`Bearer ${session.accessToken}`,
+      },
+    },
+  );
+  if(!removeObject.ok)throw new Error('Could not remove the stored file');
+  const removeRecord=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/deal_media?deal_id=eq.${request.dealId}&storage_path=eq.${encodeURIComponent(request.storagePath)}`,
+    {
+      method:'DELETE',
+      headers:{...headers(session.accessToken),Prefer:'return=minimal'},
+    },
+  );
+  if(!removeRecord.ok){
+    parseDealMutationPostgrestErrorEnvelope(
+      await readBoundedJson(removeRecord),
+      removeRecord.status,
+      'media_delete_error',
+    );
+    throw new Error('File removed, but its record could not be cleaned up');
+  }
+}
+
+export async function reorderDealMedia(
+  session:StoredSession,
+  dealId:string,
+  publicUrls:string[],
+){
+  const requestBody=parseMediaReorderRequest({
+    dealId,
+    ownerId:session.user.id,
+    publicUrls,
+    supabaseUrl,
+  });
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/reorder_deal_media`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(requestBody),
+    },
+  );
+  if(!response.ok){
+    parseDealMutationPostgrestErrorEnvelope(
+      await readBoundedJson(response),
+      response.status,
+      'media_reorder_error',
+    );
+    throw new Error('Could not reorder media');
+  }
+}
+
+export async function updatePublishedDeal(
+  session:StoredSession,
+  dealId:string,
+  draft:DealDraft,
+){
+  const normalizedDealId=parseDealIdRequest(
+    {dealId},
+    'deal_update_published_request',
+  );
+  const requestBody=parsePublishedDealUpdateRequest({
+    p_deal_id:normalizedDealId,
+    p_title:draft.title,
+    p_description:draft.description,
+    p_price_cents:toMinorUnits(draft.price,draft.currency),
+    p_condition:draft.condition,
+    p_delivery_method:draft.deliveryMethod,
+  });
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/update_published_deal`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(requestBody),
+    },
+  );
+  if(!response.ok){
+    parseDealMutationPostgrestErrorEnvelope(
+      await readBoundedJson(response),
+      response.status,
+      'deal_update_published_error',
+    );
+    throw new Error('Could not update deal');
+  }
+  return parsePublishedDealVersionResponse(
+    await readBoundedJson(response),
+  );
+}
 
 export async function createUserDeal(session: StoredSession, draft: DealDraft) {
   const saved=await saveUserDealDraft(session,draft);
@@ -959,117 +1292,449 @@ export async function createUserDeal(session: StoredSession, draft: DealDraft) {
 }
 
 export async function saveUserDealDraft(session:StoredSession,draft:DealDraft){
-  const title=draft.title.trim();
-  if(title.length<3||title.length>120)throw new Error('Item title must contain 3 to 120 characters.');
+  const expirationDays=parseDealExpirationDays(
+    draft.expiresInDays??7,
+    'deal_draft_create_request',
+  );
   const serial=draft.serialNumber.trim();
-  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals`,{method:'POST',headers:{...headers(session.accessToken),Prefer:'return=representation'},body:JSON.stringify({seller_id:session.user.id,title,description:draft.description.trim(),price_cents:toMinorUnits(draft.price,draft.currency),currency:draft.currency,condition:draft.condition,serial_last_four:serial?serial.slice(-4):null,delivery_method:draft.deliveryMethod,status:'draft',current_agreement_version:0,published_at:null,expires_at:new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString(),...catalogWriteColumns(draft)})});
-  const data=await response.json();
-  if(!response.ok)throw new Error(data?.message||'Could not save draft');
-  return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id,await accountEmailConfirmed(session));
+  const requestBody=parseDealDraftCreateRequest({
+    seller_id:session.user.id,
+    title:draft.title,
+    description:draft.description,
+    price_cents:toMinorUnits(draft.price,draft.currency),
+    currency:draft.currency,
+    condition:draft.condition,
+    serial_last_four:serial?serial.slice(-4):null,
+    delivery_method:draft.deliveryMethod,
+    status:'draft',
+    current_agreement_version:0,
+    published_at:null,
+    expires_at:new Date(
+      Date.now()+expirationDays*24*60*60*1000,
+    ).toISOString(),
+    ...catalogWriteColumns(draft),
+  });
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/deals`,
+    {
+      method:'POST',
+      headers:{
+        ...headers(session.accessToken),
+        Prefer:'return=representation',
+      },
+      body:JSON.stringify(requestBody),
+    },
+  );
+  const data=await readBoundedJson(response);
+  if(!response.ok){
+    parseDealMutationPostgrestErrorEnvelope(
+      data,
+      response.status,
+      'deal_draft_create_error',
+    );
+    throw new Error('Could not save draft');
+  }
+  const row=parseUserDealRows(data)[0];
+  if(!row)throw new Error('Could not save draft');
+  return mapDeal(row,session.user.displayName,session.user.id,await accountEmailConfirmed(session));
 }
 
 export async function updateUserDealDraft(session:StoredSession,dealId:string,draft:DealDraft){
-  const title=draft.title.trim();
-  if(title.length<3||title.length>120)throw new Error('Item title must contain 3 to 120 characters.');
+  const context=parseDealOwnerContext(
+    {dealId,ownerId:session.user.id},
+    'deal_draft_update_request',
+  );
+  const expirationDays=parseDealExpirationDays(
+    draft.expiresInDays??7,
+    'deal_draft_update_request',
+  );
   const serial=draft.serialNumber.trim();
-  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deals?id=eq.${encodeURIComponent(dealId)}&seller_id=eq.${session.user.id}&status=eq.draft`,{method:'PATCH',headers:{...headers(session.accessToken),Prefer:'return=representation'},body:JSON.stringify({title,description:draft.description.trim(),price_cents:toMinorUnits(draft.price,draft.currency),currency:draft.currency,condition:draft.condition,serial_last_four:serial?serial.slice(-4):null,delivery_method:draft.deliveryMethod,expires_at:new Date(Date.now()+(draft.expiresInDays||7)*24*60*60*1000).toISOString(),updated_at:new Date().toISOString(),...catalogWriteColumns(draft)})});
-  const data=await response.json();
-  if(!response.ok)throw new Error(data?.message||'Could not update draft');
-  if(!(data as DealRow[])[0])throw new Error('Draft was not found');
-  return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id,await accountEmailConfirmed(session));
+  const requestBody=parseDealDraftUpdateRequest({
+    title:draft.title,
+    description:draft.description,
+    price_cents:toMinorUnits(draft.price,draft.currency),
+    currency:draft.currency,
+    condition:draft.condition,
+    serial_last_four:serial?serial.slice(-4):null,
+    delivery_method:draft.deliveryMethod,
+    expires_at:new Date(
+      Date.now()+expirationDays*24*60*60*1000,
+    ).toISOString(),
+    updated_at:new Date().toISOString(),
+    ...catalogWriteColumns(draft),
+  });
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/deals?id=eq.${context.dealId}&seller_id=eq.${context.ownerId}&status=eq.draft`,
+    {
+      method:'PATCH',
+      headers:{
+        ...headers(session.accessToken),
+        Prefer:'return=representation',
+      },
+      body:JSON.stringify(requestBody),
+    },
+  );
+  const data=await readBoundedJson(response);
+  if(!response.ok){
+    parseDealMutationPostgrestErrorEnvelope(
+      data,
+      response.status,
+      'deal_draft_update_error',
+    );
+    throw new Error('Could not update draft');
+  }
+  const row=parseUserDealRows(data)[0];
+  if(!row)throw new Error('Draft was not found');
+  return mapDeal(row,session.user.displayName,session.user.id,await accountEmailConfirmed(session));
 }
 
 export async function publishUserDealDraft(session:StoredSession,dealId:string,draft:DealDraft){
-  const title=draft.title.trim();
-  if(title.length<3||title.length>120)throw new Error('Item title must contain 3 to 120 characters.');
   const serial=draft.serialNumber.trim();
-  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/publish_deal_with_seller_declarations`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_title:title,p_description:draft.description.trim(),p_price_cents:toMinorUnits(draft.price,draft.currency),p_currency:draft.currency,p_condition:draft.condition,p_serial_last_four:serial?serial.slice(-4):null,p_delivery_method:draft.deliveryMethod,p_expires_in_days:draft.expiresInDays||7})});
-  const data=await response.json();
-  if(!response.ok)throw new Error(data?.message||'Could not publish draft');
-  if(!(data as DealRow[])[0])throw new Error('Draft was not found');
-  return mapDeal((data as DealRow[])[0],session.user.displayName,session.user.id,await accountEmailConfirmed(session));
+  const requestBody=parseDealPublishRequest({
+    p_deal_id:dealId,
+    p_title:draft.title,
+    p_description:draft.description,
+    p_price_cents:toMinorUnits(draft.price,draft.currency),
+    p_currency:draft.currency,
+    p_condition:draft.condition,
+    p_serial_last_four:serial?serial.slice(-4):null,
+    p_delivery_method:draft.deliveryMethod,
+    p_expires_in_days:draft.expiresInDays??7,
+  });
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/publish_deal_with_seller_declarations`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(requestBody),
+    },
+  );
+  const data=await readBoundedJson(response);
+  if(!response.ok){
+    parseDealMutationPostgrestErrorEnvelope(
+      data,
+      response.status,
+      'deal_publish_error',
+    );
+    throw new Error('Could not publish draft');
+  }
+  const row=parseUserDealRows(data)[0];
+  if(!row)throw new Error('Draft was not found');
+  return mapDeal(row,session.user.displayName,session.user.id,await accountEmailConfirmed(session));
 }
 
-export interface DealMeeting { id:string; deal_id:string; proposed_by:string; location_name:string; address:string; scheduled_at:string; status:'proposed'|'confirmed'|'cancelled'; seller_arrived:boolean; buyer_arrived:boolean }
+export type DealMeeting = DealMeetingPayload;
 
 export async function getDealMeeting(session: StoredSession, dealId: string) {
-  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_meetings?deal_id=eq.${dealId}&select=*`,{headers:headers(session.accessToken)});
-  if(!response.ok) throw new Error('Could not load meeting');
-  return ((await response.json()) as DealMeeting[])[0] || null;
+  const requestBody=parseDealMeetingReadRequest({p_deal_id:dealId});
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_meetings?deal_id=eq.${requestBody.p_deal_id}&select=id,deal_id,proposed_by,location_name,address,scheduled_at,status,seller_arrived,buyer_arrived`,{headers:headers(session.accessToken)});
+  if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'deal_meeting_read_error');throw new Error('Could not load meeting')}
+  return parseDealMeetingRows(await readBoundedJson(response))[0] || null;
 }
 
 export async function proposeMeeting(session:StoredSession,dealId:string,locationName:string,address:string,scheduledAt:string){
-  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/propose_meeting`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_location_name:locationName,p_address:address,p_scheduled_at:new Date(scheduledAt).toISOString()})});
-  if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not propose meeting')}
+  const requestBody=parseMeetingProposalRequest({p_deal_id:dealId,p_location_name:locationName,p_address:address,p_scheduled_at:scheduledAt});
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/propose_meeting`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});
+  if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'meeting_proposal_error');throw new Error('Could not propose meeting')}
 }
 export async function confirmMeeting(session:StoredSession,dealId:string){
-  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/confirm_meeting`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});
-  if(!response.ok){const data=await response.json();throw new Error(data?.message||'Could not confirm meeting')}
+  const requestBody=parseMeetingConfirmationRequest({p_deal_id:dealId});
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/confirm_meeting`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});
+  if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'meeting_confirmation_error');throw new Error('Could not confirm meeting')}
 }
-export async function markArrived(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/mark_arrived`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not mark arrival')}}
-export async function generateHandoffPin(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/generate_handoff_pin`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not generate PIN')}return await response.json() as string}
-export async function completeHandoff(session:StoredSession,dealId:string,pin:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/complete_handoff`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_pin:pin})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not complete deal')}}
-export async function submitRating(session:StoredSession,dealId:string,stars:number,comment:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/submit_rating`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_stars:stars,p_comment:comment})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not submit rating')}}
-export async function getMyProfileSummary(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_profile_summary`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load profile')}const rows=await response.json() as ProfileSummary[];if(!rows[0])throw new Error('Profile was not found');return rows[0]}
-export async function getMyAccountSessions(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_account_sessions`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json().catch(()=>null);throw new Error(d?.message||'Could not load signed-in devices')}return await response.json() as AccountSession[]}
-export async function requestIdentityVerification(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/request_identity_verification`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not request verification')}return await response.json() as ProfileSummary['verification_status']}
-export async function cancelDeal(session:StoredSession,dealId:string,reason:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/cancel_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_reason:reason})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not cancel deal')}}
-export async function openDealDispute(session:StoredSession,dealId:string,reason:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/open_deal_dispute`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_reason:reason})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not open dispute')}}
-export async function reportPublicDeal(session:StoredSession,publicId:string,category:string,details:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/report_public_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_public_id:publicId,p_category:category,p_details:details.trim()})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not submit report')}return await response.json() as string}
-export async function getAdminAccess(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/is_dealsafe_admin`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok)return false;return Boolean(await response.json())}
-export async function getAdminRevenueSummary(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_revenue_summary`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json().catch(()=>null);throw new Error(d?.message||'Could not load revenue summary')}const rows=await response.json() as AdminRevenueSummary[];if(!rows[0])throw new Error('Revenue summary is unavailable');return rows[0]}
-export async function getAdminRevenueTransactions(session:StoredSession,limit=100){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_revenue_transactions`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_limit:limit})});if(!response.ok){const d=await response.json().catch(()=>null);throw new Error(d?.message||'Could not load revenue transactions')}return await response.json() as AdminRevenueTransaction[]}
-export async function getAdminCatalogAdoption(session:StoredSession,days:7|30|90=30){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_catalog_adoption`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_days:days})});if(!response.ok){const d=await response.json().catch(()=>null);throw new Error(d?.message||'Could not load catalog adoption')}return await response.json() as AdminCatalogAdoption[]}
-export async function getAdminReports(session:StoredSession,status:'open'|'reviewed'|'dismissed'|'all'='open'){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_reports`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_status:status})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load report queue')}return await response.json() as AdminReport[]}
-export async function resolveAdminReport(session:StoredSession,reportId:string,decision:'reviewed'|'dismissed',note:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/resolve_deal_report`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_report_id:reportId,p_decision:decision,p_resolution_note:note.trim()})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not save report decision')}}
-export async function getAdminDisputes(session:StoredSession,status:'open'|'resolved'|'all'='open'){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_disputes`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_status:status})});if(!response.ok){const d=await response.json().catch(()=>null);throw new Error(d?.message||'Could not load dispute queue')}return await response.json() as AdminDispute[]}
-export async function resolveAdminDispute(session:StoredSession,disputeId:string,decision:'resolved_buyer'|'resolved_seller'|'cancelled',note:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/resolve_deal_dispute`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_dispute_id:disputeId,p_decision:decision,p_resolution_note:note.trim()})});if(!response.ok){const d=await response.json().catch(()=>null);throw new Error(d?.message||'Could not save dispute decision')}}
-export async function resolveAdminDisputeFinancial(session:StoredSession,disputeId:string,decision:'resolved_buyer'|'resolved_seller',note:string){return invokeEdgeFunction<{resolved:boolean;action:'refund'|'transfer';refundId?:string;transferId?:string}>(session,'stripe-resolve-dispute',{disputeId,decision,note:note.trim()})}
-export async function setAdminDealVisibility(session:StoredSession,dealId:string,status:'visible'|'hidden',note:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_deal_moderation_status`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_status:status,p_note:note.trim()})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not update Deal Link visibility')}}
-export async function getDealRiskAssessment(publicId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_deal_risk_assessment`,{method:'POST',headers:headers(),body:JSON.stringify({p_public_id:publicId})});if(!response.ok)throw new Error('Risk check is unavailable');return ((await response.json()) as RiskAssessment[])[0]||null}
-export async function getPublicSellerTrustProfile(publicId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_public_seller_trust_profile`,{method:'POST',headers:headers(),body:JSON.stringify({p_public_id:publicId})});if(!response.ok)throw new Error('Seller trust profile is unavailable');return ((await response.json()) as PublicTrustProfile[])[0]||null}
-export async function getTrustPassportSettings(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_trust_passport_settings`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load passport settings')}const rows=await response.json() as TrustPassportSettings[];if(!rows[0])throw new Error('Profile was not found');return rows[0]}
-export async function setTrustPassportEnabled(session:StoredSession,enabled:boolean){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_trust_passport_enabled`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_enabled:enabled})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not update passport settings')}return await response.json() as string}
-export async function getPublicTrustPassport(publicId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_public_trust_passport`,{method:'POST',headers:headers(),body:JSON.stringify({p_public_id:publicId})});if(!response.ok)throw new Error('Passport unavailable');return ((await response.json()) as TrustPassport[])[0]||null}
-export async function getPublicSellerDeclaration(publicId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_public_seller_declaration`,{method:'POST',headers:headers(),body:JSON.stringify({p_public_id:publicId})});if(!response.ok)throw new Error('Seller declaration unavailable');return ((await response.json()) as SellerDeclarationRecord[])[0]||null}
-export async function getPublicAgreementHistory(publicId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_public_agreement_history`,{method:'POST',headers:headers(),body:JSON.stringify({p_public_id:publicId})});if(!response.ok)throw new Error('Agreement history unavailable');return await response.json() as AgreementHistoryVersion[]}
-export async function verifyAgreementRecord(publicId:string,contentHash:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/verify_agreement_record`,{method:'POST',headers:headers(),body:JSON.stringify({p_public_id:publicId,p_content_hash:contentHash})});if(!response.ok)throw new Error('Agreement verification is unavailable');return ((await response.json()) as AgreementVerificationResult[])[0]||null}
-export async function renewDealLink(session:StoredSession,dealId:string,days:number){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/renew_deal_link`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_days:days})});if(!response.ok)throw new Error('Could not renew Deal Link');const rows=await response.json() as DealRenewalResult[];if(!rows[0])throw new Error('Could not renew Deal Link');return rows[0]}
-export async function getDealAcceptanceProtection(publicId:string){const response=await fetch(`${supabaseUrl}/rest/v1/rpc/get_deal_acceptance_protection`,{method:'POST',headers:headers(),body:JSON.stringify({p_public_id:publicId})});if(!response.ok)return false;return Boolean(await response.json())}
-export async function configureBuyerAccessCode(session:StoredSession,dealId:string,enabled:boolean){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/configure_buyer_access_code`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_enabled:enabled})});const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.message||'Could not update buyer access');return data as string|null}
-export async function isDealSaved(session:StoredSession,publicId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/is_deal_saved`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_public_id:publicId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not check saved deal')}return Boolean(await response.json())}
-export async function setDealSaved(session:StoredSession,publicId:string,saved:boolean){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_deal_saved`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_public_id:publicId,p_saved:saved})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not update saved deal')}return Boolean(await response.json())}
-export async function getDealInspection(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_inspection`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load inspection receipt')}return ((await response.json()) as DealInspection[])[0]||null}
-export async function recordDealInspection(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/record_deal_inspection`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_item_reviewed:true,p_price_confirmed:true,p_handoff_confirmed:true,p_reference_checked:true})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not save inspection receipt')}}
-export async function getDealTimeline(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_timeline`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load timeline')}return await response.json() as TimelineEvent[]}
-export async function getDealParticipants(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_participants`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok)throw new Error('Could not load participants');return ((await response.json()) as DealParticipants[])[0]||null}
-export async function getDealActionPlan(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_action_plan`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok)throw new Error('Could not load deal action plan');return ((await response.json()) as DealActionPlan[])[0]||null}
-export async function getMyNotifications(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_notifications`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_limit:12})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load notifications')}return await response.json() as DealNotification[]}
-export async function markDealNotificationsRead(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/mark_deal_activity_read`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok)throw new Error('Could not update notifications')}
-export async function markAllNotificationsRead(session:StoredSession){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/mark_all_activity_read`,{method:'POST',headers:headers(session.accessToken),body:'{}'});if(!response.ok)throw new Error('Could not update notifications')}
-export async function getDealMessages(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_messages`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load messages')}return await response.json() as DealMessage[]}
-export async function sendDealMessage(session:StoredSession,dealId:string,body:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/send_deal_message`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_body:body})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not send message')}}
-export async function makeDealOffer(session:StoredSession,publicId:string,amountCents:number,typedName:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/make_deal_offer`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_public_id:publicId,p_amount_cents:amountCents,p_typed_name:typedName})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not send offer')}}
-export async function getDealOffers(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_offers`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load offers')}return await response.json() as DealOffer[]}
-export async function getDealInquiries(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_inquiries`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok)throw new Error('Could not load questions');return await response.json() as DealInquiry[]}
-export async function isCurrentUserDealSeller(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/is_current_user_deal_seller`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});return response.ok&&Boolean(await response.json())}
-export async function askDealQuestion(session:StoredSession,publicId:string,body:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/ask_deal_question`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_public_id:publicId,p_body:body.trim()})});if(!response.ok)throw new Error('Could not send question')}
-export async function replyDealInquiry(session:StoredSession,inquiryId:string,reply:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/reply_deal_inquiry`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_inquiry_id:inquiryId,p_reply:reply.trim()})});if(!response.ok)throw new Error('Could not send reply')}
-export async function respondToOffer(session:StoredSession,offerId:string,accept:boolean){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/respond_to_offer`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_offer_id:offerId,p_accept:accept})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not respond to offer')}}
-export async function getDealShipment(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_shipments?deal_id=eq.${dealId}&select=*`,{headers:headers(session.accessToken)});if(!response.ok)throw new Error('Could not load shipment');return ((await response.json()) as DealShipment[])[0]||null}
+export async function markArrived(session:StoredSession,dealId:string){const requestBody=parseMeetingArrivalRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/mark_arrived`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'meeting_arrival_error');throw new Error('Could not mark arrival')}}
+export async function generateHandoffPin(session:StoredSession,dealId:string){const requestBody=parseHandoffPinGenerateRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/generate_handoff_pin`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'handoff_pin_generate_error');throw new Error('Could not generate PIN')}return parseHandoffPinResponse(await readBoundedJson(response))}
+export async function completeHandoff(session:StoredSession,dealId:string,pin:string){const requestBody=parseHandoffCompleteRequest({p_deal_id:dealId,p_pin:pin});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/complete_handoff`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'handoff_complete_error');throw new Error('Could not complete deal')}}
+export async function submitRating(session:StoredSession,dealId:string,stars:number,comment:string){const requestBody=parseRatingSubmitRequest({p_deal_id:dealId,p_stars:stars,p_comment:comment});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/submit_rating`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseAccountActivityPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'rating_submit_error');throw new Error('Could not submit rating')}}
+export async function getMyProfileSummary(session:StoredSession){const requestBody=parseProfileSummaryRequest({});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_profile_summary`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseAccountActivityPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'profile_summary_error');throw new Error('Could not load profile')}const rows=parseProfileSummaryRows(await readBoundedJson(response));if(!rows[0])throw new Error('Profile was not found');return rows[0]}
+export async function getMyAccountSessions(session:StoredSession){const requestBody=parseAccountSessionsRequest({});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_account_sessions`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseAccountActivityPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'account_sessions_error');throw new Error('Could not load signed-in devices')}return parseAccountSessionRows(await readBoundedJson(response))}
+export async function requestIdentityVerification(session:StoredSession){const requestBody=parseIdentityVerificationRequest({});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/request_identity_verification`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseAccountActivityPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'identity_verification_error');throw new Error('Could not request verification')}return parseIdentityVerificationResponse(await readBoundedJson(response))}
+export async function cancelDeal(
+  session:StoredSession,
+  dealId:string,
+  reason:string,
+){
+  const requestBody=parseDealCancelRequest({
+    p_deal_id:dealId,
+    p_reason:reason,
+  });
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/cancel_deal`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(requestBody),
+    },
+  );
+  if(!response.ok){
+    parseDealMutationPostgrestErrorEnvelope(
+      await readBoundedJson(response),
+      response.status,
+      'deal_cancel_error',
+    );
+    throw new Error('Could not cancel deal');
+  }
+}
+export async function openDealDispute(session:StoredSession,dealId:string,reason:string){const requestBody=parseOpenDisputeRequest({p_deal_id:dealId,p_reason:reason});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/open_deal_dispute`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parsePostgrestErrorEnvelope(d,response.status,'dispute_open_error').message)}}
+export async function reportPublicDeal(session:StoredSession,publicId:string,category:string,details:string){const requestBody=parseSafetyReportRequest({p_public_id:publicId,p_category:category,p_details:details});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/report_public_deal`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'safety_report_create_error').message)}return parseSafetyReportIdResponse(await readBoundedJson(response))}
+export async function getAdminAccess(session:StoredSession){const requestBody=parseAdminAccessRequest({});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/is_dealsafe_admin`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok)return false;return parseAdminAccessResponse(await readBoundedJson(response))}
+export async function getAdminRevenueSummary(session:StoredSession){const requestBody=parseAdminRevenueSummaryRequest({});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_revenue_summary`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseAdminPostgrestErrorEnvelope(d,response.status,'admin_revenue_summary_error').message)}return parseAdminRevenueSummaryRows(await readBoundedJson(response))}
+export async function getAdminRevenueTransactions(session:StoredSession,limit=100){const requestBody=parseAdminRevenueTransactionsRequest({p_limit:limit});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_revenue_transactions`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseAdminPostgrestErrorEnvelope(d,response.status,'admin_revenue_transactions_error').message)}return parseAdminRevenueTransactionRows(await readBoundedJson(response))}
+export async function getAdminCatalogAdoption(session:StoredSession,days:7|30|90=30){const requestBody=parseAdminCatalogAdoptionRequest({p_days:days});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_catalog_adoption`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseAdminPostgrestErrorEnvelope(d,response.status,'admin_catalog_adoption_error').message)}return parseAdminCatalogAdoptionRows(await readBoundedJson(response),requestBody.p_days)}
+export async function getAdminReports(session:StoredSession,status:'open'|'reviewed'|'dismissed'|'all'='open'){const requestBody=parseAdminReportListRequest({p_status:status});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_reports`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'admin_report_list_error').message)}return parseAdminReportRows(await readBoundedJson(response))}
+export async function resolveAdminReport(session:StoredSession,reportId:string,decision:'reviewed'|'dismissed',note:string){const requestBody=parseAdminReportResolutionRequest({p_report_id:reportId,p_decision:decision,p_resolution_note:note});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/resolve_deal_report`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'admin_report_resolve_error').message)}}
+export async function getAdminDisputes(session:StoredSession,status:'open'|'resolved'|'all'='open'){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_admin_disputes`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_status:status})});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parsePostgrestErrorEnvelope(d,response.status,'dispute_queue_error').message)}return parseAdminDisputeRows(await readBoundedJson(response))}
+export async function resolveAdminDispute(session:StoredSession,disputeId:string,decision:'resolved_buyer'|'resolved_seller'|'cancelled',note:string){const requestBody=parseResolveDisputeRequest({p_dispute_id:disputeId,p_decision:decision,p_resolution_note:note});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/resolve_deal_dispute`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parsePostgrestErrorEnvelope(d,response.status,'dispute_resolve_error').message)}}
+export async function resolveAdminDisputeFinancial(session:StoredSession,disputeId:string,decision:'resolved_buyer'|'resolved_seller',note:string){const requestBody=parseFinancialDisputeRequest({disputeId,decision,note});return parseStripeDisputeResolutionResponse(await invokeEdgeFunction(session,'stripe-resolve-dispute',{...requestBody}))}
+export async function setAdminDealVisibility(session:StoredSession,dealId:string,status:'visible'|'hidden',note:string){const requestBody=parseDealModerationRequest({p_deal_id:dealId,p_status:status,p_note:note});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_deal_moderation_status`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'deal_moderation_error').message)}}
+export async function getDealRiskAssessment(publicId:string){const requestBody=parseDealRiskRequest({p_public_id:publicId});const response=await fetchWithDeadline(`${supabaseUrl}/rest/v1/rpc/get_deal_risk_assessment`,{method:'POST',headers:headers(),body:JSON.stringify(requestBody)});if(!response.ok){parseTrustPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'deal_risk_error');throw new Error('Risk check is unavailable')}return parseDealRiskAssessmentRows(await readBoundedJson(response))}
+export async function getPublicSellerTrustProfile(publicId:string){const requestBody=parsePublicSellerTrustRequest({p_public_id:publicId});const response=await fetchWithDeadline(`${supabaseUrl}/rest/v1/rpc/get_public_seller_trust_profile`,{method:'POST',headers:headers(),body:JSON.stringify(requestBody)});if(!response.ok){parseTrustPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'public_seller_trust_error');throw new Error('Seller trust profile is unavailable')}return parsePublicSellerTrustProfileRows(await readBoundedJson(response))}
+export async function getTrustPassportSettings(session:StoredSession){const requestBody=parseTrustPassportSettingsRequest({});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_trust_passport_settings`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseTrustPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'trust_passport_settings_error');throw new Error('Could not load passport settings')}return parseTrustPassportSettingsRows(await readBoundedJson(response))}
+export async function setTrustPassportEnabled(session:StoredSession,enabled:boolean){const requestBody=parseTrustPassportToggleRequest({p_enabled:enabled});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_trust_passport_enabled`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseTrustPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'trust_passport_toggle_error');throw new Error('Could not update passport settings')}return parseTrustPassportToggleResponse(await readBoundedJson(response))}
+export async function getPublicTrustPassport(publicId:string){const requestBody=parsePublicTrustPassportRequest({p_public_id:publicId});const response=await fetchWithDeadline(`${supabaseUrl}/rest/v1/rpc/get_public_trust_passport`,{method:'POST',headers:headers(),body:JSON.stringify(requestBody)});if(!response.ok){parseTrustPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'public_trust_passport_error');throw new Error('Passport unavailable')}return parsePublicTrustPassportRows(await readBoundedJson(response))}
+export async function getPublicSellerDeclaration(publicId:string){const requestBody=parseSellerDeclarationRequest({p_public_id:publicId});const response=await fetchWithDeadline(`${supabaseUrl}/rest/v1/rpc/get_public_seller_declaration`,{method:'POST',headers:headers(),body:JSON.stringify(requestBody)});if(!response.ok){parseAgreementPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'seller_declaration_error');throw new Error('Seller declaration unavailable')}return parseSellerDeclarationRows(await readBoundedJson(response))[0]||null}
+const agreementDocumentRequests=new Map<string,Promise<AgreementDocumentSnapshot>>();
+export function getPublicAgreementDocument(publicId:string,version?:number){
+  const requestBody=parseAgreementDocumentRequest({p_public_id:publicId,p_version:version??null});
+  const cacheKey=requestBody.p_version?`${requestBody.p_public_id}:${requestBody.p_version}`:'';
+  const existing=cacheKey?agreementDocumentRequests.get(cacheKey):null;
+  if(existing)return existing;
+  const request=(async()=>{const response=await fetchWithDeadline(`${supabaseUrl}/rest/v1/rpc/get_public_agreement_document`,{method:'POST',headers:headers(),body:JSON.stringify(requestBody)});if(!response.ok){parseAgreementPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'agreement_document_error');throw new Error('The stored agreement document is unavailable')}const record=parseAgreementDocumentRows(await readBoundedJson(response))[0]||null;if(!record)throw new Error('The stored agreement version was not found');return record})();
+  if(cacheKey){agreementDocumentRequests.set(cacheKey,request);request.catch(()=>agreementDocumentRequests.delete(cacheKey))}
+  return request;
+}
+export async function getPublicAgreementHistory(publicId:string){const requestBody=parseAgreementHistoryRequest({p_public_id:publicId});const response=await fetchWithDeadline(`${supabaseUrl}/rest/v1/rpc/get_public_agreement_history`,{method:'POST',headers:headers(),body:JSON.stringify(requestBody)});if(!response.ok){parseAgreementPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'agreement_history_error');throw new Error('Agreement history unavailable')}return parseAgreementHistoryRows(await readBoundedJson(response))}
+export async function verifyAgreementRecord(publicId:string,contentHash:string){const requestBody=parseAgreementVerificationRequest({p_public_id:publicId,p_content_hash:contentHash});const response=await fetchWithDeadline(`${supabaseUrl}/rest/v1/rpc/verify_agreement_record`,{method:'POST',headers:headers(),body:JSON.stringify(requestBody)});if(!response.ok){parseAgreementPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'agreement_verification_error');throw new Error('Agreement verification is unavailable')}return parseAgreementVerificationRows(await readBoundedJson(response))[0]||null}
+export async function renewDealLink(session:StoredSession,dealId:string,days:number){const requestBody=parseDealLinkRenewalRequest({p_deal_id:dealId,p_days:days});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/renew_deal_link`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseAgreementPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'deal_link_renewal_error');throw new Error('Could not renew Deal Link')}return parseDealRenewalRows(await readBoundedJson(response))[0]}
+export async function getDealAcceptanceProtection(publicId:string){const requestBody=parseAcceptanceProtectionRequest({p_public_id:publicId});const response=await fetchWithDeadline(`${supabaseUrl}/rest/v1/rpc/get_deal_acceptance_protection`,{method:'POST',headers:headers(),body:JSON.stringify(requestBody)});if(!response.ok){parseAgreementPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'acceptance_protection_error');return false}return parseAcceptanceProtectionResponse(await readBoundedJson(response))}
+export async function configureBuyerAccessCode(session:StoredSession,dealId:string,enabled:boolean){const requestBody=parseBuyerAccessCodeRequest({p_deal_id:dealId,p_enabled:enabled});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/configure_buyer_access_code`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});const data=await readBoundedJson(response);if(!response.ok){parseAgreementPostgrestErrorEnvelope(data,response.status,'buyer_access_code_error');throw new Error('Could not update buyer access')}return parseBuyerAccessCodeResponse(data)}
+export async function isDealSaved(session:StoredSession,publicId:string){const requestBody=parseWatchlistReadRequest({p_public_id:publicId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/is_deal_saved`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseAgreementPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'watchlist_read_error');throw new Error('Could not check saved deal')}return parseWatchlistStateResponse(await readBoundedJson(response))}
+export async function setDealSaved(session:StoredSession,publicId:string,saved:boolean){const requestBody=parseWatchlistWriteRequest({p_public_id:publicId,p_saved:saved});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_deal_saved`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseAgreementPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'watchlist_write_error');throw new Error('Could not update saved deal')}return parseWatchlistStateResponse(await readBoundedJson(response))}
+export async function getDealInspection(session:StoredSession,dealId:string){const requestBody=parseDealInspectionReadRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_inspection`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'deal_inspection_read_error');throw new Error('Could not load inspection receipt')}return parseDealInspectionRows(await readBoundedJson(response))[0]||null}
+export async function recordDealInspection(session:StoredSession,dealId:string){const requestBody=parseDealInspectionRecordRequest({p_deal_id:dealId,p_item_reviewed:true,p_price_confirmed:true,p_handoff_confirmed:true,p_reference_checked:true});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/record_deal_inspection`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'deal_inspection_record_error');throw new Error('Could not save inspection receipt')}}
+export async function getDealTimeline(session:StoredSession,dealId:string){const requestBody=parseDealTimelineRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_timeline`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseAccountActivityPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'deal_timeline_error');throw new Error('Could not load timeline')}return parseTimelineEventRows(await readBoundedJson(response))}
+export async function getDealParticipants(session:StoredSession,dealId:string){const requestBody=parseDealParticipantsRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_participants`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseAccountActivityPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'deal_participants_error');throw new Error('Could not load participants')}return parseDealParticipantsRows(await readBoundedJson(response))[0]||null}
+export async function getDealActionPlan(session:StoredSession,dealId:string){const requestBody=parseDealActionPlanRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_action_plan`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'deal_action_plan_error');throw new Error('Could not load deal action plan')}return parseDealActionPlanRows(await readBoundedJson(response))[0]||null}
+export async function getMyNotifications(session:StoredSession){const requestBody=parseNotificationListRequest({p_limit:12});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_notifications`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'notification_list_error').message)}return parseDealNotificationRows(await readBoundedJson(response))}
+export async function markDealNotificationsRead(session:StoredSession,dealId:string){const requestBody=parseNotificationDealReadRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/mark_deal_activity_read`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'notification_read_error').message)}}
+export async function markAllNotificationsRead(session:StoredSession){const requestBody=parseNotificationAllReadRequest({});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/mark_all_activity_read`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'notification_read_error').message)}}
+export async function getDealMessages(session:StoredSession,dealId:string){const requestBody=parseMessageListRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_messages`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'message_list_error').message)}return parseDealMessageRows(await readBoundedJson(response))}
+export async function sendDealMessage(session:StoredSession,dealId:string,body:string){const requestBody=parseSendDealMessageRequest({p_deal_id:dealId,p_body:body});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/send_deal_message`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'message_send_error').message)}}
+export async function makeDealOffer(session:StoredSession,publicId:string,amountCents:number,typedName:string){const requestBody=parseCreateOfferRequest({p_public_id:publicId,p_amount_cents:amountCents,p_typed_name:typedName});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/make_deal_offer`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'offer_create_error').message)}}
+export async function getDealOffers(session:StoredSession,dealId:string){const requestBody=parseOfferListRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_offers`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'offer_list_error').message)}return parseDealOfferRows(await readBoundedJson(response))}
+export async function getDealInquiries(session:StoredSession,dealId:string){const requestBody=parseInquiryListRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_inquiries`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'inquiry_list_error').message)}return parseDealInquiryRows(await readBoundedJson(response))}
+export async function isCurrentUserDealSeller(session:StoredSession,dealId:string){const requestBody=parseCurrentUserDealSellerRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/is_current_user_deal_seller`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok)return false;return parseCurrentUserDealSellerResponse(await readBoundedJson(response))}
+export async function askDealQuestion(session:StoredSession,publicId:string,body:string){const requestBody=parseCreateInquiryRequest({p_public_id:publicId,p_body:body});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/ask_deal_question`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'inquiry_create_error').message)}return parseInquiryIdResponse(await readBoundedJson(response))}
+export async function replyDealInquiry(session:StoredSession,inquiryId:string,reply:string){const requestBody=parseReplyInquiryRequest({p_inquiry_id:inquiryId,p_reply:reply});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/reply_deal_inquiry`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'inquiry_reply_error').message)}}
+export async function respondToOffer(session:StoredSession,offerId:string,accept:boolean){const requestBody=parseRespondOfferRequest({p_offer_id:offerId,p_accept:accept});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/respond_to_offer`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){const d=await readBoundedJson(response);throw new Error(parseInteractionPostgrestErrorEnvelope(d,response.status,'offer_response_error').message)}}
+export async function getDealShipment(session:StoredSession,dealId:string){const requestBody=parseDealShipmentReadRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/deal_shipments?deal_id=eq.${requestBody.p_deal_id}&select=id,deal_id,carrier,tracking_number,status,shipped_at,delivered_at`,{headers:headers(session.accessToken)});if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'deal_shipment_read_error');throw new Error('Could not load shipment')}return parseDealShipmentRows(await readBoundedJson(response))[0]||null}
 export async function getSellerShippingEvidenceReadiness(session:StoredSession,dealId:string){
-  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_seller_shipping_evidence_readiness`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});
-  const data=await response.json().catch(()=>null);
-  if(!response.ok)throw new Error(data?.message||'Could not check shipping evidence');
-  return ((data||[]) as SellerShippingEvidenceReadiness[])[0]||null;
+  const requestBody=parseShippingEvidenceReadinessRequest({p_deal_id:dealId});
+  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_seller_shipping_evidence_readiness`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});
+  const data=await readBoundedJson(response);
+  if(!response.ok){parseDeliveryPostgrestErrorEnvelope(data,response.status,'shipping_evidence_readiness_error');throw new Error('Could not check shipping evidence')}
+  return parseShippingEvidenceReadinessRows(data)[0]||null;
 }
-export async function getDealDeliveryDetails(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_delivery_details`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok)throw new Error('Could not load delivery address');return ((await response.json()) as DealDeliveryDetails[])[0]||null}
-export async function saveDealDeliveryDetails(session:StoredSession,dealId:string,recipientName:string,fullAddress:string,country:string,instructions:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_deal_delivery_details`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_recipient_name:recipientName,p_full_address:fullAddress,p_country:country,p_instructions:instructions||null})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not save delivery address')}}
-export async function getDealPaymentRecord(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_payment_record`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok)throw new Error('Could not load payment record');return ((await response.json()) as DealPaymentRecord[])[0]||null}
-export async function setDealPaymentMethod(session:StoredSession,dealId:string,method:DealPaymentMethod){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_deal_payment_method`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_method:method})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not save payment method')}}
-export async function confirmDealPaymentMethod(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/confirm_deal_payment_method`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not confirm payment method')}}
-export async function markDealPaymentSent(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/mark_deal_payment_sent`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not record payment sent')}}
-export async function markDealPaymentReceived(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/mark_deal_payment_received`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not confirm payment received')}}
+export async function getDealDeliveryDetails(session:StoredSession,dealId:string){const requestBody=parseDeliveryDetailsReadRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_deal_delivery_details`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'delivery_details_read_error');throw new Error('Could not load delivery address')}return parseDealDeliveryDetailsRows(await readBoundedJson(response))[0]||null}
+export async function saveDealDeliveryDetails(session:StoredSession,dealId:string,recipientName:string,fullAddress:string,country:string,instructions:string){const requestBody=parseDeliveryDetailsSaveRequest({p_deal_id:dealId,p_recipient_name:recipientName,p_full_address:fullAddress,p_country:country,p_instructions:typeof instructions==='string'&&!instructions.trim()?null:instructions});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/set_deal_delivery_details`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'delivery_details_save_error');throw new Error('Could not save delivery address')}}
+export async function getDealPaymentRecord(
+  session:StoredSession,
+  dealId:string,
+){
+  const request=parseLegacyPaymentRecordRequest({p_deal_id:dealId});
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/get_deal_payment_record`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(request),
+    },
+  );
+  const data=await readBoundedJson(response);
+  if(!response.ok){
+    parseLegacyPaymentPostgrestErrorEnvelope(data,response.status);
+    throw new Error('Could not load the historical payment record.');
+  }
+  return parseLegacyPaymentRecordRows(data)[0]??null;
+}
+
+export async function createSupportCase(
+  session:StoredSession,
+  input:{
+    dealId?:string|null;
+    category:SupportCategory;
+    subject:string;
+    message:string;
+  },
+){
+  const request=parseCreateSupportCaseRequest({
+    p_deal_id:input.dealId??null,
+    p_category:input.category,
+    p_subject:input.subject,
+    p_message:input.message,
+  });
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/create_support_case`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(request),
+    },
+  );
+  const data=await readBoundedJson(response);
+  if(!response.ok){
+    parseSupportPostgrestErrorEnvelope(data,response.status);
+    throw new Error('Could not open a support case. Please try again.');
+  }
+  return parseSupportReferenceResponse(data);
+}
+
+export async function getMySupportCases(session:StoredSession){
+  const request=parseMySupportCasesRequest({});
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/get_my_support_cases`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(request),
+    },
+  );
+  const data=await readBoundedJson(response);
+  if(!response.ok){
+    parseSupportPostgrestErrorEnvelope(data,response.status);
+    throw new Error('Could not load your support cases.');
+  }
+  return parseSupportCaseSummaryRows(data);
+}
+
+export async function getSupportCase(
+  session:StoredSession,
+  publicReference:string,
+){
+  const request=parseSupportCaseReadRequest({
+    p_public_reference:publicReference,
+  });
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/get_support_case`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(request),
+    },
+  );
+  const data=await readBoundedJson(response);
+  if(!response.ok){
+    parseSupportPostgrestErrorEnvelope(data,response.status);
+    throw new Error('Could not load this support case.');
+  }
+  return parseSupportCaseDetailRows(data);
+}
+
+export async function replySupportCase(
+  session:StoredSession,
+  publicReference:string,
+  message:string,
+){
+  const request=parseReplySupportCaseRequest({
+    p_public_reference:publicReference,
+    p_message:message,
+  });
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/reply_support_case`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(request),
+    },
+  );
+  const data=await readBoundedJson(response);
+  if(!response.ok){
+    parseSupportPostgrestErrorEnvelope(data,response.status);
+    throw new Error('Could not send your support reply.');
+  }
+  parseSupportMutationResponse(data);
+}
+
+export async function getSupportQueue(
+  session:StoredSession,
+  scope:'open'|'mine',
+){
+  const request=parseSupportQueueRequest({p_scope:scope});
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/get_support_queue`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(request),
+    },
+  );
+  const data=await readBoundedJson(response);
+  if(!response.ok){
+    parseSupportPostgrestErrorEnvelope(data,response.status);
+    throw new Error('Could not load the support queue.');
+  }
+  return parseSupportQueueRows(data);
+}
+
+export async function claimSupportCase(
+  session:StoredSession,
+  publicReference:string,
+){
+  const request=parseSupportCaseClaimRequest({
+    p_public_reference:publicReference,
+  });
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/claim_support_case`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(request),
+    },
+  );
+  const data=await readBoundedJson(response);
+  if(!response.ok){
+    parseSupportPostgrestErrorEnvelope(data,response.status);
+    throw new Error('This support case could not be assigned.');
+  }
+  parseSupportMutationResponse(data);
+}
+
+export async function resolveSupportCase(
+  session:StoredSession,
+  publicReference:string,
+  resolutionMessage:string,
+){
+  const request=parseResolveSupportCaseRequest({
+    p_public_reference:publicReference,
+    p_resolution_message:resolutionMessage,
+  });
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/resolve_support_case`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(request),
+    },
+  );
+  const data=await readBoundedJson(response);
+  if(!response.ok){
+    parseSupportPostgrestErrorEnvelope(data,response.status);
+    throw new Error('Could not resolve this support case.');
+  }
+  parseSupportMutationResponse(data);
+}
 export class SecurePaymentServiceError extends Error{
   readonly code:string;
   readonly correlationId:string|null;
@@ -1082,60 +1747,68 @@ export class SecurePaymentServiceError extends Error{
     this.retryable=retryable;
   }
 }
-async function invokeEdgeFunction<T>(session:StoredSession,name:string,body:Record<string,unknown>){
+type PaymentEdgeFunctionName='stripe-connect'|'stripe-create-checkout'|'stripe-resolve-dispute';
+const paymentErrorBoundaryByFunction:Record<PaymentEdgeFunctionName,Extract<PaymentErrorBoundary,'stripe_connect_error'|'stripe_checkout_error'|'stripe_dispute_resolution_error'>>={
+  'stripe-connect':'stripe_connect_error',
+  'stripe-create-checkout':'stripe_checkout_error',
+  'stripe-resolve-dispute':'stripe_dispute_resolution_error'
+};
+async function invokeEdgeFunction(session:StoredSession,name:PaymentEdgeFunctionName,body:Record<string,unknown>):Promise<unknown>{
   const response=await authenticatedFetch(session,`${supabaseUrl}/functions/v1/${name}`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(body)});
-  const data=await response.json().catch(()=>null) as {error?:unknown;code?:unknown;correlationId?:unknown;retryable?:unknown}|null;
+  const data=await readBoundedJson(response);
   if(!response.ok){
-    const safeMessage=typeof data?.error==='string'&&data.error.length<=240?data.error:'Secure payment service is unavailable.';
-    const code=typeof data?.code==='string'&&/^[a-z0-9_]{1,64}$/.test(data.code)?data.code:'payment_service_error';
-    const bodyReference=typeof data?.correlationId==='string'&&/^[0-9a-f-]{36}$/i.test(data.correlationId)?data.correlationId:null;
-    const headerReference=response.headers.get('X-Dealivra-Correlation-Id');
-    const correlationId=bodyReference||(headerReference&&/^[0-9a-f-]{36}$/i.test(headerReference)?headerReference:null);
-    const referenceText=correlationId?` Support reference: ${correlationId}.`:'';
-    throw new SecurePaymentServiceError(`${safeMessage}${referenceText}`,code,correlationId,data?.retryable===true);
+    const error=parsePaymentErrorEnvelope(data,response.status,response.headers.get('X-Dealivra-Correlation-Id'),paymentErrorBoundaryByFunction[name]);
+    throw new SecurePaymentServiceError(`${error.error} Support reference: ${error.correlationId}.`,error.code,error.correlationId,error.retryable);
   }
-  return data as T;
+  return data;
 }
-export async function getStripeConnectStatus(session:StoredSession){return invokeEdgeFunction<StripeConnectStatus>(session,'stripe-connect',{action:'status'})}
-export async function startStripeConnectOnboarding(session:StoredSession,dealPublicId:string){return invokeEdgeFunction<{url:string;expiresAt:number}>(session,'stripe-connect',{action:'onboard',dealPublicId})}
-export async function getProtectedPaymentStatus(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_protected_payment_status`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});const data=await response.json().catch(()=>null);if(!response.ok)throw new Error(data?.message||'Could not load protected payment');return (data as ProtectedPaymentStatus[])[0]||null}
-export async function createProtectedCheckout(session:StoredSession,dealId:string){return invokeEdgeFunction<{url:string;expiresAt?:string;reused?:boolean}>(session,'stripe-create-checkout',{dealId})}
-export async function createDealShipment(session:StoredSession,dealId:string,carrier:string,trackingNumber:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/create_deal_shipment`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId,p_carrier:carrier,p_tracking_number:trackingNumber})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not save shipment')}}
-export async function confirmShipmentDelivery(session:StoredSession,dealId:string){const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/confirm_shipment_delivery`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify({p_deal_id:dealId})});if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not confirm delivery')}}
-
-interface PublicDealRow extends DealRow {
-  agreement_version: number;
-  seller_name: string;
-  seller_contact_verified: boolean;
-  seller_verification: 'not_started' | 'pending' | 'verified';
-  media_paths: string[];
-}
-
-interface SavedDealRow extends DealRow {
-  seller_name: string;
-  seller_contact_verified: boolean;
-  seller_verification: 'not_started' | 'pending' | 'verified';
-  media_paths: string[];
-  saved_at: string;
-}
+export async function getStripeConnectStatus(session:StoredSession){const requestBody=parseStripeConnectRequest({action:'status'});return parseStripeConnectStatusResponse(await invokeEdgeFunction(session,'stripe-connect',{...requestBody}))}
+export async function startStripeConnectOnboarding(session:StoredSession,dealPublicId:string){const requestBody=parseStripeConnectRequest({action:'onboard',dealPublicId});return parseStripeConnectOnboardingResponse(await invokeEdgeFunction(session,'stripe-connect',{...requestBody}))}
+export async function getProtectedPaymentStatus(session:StoredSession,dealId:string){const requestBody=parseProtectedPaymentStatusRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_protected_payment_status`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});const data=await readBoundedJson(response);if(!response.ok)throw new Error(parsePaymentPostgrestErrorEnvelope(data,response.status).message);return parseProtectedPaymentStatusRows(data)}
+export async function createProtectedCheckout(session:StoredSession,dealId:string){const requestBody=parseStripeCheckoutRequest({dealId});return parseStripeCheckoutResponse(await invokeEdgeFunction(session,'stripe-create-checkout',{...requestBody}))}
+export async function createDealShipment(session:StoredSession,dealId:string,carrier:string,trackingNumber:string){const requestBody=parseShipmentCreateRequest({p_deal_id:dealId,p_carrier:carrier,p_tracking_number:trackingNumber});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/create_deal_shipment`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'shipment_create_error');throw new Error('Could not save shipment')}}
+export async function confirmShipmentDelivery(session:StoredSession,dealId:string){const requestBody=parseShipmentDeliveryConfirmationRequest({p_deal_id:dealId});const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/confirm_shipment_delivery`,{method:'POST',headers:headers(session.accessToken),body:JSON.stringify(requestBody)});if(!response.ok){parseDeliveryPostgrestErrorEnvelope(await readBoundedJson(response),response.status,'shipment_delivery_confirmation_error');throw new Error('Could not confirm delivery')}}
 
 export async function getMySavedDeals(session:StoredSession){
-  const response=await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/get_my_saved_deals`,{method:'POST',headers:headers(session.accessToken),body:'{}'});
-  if(!response.ok){const d=await response.json();throw new Error(d?.message||'Could not load saved deals')}
-  const rows=await response.json() as SavedDealRow[];
+  const requestBody=parseSavedDealsRequest({});
+  const response=await authenticatedFetch(
+    session,
+    `${supabaseUrl}/rest/v1/rpc/get_my_saved_deals`,
+    {
+      method:'POST',
+      headers:headers(session.accessToken),
+      body:JSON.stringify(requestBody),
+    },
+  );
+  if(!response.ok){
+    parseDealMutationPostgrestErrorEnvelope(
+      await readBoundedJson(response),
+      response.status,
+      'saved_deals_error',
+    );
+    throw new Error('Could not load saved deals');
+  }
+  const rows=parseSavedDealRows(await readBoundedJson(response));
   return rows.map(row=>({...mapDeal(row,row.seller_name),sellerContactVerified:row.seller_contact_verified,sellerVerification:row.seller_verification,mediaUrls:(row.media_paths||[]).map(publicMediaUrl)}));
 }
 
 export async function getPublicDeal(publicId: string) {
   requireSupabaseConfiguration();
-  // Deal IDs are generated and stored in uppercase. Normalize copied or
-  // manually typed links so a lowercase query string still resolves.
-  const normalizedPublicId = publicId.trim().toUpperCase();
-  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/get_public_deal`, {
-    method: 'POST', headers: headers(), body: JSON.stringify({ p_public_id: normalizedPublicId }),
+  const requestBody=parsePublicDealRequest({p_public_id:publicId});
+  const response = await fetchWithDeadline(`${supabaseUrl}/rest/v1/rpc/get_public_deal`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(requestBody),
   });
-  if (!response.ok) throw new Error('Deal Link is unavailable');
-  const rows = await response.json() as PublicDealRow[];
+  if (!response.ok){
+    parseDealMutationPostgrestErrorEnvelope(
+      await readBoundedJson(response),
+      response.status,
+      'public_deal_error',
+    );
+    throw new Error('Deal Link is unavailable');
+  }
+  const rows = parsePublicDealRows(await readBoundedJson(response));
   const row = rows[0];
   if (!row) throw new Error('Deal Link was not found');
   return {
@@ -1148,16 +1821,27 @@ export async function getPublicDeal(publicId: string) {
 }
 
 export async function acceptPublicDeal(session: StoredSession, publicId: string, typedName: string, accessCode='') {
+  const requestBody=parsePublicDealAcceptRequest({
+    p_public_id:publicId,
+    p_typed_name:typedName,
+    p_access_code:accessCode.trim()||null,
+  });
   const response = await authenticatedFetch(session,`${supabaseUrl}/rest/v1/rpc/accept_deal`, {
     method: 'POST', headers: headers(session.accessToken),
-    body: JSON.stringify({ p_public_id: publicId, p_typed_name: typedName, p_access_code: accessCode.trim() || null }),
+    body: JSON.stringify(requestBody),
   });
-  const data = await response.json().catch(()=>null);
+  const data = await readBoundedJson(response);
   if (!response.ok) {
-    throw new Error(data?.message || 'Could not accept this deal');
+    parseDealMutationPostgrestErrorEnvelope(
+      data,
+      response.status,
+      'public_deal_accept_error',
+    );
+    throw new Error('Could not accept this deal');
   }
-  if(data==='incorrect_code')throw new Error('Incorrect buyer access code');
-  if(data==='rate_limited')throw new Error('Too many incorrect codes. Try again in 15 minutes.');
+  const result=parsePublicDealAcceptanceResponse(data);
+  if(result==='incorrect_code')throw new Error('Incorrect buyer access code');
+  if(result==='rate_limited')throw new Error('Too many incorrect codes. Try again in 15 minutes.');
 }
 
 export async function checkSupabaseConnection(): Promise<boolean> {
@@ -1166,7 +1850,7 @@ export async function checkSupabaseConnection(): Promise<boolean> {
   try {
     // Health checks must not require anonymous SELECT access to a private
     // business table. The Auth health endpoint exposes no customer data.
-    const response = await fetch(`${supabaseUrl}/auth/v1/health`, {
+    const response = await fetchWithDeadline(`${supabaseUrl}/auth/v1/health`, {
       headers: { apikey: publishableKey },
     });
     return response.ok;

@@ -4,6 +4,10 @@ import {
   type CatalogCategorySnapshot,
   type GuidedCatalogCategoryId,
 } from '../smartCatalog';
+import {
+  fetchWithDeadline,
+  readBoundedJson,
+} from './browserResponseBoundary';
 
 export interface CatalogLoadResult extends CatalogCategorySnapshot {
   delivery: 'server' | 'embedded-fallback';
@@ -72,17 +76,14 @@ export async function loadSmartCatalogCategory(
   const cached = catalogMemory.get(category);
   if (cached) return cached;
 
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), requestTimeoutMs);
   try {
-    const response = await fetch(`/api/catalog?category=${encodeURIComponent(category)}`, {
+    const response = await fetchWithDeadline(`/api/catalog?category=${encodeURIComponent(category)}`, {
       method: 'GET',
       credentials: 'same-origin',
       headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    });
+    }, requestTimeoutMs);
     if (!response.ok) throw new Error('Catalog request failed.');
-    const catalog = validateCatalogResponse(await response.json(), category);
+    const catalog = validateCatalogResponse(await readBoundedJson(response), category);
     const result: CatalogLoadResult = { ...catalog, delivery: 'server' };
     catalogMemory.set(category, result);
     return result;
@@ -93,16 +94,12 @@ export async function loadSmartCatalogCategory(
     };
     catalogMemory.set(category, result);
     return result;
-  } finally {
-    window.clearTimeout(timeout);
   }
 }
 
 export async function decodeVehicleVin(vin: string, modelYear = ''): Promise<VehicleVinResult> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), requestTimeoutMs + 1_000);
   try {
-    const response = await fetch('/api/vehicles/vin', {
+    const response = await fetchWithDeadline('/api/vehicles/vin', {
       method: 'POST',
       credentials: 'same-origin',
       headers: {
@@ -110,9 +107,8 @@ export async function decodeVehicleVin(vin: string, modelYear = ''): Promise<Veh
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ vin, modelYear }),
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => ({})) as Record<string, unknown>;
+    }, requestTimeoutMs + 1_000);
+    const payload = await readBoundedJson(response) as Record<string, unknown>;
     if (!response.ok) {
       throw new Error(safeText(payload.error, 160) || 'VIN could not be checked.');
     }
@@ -134,11 +130,12 @@ export async function decodeVehicleVin(vin: string, modelYear = ''): Promise<Veh
     }
     return normalized;
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (
+      error instanceof DOMException
+      && (error.name === 'AbortError' || error.name === 'TimeoutError')
+    ) {
       throw new Error('VIN check timed out. You can try again or enter the details manually.');
     }
     throw error;
-  } finally {
-    window.clearTimeout(timeout);
   }
 }

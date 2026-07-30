@@ -15,8 +15,8 @@ This backlog turns the production specification into controlled delivery work. P
 |---|---|---|---|
 | FND-001 | P0 | Pin all direct dependencies; choose one package manager/lockfile | Clean reproducible install produces the same dependency graph |
 | FND-002 | P0 | Add format, lint, strict type-check, unit, component, and build scripts | CI fails on a deliberate violation and passes clean code |
-| FND-003 | P0 | Add protected CI workflow and Preview smoke test | Required checks block main on failure |
-| FND-004 | P0 | Add dependency, secret, and static security scans | Findings are visible and have ownership/SLA |
+| FND-003 | P0 | **In progress locally:** protected CI runs the full gate and Preview smoke, then binds a clean exact commit to a deterministic build/input hash manifest retained for 30 days; branch-protection enforcement, served-asset comparison, restricted long-term archive, and named promotion approval remain | Required checks block main on failure |
+| FND-004 | P0 | **In progress locally:** exact dependencies, high-severity audit, repository secret scan, bounded provenance manifest, and CI retention exist; license/SAST ownership and finding SLA evidence remain | Findings are visible and have ownership/SLA |
 | FND-005 | P0 | Document local/preview/staging/production config schema | Startup fails safely with a clear missing-config report |
 | FND-006 | P0 | Remove ambiguous legacy DealSafe runtime/config identifiers | Runtime keys, fee config, analytics, assets, and docs consistently use Dealivra or a migration alias |
 
@@ -26,9 +26,9 @@ This backlog turns the production specification into controlled delivery work. P
 |---|---|---|---|
 | ARC-001 | P0 | Build target-framework/session proof of concept | Auth, protected route, SSR/public route, CSP, and Preview work |
 | ARC-002 | P0 | Introduce real routes and error boundaries | Refresh/deep link/back/forward and 404 behavior pass |
-| ARC-003 | P0 | Split `app.tsx` by auth, deal, agreement, payment, delivery, dispute, admin | No feature requires editing the central monolith for ordinary behavior |
-| ARC-004 | P0 | Create typed API/service boundary with runtime request/response schemas | Invalid server/client data fails safely and is monitored |
-| ARC-005 | P1 | Add feature flags and kill switches | Each critical capability can be disabled without redeploying unrelated features |
+| ARC-003 | P0 | **Complete locally for review:** split `app.tsx` by auth, deal, agreement, payment, delivery, dispute, and admin; Deal Workspace composition and remaining Deal feature presentation are extracted into focused modules | No feature requires editing the central monolith for ordinary behavior |
+| ARC-004 | P0 | **In progress locally:** create typed API/service boundary with runtime request/response schemas; primary Deal reads, Deal creation/draft/publication/edit/cancellation, public acceptance, media ownership/order, saved/public Deal reads, browser Auth/session/TOTP MFA success responses, every current browser Auth mutation request/error, protected-payment/Stripe success responses and browser request/errors, the read-only historical payment receipt, account-name mutation with compensating rollback, governed evidence/lifecycle, evidence and dispute mutation requests/errors, participant communication, offer/inquiry, safety-report, moderation, administrator finance/catalog, public seller trust, Digital Trust Passport, explainable Deal risk, delivery/meeting/handoff/inspection, account profile/session/rating/timeline/participant, canonical agreement/Deal Link/Watchlist, and staged support-case success/request/error contracts now fail closed; revoked pre-Stripe payment acknowledgement mutations are retired from the client and production RPC allowlist | Invalid server/client data fails safely and is monitored |
+| ARC-005 | P1 | **In progress locally:** seller onboarding, checkout, payout release, refund, support intake, monitoring, recovery control, security notifications, and current-password change have exact fail-closed environment gates; environment activation proof and remaining critical capability inventory remain | Each critical capability can be disabled without redeploying unrelated features |
 
 ## Epic 3 — Design system and workflow UX
 
@@ -151,17 +151,17 @@ required.
 |---|---|---|---|
 | KYC-001 | P1 | Select and contract KYC provider | Coverage, privacy, false-positive, pricing, support, DPA reviewed |
 | KYC-002 | P1 | Implement hosted onboarding/status/remediation webhooks | Required status and manual-review paths pass |
-| AGR-001 | P0 | Version agreement schema and canonical rendering | UI/PDF/hash represent the same immutable content |
+| AGR-001 | P0 | Version agreement schema and canonical rendering — implemented locally with browser request/response integrity boundaries; activation proof pending | UI/PDF/hash represent the same immutable content |
 | AGR-002 | P1 | Counsel approves clickwrap/e-sign evidence | Consent copy, notices, timestamps, identity evidence meet approved standard |
-| AGR-003 | P1 | Produce professional accessible agreement PDF/receipt | PDF is readable, branded, versioned, verifiable, and archived |
+| AGR-003 | P1 | Produce professional accessible agreement PDF/receipt — document layout implemented locally; browser/archive/legal evidence pending | PDF is readable, branded, versioned, verifiable, and archived |
 | POL-001 | P0 | Publish beta privacy, terms, prohibited-items, retention, support, and cancellation policies | Versions are linked at collection/action points |
 
 ## Epic 9 — Support, disputes, moderation, and fraud
 
 | ID | Priority | Work | Acceptance |
 |---|---|---|---|
-| OPS-001 | P0 | Define support roles, queues, SLAs, and escalation | Test cases route to a named role with deadlines |
-| OPS-002 | P0 | Implement case-scoped access and operator audit | Support cannot browse unrelated private records |
+| OPS-001 | P0 | **In progress locally:** staged private support cases define member intake, urgent/normal SLA targets, minimal AAL2 operator queues, assignment, resolution, and a fail-closed browser gate; escalation ownership and monitored deployment evidence remain | Test cases route to a named role with deadlines |
+| OPS-002 | P0 | **In progress locally:** support tables deny direct access, customers read only their cases, full operator detail requires explicit assignment plus AAL2, and material actions append audit events; deployed cross-account proof remains | Support cannot browse unrelated private records |
 | OPS-003 | P1 | Build structured dispute/evidence review workspace | Complete case can be decided without off-platform files |
 | OPS-004 | P1 | Add refund/release authority matrix and selected dual control | Unauthorized/one-person high-value actions fail |
 | OPS-005 | P1 | Add explainable risk rules, velocity controls, and manual review | Limits and false-positive handling are measured |
@@ -171,11 +171,11 @@ required.
 
 | ID | Priority | Work | Acceptance |
 |---|---|---|---|
-| OBS-001 | P0 | Add client/server error and performance monitoring with redaction | Synthetic failure appears without leaking sensitive data |
-| OBS-002 | P0 | Add uptime/synthetic checks for critical journeys | Alert routing and acknowledgement drill pass |
-| OBS-003 | P0 | Add payment/security dashboards and alerts | Replay, mismatch, auth abuse, admin change scenarios alert |
+| OBS-001 | P0 | **In progress locally:** runtime contract rejections, fixed-category browser failures, and URL-free Web Vital quality buckets use bounded default-off intakes; Auth/catalog/VIN failures use one fixed-category correlated server record; build budgets guard asset growth and the authenticated application/service boundary is split below a tightened chunk ceiling; protected activation, remaining Edge/provider surfaces, external alert routing, retention proof, browser trace, and synthetic evidence remain | Synthetic failure appears without leaking sensitive data |
+| OBS-002 | P0 | **In progress locally:** minimal liveness and a bounded read-only protected-Preview probe cover the application shell, Terms/sign-in routes, and phone catalog; encrypted schedule, alert routing, acknowledgement/recovery drill, and isolated authenticated/provider journeys remain | Alert routing and acknowledgement drill pass |
+| OBS-003 | P0 | **In progress locally:** a deterministic privacy-safe policy reduces reviewed application/Auth/CSP/payment/notification/performance/synthetic records to fixed counters and alerts; external drain aggregation, dashboard access, alert routing, admin-change coverage, deduplication, and acknowledgement drills remain | Replay, mismatch, auth abuse, admin change scenarios alert |
 | OBS-004 | P1 | Load test API/database/storage/provider event paths | Approved capacity and degradation behavior pass |
-| OBS-005 | P1 | Define incident response, status communication, and evidence preservation | Tabletop and technical drill pass |
+| OBS-005 | P1 | **In progress locally:** fail-closed incident declaration/transition policy, release and payment-integrity freezes, reviewed status drafts, hash-only evidence manifests, and a no-network release drill are implemented; named on-call, paging/status integrations, restricted forensic storage, tabletop, and technical environment drill remain | Tabletop and technical drill pass |
 | OBS-006 | P1 | Run backup restore and provider event replay drill | RPO/RTO targets are met and documented |
 
 ## Epic 11 — Smart Catalog and structured listing data

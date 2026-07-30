@@ -5,6 +5,7 @@ import {
   requireUser,
 } from "../_shared/common.ts";
 import {
+  evidenceVideoMaxBytes,
   detectEvidenceFile,
   evidenceSignedUrlTtlSeconds,
   evidenceUploadIntakeTtlSeconds,
@@ -20,6 +21,14 @@ import {
   evidenceSha256,
   scanEvidenceBytes,
 } from "../_shared/evidence-scan.ts";
+import {
+  EvidenceJsonBoundaryError,
+  readBoundedEvidenceJson,
+} from "../_shared/evidence-json-boundary.ts";
+import {
+  BinaryBodyBoundaryError,
+  readExactBinaryBody,
+} from "../_shared/binary-body-boundary.ts";
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -36,6 +45,20 @@ type EvidenceAction =
   }
   | { action: "finalize-upload"; intakeId?: string }
   | { action: "signed-url"; evidenceId?: string };
+
+const evidenceActionKeys = {
+  "request-upload": [
+    "action",
+    "claimedMimeType",
+    "dealId",
+    "evidenceType",
+    "fileName",
+    "fileSize",
+    "uploaderRole",
+  ],
+  "finalize-upload": ["action", "intakeId"],
+  "signed-url": ["action", "evidenceId"],
+} as const;
 
 type IntakeRecord = {
   id: string;
@@ -102,6 +125,28 @@ function endpointError(error: unknown) {
     { error: "The secure file service is temporarily unavailable.", code: "evidence_service_error" },
     503,
   );
+}
+
+async function readEvidenceAction(request: Request) {
+  try {
+    return await readBoundedEvidenceJson(
+      request,
+      evidenceActionKeys,
+    ) as EvidenceAction;
+  } catch (error) {
+    if (error instanceof EvidenceJsonBoundaryError) {
+      throw new EvidenceEndpointError(
+        "evidence_request_invalid",
+        "The secure file request is invalid.",
+        error.code === "body_too_large"
+          ? 413
+          : error.code === "content_type_invalid"
+            ? 415
+            : 400,
+      );
+    }
+    throw error;
+  }
 }
 
 function extensionForMimeType(mimeType: string) {
@@ -290,7 +335,6 @@ async function finalizeUpload(userId: string, intakeId: string) {
       409,
     );
   }
-  const bytes = new Uint8Array(await file.arrayBuffer());
   const declaration: EvidenceDeclaration = {
     claimedMimeType: intake.declared_mime_type,
     evidenceType: intake.evidence_type,
@@ -298,6 +342,24 @@ async function finalizeUpload(userId: string, intakeId: string) {
     fileSize: intake.declared_size_bytes,
     role: intake.uploader_role,
   };
+  let bytes: Uint8Array;
+  try {
+    bytes = await readExactBinaryBody(
+      file,
+      declaration.fileSize,
+      evidenceVideoMaxBytes,
+    );
+  } catch (error) {
+    if (error instanceof BinaryBodyBoundaryError) {
+      await rejectIntake(claimedIntake, "rejected", "file_size_mismatch");
+      throw new EvidenceEndpointError(
+        "file_size_mismatch",
+        "The uploaded file size does not match the approved upload.",
+        422,
+      );
+    }
+    throw error;
+  }
   const byteValidation = validateEvidenceBytes(bytes, declaration);
   if (!byteValidation.ok || !byteValidation.detected) {
     await rejectIntake(claimedIntake, "rejected", byteValidation.code);
@@ -483,8 +545,6 @@ async function signedUrl(userId: string, evidenceId: string) {
     );
   }
 
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const detected = detectEvidenceFile(bytes);
   const declaration: EvidenceDeclaration = {
     claimedMimeType: evidence.detected_mime_type || evidence.mime_type || "",
     evidenceType: evidence.evidence_type || "",
@@ -492,6 +552,31 @@ async function signedUrl(userId: string, evidenceId: string) {
     fileSize: Number(evidence.file_size_bytes || 0),
     role: evidence.uploader_role || "",
   };
+  let bytes: Uint8Array;
+  try {
+    bytes = await readExactBinaryBody(
+      file,
+      declaration.fileSize,
+      evidenceVideoMaxBytes,
+    );
+  } catch (boundaryError) {
+    if (boundaryError instanceof BinaryBodyBoundaryError) {
+      await recordIntegrityResult(evidence.id, userId, {
+        storagePresent: true,
+        structureValid: false,
+        observedSha256: null,
+        observedSizeBytes: Number.isSafeInteger(file.size) ? file.size : null,
+        observedMimeType: null,
+      });
+      throw new EvidenceEndpointError(
+        "evidence_integrity_failed",
+        "This file could not be verified and was not opened.",
+        423,
+      );
+    }
+    throw boundaryError;
+  }
+  const detected = detectEvidenceFile(bytes);
   const byteValidation = validateEvidenceBytes(bytes, declaration);
   const observedSha256 = await evidenceSha256(bytes);
   const integrity = await recordIntegrityResult(evidence.id, userId, {
@@ -540,15 +625,8 @@ Deno.serve((request) =>
   handleBrowserRequest(request, async () => {
     if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
     try {
-      if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) {
-        throw new EvidenceEndpointError(
-          "content_type_invalid",
-          "The secure file request is invalid.",
-          415,
-        );
-      }
+      const body = await readEvidenceAction(request);
       const user = await requireUser(request);
-      const body = await request.json() as EvidenceAction;
       if (body.action === "request-upload") return await requestUpload(user.id, body);
       if (body.action === "finalize-upload") {
         return await finalizeUpload(user.id, body.intakeId || "");

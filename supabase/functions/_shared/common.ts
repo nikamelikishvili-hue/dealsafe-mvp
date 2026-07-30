@@ -8,6 +8,18 @@ import {
   stripeProviderError,
   withPaymentCorrelation,
 } from "./payment-observability.ts";
+import {
+  paymentCapabilityDecision,
+  type PaymentCapability,
+} from "./payment-mode.ts";
+import {
+  PaymentJsonBoundaryError,
+  readBoundedPaymentJson,
+} from "./payment-json-boundary.ts";
+import {
+  StripeResponseBoundaryError,
+  readBoundedStripeJson,
+} from "./stripe-response-boundary.ts";
 
 const browserRequestHeaders = new Set([
   "apikey",
@@ -31,6 +43,40 @@ export function requiredSecret(name: string) {
   const value = Deno.env.get(name);
   if (!value) throw new Error(`${name} is not configured`);
   return value;
+}
+
+export function requireSandboxPaymentCapability(capability: PaymentCapability) {
+  const decision = paymentCapabilityDecision(
+    capability,
+    name => Deno.env.get(name),
+  );
+  if (decision.allowed) return;
+
+  throw paymentError(
+    decision.code || "payment_configuration_invalid",
+    decision.mode === "disabled"
+      ? "This payment action is temporarily unavailable."
+      : "Secure payments are temporarily unavailable.",
+    503,
+  );
+}
+
+export async function readPaymentJson<T extends Record<string, unknown>>(
+  request: Request,
+  allowedKeys: readonly string[],
+): Promise<T> {
+  try {
+    return await readBoundedPaymentJson(request, allowedKeys) as T;
+  } catch (error) {
+    if (error instanceof PaymentJsonBoundaryError) {
+      throw paymentError(
+        "payment_request_invalid",
+        "The payment request is invalid.",
+        error.code === "body_too_large" ? 413 : 400,
+      );
+    }
+    throw error;
+  }
 }
 
 export function siteUrl() {
@@ -288,6 +334,8 @@ type StripeRequestOptions = {
   context?: PaymentOperationContext;
 };
 
+const stripeRequestTimeoutMs = 10_000;
+
 export async function stripeRequest<T>(path: string, options: StripeRequestOptions = {}): Promise<T> {
   const secretKey = requiredSecret("STRIPE_SECRET_KEY");
   if (!secretKey.startsWith("sk_test_")) {
@@ -303,11 +351,29 @@ export async function stripeRequest<T>(path: string, options: StripeRequestOptio
       method,
       headers,
       body: method === "POST" ? options.params?.toString() || "" : undefined,
+      signal: AbortSignal.timeout(stripeRequestTimeoutMs),
     });
   } catch {
     throw stripeNetworkError();
   }
-  const data = await response.json().catch(() => null);
+  let data: Record<string, unknown> | null = null;
+  try {
+    data = await readBoundedStripeJson(response);
+  } catch (error) {
+    if (
+      error instanceof DOMException
+      && (error.name === "AbortError" || error.name === "TimeoutError")
+    ) {
+      throw stripeNetworkError();
+    }
+    if (response.ok || !(error instanceof StripeResponseBoundaryError)) {
+      throw paymentError(
+        "provider_response_invalid",
+        "The payment provider returned an invalid response. Please try again later.",
+        502,
+      );
+    }
+  }
   if (!response.ok) {
     throw stripeProviderError(response, data);
   }

@@ -3,6 +3,8 @@ import {
   errorResponse,
   handleBrowserRequest,
   json,
+  readPaymentJson,
+  requireSandboxPaymentCapability,
   requireSensitiveChangeAllowedForService,
   requireUser,
   stripeRequest,
@@ -60,11 +62,15 @@ Deno.serve((request) => {
   let providerMayBeComplete = false;
   try {
     const user = await requireUser(request);
-    const { dealId } = await request.json() as { dealId?: string };
+    const { dealId } = await readPaymentJson<{ dealId?: string }>(
+      request,
+      ["dealId"],
+    );
     if (!dealId || !uuidPattern.test(dealId)) {
       throw paymentError("deal_required", "Select a valid deal before requesting payout review.", 400);
     }
     dealIdForLog = dealId;
+    requireSandboxPaymentCapability("payout_release");
 
     const admin = adminClient();
     const { data: payoutDeal, error: payoutDealError } = await admin

@@ -14,8 +14,9 @@ returns table(
   is_current boolean
 )
 language sql
+stable
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select
     agreement.version,
@@ -27,7 +28,7 @@ as $$
     coalesce(nullif(agreement.terms_json->>'currency',''),deal.currency),
     coalesce(nullif(agreement.terms_json->>'condition',''),deal.condition),
     coalesce(nullif(agreement.terms_json->>'delivery_method',''),deal.delivery_method),
-    agreement.content_hash,
+    coalesce(agreement.canonical_hash,agreement.content_hash),
     agreement.created_at,
     count(acceptance.id),
     agreement.version=greatest(deal.current_agreement_version,1)
