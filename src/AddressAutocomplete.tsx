@@ -81,27 +81,34 @@ export function AddressAutocomplete({value,onChange,placeholder,onAddressParts,s
     let autocomplete:GooglePlaceAutocompleteElement|null=null;
     const handleInput=()=>{if(!autocomplete)return;inputValueRef.current=autocomplete.value;onChangeRef.current(autocomplete.value)};
     const handleSelect=async(event:Event)=>{
-      const place=(event as PlaceSelectEvent).placePrediction.toPlace();
-      await place.fetchFields({fields:['displayName','formattedAddress','addressComponents']});
-      if(!active)return;
-      const selected=place.formattedAddress||place.displayName||autocomplete?.value||'';
-      const components=place.addressComponents||[];
-      const component=(...types:string[])=>{const item=components.find(entry=>types.some(type=>entry.types?.includes(type)));return item?.longText||item?.shortText||''};
-      const shortComponent=(...types:string[])=>{const item=components.find(entry=>types.some(type=>entry.types?.includes(type)));return item?.shortText||item?.longText||''};
-      const selectedStreetPart=selected.split(',')[0]?.trim()||selected;
-      const leadingNumber=(text:string)=>text.match(/^\s*(\d+[A-Za-z]?(?:\s*[-/]\s*\d+[A-Za-z]?)?)(?:\s|$)/)?.[1]||'';
-      const streetNumber=component('street_number')||leadingNumber(selectedStreetPart)||leadingNumber(inputValueRef.current);
-      const route=component('route');
-      const streetAddress=route?[streetNumber,route].filter(Boolean).join(' ').trim():selectedStreetPart;
-      const city=component('locality','postal_town','sublocality_level_1','administrative_area_level_2');
-      const state=shortComponent('administrative_area_level_1');
-      const postalCode=component('postal_code');
-      const country=component('country');
-      if(autocomplete)autocomplete.value=streetAddress;
-      inputValueRef.current=streetAddress;
-      onChangeRef.current(streetAddress);
-      onAddressPartsRef.current?.({streetAddress,city,state,postalCode,country});
+      try{
+        const prediction=(event as PlaceSelectEvent).placePrediction;
+        if(!prediction)throw new Error('Google Places did not return a selection');
+        const place=prediction.toPlace();
+        await place.fetchFields({fields:['displayName','formattedAddress','addressComponents']});
+        if(!active)return;
+        const selected=place.formattedAddress||place.displayName||autocomplete?.value||'';
+        const components=place.addressComponents||[];
+        const component=(...types:string[])=>{const item=components.find(entry=>types.some(type=>entry.types?.includes(type)));return item?.longText||item?.shortText||''};
+        const shortComponent=(...types:string[])=>{const item=components.find(entry=>types.some(type=>entry.types?.includes(type)));return item?.shortText||item?.longText||''};
+        const selectedStreetPart=selected.split(',')[0]?.trim()||selected;
+        const leadingNumber=(text:string)=>text.match(/^\s*(\d+[A-Za-z]?(?:\s*[-/]\s*\d+[A-Za-z]?)?)(?:\s|$)/)?.[1]||'';
+        const streetNumber=component('street_number')||leadingNumber(selectedStreetPart)||leadingNumber(inputValueRef.current);
+        const route=component('route');
+        const streetAddress=route?[streetNumber,route].filter(Boolean).join(' ').trim():selectedStreetPart;
+        const city=component('locality','postal_town','sublocality_level_1','administrative_area_level_2');
+        const state=shortComponent('administrative_area_level_1');
+        const postalCode=component('postal_code');
+        const country=component('country');
+        if(autocomplete)autocomplete.value=streetAddress;
+        inputValueRef.current=streetAddress;
+        onChangeRef.current(streetAddress);
+        onAddressPartsRef.current?.({streetAddress,city,state,postalCode,country});
+      }catch{
+        if(active)setGoogleFailed(true);
+      }
     };
+    const handleGoogleError=()=>{if(active)setGoogleFailed(true)};
     loadGoogleMaps(apiKey).then(async()=>{
       if(!active||!hostRef.current||!window.google)return;
       const {PlaceAutocompleteElement}=await window.google.maps.importLibrary('places');
@@ -118,6 +125,7 @@ export function AddressAutocomplete({value,onChange,placeholder,onAddressParts,s
       autocomplete.addEventListener('input',handleInput);
       autocomplete.addEventListener('change',handleInput);
       autocomplete.addEventListener('gmp-select',handleSelect);
+      autocomplete.addEventListener('gmp-error',handleGoogleError);
       hostRef.current.replaceChildren(autocomplete);
       elementRef.current=autocomplete;
       setGoogleReady(true);
@@ -128,6 +136,7 @@ export function AddressAutocomplete({value,onChange,placeholder,onAddressParts,s
         autocomplete.removeEventListener('input',handleInput);
         autocomplete.removeEventListener('change',handleInput);
         autocomplete.removeEventListener('gmp-select',handleSelect);
+        autocomplete.removeEventListener('gmp-error',handleGoogleError);
         autocomplete.remove();
       }
       elementRef.current=null;
@@ -136,6 +145,6 @@ export function AddressAutocomplete({value,onChange,placeholder,onAddressParts,s
 
   useEffect(()=>{inputValueRef.current=value;if(elementRef.current&&elementRef.current.value!==value)elementRef.current.value=value},[value]);
 
-  if(!apiKey||googleFailed)return <input required autoComplete={streetAddressOnly?'address-line1':'street-address'} placeholder={placeholder} value={value} onChange={event=>onChange(event.target.value)}/>;
+  if(!apiKey||googleFailed)return <div className="address-autocomplete-fallback"><input required autoComplete={streetAddressOnly?'address-line1':'street-address'} placeholder={placeholder} value={value} onChange={event=>onChange(event.target.value)}/><small className="address-autocomplete-status" role="status">Address suggestions are unavailable. Enter the address manually.</small></div>;
   return <div className={`google-address-autocomplete ${googleReady?'ready':'loading'}`}><div ref={hostRef}/>{!googleReady&&<input required autoComplete={streetAddressOnly?'address-line1':'street-address'} placeholder={placeholder} value={value} onChange={event=>onChange(event.target.value)}/>}</div>;
 }

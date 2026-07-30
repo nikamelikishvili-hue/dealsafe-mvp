@@ -109,6 +109,7 @@ export function MeetingPanel({
   const [form, setForm] = useState({
     locationName: '',
     streetAddress: '',
+    addressLine2: '',
     city: '',
     state: '',
     postalCode: '',
@@ -128,7 +129,13 @@ export function MeetingPanel({
     };
   }, [deal.id, session.accessToken]);
 
-  const completeAddress = `${form.streetAddress.trim()}, ${form.city.trim()}, ${form.state} ${form.postalCode.trim()}`;
+  const completeAddress = [
+    form.streetAddress.trim(),
+    form.addressLine2.trim(),
+    `${form.city.trim()}, ${form.state} ${form.postalCode.trim()}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
   const formComplete =
     form.locationName.trim().length >= 2 &&
     form.streetAddress.trim().length >= 3 &&
@@ -194,7 +201,7 @@ export function MeetingPanel({
             <MapPinned />
             <span>
               <b>{meeting.location_name}</b>
-              <small>{meeting.address}</small>
+              <small className="meeting-address">{meeting.address}</small>
             </span>
           </div>
           <div>
@@ -255,6 +262,21 @@ export function MeetingPanel({
                   city: parts.city || current.city,
                   state: parts.state || current.state,
                   postalCode: parts.postalCode || current.postalCode,
+                }))
+              }
+            />
+          </label>
+          <label className="meeting-field meeting-field-line-two">
+            {t('Address line 2 (optional)')}
+            <input
+              maxLength={100}
+              autoComplete="address-line2"
+              placeholder={t('Apartment, suite, unit, building, or floor')}
+              value={form.addressLine2}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  addressLine2: event.target.value,
                 }))
               }
             />
