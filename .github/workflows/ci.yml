@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Check out the reviewed commit
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Use the supported Node.js release
         uses: actions/setup-node@v5
