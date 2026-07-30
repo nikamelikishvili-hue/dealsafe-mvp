@@ -60,20 +60,28 @@ scripts.
 - The offline policy validates provenance/integrity/license/script properties.
 - The repository secret scan checks committed material.
 - `npm audit --audit-level=high` remains a separate online CI step.
+- The deterministic CycloneDX inventory records every locked component,
+  integrity value, license, provenance URL, and resolvable dependency edge.
+- CodeQL runs the extended JavaScript/TypeScript security query suite as a
+  separate GitHub security check with scoped ownership and finding SLAs.
 - Deterministic release evidence records the lockfile and policy script hashes
-  and confirms the dependency-policy gate completed first.
+  plus the exact SBOM and CodeQL workflow, and confirms SBOM/dependency gates
+  completed first.
 
 ## Required follow-up
 
 Before external beta:
 
-1. assign dependency and license finding owners and SLAs;
-2. review production versus development transitive inventory;
-3. generate and archive an industry-standard SBOM from the exact release
-   commit;
-4. retain required third-party notices;
-5. add a supported SAST/code-scanning owner and finding workflow; and
-6. rehearse a vulnerable/deprecated dependency replacement.
+1. assign a second independent security approver;
+2. require the quality/security and CodeQL checks in branch protection;
+3. archive the exact release SBOM and evidence in the restricted long-term
+   evidence store;
+4. retain required third-party notices; and
+5. rehearse a vulnerable/deprecated dependency replacement.
+
+Ownership, severity, triage/remediation SLAs, exceptions, and the deterministic
+SBOM contract are defined in
+[72_STATIC_ANALYSIS_AND_SBOM_GOVERNANCE.md](72_STATIC_ANALYSIS_AND_SBOM_GOVERNANCE.md).
 
 ## Rollback
 

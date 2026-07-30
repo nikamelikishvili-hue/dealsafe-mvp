@@ -61,7 +61,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [50_INCIDENT_CONTROL_AND_RELEASE_FREEZE.md](50_INCIDENT_CONTROL_AND_RELEASE_FREEZE.md) | Fail-closed incident state machine, release/financial freeze, safe status drafts, hashed evidence, and local drill |
 | [51_APPLICATION_BUNDLE_SPLITTING.md](51_APPLICATION_BUNDLE_SPLITTING.md) | Authenticated application/service code splitting, tightened chunk budgets, release evidence, and rollback |
 | [52_DETERMINISTIC_RELEASE_EVIDENCE.md](52_DETERMINISTIC_RELEASE_EVIDENCE.md) | Exact-commit clean-tree provenance, bounded SHA-256 asset manifest, CI artifact retention, and promotion gates |
-| [53_DEPENDENCY_SUPPLY_CHAIN_POLICY.md](53_DEPENDENCY_SUPPLY_CHAIN_POLICY.md) | Offline registry/integrity/license/install-script lockfile gate, reviewed exceptions, and remaining SBOM ownership |
+| [53_DEPENDENCY_SUPPLY_CHAIN_POLICY.md](53_DEPENDENCY_SUPPLY_CHAIN_POLICY.md) | Offline registry/integrity/license/install-script lockfile gate and reviewed exceptions |
 | [54_BROWSER_CACHE_SAFETY.md](54_BROWSER_CACHE_SAFETY.md) | Network-only private/navigation behavior, immutable asset caching, legacy cache retirement, and release proof |
 | [55_PAYMENT_CAPABILITY_KILL_SWITCHES.md](55_PAYMENT_CAPABILITY_KILL_SWITCHES.md) | Independent default-off Sandbox gates for onboarding, checkout, payout release, and refund mutations |
 | [56_PAYMENT_REQUEST_BOUNDARY.md](56_PAYMENT_REQUEST_BOUNDARY.md) | Authenticated JSON media/byte/exact-key validation before payment database or provider work |
@@ -80,6 +80,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [69_BROWSER_DIAGNOSTIC_TRANSPORT.md](69_BROWSER_DIAGNOSTIC_TRANSPORT.md) | One allowlisted, byte-limited, deadline-bound transport for privacy-safe browser diagnostics |
 | [70_GUEST_DRAFT_STORAGE_BOUNDARY.md](70_GUEST_DRAFT_STORAGE_BOUNDARY.md) | Short-lived, byte-bounded, sensitive-field-free guest Deal draft recovery |
 | [71_BROWSER_STORAGE_INVENTORY.md](71_BROWSER_STORAGE_INVENTORY.md) | Deny-by-default release inventory for persistent and tab-scoped browser storage |
+| [72_STATIC_ANALYSIS_AND_SBOM_GOVERNANCE.md](72_STATIC_ANALYSIS_AND_SBOM_GOVERNANCE.md) | CodeQL SAST, deterministic CycloneDX inventory, scoped ownership, finding SLAs, exceptions, and release evidence |
 
 ## Authority and change control
 

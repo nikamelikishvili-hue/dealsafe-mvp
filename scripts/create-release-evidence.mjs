@@ -107,13 +107,17 @@ if (
 }
 
 const selectedFiles = [
+  '.github/CODEOWNERS',
   '.github/workflows/ci.yml',
+  '.github/workflows/codeql.yml',
   '.nvmrc',
   'catalog/active-release.json',
   activeCatalog.manifest,
   'docs/production-readiness/07_TEST_RELEASE_GATES.md',
   'package-lock.json',
   'package.json',
+  'release-evidence/dependency-sbom.cdx.json',
+  'scripts/create-dependency-sbom.mjs',
   'scripts/create-release-evidence.mjs',
   'scripts/run-incident-control-drill.mjs',
   'scripts/scan-repository-secrets.mjs',
@@ -122,6 +126,7 @@ const selectedFiles = [
   'scripts/verify-build-budgets.mjs',
   'scripts/verify-dependency-policy.mjs',
   'scripts/verify-outbound-transport-policy.mjs',
+  'server/dependencySbomPolicy.mjs',
   'server/releaseEvidencePolicy.mjs',
   'src/catalog.v1.json',
   'vercel.json',
