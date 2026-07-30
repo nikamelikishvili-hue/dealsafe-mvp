@@ -55,6 +55,22 @@ Before a paid beta, a second independent security reviewer must be assigned.
 Until then, no CodeQL, dependency, license, secret, or provenance exception may
 be self-approved for a public or real-money release.
 
+## Enforced GitHub state
+
+GitHub `main` branch protection was activated on 2026-07-30. It requires:
+
+- an up-to-date pull request;
+- the `verify`, `Analyze JavaScript and TypeScript`, and `Vercel` checks;
+- signed commits and linear history;
+- resolved review conversations and dismissal of stale reviews;
+- the same policy for the repository administrator; and
+- no force pushes or branch deletion.
+
+The required checks are bound to the GitHub Actions and Vercel applications.
+The approval count remains zero only because the repository currently has one
+authorized maintainer. Before paid beta, assign a second independent security
+reviewer and require one approval plus Code Owner review.
+
 ## Finding severity and SLA
 
 | Finding | Triage | Remediation or contained mitigation | Release effect |
@@ -107,7 +123,8 @@ integrity, ownership, or evidence rules merely to restore a green check.
 
 ## Activation boundary
 
-This change reads repository source and lockfile data only. It does not access
-customer data, change GitHub branch protection, deploy code, alter Vercel or
-Supabase configuration, enable public access, contact payment providers, or
-authorize payment, payout, refund, dispute, or other real-money behavior.
+The original governance implementation read repository source and lockfile data
+only. The later activation changed only GitHub `main` branch protection. It did
+not access customer data, deploy application code, alter Vercel or Supabase
+configuration, enable public access, contact payment providers, or authorize
+payment, payout, refund, dispute, or other real-money behavior.
