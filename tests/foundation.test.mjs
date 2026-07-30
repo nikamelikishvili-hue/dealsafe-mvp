@@ -10259,7 +10259,7 @@ test('locked dependencies follow the reviewed offline supply-chain policy', () =
   );
   assert.match(
     packageJson.scripts.verify,
-    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run typecheck/,
+    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run format:check && npm run lint && npm run typecheck/,
   );
   assert.match(policy, /lockfile\.lockfileVersion !== 3/);
   assert.match(policy, /url\.protocol === 'https:'/);
@@ -10315,6 +10315,10 @@ test('CycloneDX dependency inventory is deterministic, bounded, and private', ()
     && /^[0-9a-f]{128}$/.test(component.hashes[0].content)
     && component.externalReferences[0].url.startsWith('https://registry.npmjs.org/')
   )));
+  assert.deepEqual(
+    sbom.components.find(component => component.name === '@biomejs/biome')?.licenses,
+    [{ expression: 'MIT OR Apache-2.0' }],
+  );
   assert.doesNotMatch(
     serialized,
     /customer@example|bearer\s|sk_(?:live|test)|token_value|[A-Z]:\\|absolute_path|environment_variable/i,

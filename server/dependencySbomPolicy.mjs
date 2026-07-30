@@ -4,7 +4,15 @@ const exactVersionPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const packagePathPattern = /(?:^|\/)node_modules\/((?:@[^/]+\/)?[^/]+)$/;
 const sha512IntegrityPattern = /^sha512-([A-Za-z0-9+/]+={0,2})$/;
 const safePackageNamePattern = /^(?:@[a-z0-9._~-]+\/)?[a-z0-9._~-]+$/i;
-const safeLicensePattern = /^[A-Za-z0-9.+()-]{1,80}$/;
+const reviewedLicenses = new Set([
+  '0BSD',
+  'Apache-2.0',
+  'BSD-3-Clause',
+  'ISC',
+  'MIT',
+  'MIT OR Apache-2.0',
+  'MPL-2.0',
+]);
 const maximumLockedPackages = 150;
 const maximumDependencyNames = 80;
 
@@ -188,7 +196,7 @@ export function buildDependencySbom(packageJson, lockfile) {
       || Array.isArray(record)
       || record.link === true
       || !isReviewedRegistryTarball(record.resolved)
-      || !safeLicensePattern.test(record.license ?? '')
+      || !reviewedLicenses.has(record.license)
     ) {
       return null;
     }
@@ -214,11 +222,9 @@ export function buildDependencySbom(packageJson, lockfile) {
           alg: 'SHA-512',
           content: identity.integrity,
         }],
-        licenses: [{
-          license: {
-            id: record.license,
-          },
-        }],
+        licenses: record.license.includes(' OR ')
+          ? [{ expression: record.license }]
+          : [{ license: { id: record.license } }],
         properties: [{
           name: 'cdx:npm:package:development',
           value: record.dev === true ? 'true' : 'false',

@@ -119,7 +119,7 @@ const initial: DealDraft = {title:'',description:'',price:'',currency:'USD',cond
 const formatDateTime=(value:string)=>new Date(value).toLocaleString(getAppLanguage());
 const formatDate=(value:string)=>new Date(value).toLocaleDateString(getAppLanguage());
 const dealPrice=(deal:Pick<Deal,'priceCents'|'currency'>)=>formatMoney(deal.priceCents,deal.currency,getAppLanguage());
-const groupedDealValue=(deals:Deal[])=>{const totals=new Map<Deal['currency'],number>();deals.forEach(deal=>totals.set(deal.currency,(totals.get(deal.currency)||0)+deal.priceCents));return [...totals].map(([currency,value])=>formatMoney(value,currency,getAppLanguage())).join(' · ')||formatMoney(0,'USD',getAppLanguage())};
+const groupedDealValue=(deals:Deal[])=>{const totals=new Map<Deal['currency'],number>();deals.forEach(deal=>{totals.set(deal.currency,(totals.get(deal.currency)||0)+deal.priceCents)});return [...totals].map(([currency,value])=>formatMoney(value,currency,getAppLanguage())).join(' · ')||formatMoney(0,'USD',getAppLanguage())};
 const isDealExpired=(deal:Deal,now=Date.now())=>deal.status==='published'&&Boolean(deal.expiresAt)&&new Date(deal.expiresAt!).getTime()<=now;
 
 function PublicTrustPassportPage({profile,message,onBack}:{profile:TrustPassport|null;message:string;onBack:()=>void}){
@@ -158,7 +158,7 @@ function WorkspaceDealExplorer({deals,savedDeals,onOpen,onCreate}:{deals:Deal[];
   const [filters,setFilters]=useState(()=>readCatalogSearchState(location.search));
   const availableDeals=useMemo(()=>{
     const unique=new Map<string,Deal>();
-    [...deals,...savedDeals].forEach(deal=>unique.set(deal.id,deal));
+    [...deals,...savedDeals].forEach(deal=>{unique.set(deal.id,deal)});
     return [...unique.values()];
   },[deals,savedDeals]);
   const filteredDeals=useMemo(()=>filterCatalogDeals(deals,filters),[deals,filters]);
@@ -762,7 +762,7 @@ export function App() {
   useEffect(()=>{const timer=window.setInterval(()=>setClock(Date.now()),60_000);return()=>window.clearInterval(timer)},[]);
   useEffect(()=>{if(view==='auth'&&!isSupabaseConfigured)setAuthMessage('Account service is temporarily unavailable. Please try again later.')},[view,authMode]);
   useEffect(()=>{const updated=(event:Event)=>setSession((event as CustomEvent<StoredSession>).detail);const expired=()=>{setSession(null);setMfaLogin(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')};const requiresMfa=()=>{setAuthMessage('Verify or enroll an authenticator before continuing with this protected account.');setView('profile')};window.addEventListener(sessionUpdatedEvent,updated);window.addEventListener(sessionExpiredEvent,expired);window.addEventListener(mfaRequiredEvent,requiresMfa);return()=>{window.removeEventListener(sessionUpdatedEvent,updated);window.removeEventListener(sessionExpiredEvent,expired);window.removeEventListener(mfaRequiredEvent,requiresMfa)}},[]);
-  useEffect(()=>{if(!session)return;const recordActivity=()=>markSessionActivity();const events=['pointerdown','keydown','touchstart'] as const;events.forEach(event=>window.addEventListener(event,recordActivity,{passive:true}));window.addEventListener('focus',recordActivity);return()=>{events.forEach(event=>window.removeEventListener(event,recordActivity));window.removeEventListener('focus',recordActivity)}},[session?.user.id]);
+  useEffect(()=>{if(!session)return;const recordActivity=()=>markSessionActivity();const events=['pointerdown','keydown','touchstart'] as const;events.forEach(event=>{window.addEventListener(event,recordActivity,{passive:true})});window.addEventListener('focus',recordActivity);return()=>{events.forEach(event=>{window.removeEventListener(event,recordActivity)});window.removeEventListener('focus',recordActivity)}},[session?.user.id]);
   useEffect(()=>{if(session){listUserDeals(session).then(setDeals).catch(()=>setDeals([]))}else{demoRepository.list().then(setDeals)}},[session]);
   useEffect(()=>{if(session)getMySavedDeals(session).then(setSavedDeals).catch(()=>setSavedDeals([]));else setSavedDeals([])},[session]);
   useEffect(()=>{

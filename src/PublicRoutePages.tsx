@@ -138,7 +138,7 @@ export const getPageMetadata = (
       indexable: false
     };
   }
-  if (Object.prototype.hasOwnProperty.call(publicInfoContent, view)) {
+  if (Object.hasOwn(publicInfoContent, view)) {
     const content = publicInfoContent[view as PublicInfoView];
     return {
       label: content.title,

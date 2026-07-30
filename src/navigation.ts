@@ -76,4 +76,4 @@ export function resolveBrowserRoute(input: string | URL): BrowserRoute {
 }
 
 export const isPublicInfoView = (view: string): view is PublicInfoView =>
-  Object.prototype.hasOwnProperty.call(publicInfoPaths, view);
+  Object.hasOwn(publicInfoPaths, view);

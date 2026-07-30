@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 
 const root = new URL('../', import.meta.url);
 const packageJson = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
@@ -12,6 +11,7 @@ const allowedLicenses = new Set([
   'BSD-3-Clause',
   'ISC',
   'MIT',
+  'MIT OR Apache-2.0',
   'MPL-2.0',
 ]);
 const allowedInstallScripts = new Map([

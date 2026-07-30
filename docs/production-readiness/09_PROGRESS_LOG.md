@@ -186,7 +186,7 @@ Vercel protection.
 | Item | State | Remaining evidence |
 |---|---|---|
 | FND-001 | Complete | Continue reviewing future updates through CI |
-| FND-002 | In progress | Add formatter/linter and real unit/component suites |
+| FND-002 | Complete | Keep expanding component coverage as workflows are rebuilt |
 | FND-003 | In progress | GitHub execution is verified and protected `main` requires the current `verify`, CodeQL, and Vercel checks; served-asset comparison, restricted archive, and named promotion approval remain |
 | FND-004 | In progress | Dependency, license, secret, deterministic SBOM, CodeQL, ownership, and branch-protection controls exist; an independent security approver remains |
 | SEC-004 | In progress | Initial headers exist; browser/Preview validation and CSP reporting remain |
@@ -194,7 +194,8 @@ Vercel protection.
 ### Next batch
 
 - Confirm the GitHub CI run on the pushed branch.
-- Add the real test toolchain and application-level unit/component tests.
+- Expand the component suite from static contract coverage to interactive
+  keyboard, focus, error, and loading-state coverage.
 - Add an architecture proof of concept for routed, server-managed authentication.
 - Create the database object inventory and automated authorization-test harness.
 - Restrict and normalize authenticated Edge Function origin/error behavior.
@@ -3828,3 +3829,34 @@ Only the GitHub `main` branch protection setting changed. No application
 endpoint, customer record, Supabase or Vercel environment, domain, public
 access, payment, payout, refund, dispute decision, or real-money capability
 changed.
+
+## 2026-07-30 - FND-002 enforced code-quality and component-test gates
+
+### Implemented locally for review
+
+- Added an exactly pinned Biome toolchain with deterministic formatting for
+  governed quality/test artifacts and repository-wide lint checks for unused
+  imports, unsafe prototype access, accidental assignment expressions,
+  duplicate cases/members/keys, debugger statements, callback return mistakes,
+  global evaluation, and selected accessibility hazards.
+- Added the format and lint gates to the existing protected `verify` chain
+  before type-checking, tests, build, performance budgets, and Preview smoke.
+- Replaced implicit callback returns and assignment side effects identified by
+  the new lint boundary, removed unused imports, and moved safe own-property
+  checks to `Object.hasOwn`.
+- Added an isolated Vite SSR component-test runner without adding a browser DOM
+  dependency or widening the approved dependency graph.
+- Added initial React component contract coverage for the address manual
+  fallback, password-manager semantics, sign-in and sign-up submission
+  behavior, policy consent links, forgot-password button behavior, and the
+  Dealivra brand's accessible name.
+- Made critical account-flow buttons explicit about submit versus non-submit
+  behavior so moving them within a form cannot trigger accidental account
+  actions.
+
+### Review boundary
+
+This batch changes repository quality controls and deterministic component
+tests only. It does not activate public access, change Supabase or Vercel
+configuration, migrate customer data, or enable payment, payout, refund,
+dispute, or real-money behavior.

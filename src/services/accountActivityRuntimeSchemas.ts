@@ -111,7 +111,7 @@ function exactRecord(
 ): JsonRecord {
   const source = record(value, boundary, issue);
   if (
-    keys.some(key => !Object.prototype.hasOwnProperty.call(source, key))
+    keys.some(key => !Object.hasOwn(source, key))
     || Object.keys(source).some(key => !keys.includes(key))
   ) {
     reject(boundary, issue);
