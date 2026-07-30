@@ -31,7 +31,7 @@ type AccountEntryPageProps = {
 
 export function ForgotPasswordEntry({ onOpen }: { onOpen: () => void }) {
   return <div className="forgot-entry">
-    <button onClick={onOpen}>{t('Forgot password?')}</button>
+    <button type="button" onClick={onOpen}>{t('Forgot password?')}</button>
   </div>;
 }
 
@@ -55,7 +55,7 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
   };
 
   return <section className="recovery-page">
-    <button className="back" onClick={onBack}>← {t('Back to sign in')}</button>
+    <button type="button" className="back" onClick={onBack}>← {t('Back to sign in')}</button>
     <p className="eyebrow">{t('Account recovery')}</p>
     <h1>{t('Reset your password')}</h1>
     <p>{t('Enter your account email. For privacy, the result will not reveal whether an account exists.')}</p>
@@ -71,7 +71,7 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
         />
       </label>
       {message && <div className="notice">{t(message)}</div>}
-      <button className="primary full" disabled={sending}>
+      <button type="submit" className="primary full" disabled={sending}>
         {t(sending ? 'Sending…' : 'Send reset link')}
       </button>
     </form>
@@ -128,7 +128,7 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
       </label>
       <small>{t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}</small>
       {message && <div className="notice">{t(message)}</div>}
-      <button className="primary full">{t('Update password')}</button>
+      <button type="submit" className="primary full">{t('Update password')}</button>
     </form>
   </section>;
 }
@@ -165,7 +165,7 @@ export function AccountEntryPage({
   };
 
   return <section className="form-wrap auth-wrap">
-    <button className="back" onClick={onBack}>← {t(returnToCreate ? 'Back to draft' : 'Back')}</button>
+    <button type="button" className="back" onClick={onBack}>← {t(returnToCreate ? 'Back to draft' : 'Back')}</button>
     <p className="eyebrow">
       {pendingCreateAction ? 'FINAL STEP · ACCOUNT' : isSignup ? 'START YOUR PRIVATE DEAL' : 'DEALIVRA ACCOUNT'}
     </p>
@@ -260,7 +260,7 @@ export function AccountEntryPage({
         </span>
       </label>}
       {message && <div className="notice" role="status">{t(message)}</div>}
-      <button className="primary full" disabled={isSignup && !acceptedPolicies}>
+      <button type="submit" className="primary full" disabled={isSignup && !acceptedPolicies}>
         {t(pendingCreateAction ? pendingAuthAction : isSignup ? 'Create account & continue' : 'Sign in')}
       </button>
       <button type="button" className="switch-auth" onClick={onSwitchMode}>

@@ -125,7 +125,7 @@ function exactRecord(
   const source = value as JsonRecord;
   const allowed = new Set([...required, ...optional]);
   if (
-    required.some(key => !Object.prototype.hasOwnProperty.call(source, key))
+    required.some(key => !Object.hasOwn(source, key))
     || Object.keys(source).some(key => !allowed.has(key))
   ) {
     reject(boundary, issue);

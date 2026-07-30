@@ -172,7 +172,9 @@ export function startWebVitalMonitoring(): void {
   const finalize = () => {
     if (finalized) return;
     finalized = true;
-    observers.forEach(observer => observer.disconnect());
+    observers.forEach(observer => {
+      observer.disconnect();
+    });
     if (lcp !== null) reportWebVital(classifyWebVital('lcp', lcp));
     reportWebVital(classifyWebVital('cls', cls));
     if (inp !== null) reportWebVital(classifyWebVital('inp', inp));

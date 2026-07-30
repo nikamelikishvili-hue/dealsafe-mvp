@@ -14,7 +14,7 @@ This backlog turns the production specification into controlled delivery work. P
 | ID | Priority | Work | Acceptance |
 |---|---|---|---|
 | FND-001 | P0 | Pin all direct dependencies; choose one package manager/lockfile | Clean reproducible install produces the same dependency graph |
-| FND-002 | P0 | Add format, lint, strict type-check, unit, component, and build scripts | CI fails on a deliberate violation and passes clean code |
+| FND-002 | P0 | **Complete:** pinned Biome format/lint gates, strict type-checking, foundation/unit tests, SSR React component tests, and production build/smoke checks run through the protected `verify` job | CI fails on a deliberate violation and passes clean code |
 | FND-003 | P0 | **In progress:** protected CI runs the full gate and Preview smoke, then binds a clean exact commit to a deterministic build/input hash manifest retained for 30 days; GitHub `main` now requires the current branch, `verify`, CodeQL analysis, and Vercel through a signed, linear, conversation-resolved pull request with administrator enforcement; served-asset comparison, restricted long-term archive, and named promotion approval remain | Required checks block main on failure |
 | FND-004 | P0 | **In progress:** exact dependencies, license and install-script policy, high-severity audit, repository secret scan, deterministic CycloneDX SBOM, bounded provenance manifest, CodeQL SAST, scoped ownership, finding SLAs, CI retention, and enforced branch protection exist; independent security-approver assignment remains an external paid-beta gate | Findings are visible and have ownership/SLA |
 | FND-005 | P0 | Document local/preview/staging/production config schema | Startup fails safely with a clear missing-config report |

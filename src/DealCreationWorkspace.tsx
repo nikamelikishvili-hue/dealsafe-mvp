@@ -558,7 +558,12 @@ export function DealCreationWorkspace({
         )
         .slice(0, 6);
       let videoSeen = false;
-      return combined.filter(file => !isVideoFile(file) || (!videoSeen && (videoSeen = true)));
+      return combined.filter(file => {
+        if (!isVideoFile(file)) return true;
+        if (videoSeen) return false;
+        videoSeen = true;
+        return true;
+      });
     });
     event.currentTarget.value = '';
   };
