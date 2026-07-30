@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "2026-07-29.1",
+  "status": "active",
+  "market": "US",
+  "releasedAt": "2026-07-29",
+  "dataset": {
+    "path": "src/catalog.v1.json",
+    "sha256": "105988c9c18b11020a82cd193d841302a5cc3bd07e72fc25c6230141ea17c714",
+    "categories": [
+      "phone",
+      "tablet",
+      "laptop",
+      "vehicle",
+      "watch",
+      "camera",
+      "gaming",
+      "tools"
+    ]
+  },
+  "ownership": {
+    "businessOwner": "Product Operations",
+    "technicalOwner": "Engineering",
+    "riskReviewer": "Trust & Safety",
+    "approvalRule": "Business owner, technical owner, and risk reviewer must approve every active release."
+  },
+  "sources": [
+    {
+      "id": "dealivra-curated-us-launch-catalog",
+      "kind": "curated",
+      "owner": "Product Operations",
+      "reference": "docs/production-readiness/12_CATALOG_GOVERNANCE.md#source-policy",
+      "retrievedAt": "2026-07-29",
+      "use": "Checksum-governance correction for the reviewed U.S. launch catalog; category, brand, model, and variant labels are unchanged."
+    },
+    {
+      "id": "nhtsa-vpic",
+      "kind": "government-api",
+      "owner": "Engineering",
+      "url": "https://vpic.nhtsa.dot.gov/api/",
+      "retrievedAt": "runtime",
+      "use": "Server-side VIN reference only; provider data is never merged into a catalog release without review."
+    }
+  ],
+  "updateCadence": {
+    "regularReviewDays": 30,
+    "staleWarningDays": 45,
+    "emergencyReviewHours": 24,
+    "triggers": [
+      "material model or brand coverage gap",
+      "provider schema change",
+      "incorrect or unsafe option",
+      "manual fallback rate above the approved threshold"
+    ]
+  },
+  "releaseEvidence": {
+    "status": "verified",
+    "commands": [
+      "npm run catalog:verify",
+      "npm run verify"
+    ],
+    "requiredReview": [
+      "source and ownership review",
+      "privacy and public-field review",
+      "keyboard and manual-fallback review",
+      "Preview deployment verification"
+    ]
+  },
+  "metrics": {
+    "source": "public.get_admin_catalog_adoption(integer)",
+    "windowsDays": [7, 30, 90],
+    "dimensions": [
+      "catalog_version",
+      "category_id"
+    ],
+    "measures": [
+      "deal_count",
+      "structured_brand_count",
+      "structured_model_count",
+      "manual_fallback_count",
+      "published_count",
+      "accepted_count",
+      "completed_count"
+    ],
+    "forbiddenDimensions": [
+      "deal_id",
+      "public_id",
+      "user_id",
+      "email",
+      "address",
+      "serial_number",
+      "payment_identifier"
+    ]
+  },
+  "rollback": {
+    "strategy": "git-revert-and-redeploy",
+    "previousVersion": "2026-07-27.2",
+    "databaseRollbackRequired": false,
+    "preserveHistoricalDeals": true,
+    "procedure": "docs/production-readiness/12_CATALOG_GOVERNANCE.md#rollback-procedure"
+  }
+}

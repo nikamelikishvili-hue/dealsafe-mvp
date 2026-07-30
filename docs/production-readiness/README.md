@@ -46,6 +46,40 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [35_AUTH_ABUSE_AND_RATE_LIMIT_ROLLOUT.md](35_AUTH_ABUSE_AND_RATE_LIMIT_ROLLOUT.md) | Same-origin password recovery, privacy-safe Auth rejection telemetry, bounded retry guidance, and staged Vercel Firewall thresholds |
 | [36_AUTH_PROXY_CLIENT_IP_BOUNDARY.md](36_AUTH_PROXY_CLIENT_IP_BOUNDARY.md) | Staged, fail-closed Supabase Auth client-IP forwarding through the trusted Vercel proxy boundary |
 | [37_PASSWORD_MUTATION_BOUNDARY.md](37_PASSWORD_MUTATION_BOUNDARY.md) | Same-origin recovery completion and fail-closed current-password verification for signed-in changes |
+| [38_CANONICAL_AGREEMENT_RECORD.md](38_CANONICAL_AGREEMENT_RECORD.md) | Immutable server-owned agreement payloads, canonical hashes, legacy compatibility, and PDF failure behavior |
+| [39_ACCESSIBLE_AGREEMENT_PDF.md](39_ACCESSIBLE_AGREEMENT_PDF.md) | Professional accessible agreement layout, print safeguards, verification evidence, and remaining archival/legal gates |
+| [40_BROWSER_ROUTING_AND_RECOVERY.md](40_BROWSER_ROUTING_AND_RECOVERY.md) | Canonical browser routes, deep-link/history recovery, customer-safe 404 and render-failure behavior, and remaining server-route gate |
+| [41_APPLICATION_DECOMPOSITION.md](41_APPLICATION_DECOMPOSITION.md) | ARC-003 incremental extraction boundaries, preserved behavior, regression controls, and remaining feature slices |
+| [42_RUNTIME_SERVICE_VALIDATION.md](42_RUNTIME_SERVICE_VALIDATION.md) | ARC-004 runtime response validation, privacy-safe rejection telemetry, authorization boundary, and remaining service schemas |
+| [43_SUPPORT_CASE_FOUNDATION.md](43_SUPPORT_CASE_FOUNDATION.md) | OPS-001/002 private support intake, SLA, assignment, AAL2, audit, feature-gate, rollout, and rollback controls |
+| [44_RUNTIME_REJECTION_MONITORING.md](44_RUNTIME_REJECTION_MONITORING.md) | Default-off privacy-safe runtime rejection transport, bounded log contract, activation, alerts, retention, synthetic proof, and rollback |
+| [45_CLIENT_FAILURE_MONITORING.md](45_CLIENT_FAILURE_MONITORING.md) | Fixed-category React/bootstrap/browser failure recovery and default-off privacy-safe monitoring |
+| [46_SERVER_FAILURE_MONITORING.md](46_SERVER_FAILURE_MONITORING.md) | Fixed-category correlated Auth/catalog/VIN server failure records, redaction, alerts, retention, and rollout evidence |
+| [47_PRIVACY_SAFE_PERFORMANCE_MONITORING.md](47_PRIVACY_SAFE_PERFORMANCE_MONITORING.md) | URL-free Core Web Vitals quality buckets, default-off intake, build budgets, activation, and rollback |
+| [48_UPTIME_SYNTHETIC_READINESS.md](48_UPTIME_SYNTHETIC_READINESS.md) | Minimal liveness, protected read-only critical-journey probes, alert gates, secret handling, and rollback |
+| [49_OPERATIONAL_ALERT_POLICY.md](49_OPERATIONAL_ALERT_POLICY.md) | Sanitized fixed-counter alert policy for application, Auth, CSP, payment, notification, performance, and synthetic signals |
+| [50_INCIDENT_CONTROL_AND_RELEASE_FREEZE.md](50_INCIDENT_CONTROL_AND_RELEASE_FREEZE.md) | Fail-closed incident state machine, release/financial freeze, safe status drafts, hashed evidence, and local drill |
+| [51_APPLICATION_BUNDLE_SPLITTING.md](51_APPLICATION_BUNDLE_SPLITTING.md) | Authenticated application/service code splitting, tightened chunk budgets, release evidence, and rollback |
+| [52_DETERMINISTIC_RELEASE_EVIDENCE.md](52_DETERMINISTIC_RELEASE_EVIDENCE.md) | Exact-commit clean-tree provenance, bounded SHA-256 asset manifest, CI artifact retention, and promotion gates |
+| [53_DEPENDENCY_SUPPLY_CHAIN_POLICY.md](53_DEPENDENCY_SUPPLY_CHAIN_POLICY.md) | Offline registry/integrity/license/install-script lockfile gate, reviewed exceptions, and remaining SBOM ownership |
+| [54_BROWSER_CACHE_SAFETY.md](54_BROWSER_CACHE_SAFETY.md) | Network-only private/navigation behavior, immutable asset caching, legacy cache retirement, and release proof |
+| [55_PAYMENT_CAPABILITY_KILL_SWITCHES.md](55_PAYMENT_CAPABILITY_KILL_SWITCHES.md) | Independent default-off Sandbox gates for onboarding, checkout, payout release, and refund mutations |
+| [56_PAYMENT_REQUEST_BOUNDARY.md](56_PAYMENT_REQUEST_BOUNDARY.md) | Authenticated JSON media/byte/exact-key validation before payment database or provider work |
+| [57_STRIPE_RESPONSE_BOUNDARY.md](57_STRIPE_RESPONSE_BOUNDARY.md) | Timeout and bounded JSON validation for Stripe responses before trusted-object checks |
+| [58_AUTH_PROVIDER_TRANSPORT_BOUNDARY.md](58_AUTH_PROVIDER_TRANSPORT_BOUNDARY.md) | Timeout and bounded JSON validation for Supabase Auth and protected recovery RPC responses |
+| [59_AUTH_PROVIDER_REQUEST_ALLOWLIST.md](59_AUTH_PROVIDER_REQUEST_ALLOWLIST.md) | Exact Supabase Auth route/method/header allowlist and bounded outbound JSON |
+| [60_BROWSER_DATA_TRANSPORT_BOUNDARY.md](60_BROWSER_DATA_TRANSPORT_BOUNDARY.md) | Streaming byte/media/JSON limits and deadlines for browser-owned Auth, Data API, Storage, evidence, catalog, and VIN requests |
+| [61_EVIDENCE_REQUEST_BOUNDARY.md](61_EVIDENCE_REQUEST_BOUNDARY.md) | Streaming byte limits and exact action-key allowlists for evidence, lifecycle, legal-hold, and scheduled requests |
+| [62_PROVIDER_RESPONSE_STREAM_BOUNDARY.md](62_PROVIDER_RESPONSE_STREAM_BOUNDARY.md) | Incremental byte ceilings for Stripe and malware-scanner responses before JSON and trusted-contract validation |
+| [63_NODE_PROVIDER_RESPONSE_STREAM_BOUNDARY.md](63_NODE_PROVIDER_RESPONSE_STREAM_BOUNDARY.md) | Incremental byte ceilings for Node Auth and NHTSA VIN responses before JSON and domain validation |
+| [64_STRIPE_WEBHOOK_REQUEST_STREAM_BOUNDARY.md](64_STRIPE_WEBHOOK_REQUEST_STREAM_BOUNDARY.md) | Incremental raw-body ceiling before Stripe signature verification, JSON parsing, or database work |
+| [65_EVIDENCE_STORAGE_STREAM_BOUNDARY.md](65_EVIDENCE_STORAGE_STREAM_BOUNDARY.md) | Exact-length, capped Storage download streams before evidence scanning, viewing, hashing, or maintenance |
+| [66_SECURITY_NOTIFICATION_RESPONSE_BOUNDARY.md](66_SECURITY_NOTIFICATION_RESPONSE_BOUNDARY.md) | JSON media, streamed byte, UTF-8, and object-shape limits for security-notification provider responses |
+| [67_OUTBOUND_TRANSPORT_INVENTORY.md](67_OUTBOUND_TRANSPORT_INVENTORY.md) | Deny-by-default inventory and release gate for every direct application network call |
+| [68_BROWSER_EVIDENCE_FILE_STREAM_BOUNDARY.md](68_BROWSER_EVIDENCE_FILE_STREAM_BOUNDARY.md) | Exact-size streamed browser evidence validation before upload intake and quarantine |
+| [69_BROWSER_DIAGNOSTIC_TRANSPORT.md](69_BROWSER_DIAGNOSTIC_TRANSPORT.md) | One allowlisted, byte-limited, deadline-bound transport for privacy-safe browser diagnostics |
+| [70_GUEST_DRAFT_STORAGE_BOUNDARY.md](70_GUEST_DRAFT_STORAGE_BOUNDARY.md) | Short-lived, byte-bounded, sensitive-field-free guest Deal draft recovery |
+| [71_BROWSER_STORAGE_INVENTORY.md](71_BROWSER_STORAGE_INVENTORY.md) | Deny-by-default release inventory for persistent and tab-scoped browser storage |
 
 ## Authority and change control
 

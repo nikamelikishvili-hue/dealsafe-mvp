@@ -1,4 +1,5 @@
 import { getCatalogCategory } from '../server/catalogShared.mjs';
+import { recordServerFailure } from '../server/serverFailureReporter.mjs';
 
 const defaultCategory = 'phone';
 
@@ -36,6 +37,13 @@ export default async function handler(request, response) {
   } catch (error) {
     response.setHeader('Cache-Control', 'no-store, max-age=0');
     const status = error?.code === 'UNSUPPORTED_CATALOG_CATEGORY' ? 400 : 503;
+    if (status === 503) {
+      recordServerFailure({
+        schema: 'dealivra.server-failure.v1',
+        boundary: 'catalog_read',
+        issue: 'catalog_unavailable',
+      });
+    }
     response.status(status).json({
       error: status === 400 ? 'Choose a supported catalog category.' : 'Catalog is temporarily unavailable.',
     });

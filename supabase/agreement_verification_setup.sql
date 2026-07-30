@@ -10,8 +10,9 @@ returns table(
   created_at timestamptz
 )
 language sql
+stable
 security definer
-set search_path = public, pg_temp
+set search_path = ''
 as $$
   select
     true,
@@ -22,8 +23,11 @@ as $$
   from public.deals deal
   join public.agreement_versions agreement on agreement.deal_id=deal.id
   where deal.public_id=upper(trim(p_public_id))
-    and lower(agreement.content_hash)=lower(trim(p_content_hash))
-    and char_length(trim(p_content_hash))=64
+    and (
+      lower(agreement.canonical_hash)=lower(trim(p_content_hash))
+      or lower(agreement.content_hash)=lower(trim(p_content_hash))
+    )
+    and trim(p_content_hash) ~ '^[A-Fa-f0-9]{64}$'
     and deal.status in ('published','accepted','completed','disputed')
   order by (agreement.version=greatest(deal.current_agreement_version,1)) desc,agreement.version desc
   limit 1;

@@ -4,16 +4,23 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --configLoader native",
     "typecheck": "tsc -b --pretty false",
     "test": "node --test --test-isolation=none tests/foundation.test.mjs",
     "catalog:verify": "node scripts/validate-catalog-release.mjs",
+    "dependency:policy": "node scripts/verify-dependency-policy.mjs",
+    "security:browser-storage": "node scripts/verify-browser-storage-policy.mjs",
+    "security:transport": "node scripts/verify-outbound-transport-policy.mjs",
     "security:secrets": "node scripts/scan-repository-secrets.mjs",
     "security:mfa-matrix": "node scripts/run-mfa-password-only-matrix.mjs",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
+    "performance:budgets": "node scripts/verify-build-budgets.mjs",
+    "build": "tsc -b && vite build --configLoader native && npm run performance:budgets",
+    "preview": "vite preview --configLoader native",
     "smoke:preview": "node scripts/smoke-preview.mjs",
-    "verify": "npm run catalog:verify && npm run typecheck && npm test && npm run security:secrets && npm run build && npm run smoke:preview"
+    "smoke:protected": "node scripts/run-protected-synthetic.mjs",
+    "incident:drill": "node scripts/run-incident-control-drill.mjs",
+    "release:evidence": "node scripts/create-release-evidence.mjs",
+    "verify": "npm run catalog:verify && npm run dependency:policy && npm run security:browser-storage && npm run security:transport && npm run typecheck && npm test && npm run incident:drill && npm run security:secrets && npm run build && npm run smoke:preview"
   },
   "dependencies": {
     "lucide-react": "1.25.0",

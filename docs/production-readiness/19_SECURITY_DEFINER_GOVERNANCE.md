@@ -19,6 +19,7 @@ The anonymous role can execute only these elevated, read-only projections:
 | `get_public_deal(text)` | Opens a valid Deal Link | Returns the reviewed listing projection; hidden or unavailable deals are excluded |
 | `get_deal_acceptance_protection(text)` | Shows whether a buyer code is required | Returns one boolean, never the code or hash |
 | `get_deal_risk_assessment(text)` | Shows explainable safety signals | Returns bounded labels and score, not reports or participant records |
+| `get_public_agreement_document(text,integer)` | Opens one immutable agreement version for page and PDF rendering | Returns the canonical public terms, schema, hash, time, and aggregate acceptance count; excludes participant and private deal data |
 | `get_public_agreement_history(text)` | Shows published agreement versions | Returns published terms and aggregate acceptance count |
 | `verify_agreement_record(text,text)` | Verifies a published agreement fingerprint | Requires a 64-character fingerprint and returns one bounded match |
 | `get_public_seller_declaration(text)` | Shows seller attestation state | Returns only attested state and timestamp |
@@ -66,7 +67,7 @@ blocks release until the production rollback suite passes again.
 
 - `RLS enabled, no policy` is intentional only for service-owned ledgers and
   projection source tables that browser roles cannot access directly.
-- The eight anonymous `SECURITY DEFINER` warnings above are reviewed public
+- The nine anonymous `SECURITY DEFINER` warnings above are reviewed public
   projection exceptions, not general table access.
 - Any other anonymous elevated function is a release blocker.
 - Auth leaked-password protection is a separate Auth configuration gate and

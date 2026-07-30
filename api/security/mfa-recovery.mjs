@@ -1,4 +1,5 @@
 import {
+  authProviderPayload,
   currentUserAppRole,
   logAuthFailure,
   prepareResponse,
@@ -106,7 +107,7 @@ export default async function handler(request, response) {
       recoveryRequest.rpc,
       recoveryRequest.parameters,
     );
-    const data = await upstream.json().catch(() => null);
+    const data = await authProviderPayload(upstream);
     if (!upstream.ok) {
       recoveryFailure(response, data, upstream.status);
       return;

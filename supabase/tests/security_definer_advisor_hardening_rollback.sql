@@ -57,6 +57,7 @@ declare
   expected_signatures constant text[] := array[
     'get_deal_acceptance_protection(text)',
     'get_deal_risk_assessment(text)',
+    'get_public_agreement_document(text,integer)',
     'get_public_agreement_history(text)',
     'get_public_deal(text)',
     'get_public_seller_declaration(text)',

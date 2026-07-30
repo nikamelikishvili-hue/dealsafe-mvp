@@ -4,6 +4,7 @@ import {
   requirePost,
   requireSameOrigin,
 } from '../../server/authShared.mjs';
+import { recordServerFailure } from '../../server/serverFailureReporter.mjs';
 import { decodeVehicleVin } from '../../server/vehicleVinShared.mjs';
 
 export default async function handler(request, response) {
@@ -33,6 +34,16 @@ export default async function handler(request, response) {
       });
       return;
     }
+    const issue = error?.code === 'VIN_PROVIDER_TIMEOUT'
+      ? 'provider_timeout'
+      : error?.code === 'VIN_PROVIDER_INVALID_RESPONSE'
+        ? 'provider_response_invalid'
+        : 'provider_unavailable';
+    recordServerFailure({
+      schema: 'dealivra.server-failure.v1',
+      boundary: 'vehicle_vin_decode',
+      issue,
+    });
     response.status(503).json({
       error: 'VIN check is temporarily unavailable. Enter the vehicle details manually or try again.',
     });

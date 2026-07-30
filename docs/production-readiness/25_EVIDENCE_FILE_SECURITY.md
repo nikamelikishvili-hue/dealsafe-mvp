@@ -1,5 +1,10 @@
 # Evidence file security
 
+Malware-scanner verdict responses are consumed as a byte stream with a
+16,384-byte ceiling, JSON media requirement, and non-array object requirement
+before SHA-256/verdict/engine/reference validation. A chunked or dishonest
+provider response is cancelled before it can allocate an unbounded body.
+
 ## Outcome
 
 EVD-001 through EVD-003 now have a governed implementation boundary:
@@ -48,8 +53,10 @@ browser and Edge Function.
    `deal-evidence-quarantine`. The quarantine bucket has no browser read,
    update, or delete policy.
 5. The function downloads the quarantined bytes with its server credential,
-   compares the real size, parses the byte structure, calculates SHA-256, and
-   sends the same bytes/hash to the approved malware-scanner gateway.
+   requires the Storage size to equal the approved declaration, reads exactly
+   that many bytes through a cancelling stream, parses the byte structure,
+   calculates SHA-256, and sends the same bytes/hash to the approved
+   malware-scanner gateway.
 6. A response is accepted only when the verdict, SHA-256, engine, and scan
    reference satisfy the fixed response contract.
 7. Only a `clean` result is copied to `deal-evidence` and recorded in

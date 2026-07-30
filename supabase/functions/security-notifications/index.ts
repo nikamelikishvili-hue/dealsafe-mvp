@@ -1,5 +1,6 @@
 import { adminClient, json, requiredSecret } from "../_shared/common.ts";
 import { renderSecurityNotification } from "../_shared/security-notification.ts";
+import { readSecurityNotificationProviderJson } from "../_shared/security-notification-response.ts";
 
 type NotificationJob = {
   notification_id: string;
@@ -52,38 +53,6 @@ async function authorizeWorker(request: Request) {
   const expected = requiredSecret("DEALIVRA_SECURITY_NOTIFICATION_WORKER_SECRET");
   if (!candidate || !(await secretsMatch(candidate, expected))) {
     throw new Error("security_notification_worker_unauthorized");
-  }
-}
-
-async function readBoundedJson(response: Response, maximumBytes = 16_384) {
-  const contentLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > maximumBytes) {
-    throw new Error("security_notification_provider_invalid");
-  }
-  const reader = response.body?.getReader();
-  if (!reader) return null;
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    received += value.byteLength;
-    if (received > maximumBytes) {
-      await reader.cancel();
-      throw new Error("security_notification_provider_invalid");
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  try {
-    return JSON.parse(new TextDecoder().decode(bytes));
-  } catch {
-    return null;
   }
 }
 
@@ -204,7 +173,7 @@ async function deliver(job: NotificationJob) {
     return false;
   }
 
-  const provider = await readBoundedJson(response);
+  const provider = await readSecurityNotificationProviderJson(response);
   if (
     !response.ok
     || !provider

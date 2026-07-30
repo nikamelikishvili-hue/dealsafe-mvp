@@ -79,6 +79,11 @@ The worker claims at most 20 jobs per invocation and leases them for ten
 minutes. It retries an expired lease, stops after five bounded attempts, and
 creates an operator alert instead of looping indefinitely.
 
+Integrity jobs require the Storage object's reported size to equal the
+database-owned expected size and read exactly that many bytes through a
+cancelling stream capped at 50 MB. A mismatch is recorded as an invalid
+integrity observation without hashing or retaining a larger object in memory.
+
 The Cron-to-Edge credential is generated inside the database, encrypted through
 Supabase Vault, sent only in a dedicated internal header, and compared as a
 SHA-256 digest inside a service-only function. The raw credential is not stored

@@ -18,7 +18,9 @@ issues any short-lived URL:
 1. Verify the signed-in user is a deal participant or an administrator assigned
    to an existing dispute for that deal.
 2. Deny legacy or non-clean evidence.
-3. Download the private vault object through the service boundary.
+3. Download the private vault object through the service boundary and read it
+   through an exact-length cancelling stream capped at the canonical 50 MB
+   maximum.
 4. Parse the bytes again as canonical metadata-free WebP, MP4, MOV, or WebM.
 5. Recompute SHA-256 and compare it with the immutable upload fingerprint.
 6. Compare the byte length and detected MIME type with the evidence record.

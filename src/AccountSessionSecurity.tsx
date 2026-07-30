@@ -77,7 +77,7 @@ export function AccountSessionSecurity({
       .catch(loadError=>{if(active)setError(loadError instanceof Error?loadError.message:'Could not load signed-in devices.')})
       .finally(()=>{if(active)setLoading(false)});
     return()=>{active=false};
-  },[session.user.id]);
+  },[session.user.id,session.accessToken]);
 
   const signOutOthers=async()=>{
     setBusy('others');

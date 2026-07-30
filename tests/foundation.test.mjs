@@ -4,7 +4,25 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import clientFailureHandler from '../api/security/client-failure.mjs';
 import cspReportHandler from '../api/security/csp-report.mjs';
+import runtimeRejectionHandler from '../api/security/runtime-rejection.mjs';
+import webVitalHandler from '../api/security/web-vital.mjs';
+import healthHandler from '../api/health.mjs';
+import {
+  buildOperationalSnapshot,
+  classifyOperationalRecord,
+} from '../server/monitoring/operationalAlertPolicy.mjs';
+import {
+  buildIncidentEvidenceManifest,
+  declareIncident,
+  incidentPublicTemplate,
+  transitionIncident,
+} from '../server/monitoring/incidentControl.mjs';
+import {
+  buildReleaseEvidence,
+  requiredReleaseChecks,
+} from '../server/releaseEvidencePolicy.mjs';
 
 const root = new URL('../', import.meta.url);
 const rootPath = fileURLToPath(root);
@@ -337,8 +355,8 @@ test('browser auth keeps the long-lived refresh secret in an HttpOnly cookie', (
 
   assert.match(authService, /sessionStorage\.setItem\(sessionStorageKey/);
   assert.doesNotMatch(authService, /localStorage\.setItem\(/);
-  assert.match(authService, /fetch\('\/api\/auth\/login'/);
-  assert.match(authService, /fetch\('\/api\/auth\/refresh'/);
+  assert.match(authService, /fetchWithDeadline\('\/api\/auth\/login'/);
+  assert.match(authService, /fetchWithDeadline\('\/api\/auth\/refresh'/);
   assert.match(serverAuth, /__Host-dealivra-refresh/);
   assert.match(serverAuth, /HttpOnly; Secure; SameSite=Strict/);
   assert.match(serverAuth, /const refreshCookiePath = '\/';/);
@@ -914,6 +932,216 @@ test('password recovery and sign-in preserve bounded provider retry guidance', a
   }
 });
 
+test('Auth provider responses are byte-bounded JSON values with a controlled empty exception', async () => {
+  const {
+    AuthProviderResponseBoundaryError,
+    readBoundedAuthProviderJson,
+  } = await import('../server/authProviderResponse.mjs');
+
+  assert.deepEqual(
+    await readBoundedAuthProviderJson(new Response('{"access_token":"safe"}', {
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    })),
+    { access_token: 'safe' },
+  );
+  assert.equal(
+    await readBoundedAuthProviderJson(new Response('"admin"', {
+      headers: { 'Content-Type': 'application/json' },
+    })),
+    'admin',
+  );
+  assert.equal(
+    await readBoundedAuthProviderJson(new Response(null, { status: 204 }), {
+      allowEmpty: true,
+    }),
+    null,
+  );
+
+  const rejected = [
+    new Response('{}', { headers: { 'Content-Type': 'text/html' } }),
+    new Response('{', { headers: { 'Content-Type': 'application/json' } }),
+    new Response('', { headers: { 'Content-Type': 'application/json' } }),
+    new Response('{}', {
+      headers: {
+        'Content-Length': '262145',
+        'Content-Type': 'application/json',
+      },
+    }),
+    new Response(`"${'é'.repeat(131_073)}"`, {
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  ];
+  for (const response of rejected) {
+    await assert.rejects(
+      () => readBoundedAuthProviderJson(response),
+      error => (
+        error instanceof AuthProviderResponseBoundaryError
+        && error.message === 'Authentication provider response was rejected.'
+        && !error.message.includes('{')
+      ),
+    );
+  }
+});
+
+test('Node provider response streams stop at the byte boundary before buffering the full body', async () => {
+  const {
+    readBoundedResponseText,
+    ResponseBodyBoundaryError,
+  } = await import('../server/responseBodyBoundary.mjs');
+  let cancelled = false;
+  const oversizedStream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(180));
+      controller.enqueue(new Uint8Array(180));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  await assert.rejects(
+    () => readBoundedResponseText(new Response(oversizedStream), 256),
+    error => (
+      error instanceof ResponseBodyBoundaryError
+      && error.code === 'response_too_large'
+      && error.message === 'Remote response body was rejected.'
+    ),
+  );
+  assert.equal(cancelled, true);
+
+  await assert.rejects(
+    () => readBoundedResponseText(new Response('{}', {
+      headers: { 'Content-Length': 'not-a-number' },
+    }), 256),
+    error => (
+      error instanceof ResponseBodyBoundaryError
+      && error.code === 'content_length_invalid'
+    ),
+  );
+});
+
+test('Auth provider transport uses one timeout and bounded parsing across Auth and RPC calls', async () => {
+  const auth = await import('../server/authShared.mjs');
+  const source = readText('server/authShared.mjs');
+  const providerResponse = readText('server/authProviderResponse.mjs');
+  const recovery = readText('api/security/mfa-recovery.mjs');
+  let providerSignal;
+
+  await withAuthProvider(async (_input, init) => {
+    providerSignal = init?.signal;
+    return new Response('{"access_token":"safe"}', {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, async () => {
+    const upstream = await auth.supabaseAuthRequest('token?grant_type=password', {
+      method: 'POST',
+      body: '{}',
+    }, authRequest());
+    assert.deepEqual(await auth.authPayload(upstream), { access_token: 'safe' });
+  });
+
+  assert.ok(providerSignal instanceof AbortSignal);
+  assert.equal(
+    [...source.matchAll(/signal: AbortSignal\.timeout\(authProviderTimeoutMs\)/g)].length,
+    3,
+  );
+  assert.match(source, /readBoundedAuthProviderJson\(upstream/);
+  assert.doesNotMatch(source, /upstream\.json\(\)/);
+  assert.match(providerResponse, /readBoundedResponseText\(response, maximumBytes\)/);
+  assert.doesNotMatch(providerResponse, /response\.text\(\)/);
+  assert.match(recovery, /authProviderPayload\(upstream\)/);
+  assert.doesNotMatch(recovery, /upstream\.json\(\)/);
+});
+
+test('Auth provider requests use only reviewed routes, methods, headers, and bounded JSON', async () => {
+  const {
+    AuthProviderRequestBoundaryError,
+    serializeBoundedAuthProviderJson,
+    validateAuthProviderRequest,
+  } = await import('../server/authProviderRequest.mjs');
+  const origin = 'https://dealivra.test';
+  const bearer = { Authorization: 'Bearer current-session-token' };
+  const factorId = '11111111-1111-4111-8111-111111111111';
+
+  for (const [path, init] of [
+    ['signup', { method: 'POST', body: '{"email":"user@example.test"}' }],
+    ['token?grant_type=password', { method: 'POST', body: '{}' }],
+    ['token?grant_type=refresh_token', { method: 'POST', body: '{}' }],
+    [`recover?redirect_to=${encodeURIComponent(origin)}`, {
+      method: 'POST',
+      body: '{"email":"user@example.test"}',
+    }],
+    ['user', { method: 'GET', headers: bearer }],
+    ['user', { method: 'PUT', headers: bearer, body: '{"password":"safe"}' }],
+    ['factors', { method: 'POST', headers: bearer, body: '{}' }],
+    [`factors/${factorId}/challenge`, { method: 'POST', headers: bearer, body: '{}' }],
+    [`factors/${factorId}/verify`, { method: 'POST', headers: bearer, body: '{}' }],
+    [`factors/${factorId}`, { method: 'DELETE', headers: bearer }],
+    ['logout?scope=global', { method: 'POST', headers: bearer, body: '{}' }],
+  ]) {
+    assert.doesNotThrow(() => validateAuthProviderRequest(path, init, origin));
+  }
+  assert.equal(serializeBoundedAuthProviderJson({ safe: true }), '{"safe":true}');
+
+  const invalid = [
+    ['admin/users', { method: 'GET', headers: bearer }],
+    ['../rest/v1/profiles', { method: 'POST', body: '{}' }],
+    ['token?grant_type=password&redirect_to=https://attacker.test', {
+      method: 'POST',
+      body: '{}',
+    }],
+    ['signup', { method: 'GET' }],
+    ['signup', { method: 'POST', headers: bearer, body: '{}' }],
+    ['user', { method: 'GET' }],
+    ['user', { method: 'GET', headers: bearer, body: '{}' }],
+    ['logout?scope=everything', { method: 'POST', headers: bearer, body: '{}' }],
+    ['factors/not-a-uuid', { method: 'DELETE', headers: bearer }],
+    ['signup', { method: 'POST', body: '[]' }],
+    ['signup', { method: 'POST', body: '{' }],
+    ['signup', { method: 'POST', body: `{"value":"${'é'.repeat(8_193)}"}` }],
+    ['signup', { method: 'POST', body: '{}', redirect: 'follow' }],
+  ];
+  for (const [path, init] of invalid) {
+    assert.throws(
+      () => validateAuthProviderRequest(path, init, origin),
+      error => (
+        error instanceof AuthProviderRequestBoundaryError
+        && error.message === 'Authentication provider request was rejected.'
+        && !error.message.includes(path)
+      ),
+    );
+  }
+});
+
+test('invalid Auth provider destinations fail before configuration or network access', async () => {
+  const {
+    supabaseAuthRequest,
+    supabaseRestRpcRequest,
+  } = await import('../server/authShared.mjs');
+  let providerCalled = false;
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, async () => {
+    await assert.rejects(
+      () => supabaseAuthRequest('../rest/v1/private', {
+        method: 'POST',
+        body: '{}',
+      }, authRequest()),
+      /Authentication provider request was rejected/,
+    );
+    await assert.rejects(
+      () => supabaseRestRpcRequest(
+        'current-session-token',
+        'get_my_sensitive_change_holds',
+        { value: 'é'.repeat(8_193) },
+      ),
+      /Authentication provider request was rejected/,
+    );
+  });
+  assert.equal(providerCalled, false);
+});
+
 test('Auth proxy IP forwarding is disabled by default and never trusts an inbound address silently', async () => {
   const { supabaseAuthRequest } = await import('../server/authShared.mjs');
   let providerHeaders;
@@ -951,10 +1179,6 @@ test('enforced Auth proxy forwarding uses only the server secret and exact Verce
     process.env.SUPABASE_AUTH_SECRET_KEY = secretKey;
     await supabaseAuthRequest('token?grant_type=password', {
       method: 'POST',
-      headers: {
-        apikey: 'untrusted-override',
-        'Sb-Forwarded-For': '203.0.113.9',
-      },
       body: '{}',
     }, authRequest({}, {
       'x-vercel-forwarded-for': '198.51.100.24',
@@ -1191,12 +1415,13 @@ test('auth abuse telemetry and firewall rollout remain privacy-safe and staged',
   const shared = readText('server/authShared.mjs');
   const client = readText('src/services/supabaseRest.ts');
   const app = readText('src/app.tsx');
+  const accountEntry = readText('src/AccountEntryPages.tsx');
   const recovery = readText('api/auth/recover.mjs');
   const forwarding = readText('docs/production-readiness/36_AUTH_PROXY_CLIENT_IP_BOUNDARY.md');
   const passwordBoundary = readText('docs/production-readiness/37_PASSWORD_MUTATION_BOUNDARY.md');
   const standard = readText('docs/production-readiness/35_AUTH_ABUSE_AND_RATE_LIMIT_ROLLOUT.md');
   const readinessIndex = readText('docs/production-readiness/README.md');
-  const rejectionLogger = shared.match(
+  const rejectionLogger = shared.replace(/\r\n/g, '\n').match(
     /export function logAuthRejection[\s\S]*?\n}\n/,
   )?.[0] ?? '';
 
@@ -1205,7 +1430,7 @@ test('auth abuse telemetry and firewall rollout remain privacy-safe and staged',
   assert.match(shared, /response\.setHeader\('Retry-After'/);
   assert.ok(rejectionLogger);
   assert.doesNotMatch(rejectionLogger, /email|password|token|cookie|x-forwarded-for/i);
-  assert.match(client, /fetch\('\/api\/auth\/recover'/);
+  assert.match(client, /fetchWithDeadline\('\/api\/auth\/recover'/);
   assert.doesNotMatch(client, /auth\/v1\/recover\?/);
   assert.match(client, /class AuthenticationApiError extends Error/);
   assert.match(client, /Try again in \$\{retryAfterSeconds\}/);
@@ -1218,12 +1443,12 @@ test('auth abuse telemetry and firewall rollout remain privacy-safe and staged',
   const accountPassword = client.match(
     /export async function updateAccountPassword[\s\S]*?\n}/,
   )?.[0] ?? '';
-  assert.match(recoveredPassword, /fetch\('\/api\/auth\/password'/);
+  assert.match(recoveredPassword, /fetchWithDeadline\('\/api\/auth\/password'/);
   assert.doesNotMatch(recoveredPassword, /auth\/v1\/user|supabaseUrl/);
   assert.match(accountPassword, /currentPassword/);
-  assert.match(accountPassword, /fetch\('\/api\/auth\/password'/);
+  assert.match(accountPassword, /fetchWithDeadline\('\/api\/auth\/password'/);
   assert.doesNotMatch(accountPassword, /auth\/v1\/user|supabaseUrl/);
-  assert.match(app, /autoComplete="current-password"/);
+  assert.match(accountEntry, /autoComplete=\{isSignup \? 'new-password' : 'current-password'\}/);
   assert.match(recovery, /requireSameOrigin/);
   assert.match(recovery, /requestOrigin\(request\)/);
   assert.match(recovery, /If an account exists for this email/);
@@ -1263,15 +1488,16 @@ test('failed password login directs the user to secure account recovery', async 
 
 test('password guidance and every application mutation require the provider symbol class', () => {
   const signup = readText('api/auth/signup.mjs');
-  const client = readText('src/services/supabaseRest.ts');
-  const app = readText('src/app.tsx');
+  const clientBoundary = readText('src/services/authBoundarySchemas.ts');
+  const accountEntry = readText('src/AccountEntryPages.tsx');
+  const profileWorkspace = readText('src/AccountProfileWorkspace.tsx');
   const standard = readText('docs/production-readiness/20_AUTH_PASSWORD_SECURITY.md');
   const readinessIndex = readText('docs/production-readiness/README.md');
 
   assert.match(signup, /number, and a symbol/);
-  assert.match(client, /number, and a symbol/);
-  assert.match(app, /12 characters with uppercase, lowercase, a number, and a symbol/);
-  assert.match(app, /12\+ characters with uppercase, lowercase, a number, and a symbol/);
+  assert.match(clientBoundary, /number, and a symbol/);
+  assert.match(profileWorkspace, /12 characters with uppercase, lowercase, a number, and a symbol/);
+  assert.match(accountEntry, /12\+ characters with uppercase, lowercase, a number, and a symbol/);
   assert.match(standard, /Minimum password length \| `12`/);
   assert.match(standard, /Leaked-password protection \| Unavailable on the current Free plan/);
   assert.match(standard, /must not claim compromised-password screening/);
@@ -1410,6 +1636,7 @@ test('MFA enforcement is shared by Data API, Storage, protected functions, and a
   const evidenceEndpoint = readText('supabase/functions/evidence-files/index.ts');
   const accountMfa = readText('src/AccountMfaSecurity.tsx');
   const loginMfa = readText('src/MfaLoginVerification.tsx');
+  const profileWorkspace = readText('src/AccountProfileWorkspace.tsx');
   const client = readText('src/services/supabaseRest.ts');
   const app = readText('src/app.tsx');
   const standard = readText('docs/production-readiness/28_MFA_AND_PRIVILEGED_STEP_UP.md');
@@ -1449,7 +1676,7 @@ test('MFA enforcement is shared by Data API, Storage, protected functions, and a
   assert.match(client, /action:'cancel_enrollment'/);
   assert.match(client, /claims\?\.aal!=='aal2'/);
   assert.match(client, /window\.dispatchEvent\(new Event\(mfaRequiredEvent\)\)/);
-  assert.match(app, /<AccountMfaSecurity session=\{session\}/);
+  assert.match(profileWorkspace, /<AccountMfaSecurity session=\{session\}/);
   assert.match(app, /<MfaLoginVerification challenge=\{mfaLogin\}/);
   assert.match(standard, /TOTP is not phishing-resistant/);
   assert.match(standard, /Privileged enrollment runbook/);
@@ -1794,6 +2021,29 @@ test('sensitive-change recovery enforcement is staged safely and fails closed wh
     error => error?.code === 'recovery_cooldown_active' && error?.status === 423,
   );
 
+  for (const providerResponse of [
+    new Response('<html>private provider error</html>', {
+      status: 500,
+      headers: { 'Content-Type': 'text/html' },
+    }),
+    new Response(`{"message":"${'é'.repeat(131_073)}"}`, {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  ]) {
+    await assert.rejects(
+      () => assertSensitiveChangeAllowed('access-token', 'email', {
+        environment: { DEALIVRA_RECOVERY_CONTROL_MODE: 'enforced' },
+        request: async () => providerResponse,
+      }),
+      error => (
+        error?.code === 'recovery_protection_unavailable'
+        && error?.status === 503
+        && !error.message.includes('private')
+      ),
+    );
+  }
+
   assert.throws(
     () => sensitiveChangeProtectionMode({
       DEALIVRA_RECOVERY_CONTROL_MODE: 'disabled',
@@ -1834,6 +2084,10 @@ test('MFA and payout mutations are wired to the staged recovery cooldown boundar
   assert.match(enforcementStandard, /refund remains available/i);
   assert.match(enforcementStandard, /must not be set to `enforced`/i);
   assert.match(readinessIndex, /33_SENSITIVE_CHANGE_ENFORCEMENT\.md/);
+  assert.doesNotMatch(
+    readText('server/sensitiveChangeProtection.mjs'),
+    /upstream\.json\(\)/,
+  );
 });
 
 test('security notification templates are bounded, non-secret, and case-specific', async () => {
@@ -1904,7 +2158,8 @@ test('security notification worker is authenticated, idempotent, staged, and pri
   assert.match(worker, /https:\/\/api\.resend\.com\/emails/);
   assert.match(worker, /"Idempotency-Key": `dealivra_security_\$\{job\.notification_id\}`/);
   assert.match(worker, /AbortSignal\.timeout\(10_000\)/);
-  assert.match(worker, /readBoundedJson\(response\)/);
+  assert.match(worker, /readSecurityNotificationProviderJson\(response\)/);
+  assert.doesNotMatch(worker, /response\.body\?\.getReader\(\)/);
   assert.match(worker, /"complete_security_notification_delivery"/);
   assert.match(worker, /"get_security_notification_delivery_health_for_service"/);
   assert.match(worker, /event: "queue_attention_required"/);
@@ -1925,6 +2180,47 @@ test('security notification worker is authenticated, idempotent, staged, and pri
   assert.match(recoverySql, /delivery_attempts >= 5/);
   assert.match(rollbackProof, /delivery health privacy or dead-letter boundary changed/);
   assert.match(readinessIndex, /34_SECURITY_NOTIFICATION_DELIVERY\.md/);
+});
+
+test('security notification provider responses use the shared bounded JSON stream', async () => {
+  const { readSecurityNotificationProviderJson } = await import(
+    '../supabase/functions/_shared/security-notification-response.ts'
+  );
+  const response = (body, headers = {}) => new Response(body, {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      ...headers,
+    },
+  });
+
+  assert.deepEqual(
+    await readSecurityNotificationProviderJson(response(
+      '{"id":"11111111-1111-4111-8111-111111111111"}',
+    )),
+    { id: '11111111-1111-4111-8111-111111111111' },
+  );
+  assert.equal(
+    await readSecurityNotificationProviderJson(new Response('{}', {
+      headers: { 'content-type': 'text/html' },
+    })),
+    null,
+  );
+  assert.equal(
+    await readSecurityNotificationProviderJson(response('[]')),
+    null,
+  );
+  assert.equal(
+    await readSecurityNotificationProviderJson(response('{}', {
+      'content-length': '999999',
+    })),
+    null,
+  );
+
+  const parser = readText(
+    'supabase/functions/_shared/security-notification-response.ts',
+  );
+  assert.match(parser, /readBoundedResponseText\(response, maximumProviderBytes\)/);
+  assert.doesNotMatch(parser, /response\.(?:json|text|arrayBuffer)\(\)/);
 });
 
 test('malformed refresh cookies fail safely without contacting the auth provider', async () => {
@@ -2407,6 +2703,36 @@ test('VIN provider requests time out with a safe error code', async () => {
   );
 });
 
+test('VIN provider response streams are bounded before JSON parsing', async () => {
+  const {
+    decodeVehicleVin,
+    resetVehicleVinCacheForTests,
+  } = await import('../server/vehicleVinShared.mjs');
+  const source = readText('server/vehicleVinShared.mjs');
+  resetVehicleVinCacheForTests();
+
+  await assert.rejects(
+    () => decodeVehicleVin('1M8GDM9AXKP042788', '1989', {
+      fetchImplementation: async () => new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(200_000));
+          controller.enqueue(new Uint8Array(60_001));
+        },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    }),
+    error => (
+      error?.code === 'VIN_PROVIDER_INVALID_RESPONSE'
+      && error.message === 'The VIN provider returned an invalid response.'
+    ),
+  );
+  assert.match(source, /readBoundedResponseText\(upstream, maximumProviderBytes\)/);
+  assert.doesNotMatch(source, /upstream\.text\(\)/);
+  resetVehicleVinCacheForTests();
+});
+
 const loadCatalogSearchModule = async () => {
   const typescript = await import('typescript');
   const source = readText('src/catalogSearch.ts');
@@ -2527,12 +2853,13 @@ test('private catalog filtering is rendered once for both dashboard and Watchlis
   const app = readText('src/app.tsx');
   const panel = readText('src/CatalogSearchPanel.tsx');
   const styles = readText('src/catalog-search.css');
+  const publicRoutes = readText('src/PublicRoutePages.tsx');
 
   assert.match(app, /<CatalogSearchPanel deals=\{availableDeals\}/);
   assert.match(app, /<SavedDealsPanel items=\{filteredSavedDeals\}/);
   assert.match(app, /<EnhancedDashboard deals=\{filteredDeals\} allDeals=\{deals\}/);
-  assert.match(app, /view==='home'&&isAuthenticated/);
-  assert.match(app, /indexable:false/);
+  assert.match(publicRoutes, /view === 'home' && isAuthenticated/);
+  assert.match(publicRoutes, /indexable: false/);
   assert.match(panel, /Filters stay in this URL/);
   assert.match(panel, /Choose category first/);
   assert.match(styles, /@media\(max-width:480px\)/);
@@ -2541,9 +2868,20 @@ test('private catalog filtering is rendered once for both dashboard and Watchlis
 test('active catalog release has verified ownership, evidence, source, metrics, and rollback controls', async () => {
   const pointer = readJson('catalog/active-release.json');
   const manifest = readJson(pointer.manifest);
-  const { validateCatalogRelease } = await import('../scripts/validate-catalog-release.mjs');
+  const {
+    catalogDatasetDigest,
+    validateCatalogRelease,
+  } = await import('../scripts/validate-catalog-release.mjs');
   const report = validateCatalogRelease(rootPath);
 
+  assert.equal(
+    catalogDatasetDigest('{"catalog":"portable"}\n'),
+    catalogDatasetDigest('{"catalog":"portable"}\r\n'),
+  );
+  assert.throws(
+    () => catalogDatasetDigest('{"catalog":"invalid"}\r'),
+    /unsupported carriage-return line ending/,
+  );
   assert.equal(pointer.catalogVersion, manifest.catalogVersion);
   assert.equal(report.catalogVersion, pointer.catalogVersion);
   assert.equal(report.categoryCount, 8);
@@ -2560,7 +2898,7 @@ test('active catalog release has verified ownership, evidence, source, metrics, 
 test('catalog adoption metrics are aggregate, admin-only, and exclude participant identifiers', () => {
   const migration = readText('supabase/catalog_governance_metrics.sql');
   const client = readText('src/services/supabaseRest.ts');
-  const app = readText('src/app.tsx');
+  const administration = readText('src/AdministrationWorkspace.tsx');
 
   assert.match(migration, /if not public\.is_dealsafe_admin\(\)/);
   assert.match(migration, /p_days not in \(7, 30, 90\)/);
@@ -2571,8 +2909,11 @@ test('catalog adoption metrics are aggregate, admin-only, and exclude participan
   assert.doesNotMatch(migration, /returns table\([\s\S]*\buser_id\b/);
   assert.doesNotMatch(migration, /returns table\([\s\S]*\bemail\b/);
   assert.match(client, /getAdminCatalogAdoption/);
-  assert.match(app, /<AdminCatalogCenter session=\{session\}\/>/);
-  assert.match(app, /Only aggregate version and category counts are returned/);
+  assert.match(
+    administration,
+    /<AdminCatalogCenter session=\{session\}\s*\/>/,
+  );
+  assert.match(administration, /Only aggregate version and category counts are returned/);
 });
 
 test('catalog governance validation is part of the full release gate', () => {
@@ -2612,6 +2953,7 @@ test('session security UI separates current, other, and global sign-out actions'
   const client = readText('src/services/supabaseRest.ts');
   const styles = readText('src/session-security.css');
   const app = readText('src/app.tsx');
+  const profileWorkspace = readText('src/AccountProfileWorkspace.tsx');
   const sessionStandard = readText('docs/production-readiness/13_SESSION_SECURITY.md');
 
   assert.match(client, /scope:SignOutScope='local'/);
@@ -2622,7 +2964,8 @@ test('session security UI separates current, other, and global sign-out actions'
   assert.match(component, /Sign out everywhere/);
   assert.match(component, /You will need to sign in again everywhere/);
   assert.match(component, /Review your account sessions without exposing location or IP information/);
-  assert.match(app, /<AccountSessionSecurity session=\{session\}/);
+  assert.match(profileWorkspace, /<AccountSessionSecurity session=\{session\}/);
+  assert.match(app, /<AccountProfileWorkspace/);
   assert.match(styles, /@media\(max-width:720px\)/);
   assert.match(styles, /@media\(prefers-reduced-motion:reduce\)/);
   assert.match(styles, /\.session-security-heading\{[^}]*height:auto;min-height:0/);
@@ -2859,6 +3202,9 @@ test('Stripe webhook stays signature-authenticated and outside browser CORS', ()
 
   assert.match(webhook, /verifyStripeSignature/);
   assert.match(webhook, /Stripe-Signature/);
+  assert.match(webhook, /readBoundedRequestText\(request, maxWebhookBytes\)/);
+  assert.match(webhook, /error instanceof RequestBodyBoundaryError/);
+  assert.doesNotMatch(webhook, /request\.text\(\)/);
   assert.doesNotMatch(webhook, /handleBrowserRequest/);
   assert.match(config, /\[functions\.stripe-webhook\][\s\S]*verify_jwt = false/);
   assert.match(originStandard, /The Stripe webhook is intentionally excluded/);
@@ -2878,7 +3224,7 @@ test('Stripe webhook claims and applies each provider event through one fenced t
   assert.match(webhook, /\.rpc\("fail_stripe_webhook_event"/);
   assert.match(webhook, /difference \|= signature\.charCodeAt\(index\) \^ expected\.charCodeAt\(index\)/);
   assert.match(webhook, /maxWebhookBytes = 262_144/);
-  assert.match(webhook, /contentLength > maxWebhookBytes/);
+  assert.match(webhook, /tooLarge \? 413 : 400/);
   assert.match(webhook, /Number\.isSafeInteger\(timestampNumber\)/);
   assert.doesNotMatch(webhook, /\.from\("stripe_webhook_events"\)/);
   assert.doesNotMatch(webhook, /\.from\("protected_payments"\)/);
@@ -2915,6 +3261,7 @@ test('trusted payment commands freeze financial snapshots and fence every provid
   const dispute = readText('supabase/functions/stripe-resolve-dispute/index.ts');
   const verification = readText('supabase/functions/_shared/financial.ts');
   const app = readText('src/app.tsx');
+  const paymentWorkspace = readText('src/DealPaymentWorkspace.tsx');
   const client = readText('src/services/supabaseRest.ts');
   const standard = readText('docs/production-readiness/17_TRUSTED_PAYMENT_COMMANDS.md');
   const readinessIndex = readText('docs/production-readiness/README.md');
@@ -2969,7 +3316,7 @@ test('trusted payment commands freeze financial snapshots and fence every provid
   assert.doesNotMatch(app, /Release funds to seller/);
   assert.doesNotMatch(app, /releaseProtectedPayment/);
   assert.doesNotMatch(client, /releaseProtectedPayment/);
-  assert.match(app, /waiting for Dealivra operations review/);
+  assert.match(paymentWorkspace, /waiting for Dealivra operations review/);
   assert.match(standard, /provider-success\/recording-uncertain/);
   assert.match(readinessIndex, /17_TRUSTED_PAYMENT_COMMANDS\.md/);
 });
@@ -3125,10 +3472,50 @@ test('evidence file policy rejects mismatched, metadata-bearing, and oversized f
 });
 
 test('evidence scanner accepts only bounded hash-matched provider verdicts', async () => {
-  const { validateScannerVerdict } = await import(
+  const {
+    EvidenceScanError,
+    readBoundedScannerJson,
+    validateScannerVerdict,
+  } = await import(
     '../supabase/functions/_shared/evidence-scan.ts'
   );
   const sha256 = 'a'.repeat(64);
+  assert.deepEqual(
+    await readBoundedScannerJson(new Response(JSON.stringify({
+      verdict: 'clean',
+      sha256,
+      scanId: 'scan-123',
+      engine: 'clamav-gateway-v1',
+    }), {
+      headers: { 'content-type': 'application/json' },
+    })),
+    {
+      verdict: 'clean',
+      sha256,
+      scanId: 'scan-123',
+      engine: 'clamav-gateway-v1',
+    },
+  );
+  await assert.rejects(
+    () => readBoundedScannerJson(new Response('{}', {
+      headers: { 'content-type': 'text/html' },
+    })),
+    error => (
+      error instanceof EvidenceScanError
+      && error.code === 'scanner_response_invalid'
+      && !error.message.includes('{}')
+    ),
+  );
+  await assert.rejects(
+    () => readBoundedScannerJson(new Response(
+      `{"value":"${'😀'.repeat(4_100)}"}`,
+      { headers: { 'content-type': 'application/json' } },
+    )),
+    error => (
+      error instanceof EvidenceScanError
+      && error.code === 'scanner_response_invalid'
+    ),
+  );
   assert.deepEqual(validateScannerVerdict({
     verdict: 'clean',
     sha256,
@@ -3185,9 +3572,16 @@ test('private evidence uses quarantine, service-side scanning, and 60-second acc
   assert.match(scanner, /DEALIVRA_MALWARE_SCANNER_TOKEN/);
   assert.match(scanner, /X-Content-SHA256/);
   assert.match(scanner, /scanner_unavailable/);
+  assert.match(scanner, /readBoundedResponseText\(response, 16_384\)/);
+  assert.doesNotMatch(scanner, /response\.arrayBuffer\(\)/);
 
   assert.match(client, /functions\/v1\/evidence-files/);
   assert.match(client, /deal_evidence_safe/);
+  assert.match(
+    client,
+    /readExactBlobArrayBuffer\(preparedFile,preparedFile\.size\)/,
+  );
+  assert.doesNotMatch(client, /preparedFile\.arrayBuffer\(\)/);
   assert.doesNotMatch(client, /fetch\([^)]*object\/sign\/deal-evidence/);
   assert.doesNotMatch(client, /rest\/v1\/deal_evidence[^_]/);
 
@@ -3210,6 +3604,7 @@ test('evidence viewer revalidates bytes and records append-only integrity before
   const app = readText('src/app.tsx');
   const standard = readText('docs/production-readiness/26_EVIDENCE_INTEGRITY_VIEWER.md');
   const readinessIndex = readText('docs/production-readiness/README.md');
+  const normalizedEdgeFunction = edgeFunction.replace(/\r\n/g, '\n');
 
   assert.match(migration, /create table if not exists public\.evidence_integrity_events/);
   assert.match(migration, /evidence_integrity_events_reject_update_delete/);
@@ -3223,10 +3618,10 @@ test('evidence viewer revalidates bytes and records append-only integrity before
     /storage_path|uploaded_by|scan_provider|scan_reference|metadata|observed_sha256/,
   );
 
-  const downloadIndex = edgeFunction.indexOf('.from("deal-evidence")\n    .download(evidence.storage_path)');
-  const hashIndex = edgeFunction.indexOf('evidenceSha256(bytes)');
-  const integrityIndex = edgeFunction.indexOf('recordIntegrityResult(evidence.id, userId', hashIndex);
-  const signedIndex = edgeFunction.indexOf('createSignedUrl(evidence.storage_path, evidenceSignedUrlTtlSeconds)');
+  const downloadIndex = normalizedEdgeFunction.indexOf('.from("deal-evidence")\n    .download(evidence.storage_path)');
+  const hashIndex = normalizedEdgeFunction.indexOf('evidenceSha256(bytes)');
+  const integrityIndex = normalizedEdgeFunction.indexOf('recordIntegrityResult(evidence.id, userId', hashIndex);
+  const signedIndex = normalizedEdgeFunction.indexOf('createSignedUrl(evidence.storage_path, evidenceSignedUrlTtlSeconds)');
   assert.ok(downloadIndex >= 0, 'Evidence viewer must download the private object for revalidation');
   assert.ok(hashIndex > downloadIndex, 'Evidence digest must be recomputed after private download');
   assert.ok(integrityIndex > hashIndex, 'Integrity result must be recorded after digest computation');
@@ -3237,7 +3632,7 @@ test('evidence viewer revalidates bytes and records append-only integrity before
   assert.match(client, /export async function loadDealEvidenceViewer/);
   assert.match(client, /credentials:'omit',referrerPolicy:'no-referrer'/);
   assert.match(client, /URL\.createObjectURL\(new Blob/);
-  assert.match(client, /bytes\.byteLength!==data\.fileSizeBytes/);
+  assert.match(client, /readExactArrayBuffer\(response,data\.fileSizeBytes\)/);
   assert.match(client, /crypto\.subtle\.digest\('SHA-256',bytes\)/);
   assert.match(client, /evidenceViewerSha256\(bytes\)!==data\.sha256/);
   assert.match(client, /signedUrl\.origin!==expectedStorageOrigin/);
@@ -3260,4 +3655,7363 @@ test('evidence viewer revalidates bytes and records append-only integrity before
   assert.match(standard, /never uses an iframe, object, embed/i);
   assert.match(standard, /does not authorize public launch/i);
   assert.match(readinessIndex, /26_EVIDENCE_INTEGRITY_VIEWER\.md/);
+});
+
+test('agreement UI and PDF render one immutable server-authoritative version', () => {
+  const migration = readText('supabase/canonical_agreement_record.sql');
+  const rollback = readText('supabase/canonical_agreement_record_rollback.sql');
+  const history = readText('supabase/agreement_history_setup.sql');
+  const verifier = readText('supabase/agreement_verification_setup.sql');
+  const hardening = readText('supabase/production_auth_rbac_hardening.sql');
+  const client = readText('src/services/supabaseRest.ts');
+  const agreementRuntime = readText(
+    'src/services/agreementRuntimeSchemas.ts',
+  );
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+  const printDocument = readText('src/AgreementPrintDocument.tsx');
+
+  assert.match(migration, /add column if not exists canonical_payload jsonb/);
+  assert.match(migration, /add column if not exists canonical_hash text/);
+  assert.match(migration, /'schema', 'dealivra\.agreement\.v1'/);
+  assert.match(migration, /'identifier', nullif\(trim\(coalesce\(p_identifier, ''\)\), ''\)/);
+  assert.match(migration, /'catalog_identity', p_terms_json->'catalog_identity'/);
+  assert.match(migration, /'seller_declarations', p_terms_json->'seller_declarations'/);
+  assert.match(migration, /extensions\.digest\([\s\S]*convert_to\(snapshot\.payload::text, 'UTF8'\)/);
+  assert.doesNotMatch(
+    migration.match(/with agreement_snapshots[\s\S]*?where agreement\.id = snapshot\.id;/)?.[0] || '',
+    /content_hash\s*=/,
+    'Legacy hashes must survive canonical backfill',
+  );
+  assert.match(migration, /before insert on public\.agreement_versions/);
+  assert.match(migration, /Published agreement versions are immutable/);
+  assert.match(migration, /create or replace function public\.get_public_agreement_document/);
+  assert.match(migration, /security definer[\s\S]*set search_path = ''/);
+  assert.match(migration, /revoke all on function public\.get_public_agreement_document[\s\S]*from public, anon, authenticated/);
+  assert.match(migration, /grant execute on function public\.get_public_agreement_document[\s\S]*to anon, authenticated/);
+  assert.match(migration, /agreement\.canonical_hash[\s\S]*or lower\(agreement\.content_hash\)/);
+  assert.match(rollback, /Intentionally retain/);
+  assert.doesNotMatch(rollback, /drop column/);
+
+  assert.match(history, /coalesce\(agreement\.canonical_hash,agreement\.content_hash\)/);
+  assert.match(verifier, /agreement\.canonical_hash/);
+  assert.match(hardening, /'get_public_agreement_document'/);
+  const rollbackProof = readText(
+    'supabase/tests/canonical_agreement_record_rollback.sql',
+  );
+  assert.match(rollbackProof, /AGR-001 canonical backfill or SHA-256 integrity failed/);
+  assert.match(rollbackProof, /AGR-001 agreement mutation unexpectedly succeeded/);
+  assert.match(rollbackProof, /AGR-001 public agreement privacy boundary changed/);
+  assert.match(client, /export interface AgreementDocumentSnapshot/);
+  assert.match(client, /getPublicAgreementDocument/);
+  assert.match(client, /agreementDocumentRequests=new Map/);
+  assert.match(client, /parseAgreementDocumentRows/);
+  assert.match(
+    agreementRuntime,
+    /source\.schema_version !== 'dealivra\.agreement\.v1'/,
+  );
+  assert.match(agreementRuntime, /const hashPattern = \/\^\[a-f0-9\]\{64\}\$\//);
+  assert.match(workspace, /<AgreementPrintDocument deal=\{deal\}/);
+  assert.match(printDocument, /useStoredAgreementDocument/);
+  assert.match(printDocument, /SERVER-RECORDED SHA-256 AGREEMENT CODE/);
+  assert.match(printDocument, /record\.content_hash\.toUpperCase\(\)/);
+  assert.match(printDocument, /record\.title/);
+  assert.match(printDocument, /record\.price_cents/);
+  assert.match(printDocument, /record\.seller_declarations/);
+  assert.match(printDocument, /record\.catalog_identity/);
+  assert.doesNotMatch(app, /createAgreementFingerprint/);
+  assert.equal(
+    existsSync(join(rootPath, 'src', 'agreementFingerprint.ts')),
+    false,
+    'The obsolete browser-generated agreement hash helper must be removed',
+  );
+});
+
+test('agreement PDF has accessible structure and print-safe layout rules', () => {
+  const printDocument = readText('src/AgreementPrintDocument.tsx');
+  const styles = readText('src/agreement-export.css');
+  const standard = readText(
+    'docs/production-readiness/39_ACCESSIBLE_AGREEMENT_PDF.md',
+  );
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(
+    printDocument,
+    /className="agreement-print-document"[\s\S]*role="document"[\s\S]*aria-labelledby="agreement-document-title"[\s\S]*aria-describedby="agreement-document-summary"/,
+  );
+  assert.match(
+    printDocument,
+    /role="toolbar"[\s\S]*aria-label=\{t\('Agreement document actions'\)\}/,
+  );
+  assert.match(printDocument, /id="agreement-participants-title"/);
+  assert.match(printDocument, /id="agreement-terms-title"/);
+  assert.match(printDocument, /id="agreement-declarations-title"/);
+  assert.match(printDocument, /id="agreement-verification-title"/);
+  assert.match(
+    printDocument,
+    /role="note"[\s\S]*aria-label="Important platform notice"/,
+  );
+  assert.match(
+    printDocument,
+    /onClick=\{\(\) => window\.print\(\)\}/,
+  );
+
+  assert.match(styles, /@page\{\s*size:Letter;/);
+  assert.match(styles, /overflow-wrap:anywhere/);
+  assert.match(styles, /orphans:3;widows:3/);
+  assert.match(styles, /break-inside:avoid-page/);
+  assert.match(styles, /page-break-inside:avoid/);
+  assert.match(styles, /\.agreement-print-hero h1\{[^}]*overflow-wrap:anywhere/);
+  assert.doesNotMatch(styles, /\.agreement-print-section\{[^}]*break-inside:avoid/);
+  assert.match(standard, /does not activate Production/i);
+  assert.match(standard, /Remaining activation evidence/);
+  assert.match(readinessIndex, /39_ACCESSIBLE_AGREEMENT_PDF\.md/);
+});
+
+test('browser route resolver preserves deep links and rejects unknown paths', async () => {
+  const { resolveBrowserRoute } = await import('../src/navigation.ts');
+
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/'), { view: 'home' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/#protection'), { view: 'home' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/fees/'), { view: 'fees' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/verify'), { view: 'verify' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/?start=create'), { view: 'create' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/?start=signin'), {
+    view: 'auth',
+    authMode: 'signin',
+  });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/?start=signup'), {
+    view: 'auth',
+    authMode: 'signup',
+  });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/?trust=TP-123'), {
+    view: 'passport',
+    trustId: 'TP-123',
+  });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/?deal=DV-123&document=1'), {
+    view: 'deal',
+    publicDealId: 'DV-123',
+    documentMode: true,
+  });
+  assert.deepEqual(
+    resolveBrowserRoute('https://dealivra.com/?start=create#type=recovery&access_token=secret'),
+    { view: 'reset', recoveryToken: 'secret' },
+  );
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/missing?deal=DV-123'), {
+    view: 'not-found',
+  });
+
+  const app = readText('src/app.tsx');
+  const main = readText('src/main.tsx');
+  const errorBoundary = readText('src/AppErrorBoundary.tsx');
+  assert.match(app, /const onPopState=\(\)=>setRouteRevision/);
+  assert.match(app, /setView\('route-loading'\)/);
+  assert.match(app, /view==='not-found'&&<NotFoundPage/);
+  assert.doesNotMatch(app, /const viewFromPath=/);
+  assert.match(main, /<AppErrorBoundary><App \/><\/AppErrorBoundary>/);
+  assert.match(main, /<AppErrorBoundary><PublicLanding/);
+  assert.match(errorBoundary, /static getDerivedStateFromError/);
+  assert.match(errorBoundary, /componentDidCatch/);
+  assert.match(errorBoundary, /No transaction action was completed on this screen/);
+  assert.doesNotMatch(errorBoundary, /\{error\.message\}/);
+});
+
+test('public route presentation and metadata are isolated from application state', () => {
+  const app = readText('src/app.tsx');
+  const publicRoutes = readText('src/PublicRoutePages.tsx');
+
+  assert.match(
+    app,
+    /import \{ applyPageMetadata, DealLinkError, getPageMetadata, NotFoundPage, PublicInfoPage, RouteLoading \} from '\.\/PublicRoutePages'/,
+  );
+  assert.match(app, /getPageMetadata\(view,active\?\.title,Boolean\(user\)\)/);
+  assert.match(app, /isPublicInfoView\(view\)&&<PublicInfoPage/);
+  assert.doesNotMatch(app, /const publicInfoContent/);
+  assert.doesNotMatch(app, /function PublicInfoPage/);
+  assert.doesNotMatch(app, /function RouteLoading/);
+  assert.doesNotMatch(app, /function NotFoundPage/);
+  assert.doesNotMatch(app, /function DealLinkError/);
+
+  assert.match(publicRoutes, /const publicInfoContent: Record<PublicInfoView, PublicInfoContent>/);
+  assert.match(publicRoutes, /export const getPageMetadata/);
+  assert.match(publicRoutes, /export const applyPageMetadata/);
+  assert.match(publicRoutes, /export function PublicInfoPage/);
+  assert.match(publicRoutes, /export function RouteLoading/);
+  assert.match(publicRoutes, /export function NotFoundPage/);
+  assert.match(publicRoutes, /export function DealLinkError/);
+  assert.match(publicRoutes, /noindex,nofollow,noarchive/);
+  assert.match(publicRoutes, /link\[rel="canonical"\]/);
+  assert.match(publicRoutes, /https:\/\/dealivra\.com/);
+});
+
+test('account entry and recovery pages are isolated without moving authentication state', () => {
+  const app = readText('src/app.tsx');
+  const accountEntry = readText('src/AccountEntryPages.tsx');
+
+  assert.match(
+    app,
+    /import \{ AccountEntryPage, ForgotPassword, ForgotPasswordEntry, ResetPassword, type AuthFormState, type AuthMode \} from '\.\/AccountEntryPages'/,
+  );
+  assert.match(app, /const submitAuth=async\(e:React\.FormEvent\)=>/);
+  assert.match(app, /await signUp\(authForm\.email,authForm\.password,authForm\.displayName\)/);
+  assert.match(app, /await signIn\(authForm\.email,authForm\.password\)/);
+  assert.match(app, /view==='auth'&&!mfaLogin&&<AccountEntryPage/);
+  assert.doesNotMatch(app, /function ForgotPassword/);
+  assert.doesNotMatch(app, /function ResetPassword/);
+  assert.doesNotMatch(app, /className="form-wrap auth-wrap"/);
+  assert.doesNotMatch(app, /className="policy-consent"/);
+
+  assert.match(accountEntry, /export function AccountEntryPage/);
+  assert.match(accountEntry, /export function ForgotPasswordEntry/);
+  assert.match(accountEntry, /export function ForgotPassword/);
+  assert.match(accountEntry, /export function ResetPassword/);
+  assert.match(accountEntry, /await requestPasswordReset\(email\)/);
+  assert.match(accountEntry, /await updateRecoveredPassword\(token, password\)/);
+  assert.match(accountEntry, /autoComplete=\{isSignup \? 'new-password' : 'current-password'\}/);
+  assert.match(accountEntry, /publicInfoPaths\.terms/);
+  assert.match(accountEntry, /publicInfoPaths\.privacy/);
+  assert.match(accountEntry, /minLength=\{12\}/);
+});
+
+test('account profile and security workspace is isolated without moving session ownership', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/AccountProfileWorkspace.tsx');
+  const sessionSecurity = readText('src/AccountSessionSecurity.tsx');
+
+  assert.match(
+    app,
+    /import \{ AccountProfileWorkspace \} from '\.\/AccountProfileWorkspace'/,
+  );
+  assert.match(app, /view==='profile'&&session&&<AccountProfileWorkspace/);
+  assert.match(app, /onSessionUpdated=\{setSession\}/);
+  assert.match(app, /onSignedOut=\{finishSignedOutSession\}/);
+  assert.match(app, /onRequestVerification=\{requestVerification\}/);
+  assert.doesNotMatch(app, /function SecurityCenter/);
+  assert.doesNotMatch(app, /function AccountSettings/);
+  assert.doesNotMatch(app, /function TrustPassportControls/);
+  assert.doesNotMatch(app, /className="profile-page"/);
+  assert.doesNotMatch(app, /updateAccountName|updateAccountPassword/);
+  assert.doesNotMatch(app, /getTrustPassportSettings|setTrustPassportEnabled/);
+
+  assert.match(workspace, /export function AccountProfileWorkspace/);
+  assert.match(workspace, /function SecurityCenter/);
+  assert.match(workspace, /function AccountSettings/);
+  assert.match(workspace, /function TrustPassportControls/);
+  assert.match(workspace, /function ProfileOverview/);
+  assert.match(workspace, /<AccountMfaSecurity session=\{session\}/);
+  assert.match(workspace, /<AccountSessionSecurity session=\{session\}/);
+  assert.match(workspace, /updateAccountName\(session, name\)/);
+  assert.match(workspace, /updateAccountPassword\(session, currentPassword, password\)/);
+  assert.match(workspace, /getTrustPassportSettings\(session\)/);
+  assert.match(workspace, /setTrustPassportEnabled\(session, enabled\)/);
+  assert.match(sessionSecurity, /\[session\.user\.id,session\.accessToken\]/);
+});
+
+test('deal creation presentation is isolated without moving draft persistence ownership', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealCreationWorkspace.tsx');
+  const dealFeatures = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(app, /DealCreationWorkspace/);
+  assert.match(app, /view==='create'&&<DealCreationWorkspace/);
+  assert.match(app, /const \[draft,setDraft\]=useState<DealDraft>/);
+  assert.match(app, /const publishDraft=async\(activeSession:StoredSession\)=>/);
+  assert.match(app, /createUserDeal\(activeSession,draftForPersistence\(\)\)/);
+  assert.match(app, /saveUserDealDraft\(activeSession,draftForPersistence\(\)\)/);
+  assert.match(app, /uploadDealPhotos\(activeSession,deal\.id,photos\)/);
+  assert.match(dealFeatures, /URL\.revokeObjectURL\(nextSource\)/);
+  assert.doesNotMatch(app, /id="create-step-1"/);
+  assert.doesNotMatch(app, /function DealTemplatePicker/);
+  assert.doesNotMatch(app, /function CreateDealProgress/);
+  assert.doesNotMatch(app, /function CreateValidationSummary/);
+  assert.doesNotMatch(app, /function DealPhotoGuide/);
+  assert.doesNotMatch(app, /const dealTemplates/);
+
+  assert.match(workspace, /export function DealCreationWorkspace/);
+  assert.match(workspace, /export const dealTemplates/);
+  assert.match(workspace, /function DealTemplatePicker/);
+  assert.match(workspace, /function CreateDealProgress/);
+  assert.match(workspace, /function CreateValidationSummary/);
+  assert.match(workspace, /function DealPhotoGuide/);
+  assert.match(workspace, /<SmartCatalogFields/);
+  assert.match(workspace, /id="create-step-1"/);
+  assert.match(workspace, /id="create-step-2"/);
+  assert.match(workspace, /id="create-step-3"/);
+  assert.match(workspace, /URL\.revokeObjectURL\(nextSource\)/);
+  assert.doesNotMatch(workspace, /createUserDeal|saveUserDealDraft|uploadDealPhotos/);
+});
+
+test('deal workspace shell is isolated without moving transaction orchestration', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+  const shell = readText('src/DealWorkspaceShell.tsx');
+
+  assert.match(app, /from '\.\/DealWorkspaceShell'/);
+  assert.match(app, /from '\.\/DealWorkspace'/);
+  assert.match(app, /<DealWorkspace/);
+  assert.match(app, /resolveDealPrimaryAction\(\{/);
+  assert.match(workspace, /<DealWorkspaceNavigation/);
+  assert.match(workspace, /<DealPrimaryActionDock/);
+  assert.match(app, /const runDealPrimaryAction=\(\)=>/);
+  assert.match(app, /if\(dealPrimaryAction\.kind==='accept'\)\{void accept\(\);return\}/);
+  assert.match(app, /openAuthRoute\('signin','deal'\)/);
+  assert.match(app, /scrollToDealSection\(dealPrimaryAction\.targetId\)/);
+  assert.doesNotMatch(app, /function getShippingPrimaryAction/);
+  assert.doesNotMatch(app, /function DealWorkspaceGroup/);
+  assert.doesNotMatch(app, /<DealWorkspaceNavigation|<DealPrimaryActionDock|<DealWorkspaceGroup/);
+
+  assert.match(shell, /export function resolveDealPrimaryAction/);
+  assert.match(shell, /export function DealWorkspaceGroup/);
+  assert.match(shell, /export function DealWorkspaceNavigation/);
+  assert.match(shell, /export function DealPrimaryActionDock/);
+  assert.match(shell, /targetId: 'deal-evidence-vault'/);
+  assert.match(shell, /targetId: 'payment-status-panel'/);
+  assert.match(shell, /targetId: 'shipping-panel'/);
+  assert.match(shell, /aria-label=\{t\('Deal page navigation'\)\}/);
+  assert.match(shell, /aria-label=\{t\('Primary deal action'\)\}/);
+  assert.doesNotMatch(
+    shell,
+    /acceptPublicDeal|createProtectedCheckout|getDealActionPlan|createDealShipment|confirmShipmentDelivery|signIn|signUp/,
+  );
+});
+
+test('public agreement verification is isolated from central application state', () => {
+  const app = readText('src/app.tsx');
+  const verification = readText('src/AgreementVerificationPage.tsx');
+
+  assert.match(
+    app,
+    /import \{ AgreementVerificationPage \} from '\.\/AgreementVerificationPage'/,
+  );
+  assert.match(app, /view==='verify'&&<AgreementVerificationPage/);
+  assert.doesNotMatch(app, /function AgreementVerifier/);
+  assert.doesNotMatch(app, /verifyAgreementRecord|AgreementVerificationResult/);
+  assert.doesNotMatch(app, /className="agreement-verifier-page"/);
+
+  assert.match(verification, /export function AgreementVerificationPage/);
+  assert.match(verification, /function AgreementVerifier/);
+  assert.match(verification, /await verifyAgreementRecord\(cleanId, cleanCode\)/);
+  assert.match(verification, /\/\^\[a-f0-9\]\{64\}\$\/i/);
+  assert.match(verification, /aria-invalid=\{dealIdInvalid\}/);
+  assert.match(verification, /aria-invalid=\{codeInvalid\}/);
+  assert.match(verification, /role="status"/);
+  assert.match(verification, /aria-live="polite"/);
+  assert.match(
+    verification,
+    /A match confirms only the stored agreement record, not the item or payment\./,
+  );
+  assert.doesNotMatch(
+    verification,
+    /acceptPublicDeal|createProtectedCheckout|createDealShipment|uploadDealEvidence|signIn|signUp/,
+  );
+});
+
+test('agreement record summary, history, and PDF rendering are isolated', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+  const records = readText('src/AgreementRecordSummary.tsx');
+  const printDocument = readText('src/AgreementPrintDocument.tsx');
+
+  assert.match(workspace, /from '\.\/AgreementRecordSummary'/);
+  assert.match(workspace, /<AgreementExport deal=\{deal\}/);
+  assert.match(workspace, /<AgreementFingerprint deal=\{deal\}/);
+  assert.match(workspace, /<AgreementHistory deal=\{deal\}/);
+  assert.match(workspace, /from '\.\/AgreementPrintDocument'/);
+  assert.match(workspace, /<AgreementPrintDocument deal=\{deal\}/);
+  assert.doesNotMatch(app, /function AgreementPrintDocument/);
+  assert.doesNotMatch(app, /useStoredAgreementDocument\(deal\)/);
+  assert.doesNotMatch(app, /function AgreementExport/);
+  assert.doesNotMatch(app, /function AgreementFingerprint/);
+  assert.doesNotMatch(app, /function AgreementHistory/);
+  assert.doesNotMatch(
+    app,
+    /AgreementExport|AgreementFingerprint|AgreementHistory|AgreementPrintDocument|getPublicAgreementDocument|getPublicAgreementHistory|AgreementDocumentSnapshot|AgreementHistoryVersion/,
+  );
+
+  assert.match(records, /export function useStoredAgreementDocument/);
+  assert.match(records, /export function AgreementExport/);
+  assert.match(records, /export function AgreementFingerprint/);
+  assert.match(records, /export function AgreementHistory/);
+  assert.match(
+    records,
+    /getPublicAgreementDocument\(deal\.publicId, deal\.agreementVersion\)/,
+  );
+  assert.match(records, /getPublicAgreementHistory\(deal\.publicId\)/);
+  assert.match(records, /if \(current\) setRecord\(value\)/);
+  assert.match(records, /\[deal\.publicId, deal\.agreementVersion\]/);
+  assert.match(records, /role="status"/);
+  assert.match(records, /aria-live="polite"/);
+  assert.match(printDocument, /export function AgreementPrintDocument/);
+  assert.match(printDocument, /useStoredAgreementDocument\(deal\)/);
+  assert.match(printDocument, /record\.content_hash\.toUpperCase\(\)/);
+  assert.match(printDocument, /record\.seller_declarations/);
+  assert.match(printDocument, /record\.catalog_identity/);
+  assert.match(printDocument, /role="document"/);
+  assert.match(printDocument, /role=\{loading \? 'status' : 'alert'\}/);
+  assert.doesNotMatch(
+    `${records}\n${printDocument}`,
+    /acceptPublicDeal|createProtectedCheckout|createDealShipment|uploadDealEvidence|signIn|signUp/,
+  );
+});
+
+test('seller declaration presentation is isolated without moving publication', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+  const declarations = readText('src/SellerDeclarations.tsx');
+
+  assert.match(app, /from '\.\/SellerDeclarations'/);
+  assert.match(app, /<SellerDeclarationChecklist/);
+  assert.match(workspace, /<PublicSellerDeclaration deal=\{deal\}/);
+  assert.match(app, /createUserDeal\(activeSession,draftForPersistence\(\)\)/);
+  assert.doesNotMatch(app, /function SellerDeclarationChecklist/);
+  assert.doesNotMatch(app, /function PublicSellerDeclaration/);
+  assert.doesNotMatch(
+    app,
+    /getPublicSellerDeclaration|SellerDeclarationRecord/,
+  );
+
+  assert.match(declarations, /export interface SellerDeclarations/);
+  assert.match(declarations, /export const emptySellerDeclarations/);
+  assert.match(declarations, /export function SellerDeclarationChecklist/);
+  assert.match(declarations, /export function PublicSellerDeclaration/);
+  assert.match(
+    declarations,
+    /getPublicSellerDeclaration\(deal\.publicId\)/,
+  );
+  assert.match(declarations, /if \(current\)/);
+  assert.match(declarations, /\[deal\.publicId\]/);
+  assert.match(
+    declarations,
+    /These confirmations are recorded when the Deal Link is published\./,
+  );
+  assert.match(
+    declarations,
+    /It does not verify ownership or authenticity\./,
+  );
+  assert.doesNotMatch(
+    declarations,
+    /publishUserDealDraft|updateUserDealDraft|acceptPublicDeal|createProtectedCheckout|createDealShipment|uploadDealEvidence|signIn|signUp/,
+  );
+});
+
+test('participant evidence workspace is isolated with security controls intact', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+  const evidence = readText('src/DealEvidenceWorkspace.tsx');
+
+  assert.match(workspace, /from '\.\/DealEvidenceWorkspace'/);
+  assert.match(workspace, /<DealEvidenceWorkspace/);
+  assert.doesNotMatch(app, /evidenceLabels/);
+  assert.doesNotMatch(app, /function EvidencePanel/);
+  assert.doesNotMatch(
+    app,
+    /uploadDealEvidence|evidenceInputAccept|\bEvidenceType\b/,
+  );
+
+  assert.match(evidence, /export const evidenceLabels/);
+  assert.match(evidence, /export function DealEvidenceWorkspace/);
+  assert.match(evidence, /evidenceInputAccept\(role, evidenceType\)/);
+  assert.match(evidence, /listDealEvidence\(session, deal\.id\)/);
+  assert.match(evidence, /uploadDealEvidence\(/);
+  assert.match(evidence, /for \(const file of files\)/);
+  assert.match(evidence, /if \(current\) setItems\(next\)/);
+  assert.match(evidence, /\[deal\.id, session\.accessToken, role\]/);
+  assert.match(evidence, /<EvidenceViewer/);
+  assert.match(
+    evidence,
+    /Files enter an isolated quarantine and are available only after type, size, and malware checks pass\./,
+  );
+  assert.match(
+    evidence,
+    /Evidence is append-only, access is logged, and each viewing link expires after 60 seconds\./,
+  );
+  assert.doesNotMatch(
+    evidence,
+    /acceptPublicDeal|createProtectedCheckout|createDealShipment|confirmShipmentDelivery|signIn|signUp|publishUserDealDraft|updateUserDealDraft/,
+  );
+});
+
+test('payment and seller payout workspace is isolated with guarded polling', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+  const payment = readText('src/DealPaymentWorkspace.tsx');
+
+  assert.match(workspace, /from '\.\/DealPaymentWorkspace'/);
+  assert.match(workspace, /<DealPaymentWorkspace/);
+  assert.match(workspace, /<ProtectedPaymentReceipt deal=\{deal\}/);
+  assert.doesNotMatch(app, /function ProtectedPaymentPanel/);
+  assert.doesNotMatch(app, /function ProtectedPaymentReceipt/);
+  assert.doesNotMatch(app, /startStripeConnectOnboarding|createProtectedCheckout/);
+  assert.doesNotMatch(app, /\bProtectedPaymentStatus\b|\bStripeConnectStatus\b/);
+
+  assert.match(payment, /export function DealPaymentWorkspace/);
+  assert.match(payment, /export function ProtectedPaymentReceipt/);
+  assert.match(payment, /getProtectedPaymentStatus\(session, deal\.id\)/);
+  assert.match(payment, /getStripeConnectStatus\(session\)/);
+  assert.match(payment, /getDealActionPlan\(session, deal\.id\)/);
+  assert.match(payment, /startStripeConnectOnboarding\(session, deal\.publicId\)/);
+  assert.match(payment, /createProtectedCheckout\(session, deal\.id\)/);
+  assert.match(payment, /let current = true/);
+  assert.match(payment, /if \(!current\) return/);
+  assert.match(payment, /window\.clearInterval\(timer\)/);
+  assert.match(payment, /popup\.opener = null/);
+  assert.match(payment, /id="payment-status-panel"/);
+  assert.match(
+    payment,
+    /Payments are processed in Stripe Sandbox\. Dealivra never stores card or bank details\. This beta is not legal escrow\./,
+  );
+  assert.match(
+    payment,
+    /This receipt records the Dealivra payment status\. It is not a bank statement or legal escrow certificate\./,
+  );
+  assert.doesNotMatch(
+    payment,
+    /resolveAdminDisputeFinancial|createDealShipment|confirmShipmentDelivery|uploadDealEvidence|acceptPublicDeal|publishUserDealDraft|signIn|signUp/,
+  );
+});
+
+test('delivery, shipping, handoff, and inspection are isolated together', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(workspace, /from '\.\/DealFulfillmentWorkspace'/);
+  assert.match(workspace, /<ShippingPanel/);
+  assert.match(workspace, /<MeetingPanel deal=\{deal\}/);
+  assert.match(workspace, /<HandoffPanel/);
+  assert.doesNotMatch(app, /function ShippingPanel/);
+  assert.doesNotMatch(app, /function MeetingPanel/);
+  assert.doesNotMatch(app, /function InspectionRecorder/);
+  assert.doesNotMatch(app, /function HandoffPanel/);
+  assert.doesNotMatch(
+    app,
+    /createDealShipment|confirmShipmentDelivery|saveDealDeliveryDetails|proposeMeeting|confirmMeeting|recordDealInspection|markArrived|generateHandoffPin|completeHandoff/,
+  );
+
+  assert.match(fulfillment, /export function ShippingPanel/);
+  assert.match(fulfillment, /export function MeetingPanel/);
+  assert.match(fulfillment, /export function InspectionRecorder/);
+  assert.match(fulfillment, /export function HandoffPanel/);
+  assert.match(fulfillment, /getDealDeliveryDetails\(session, deal\.id\)/);
+  assert.match(fulfillment, /saveDealDeliveryDetails\(/);
+  assert.match(fulfillment, /getSellerShippingEvidenceReadiness\(session, deal\.id\)/);
+  assert.match(fulfillment, /createDealShipment\(session, deal\.id, carrier, tracking\)/);
+  assert.match(fulfillment, /confirmShipmentDelivery\(session, deal\.id\)/);
+  assert.match(fulfillment, /proposeMeeting\(/);
+  assert.match(fulfillment, /confirmMeeting\(session, deal\.id\)/);
+  assert.match(fulfillment, /recordDealInspection\(session, deal\.id\)/);
+  assert.match(fulfillment, /generateHandoffPin\(session, deal\.id\)/);
+  assert.match(fulfillment, /completeHandoff\(session, deal\.id, pin\)/);
+  assert.match(fulfillment, /let current = true/);
+  assert.match(fulfillment, /if \(!current\) return/);
+  assert.match(fulfillment, /Address line 2 \(optional\)/);
+  assert.match(fulfillment, /Apartment, suite, unit, building, or floor/);
+  assert.match(fulfillment, /\^\\d\{5\}\(\?:-\\d\{4\}\)\?\$/);
+  assert.match(fulfillment, /getElementById\('deal-evidence-vault'\)/);
+  assert.match(
+    fulfillment,
+    /This address is used only for this deal and is never shown on the public Deal Link\./,
+  );
+  assert.doesNotMatch(
+    fulfillment,
+    /createProtectedCheckout|startStripeConnectOnboarding|uploadDealEvidence|acceptPublicDeal|publishUserDealDraft|resolveAdminDisputeFinancial|signIn|signUp/,
+  );
+});
+
+test('participant resolution and private deal chat are isolated safely', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+  const resolution = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(workspace, /from '\.\/DealResolutionWorkspace'/);
+  assert.match(workspace, /<RatingPanel deal=\{deal\}/);
+  assert.match(workspace, /<DealSafetyActions/);
+  assert.match(workspace, /<ReportDealPanel/);
+  assert.match(workspace, /<DealChat deal=\{deal\}/);
+  assert.doesNotMatch(app, /function RatingPanel/);
+  assert.doesNotMatch(app, /function DealSafetyActions/);
+  assert.doesNotMatch(app, /function ReportDealPanel/);
+  assert.doesNotMatch(app, /function DealChat/);
+  assert.doesNotMatch(
+    app,
+    /submitRating|cancelDeal|openDealDispute|reportPublicDeal|getDealMessages|sendDealMessage/,
+  );
+
+  assert.match(resolution, /export function RatingPanel/);
+  assert.match(resolution, /export function DealSafetyActions/);
+  assert.match(resolution, /export function ReportDealPanel/);
+  assert.match(resolution, /export function DealChat/);
+  assert.match(resolution, /submitRating\(session, deal\.id, stars, comment\)/);
+  assert.match(resolution, /cancelDeal\(session, deal\.id, reason\)/);
+  assert.match(resolution, /openDealDispute\(session, deal\.id, reason\)/);
+  assert.match(
+    resolution,
+    /reportPublicDeal\(session, deal\.publicId, category, details\)/,
+  );
+  assert.match(resolution, /getDealMessages\(session, deal\.id\)/);
+  assert.match(resolution, /sendDealMessage\(session, deal\.id, body\)/);
+  assert.match(resolution, /let current = true/);
+  assert.match(resolution, /request !== requestRef\.current/);
+  assert.match(resolution, /window\.clearInterval\(timer\)/);
+  assert.match(resolution, /aria-controls="deal-chat-panel"/);
+  assert.match(resolution, /aria-live="polite"/);
+  assert.doesNotMatch(
+    resolution,
+    /resolveAdminDisputeFinancial|resolveAdminDispute|setAdminDealVisibility|createProtectedCheckout|createDealShipment|confirmShipmentDelivery|uploadDealEvidence|acceptPublicDeal|publishUserDealDraft|signIn|signUp/,
+  );
+});
+
+test('administration operations are isolated behind the central access gate', () => {
+  const app = readText('src/app.tsx');
+  const administration = readText('src/AdministrationWorkspace.tsx');
+
+  assert.match(app, /getAdminAccess\(session\)/);
+  assert.match(
+    app,
+    /view==='admin'&&session&&isAdmin&&<AdministrationWorkspace session=\{session\}/,
+  );
+  assert.match(app, /from '\.\/AdministrationWorkspace'/);
+  assert.doesNotMatch(
+    app,
+    /function AdminCatalogCenter|function AdminEvidenceReview|function AdminRevenueCenter|function AdminDisputeCenter|function AdminReportCenter/,
+  );
+  assert.doesNotMatch(
+    app,
+    /getAdminCatalogAdoption|getAdminRevenueSummary|getAdminRevenueTransactions|getAdminDisputes|getAdminReports|resolveAdminDisputeFinancial|resolveAdminDispute|resolveAdminReport|setAdminDealVisibility|listDealEvidence/,
+  );
+
+  assert.match(administration, /export function AdministrationWorkspace/);
+  assert.match(administration, /<EvidenceLifecycleCenter session=\{session\}/);
+  assert.match(administration, /getAdminCatalogAdoption\(session, activeDays\)/);
+  assert.match(administration, /getAdminRevenueSummary\(session\)/);
+  assert.match(administration, /getAdminRevenueTransactions\(session, 100\)/);
+  assert.match(administration, /getAdminDisputes\(session, filter\)/);
+  assert.match(administration, /getAdminReports\(session, filter\)/);
+  assert.match(administration, /resolveAdminDisputeFinancial\(/);
+  assert.match(administration, /resolveAdminDispute\(/);
+  assert.match(administration, /resolveAdminReport\(/);
+  assert.match(administration, /setAdminDealVisibility\(/);
+  assert.match(administration, /listDealEvidence\(session, dispute\.deal_id\)/);
+  assert.match(administration, /Promise\.allSettled/);
+  assert.match(administration, /request !== requestRef\.current/);
+  assert.match(administration, /<th className="action-heading">/);
+  assert.doesNotMatch(administration, /document\.querySelector/);
+  assert.match(
+    administration,
+    /Buyer and seller resolutions perform the confirmed Stripe refund or release\. Closing a dispute moves no funds\./,
+  );
+  assert.match(administration, /if \(!confirm\(t\(prompt\)\)\) return/);
+  assert.doesNotMatch(
+    administration,
+    /getAdminAccess|signIn|signUp|acceptPublicDeal|publishUserDealDraft|createProtectedCheckout|createDealShipment|uploadDealEvidence/,
+  );
+});
+
+test('deal workspace composition is isolated while central transaction ownership remains explicit', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(app, /import \{ DealWorkspace \} from '\.\/DealWorkspace'/);
+  assert.equal(
+    (app.match(/<DealWorkspace\b/g) || []).length,
+    1,
+    'The central application should render exactly one Deal Workspace boundary',
+  );
+  assert.doesNotMatch(
+    app,
+    /<DealWorkspaceGroup|<DealWorkspaceNavigation|<DealPrimaryActionDock|<DealEvidenceWorkspace|<DealPaymentWorkspace|<ShippingPanel|<DealChat/,
+  );
+  assert.doesNotMatch(
+    app,
+    /function BuyerAccessCodeManager|function DealRiskCheck|function DealParticipantsCard|function DealActionPlanCard|function DealEditor|function DealProgressStrip/,
+  );
+  assert.match(app, /await acceptPublicDeal\(session,active\.publicId/);
+  assert.match(app, /await getDealActionPlan\(session,dealId\)/);
+
+  assert.match(workspace, /export function DealWorkspace/);
+  assert.match(workspace, /<DealWorkspaceGroup/);
+  assert.match(workspace, /<DealWorkspaceNavigation/);
+  assert.match(workspace, /<DealPrimaryActionDock/);
+  assert.match(workspace, /<DealEvidenceWorkspace/);
+  assert.match(workspace, /<DealPaymentWorkspace/);
+  assert.match(workspace, /<ShippingPanel/);
+  assert.match(workspace, /<DealChat deal=\{deal\}/);
+  assert.match(workspace, /<AgreementPrintDocument deal=\{deal\}/);
+
+  assert.match(features, /export function BuyerAccessCodeManager/);
+  assert.match(features, /export function DealRiskCheck/);
+  assert.match(features, /export function DealParticipantsCard/);
+  assert.match(features, /export function DealActionPlanCard/);
+  assert.match(features, /export function DealEditor/);
+  assert.match(features, /export function DealProgressStrip/);
+  assert.doesNotMatch(
+    `${workspace}\n${features}`,
+    /signIn\(|signUp\(|acceptPublicDeal\(|resolveAdminDisputeFinancial\(|setAdminDealVisibility\(|createProtectedCheckout\(/,
+  );
+});
+
+test('core Deal service responses are validated and normalized at runtime', async () => {
+  const schemas = await import('../src/services/runtimeSchemas.ts');
+  const { currencyCodes } = await import('../src/currency.ts');
+  const baseDealRow = {
+    id: '00000000-0000-0000-0000-000000000001',
+    public_id: 'DV-VALID-001',
+    title: 'Verified test phone',
+    description: 'A bounded service response used by the release gate.',
+    price_cents: 12500,
+    currency: 'USD',
+    condition: 'Good',
+    serial_last_four: null,
+    delivery_method: 'Ship to buyer',
+    category_id: 'phone',
+    catalog_version: '2026-07-29.1',
+    catalog_brand_id: 'apple',
+    catalog_brand_label: 'Apple',
+    catalog_model_id: 'iphone-16',
+    catalog_model_label: 'iPhone 16',
+    model_year: 2025,
+    catalog_variant_id: null,
+    catalog_variant_label: null,
+    status: 'published',
+    current_agreement_version: 2,
+    created_at: '2026-07-29T12:00:00.000Z',
+    expires_at: null,
+    deal_media: [{
+      storage_path: 'seller/deal/item.webp',
+      sort_order: 0,
+    }],
+    seller_id: '00000000-0000-0000-0000-000000000002',
+    buyer_id: null,
+  };
+
+  const parsedDeal = schemas.parseUserDealRows([baseDealRow])[0];
+  assert.equal(parsedDeal.currency, 'USD');
+  assert.equal(parsedDeal.category_id, 'phone');
+  assert.equal(parsedDeal.deal_media[0].sort_order, 0);
+  assert.equal(parsedDeal.buyer_id, undefined);
+
+  const publicRow = schemas.parsePublicDealRows([{
+    ...baseDealRow,
+    current_agreement_version: undefined,
+    agreement_version: 3,
+    seller_name: 'Verified Seller',
+    seller_contact_verified: true,
+    seller_verification: 'failed',
+    media_paths: ['seller/deal/item.webp'],
+  }])[0];
+  assert.equal(publicRow.current_agreement_version, 3);
+  assert.equal(publicRow.agreement_version, 3);
+  assert.equal(publicRow.seller_verification, 'failed');
+
+  const savedRow = schemas.parseSavedDealRows([{
+    ...baseDealRow,
+    seller_name: 'Verified Seller',
+    seller_contact_verified: true,
+    seller_verification: 'verified',
+    media_paths: ['seller/deal/item.webp'],
+    saved_at: '2026-07-29T13:00:00.000Z',
+  }])[0];
+  assert.equal(savedRow.saved_at, '2026-07-29T13:00:00.000Z');
+
+  const actionPlan = schemas.parseDealActionPlanRows([{
+    viewer_role: 'buyer',
+    deal_status: 'accepted',
+    meeting_status: null,
+    seller_arrived: false,
+    buyer_arrived: false,
+    handoff_code_ready: false,
+    shipment_status: 'shipped',
+    inspection_recorded: false,
+    rating_submitted: false,
+    delivery_address_ready: true,
+    payment_method_recorded: true,
+    payment_method_confirmed: true,
+    payment_marked_sent: true,
+    payment_received: false,
+  }])[0];
+  assert.equal(actionPlan.viewer_role, 'buyer');
+  assert.equal(actionPlan.shipment_status, 'shipped');
+
+  const readiness = schemas.parseShippingEvidenceReadinessRows([{
+    item_photo_ready: true,
+    packing_video_ready: true,
+    package_weight_ready: true,
+    serial_required: false,
+    serial_photo_ready: false,
+    distinct_files_ready: true,
+    ready: true,
+  }])[0];
+  assert.equal(readiness.ready, true);
+
+  assert.deepEqual(
+    [...new Set(schemas.runtimeCurrencyCodes)].sort(),
+    [...new Set(currencyCodes)].sort(),
+  );
+});
+
+test('invalid Deal service responses fail closed without logging payload data', async () => {
+  const schemas = await import('../src/services/runtimeSchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+
+  try {
+    assert.throws(
+      () => schemas.parseUserDealRows([{
+        id: 'deal-id',
+        public_id: 'DV-INVALID',
+        title: { secret: 'private-value-must-not-be-logged' },
+        description: '',
+        price_cents: 100,
+        currency: 'USD',
+        condition: 'Good',
+        serial_last_four: null,
+        delivery_method: 'Meet in person',
+        status: 'draft',
+        current_agreement_version: 0,
+        created_at: '2026-07-29T12:00:00.000Z',
+        expires_at: null,
+        deal_media: [],
+      }]),
+      error => (
+        error instanceof schemas.ServiceResponseValidationError
+        && error.boundary === 'user_deals'
+        && error.issue === 'row_0_invalid_title'
+      ),
+    );
+    assert.throws(
+      () => schemas.parseUserDealRows('not-an-array'),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parsePublicDealRows([{}, {}]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseDealActionPlanRows([{
+        viewer_role: 'buyer',
+        deal_status: 'accepted',
+        meeting_status: null,
+        seller_arrived: 'yes',
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseShippingEvidenceReadinessRows([{
+        item_photo_ready: true,
+        packing_video_ready: true,
+        package_weight_ready: true,
+        serial_required: false,
+        serial_photo_ready: false,
+        distinct_files_ready: true,
+        ready: 'yes',
+      }]),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.service\.response-rejection\.v1/);
+  assert.match(serializedLogs, /user_deals/);
+  assert.doesNotMatch(serializedLogs, /private-value-must-not-be-logged/);
+  assert.doesNotMatch(serializedLogs, /DV-INVALID/);
+});
+
+test('the first ARC-004 boundary is wired and documented without weakening authorization', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/runtimeSchemas.ts');
+  const standard = readText('docs/production-readiness/42_RUNTIME_SERVICE_VALIDATION.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+
+  assert.match(service, /parseUserDealRows/);
+  assert.match(service, /parsePublicDealRows/);
+  assert.match(service, /parseSavedDealRows/);
+  assert.match(service, /parseDealActionPlanRows/);
+  assert.match(service, /parseShippingEvidenceReadinessRows/);
+  assert.doesNotMatch(service, /as DealRow\[\]/);
+  assert.doesNotMatch(service, /as PublicDealRow\[\]/);
+  assert.doesNotMatch(service, /as SavedDealRow\[\]/);
+
+  assert.match(schemas, /dealivra\.service\.response-rejection\.v1/);
+  assert.match(schemas, /ServiceResponseValidationError/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+  assert.match(standard, /RLS and grants remain authoritative/);
+  assert.match(standard, /No Supabase resource, schema, policy, migration/);
+  assert.match(readinessIndex, /42_RUNTIME_SERVICE_VALIDATION\.md/);
+});
+
+test('Auth session, signup, login, and MFA success envelopes are runtime validated', async () => {
+  const schemas = await import('../src/services/authRuntimeSchemas.ts');
+  const accessToken = 'eyJhbGciOiJIUzI1NiJ9.eyJhbWwiOiJhYWwxIn0.signature';
+  const user = {
+    id: '00000000-0000-4000-8000-000000000042',
+    email: 'member@example.com',
+    email_confirmed_at: '2026-07-29T12:00:00.000Z',
+    user_metadata: { display_name: 'Dealivra Member' },
+  };
+  const session = {
+    access_token: accessToken,
+    expires_in: 3600,
+    user,
+  };
+  const factor = {
+    id: '00000000-0000-4000-8000-000000000043',
+    factorType: 'totp',
+    friendlyName: 'Primary authenticator',
+    createdAt: '2026-07-29T12:00:00.000Z',
+    updatedAt: null,
+  };
+
+  assert.equal(
+    schemas.parseAuthSession(session, 'auth_refresh').user.email,
+    'member@example.com',
+  );
+  assert.deepEqual(
+    schemas.parseSignupResponse({
+      session,
+      needsEmailConfirmation: false,
+    }).session.user.user_metadata,
+    { display_name: 'Dealivra Member' },
+  );
+  assert.deepEqual(
+    schemas.parseSignupResponse({
+      session: null,
+      needsEmailConfirmation: true,
+    }),
+    { session: null, needsEmailConfirmation: true },
+  );
+  assert.equal(
+    schemas.parseLoginResponse(session).access_token,
+    accessToken,
+  );
+  assert.equal(
+    schemas.parseLoginResponse({
+      mfa_required: true,
+      pending_access_token: accessToken,
+      expires_in: 300,
+      factors: [factor],
+    }).factors[0].factorType,
+    'totp',
+  );
+  assert.equal(
+    schemas.parseMfaStatusResponse({
+      assuranceLevel: 'aal2',
+      factors: [factor],
+      minimumVerifiedFactors: 0,
+      canRemoveVerifiedFactor: true,
+      unsupportedVerifiedFactor: false,
+    }).assuranceLevel,
+    'aal2',
+  );
+  assert.equal(
+    schemas.parseMfaEnrollmentResponse({
+      factorId: factor.id,
+      friendlyName: 'Primary authenticator',
+      qrCodeSvg: '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>',
+      secret: 'JBSWY3DPEHPK3PXP',
+      uri: 'otpauth://totp/Dealivra:member%40example.com?secret=JBSWY3DPEHPK3PXP',
+    }).factorId,
+    factor.id,
+  );
+});
+
+test('invalid Auth and MFA responses fail closed without exposing secrets or identity data', async () => {
+  const schemas = await import('../src/services/authRuntimeSchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+
+  const accessToken = 'eyJhbGciOiJIUzI1NiJ9.eyJhbWwiOiJhYWwxIn0.private-signature';
+  const session = {
+    access_token: accessToken,
+    expires_in: 3600,
+    user: {
+      id: '00000000-0000-4000-8000-000000000042',
+      email: 'private-member@example.com',
+      email_confirmed_at: null,
+      user_metadata: { display_name: null },
+    },
+  };
+
+  try {
+    assert.throws(
+      () => schemas.parseAuthSession({
+        ...session,
+        refresh_token: 'provider-refresh-secret',
+      }, 'auth_refresh'),
+      error => (
+        error instanceof schemas.AuthResponseValidationError
+        && error.boundary === 'auth_refresh'
+        && error.issue === 'refresh_token_exposed'
+      ),
+    );
+    assert.throws(
+      () => schemas.parseAuthSession({
+        ...session,
+        access_token: 'not-a-jwt',
+      }, 'auth_login'),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseSignupResponse({
+        session: null,
+        needsEmailConfirmation: false,
+      }),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseLoginResponse({
+        mfa_required: true,
+        pending_access_token: accessToken,
+        expires_in: 300,
+        factors: [],
+      }),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseMfaStatusResponse({
+        assuranceLevel: 'aal2',
+        factors: [],
+        minimumVerifiedFactors: 0,
+        canRemoveVerifiedFactor: true,
+        unsupportedVerifiedFactor: false,
+      }),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseMfaEnrollmentResponse({
+        factorId: '00000000-0000-4000-8000-000000000043',
+        friendlyName: 'Primary authenticator',
+        qrCodeSvg: '<svg><script>steal()</script></svg>',
+        secret: 'PRIVATESECRET234',
+        uri: 'https://attacker.invalid/totp',
+      }),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.auth\.response-rejection\.v1/);
+  assert.match(serializedLogs, /auth_refresh/);
+  assert.doesNotMatch(serializedLogs, /provider-refresh-secret/);
+  assert.doesNotMatch(serializedLogs, /private-signature/);
+  assert.doesNotMatch(serializedLogs, /private-member@example\.com/);
+  assert.doesNotMatch(serializedLogs, /PRIVATESECRET234/);
+});
+
+test('the second ARC-004 boundary validates every browser Auth and MFA success response', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/authRuntimeSchemas.ts');
+
+  assert.match(service, /parseSignupResponse\(responseBody\)/);
+  assert.match(service, /parseLoginResponse\(responseBody\)/);
+  assert.match(service, /parseAuthSession\(responseBody,'auth_refresh'\)/);
+  assert.match(service, /parseMfaStatusResponse\(await mfaRequest/);
+  assert.match(service, /parseMfaEnrollmentResponse\(await mfaRequest/);
+  assert.match(service, /'mfa_session'/);
+  assert.doesNotMatch(service, /interface AuthResponse/);
+  assert.doesNotMatch(service, /mfaRequest<T>/);
+  assert.doesNotMatch(service, /response\.json\(\) as AuthResponse/);
+
+  assert.match(schemas, /dealivra\.auth\.response-rejection\.v1/);
+  assert.match(schemas, /refresh_token_exposed/);
+  assert.match(schemas, /AuthResponseValidationError/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+});
+
+test('browser Auth mutation requests and reviewed error envelopes are runtime validated', async () => {
+  const schemas = await import('../src/services/authBoundarySchemas.ts');
+  const accessToken = 'eyJhbGciOiJIUzI1NiJ9.eyJhbWwiOiJhYWwyIn0.signature';
+  const factorId = '00000000-0000-4000-8000-000000000043';
+
+  assert.deepEqual(
+    schemas.parseAuthSignupRequest({
+      email: '  Member@Example.com ',
+      password: 'Correct-Horse9!',
+      displayName: ' Dealivra Member ',
+    }),
+    {
+      email: 'member@example.com',
+      password: 'Correct-Horse9!',
+      displayName: 'Dealivra Member',
+    },
+  );
+  assert.deepEqual(
+    schemas.parseAuthLoginRequest({
+      email: 'MEMBER@example.com',
+      password: 'legacy-password',
+    }),
+    {
+      email: 'member@example.com',
+      password: 'legacy-password',
+    },
+  );
+  assert.deepEqual(schemas.parseAuthRefreshRequest({}), {});
+  assert.deepEqual(
+    schemas.parseAuthRecoverRequest({ email: 'Member@example.com' }),
+    { email: 'member@example.com' },
+  );
+  assert.deepEqual(
+    schemas.parseAuthPasswordRequest({
+      action: 'recovery',
+      newPassword: 'Replacement9!Pass',
+    }),
+    {
+      action: 'recovery',
+      newPassword: 'Replacement9!Pass',
+    },
+  );
+  assert.deepEqual(
+    schemas.parseAuthPasswordRequest({
+      action: 'change',
+      currentPassword: 'legacy-password',
+      newPassword: 'Replacement9!Pass',
+    }),
+    {
+      action: 'change',
+      currentPassword: 'legacy-password',
+      newPassword: 'Replacement9!Pass',
+    },
+  );
+  assert.deepEqual(
+    schemas.parseAuthLogoutRequest({ scope: 'others' }),
+    { scope: 'others' },
+  );
+  assert.deepEqual(
+    schemas.parseAuthMfaRequest({
+      action: 'challenge_and_verify',
+      purpose: 'step_up',
+      factorId,
+      code: '123456',
+    }),
+    {
+      action: 'challenge_and_verify',
+      purpose: 'step_up',
+      factorId,
+      code: '123456',
+    },
+  );
+  assert.equal(
+    schemas.parseAuthBearerToken(accessToken, 'auth_mfa_request'),
+    accessToken,
+  );
+
+  assert.deepEqual(
+    schemas.parseAuthErrorEnvelope(
+      {
+        error: 'Too many attempts.',
+        retryAfter: 60,
+      },
+      429,
+      '60',
+      'auth_login_error',
+    ),
+    {
+      error: 'Too many attempts.',
+      code: null,
+      retryAfter: 60,
+    },
+  );
+  assert.deepEqual(
+    schemas.parseAuthErrorEnvelope(
+      {
+        error: 'This security change is temporarily locked after account recovery.',
+        code: 'recovery_cooldown_active',
+      },
+      423,
+      null,
+      'auth_mfa_error',
+    ),
+    {
+      error: 'This security change is temporarily locked after account recovery.',
+      code: 'recovery_cooldown_active',
+      retryAfter: null,
+    },
+  );
+});
+
+test('invalid Auth mutation boundaries fail closed without logging credentials or provider data', async () => {
+  const schemas = await import('../src/services/authBoundarySchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+
+  try {
+    assert.throws(
+      () => schemas.parseAuthSignupRequest({
+        email: 'private-member@example.com',
+        password: 'Private-Password9!',
+        displayName: 'Private Member',
+        refresh_token: 'provider-refresh-secret',
+      }),
+      error => (
+        error instanceof schemas.AuthBoundaryValidationError
+        && error.boundary === 'auth_signup_request'
+        && error.issue === 'request_shape_invalid'
+      ),
+    );
+    assert.throws(
+      () => schemas.parseAuthPasswordRequest({
+        action: 'recovery',
+        currentPassword: 'Private-Old9!',
+        newPassword: 'Private-New9!',
+      }),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => schemas.parseAuthMfaRequest({
+        action: 'challenge_and_verify',
+        purpose: 'login',
+        factorId: '00000000-0000-4000-8000-000000000043',
+        code: '12AB56',
+      }),
+      /6-digit authenticator code/i,
+    );
+    assert.throws(
+      () => schemas.parseAuthBearerToken(
+        'private-provider-token',
+        'auth_password_request',
+      ),
+      /session expired/i,
+    );
+    assert.throws(
+      () => schemas.parseAuthErrorEnvelope(
+        {
+          error: 'Private provider diagnostic',
+          provider_token: 'provider-secret-value',
+        },
+        503,
+        null,
+        'auth_refresh_error',
+      ),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => schemas.parseAuthErrorEnvelope(
+        {
+          error: 'Too many attempts.',
+          retryAfter: 30,
+        },
+        429,
+        '60',
+        'auth_login_error',
+      ),
+      /processed safely/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.auth\.boundary-rejection\.v1/);
+  assert.match(serializedLogs, /auth_signup_request/);
+  assert.match(serializedLogs, /auth_refresh_error/);
+  assert.doesNotMatch(serializedLogs, /private-member@example\.com/);
+  assert.doesNotMatch(serializedLogs, /Private-Password9/);
+  assert.doesNotMatch(serializedLogs, /Private-Old9/);
+  assert.doesNotMatch(serializedLogs, /Private-New9/);
+  assert.doesNotMatch(serializedLogs, /12AB56/);
+  assert.doesNotMatch(serializedLogs, /private-provider-token/);
+  assert.doesNotMatch(serializedLogs, /Private provider diagnostic/);
+  assert.doesNotMatch(serializedLogs, /provider-secret-value/);
+});
+
+test('the eighth ARC-004 boundary validates every browser Auth mutation request and error', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/authBoundarySchemas.ts');
+
+  for (const parser of [
+    'parseAuthSignupRequest',
+    'parseAuthLoginRequest',
+    'parseAuthRefreshRequest',
+    'parseAuthRecoverRequest',
+    'parseAuthPasswordRequest',
+    'parseAuthLogoutRequest',
+    'parseAuthMfaRequest',
+    'parseAuthBearerToken',
+    'parseAuthErrorEnvelope',
+  ]) {
+    assert.match(service, new RegExp(`${parser}\\(`));
+    assert.match(schemas, new RegExp(`function ${parser}\\(`));
+  }
+  for (const boundary of [
+    'auth_signup_error',
+    'auth_login_error',
+    'auth_refresh_error',
+    'auth_recover_error',
+    'auth_password_error',
+    'auth_logout_error',
+    'auth_mfa_error',
+  ]) {
+    assert.match(service, new RegExp(`'${boundary}'`));
+  }
+  assert.doesNotMatch(service, /function boundedRetryAfter/);
+  assert.doesNotMatch(service, /providerMessage/);
+  assert.doesNotMatch(service, /function validatePassword/);
+  assert.match(schemas, /dealivra\.auth\.boundary-rejection\.v1/);
+  assert.match(schemas, /request_shape_invalid/);
+  assert.match(schemas, /retry_after_conflict/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+});
+
+test('protected payment and Stripe success responses are runtime validated', async () => {
+  const schemas = await import('../src/services/paymentRuntimeSchemas.ts');
+  const { currencyCodes } = await import('../src/currency.ts');
+  const now = Date.now();
+  const paidAt = new Date(now - 5 * 60_000).toISOString();
+  const checkoutExpiresAt = new Date(now + 60 * 60_000).toISOString();
+
+  const payment = schemas.parseProtectedPaymentStatusRows([{
+    status: 'funds_secured',
+    item_amount_cents: 12500,
+    platform_fee_cents: 500,
+    seller_amount_cents: 12000,
+    currency: 'USD',
+    checkout_expires_at: checkoutExpiresAt,
+    paid_at: paidAt,
+    released_at: null,
+    refunded_at: null,
+    disputed_at: null,
+    failure_message: null,
+    seller_connected: true,
+    seller_payouts_ready: true,
+    viewer_role: 'buyer',
+  }]);
+  assert.equal(payment.status, 'funds_secured');
+  assert.equal(
+    payment.platform_fee_cents + payment.seller_amount_cents,
+    payment.item_amount_cents,
+  );
+
+  assert.deepEqual(
+    schemas.parseStripeConnectStatusResponse({
+      connected: true,
+      detailsSubmitted: true,
+      payoutsEnabled: true,
+      transfersActive: true,
+      ready: true,
+    }),
+    {
+      connected: true,
+      detailsSubmitted: true,
+      payoutsEnabled: true,
+      transfersActive: true,
+      ready: true,
+    },
+  );
+
+  const onboarding = schemas.parseStripeConnectOnboardingResponse({
+    url: 'https://connect.stripe.com/setup/s/test_account_link',
+    expiresAt: Math.floor((now + 10 * 60_000) / 1000),
+  });
+  assert.equal(onboarding.url, 'https://connect.stripe.com/setup/s/test_account_link');
+
+  const checkout = schemas.parseStripeCheckoutResponse({
+    url: 'https://checkout.stripe.com/c/pay/cs_test_safe_session#fidkdWxOYHwnPyd1blpx',
+    expiresAt: checkoutExpiresAt,
+    reused: true,
+  });
+  assert.equal(checkout.reused, true);
+
+  assert.deepEqual(
+    schemas.parseStripeDisputeResolutionResponse({
+      resolved: true,
+      action: 'refund',
+      refundId: 're_12345678',
+      idempotent: true,
+    }),
+    {
+      resolved: true,
+      action: 'refund',
+      refundId: 're_12345678',
+      idempotent: true,
+    },
+  );
+  assert.deepEqual(
+    schemas.parseStripeDisputeResolutionResponse({
+      resolved: true,
+      action: 'transfer',
+      transferId: 'tr_12345678',
+    }),
+    {
+      resolved: true,
+      action: 'transfer',
+      transferId: 'tr_12345678',
+      idempotent: false,
+    },
+  );
+
+  assert.deepEqual(
+    [...new Set(schemas.paymentCurrencyCodes)].sort(),
+    [...new Set(currencyCodes)].sort(),
+  );
+});
+
+test('invalid payment responses fail closed without logging financial or provider data', async () => {
+  const schemas = await import('../src/services/paymentRuntimeSchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const now = Date.now();
+  const privateCheckoutUrl =
+    'https://attacker.invalid/c/pay/private-checkout-session-token';
+
+  try {
+    assert.throws(
+      () => schemas.parseProtectedPaymentStatusRows([{
+        status: 'funds_secured',
+        item_amount_cents: 12500,
+        platform_fee_cents: 500,
+        seller_amount_cents: 11999,
+        currency: 'USD',
+        checkout_expires_at: null,
+        paid_at: new Date(now - 60_000).toISOString(),
+        released_at: null,
+        refunded_at: null,
+        disputed_at: null,
+        failure_message: 'private-provider-message',
+        seller_connected: true,
+        seller_payouts_ready: true,
+        viewer_role: 'buyer',
+      }]),
+      error => (
+        error instanceof schemas.PaymentResponseValidationError
+        && error.boundary === 'protected_payment_status'
+        && error.issue === 'amounts_do_not_balance'
+      ),
+    );
+    assert.throws(
+      () => schemas.parseProtectedPaymentStatusRows([]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseProtectedPaymentStatusRows([{
+        status: 'released',
+        item_amount_cents: 12500,
+        platform_fee_cents: 500,
+        seller_amount_cents: 12000,
+        currency: 'USD',
+        checkout_expires_at: null,
+        paid_at: new Date(now - 60_000).toISOString(),
+        released_at: new Date(now - 120_000).toISOString(),
+        refunded_at: null,
+        disputed_at: null,
+        failure_message: null,
+        seller_connected: true,
+        seller_payouts_ready: true,
+        viewer_role: 'seller',
+      }]),
+      error => (
+        error instanceof schemas.PaymentResponseValidationError
+        && error.boundary === 'protected_payment_status'
+        && error.issue === 'event_timestamp_order_invalid'
+      ),
+    );
+    assert.throws(
+      () => schemas.parseStripeConnectStatusResponse({
+        connected: false,
+        detailsSubmitted: true,
+        payoutsEnabled: false,
+        transfersActive: false,
+        ready: false,
+      }),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseStripeConnectOnboardingResponse({
+        url: privateCheckoutUrl,
+        expiresAt: Math.floor((now + 10 * 60_000) / 1000),
+      }),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseStripeCheckoutResponse({
+        url: privateCheckoutUrl,
+        expiresAt: new Date(now + 60 * 60_000).toISOString(),
+      }),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseStripeDisputeResolutionResponse({
+        resolved: true,
+        action: 'refund',
+        refundId: 're_private-provider-id',
+        transferId: 'tr_private-provider-id',
+      }),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.payment\.response-rejection\.v1/);
+  assert.match(serializedLogs, /protected_payment_status/);
+  assert.doesNotMatch(serializedLogs, /private-provider-message/);
+  assert.doesNotMatch(serializedLogs, /private-checkout-session-token/);
+  assert.doesNotMatch(serializedLogs, /private-provider-id/);
+  assert.doesNotMatch(serializedLogs, /12500/);
+});
+
+test('the third ARC-004 boundary validates every browser payment success response', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/paymentRuntimeSchemas.ts');
+
+  assert.match(service, /parseProtectedPaymentStatusRows\(data\)/);
+  assert.match(service, /parseStripeConnectStatusResponse\(await invokeEdgeFunction/);
+  assert.match(service, /parseStripeConnectOnboardingResponse\(await invokeEdgeFunction/);
+  assert.match(service, /parseStripeCheckoutResponse\(await invokeEdgeFunction/);
+  assert.match(service, /parseStripeDisputeResolutionResponse\(await invokeEdgeFunction/);
+  assert.doesNotMatch(service, /invokeEdgeFunction<T>/);
+  assert.doesNotMatch(service, /as ProtectedPaymentStatus\[\]/);
+  assert.doesNotMatch(service, /invokeEdgeFunction<StripeConnectStatus>/);
+
+  assert.match(schemas, /dealivra\.payment\.response-rejection\.v1/);
+  assert.match(schemas, /amounts_do_not_balance/);
+  assert.match(schemas, /event_timestamp_order_invalid/);
+  assert.match(schemas, /https:\/\/checkout\.stripe\.com/);
+  assert.match(schemas, /https:\/\/connect\.stripe\.com/);
+  assert.match(schemas, /PaymentResponseValidationError/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+});
+
+test('browser protected-payment requests and reviewed errors are runtime validated', async () => {
+  const schemas = await import('../src/services/paymentBoundarySchemas.ts');
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const correlationId = '22222222-2222-4222-8222-222222222222';
+
+  assert.deepEqual(
+    schemas.parseStripeConnectRequest({ action: 'status' }),
+    { action: 'status' },
+  );
+  assert.deepEqual(
+    schemas.parseStripeConnectRequest({
+      action: 'onboard',
+      dealPublicId: '  ab12cd34  ',
+    }),
+    {
+      action: 'onboard',
+      dealPublicId: 'AB12CD34',
+    },
+  );
+  assert.deepEqual(
+    schemas.parseStripeCheckoutRequest({ dealId }),
+    { dealId },
+  );
+  assert.deepEqual(
+    schemas.parseProtectedPaymentStatusRequest({ p_deal_id: dealId }),
+    { p_deal_id: dealId },
+  );
+  assert.deepEqual(
+    schemas.parsePaymentErrorEnvelope(
+      {
+        error: 'The payment provider is temporarily unavailable.',
+        code: 'provider_unavailable',
+        correlationId,
+        retryable: true,
+      },
+      503,
+      correlationId,
+      'stripe_checkout_error',
+    ),
+    {
+      error: 'The payment provider is temporarily unavailable.',
+      code: 'provider_unavailable',
+      correlationId,
+      retryable: true,
+    },
+  );
+  assert.deepEqual(
+    schemas.parsePaymentPostgrestErrorEnvelope(
+      {
+        code: 'P0001',
+        details: null,
+        hint: null,
+        message: 'Only deal participants can view protected payment status',
+      },
+      400,
+    ),
+    {
+      message: 'Only deal participants can view protected payment status',
+      code: 'P0001',
+    },
+  );
+});
+
+test('invalid payment request and error boundaries fail closed without logging financial data', async () => {
+  const schemas = await import('../src/services/paymentBoundarySchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const correlationId = '22222222-2222-4222-8222-222222222222';
+  const otherCorrelationId = '33333333-3333-4333-8333-333333333333';
+  const privateProviderMessage = 'private-provider-payment-diagnostic';
+
+  try {
+    assert.throws(
+      () => schemas.parseStripeConnectRequest({
+        action: 'status',
+        dealPublicId: 'PRIVATE99',
+      }),
+      error => (
+        error instanceof schemas.PaymentBoundaryValidationError
+        && error.boundary === 'stripe_connect_request'
+        && error.issue === 'request_shape_invalid'
+      ),
+    );
+    assert.throws(
+      () => schemas.parseStripeCheckoutRequest({
+        dealId,
+        priceCents: 125_00,
+      }),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => schemas.parsePaymentErrorEnvelope(
+        {
+          error: privateProviderMessage,
+          code: 'provider_unavailable',
+          correlationId,
+          retryable: true,
+        },
+        503,
+        otherCorrelationId,
+        'stripe_checkout_error',
+      ),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => schemas.parsePaymentErrorEnvelope(
+        {
+          error: privateProviderMessage,
+          code: 'provider_unavailable',
+          correlationId,
+          retryable: true,
+          providerRequestId: 'req_private-provider-request',
+        },
+        503,
+        correlationId,
+        'stripe_connect_error',
+      ),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => schemas.parsePaymentPostgrestErrorEnvelope(
+        {
+          message: privateProviderMessage,
+          code: 'P0001',
+          payment_intent: 'pi_private-provider-object',
+        },
+        400,
+      ),
+      /processed safely/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.payment\.boundary-rejection\.v1/);
+  assert.match(serializedLogs, /stripe_connect_request/);
+  assert.match(serializedLogs, /stripe_checkout_request/);
+  assert.match(serializedLogs, /stripe_checkout_error/);
+  assert.match(serializedLogs, /stripe_connect_error/);
+  assert.match(serializedLogs, /protected_payment_status_error/);
+  assert.doesNotMatch(serializedLogs, /PRIVATE99/);
+  assert.doesNotMatch(serializedLogs, /12500/);
+  assert.doesNotMatch(serializedLogs, /private-provider-payment-diagnostic/);
+  assert.doesNotMatch(serializedLogs, /req_private-provider-request/);
+  assert.doesNotMatch(serializedLogs, /pi_private-provider-object/);
+  assert.doesNotMatch(serializedLogs, new RegExp(correlationId));
+  assert.doesNotMatch(serializedLogs, new RegExp(otherCorrelationId));
+});
+
+test('the tenth ARC-004 boundary validates protected-payment requests and errors', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/paymentBoundarySchemas.ts');
+
+  for (const parser of [
+    'parseStripeConnectRequest',
+    'parseStripeCheckoutRequest',
+    'parseProtectedPaymentStatusRequest',
+    'parsePaymentErrorEnvelope',
+    'parsePaymentPostgrestErrorEnvelope',
+  ]) {
+    assert.match(service, new RegExp(`${parser}\\(`));
+    assert.match(schemas, new RegExp(`function ${parser}\\(`));
+  }
+  for (const boundary of [
+    'stripe_connect_error',
+    'stripe_checkout_error',
+    'stripe_dispute_resolution_error',
+  ]) {
+    assert.match(service, new RegExp(`'${boundary}'`));
+  }
+  assert.match(schemas, /'protected_payment_status_error'/);
+  assert.doesNotMatch(service, /typeof data\?\.error==='string'/);
+  assert.doesNotMatch(service, /typeof data\?\.correlationId==='string'/);
+  assert.doesNotMatch(service, /data\?\.retryable===true/);
+  assert.match(schemas, /dealivra\.payment\.boundary-rejection\.v1/);
+  assert.match(schemas, /correlation_id_conflict/);
+  assert.match(schemas, /request_shape_invalid/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+});
+
+test('evidence, lifecycle, and administrator dispute success responses are runtime validated', async () => {
+  const schemas = await import('../src/services/evidenceRuntimeSchemas.ts');
+  const { currencyCodes } = await import('../src/currency.ts');
+  const now = Date.now();
+  const userId = '11111111-1111-4111-8111-111111111111';
+  const dealId = '22222222-2222-4222-8222-222222222222';
+  const intakeId = '33333333-3333-4333-8333-333333333333';
+  const evidenceId = '44444444-4444-4444-8444-444444444444';
+  const disputeId = '55555555-5555-4555-8555-555555555555';
+  const jobId = '66666666-6666-4666-8666-666666666666';
+  const holdKey = '77777777-7777-4777-8777-777777777777';
+  const alertId = '88888888-8888-4888-8888-888888888888';
+  const createdAt = new Date(now - 5 * 60_000).toISOString();
+  const scannedAt = new Date(now - 4 * 60_000).toISOString();
+  const integrityCheckedAt = new Date(now - 3 * 60_000).toISOString();
+  const retentionUntil = new Date(now + 365 * 24 * 60 * 60_000).toISOString();
+  const digest = 'a'.repeat(64);
+  const evidence = {
+    id: evidenceId,
+    deal_id: dealId,
+    dispute_id: disputeId,
+    uploader_role: 'seller',
+    evidence_type: 'seller_item_photo',
+    file_name: 'package-photo.webp',
+    mime_type: 'image/webp',
+    detected_mime_type: 'image/webp',
+    file_size_bytes: 2_048,
+    sha256: digest,
+    scan_status: 'clean',
+    scanned_at: scannedAt,
+    integrity_status: 'verified',
+    integrity_checked_at: integrityCheckedAt,
+    retention_class: 'dispute_evidence',
+    retention_until: retentionUntil,
+    lifecycle_status: 'retained',
+    deleted_at: null,
+    created_at: createdAt,
+  };
+
+  const intake = schemas.parseEvidenceUploadIntakeResponse({
+    intakeId,
+    path: `${userId}/${dealId}/${intakeId}.webp`,
+    bucket: 'deal-evidence-quarantine',
+    expiresAt: new Date(now + 15 * 60_000).toISOString(),
+  }, userId, dealId);
+  assert.equal(intake.bucket, 'deal-evidence-quarantine');
+
+  const finalized = schemas.parseFinalizeEvidenceResponse(
+    { evidence },
+    dealId,
+    'seller',
+  );
+  assert.equal(finalized.evidence.sha256, digest);
+  const deletedEvidence = {
+    ...evidence,
+    id: '99999999-9999-4999-8999-999999999999',
+    dispute_id: null,
+    file_name: null,
+    mime_type: null,
+    detected_mime_type: null,
+    file_size_bytes: null,
+    sha256: null,
+    scan_status: 'deleted',
+    scanned_at: null,
+    integrity_status: 'deleted',
+    integrity_checked_at: new Date(now - 60_000).toISOString(),
+    lifecycle_status: 'deleted',
+    deleted_at: new Date(now - 60_000).toISOString(),
+  };
+  const evidenceRows = schemas.parseDealEvidenceRows(
+    [evidence, deletedEvidence],
+    dealId,
+  );
+  assert.deepEqual(evidenceRows[0], finalized.evidence);
+  assert.equal(evidenceRows[1].lifecycle_status, 'deleted');
+
+  const viewer = schemas.parseEvidenceSignedViewerResponse({
+    url:
+      'https://project.supabase.co/storage/v1/object/sign/deal-evidence/private/package-photo.webp?token=safe-test-token',
+    expiresAt: new Date(now + 60_000).toISOString(),
+    mimeType: 'image/webp',
+    fileName: 'package-photo.webp',
+    fileSizeBytes: 2_048,
+    sha256: digest,
+    scanStatus: 'clean',
+    scannedAt,
+    integrityStatus: 'verified',
+    integrityCheckedAt,
+  }, 'https://project.supabase.co');
+  assert.equal(viewer.integrityStatus, 'verified');
+
+  const snapshot = schemas.parseEvidenceLifecycleSnapshotResponse({
+    generatedAt: new Date(now).toISOString(),
+    counts: {
+      openAlerts: 1,
+      integrityQueued: 0,
+      quarantineQueued: 0,
+      deletionReviews: 1,
+      activeLegalHolds: 1,
+    },
+    jobs: [{
+      jobId,
+      jobType: 'evidence_delete',
+      status: 'pending_review',
+      evidenceId,
+      publicId: 'AB12CD34',
+      title: 'Verified phone',
+      retentionClass: 'dispute_evidence',
+      retentionUntil,
+      lifecycleStatus: 'deletion_review',
+      reasonCode: 'retention_period_elapsed',
+      attempts: 0,
+      lastErrorCode: null,
+      createdAt,
+      updatedAt: integrityCheckedAt,
+      activeHold: true,
+      holdKey,
+    }],
+    alerts: [{
+      alertId,
+      alertType: 'deletion_review_required',
+      severity: 'warning',
+      ownerRole: 'compliance',
+      status: 'open',
+      summary: 'Evidence reached its retention date and requires review.',
+      evidenceId,
+      jobId,
+      createdAt,
+    }],
+  });
+  assert.equal(snapshot.jobs[0].holdKey, holdKey);
+
+  assert.equal(
+    schemas.parseEvidenceInventoryResponse({
+      inventory: {
+        expiredIntakes: 1,
+        queuedQuarantineCleanup: 1,
+        queuedIntegrityChecks: 2,
+        classifiedEvidence: 3,
+        queuedDeletionReviews: 1,
+        refreshedAt: new Date(now).toISOString(),
+      },
+    }).inventory.queuedIntegrityChecks,
+    2,
+  );
+  assert.equal(schemas.parseEvidenceJobIdResponse({ jobId }).jobId, jobId);
+  assert.equal(
+    schemas.parseEvidenceHoldKeyResponse({ holdKey }, holdKey).holdKey,
+    holdKey,
+  );
+  assert.deepEqual(
+    schemas.parseEvidenceAlertAcknowledgementResponse({ acknowledged: true }),
+    { acknowledged: true },
+  );
+
+  const disputes = schemas.parseAdminDisputeRows([{
+    dispute_id: disputeId,
+    deal_id: dealId,
+    public_id: 'AB12CD34',
+    title: 'Verified phone',
+    reason: 'The delivered item does not match the agreement.',
+    dispute_status: 'open',
+    response_deadline: new Date(now + 48 * 60 * 60_000).toISOString(),
+    opened_at: createdAt,
+    opened_by_name: 'Buyer',
+    seller_name: 'Seller',
+    buyer_name: 'Buyer',
+    payment_status: 'funds_secured',
+    item_amount_cents: 125_00,
+    currency: 'USD',
+    resolution_note: null,
+  }]);
+  assert.equal(disputes[0].payment_status, 'funds_secured');
+  assert.deepEqual(
+    [...new Set(schemas.evidenceCurrencyCodes)].sort(),
+    [...new Set(currencyCodes)].sort(),
+  );
+});
+
+test('invalid evidence and dispute responses fail closed without logging case data', async () => {
+  const schemas = await import('../src/services/evidenceRuntimeSchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const now = Date.now();
+  const userId = '11111111-1111-4111-8111-111111111111';
+  const dealId = '22222222-2222-4222-8222-222222222222';
+  const intakeId = '33333333-3333-4333-8333-333333333333';
+  const evidenceId = '44444444-4444-4444-8444-444444444444';
+  const disputeId = '55555555-5555-4555-8555-555555555555';
+  const privateFileName = 'private-customer-evidence-name.webp';
+  const privateCaseReason = 'private-customer-dispute-reason';
+  const privateSignedToken = 'private-signed-storage-token';
+
+  try {
+    assert.throws(
+      () => schemas.parseEvidenceUploadIntakeResponse({
+        intakeId,
+        path: `${userId}/${dealId}/../${privateFileName}`,
+        bucket: 'deal-evidence-quarantine',
+        expiresAt: new Date(now + 15 * 60_000).toISOString(),
+      }, userId, dealId),
+      error => (
+        error instanceof schemas.EvidenceResponseValidationError
+        && error.boundary === 'evidence_upload_intake'
+        && error.issue === 'path_invalid'
+      ),
+    );
+    assert.throws(
+      () => schemas.parseEvidenceSignedViewerResponse({
+        url:
+          `https://attacker.invalid/storage/v1/object/sign/deal-evidence/file?token=${privateSignedToken}`,
+        expiresAt: new Date(now + 60_000).toISOString(),
+        mimeType: 'image/webp',
+        fileName: privateFileName,
+        fileSizeBytes: 2_048,
+        sha256: 'a'.repeat(64),
+        scanStatus: 'clean',
+        scannedAt: new Date(now - 120_000).toISOString(),
+        integrityStatus: 'verified',
+        integrityCheckedAt: new Date(now - 60_000).toISOString(),
+      }, 'https://project.supabase.co'),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseEvidenceLifecycleSnapshotResponse({
+        generatedAt: new Date(now).toISOString(),
+        counts: {
+          openAlerts: 0,
+          integrityQueued: 0,
+          quarantineQueued: 0,
+          deletionReviews: 1,
+          activeLegalHolds: 1,
+        },
+        jobs: [{
+          jobId: '66666666-6666-4666-8666-666666666666',
+          jobType: 'evidence_delete',
+          status: 'pending_review',
+          evidenceId,
+          publicId: 'AB12CD34',
+          title: privateFileName,
+          retentionClass: 'dispute_evidence',
+          retentionUntil: new Date(now + 60_000).toISOString(),
+          lifecycleStatus: 'deletion_review',
+          reasonCode: 'retention_period_elapsed',
+          attempts: 0,
+          lastErrorCode: null,
+          createdAt: new Date(now - 120_000).toISOString(),
+          updatedAt: new Date(now - 60_000).toISOString(),
+          activeHold: true,
+          holdKey: null,
+        }],
+        alerts: [],
+      }),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseAdminDisputeRows([{
+        dispute_id: disputeId,
+        deal_id: dealId,
+        public_id: 'AB12CD34',
+        title: privateFileName,
+        reason: privateCaseReason,
+        dispute_status: 'open',
+        response_deadline: new Date(now + 60_000).toISOString(),
+        opened_at: new Date(now - 60_000).toISOString(),
+        opened_by_name: 'Private Buyer',
+        seller_name: 'Private Seller',
+        buyer_name: 'Private Buyer',
+        payment_status: 'funds_secured',
+        item_amount_cents: -125_00,
+        currency: 'USD',
+        resolution_note: null,
+      }]),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.evidence\.response-rejection\.v1/);
+  assert.match(serializedLogs, /evidence_upload_intake/);
+  assert.match(serializedLogs, /evidence_signed_viewer/);
+  assert.match(serializedLogs, /evidence_lifecycle_snapshot/);
+  assert.match(serializedLogs, /admin_dispute_list/);
+  assert.doesNotMatch(serializedLogs, /private-customer-evidence-name/);
+  assert.doesNotMatch(serializedLogs, /private-customer-dispute-reason/);
+  assert.doesNotMatch(serializedLogs, /private-signed-storage-token/);
+  assert.doesNotMatch(serializedLogs, /12500/);
+});
+
+test('the fourth ARC-004 boundary validates every evidence and dispute success response', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/evidenceRuntimeSchemas.ts');
+
+  assert.match(service, /parseEvidenceUploadIntakeResponse\(await invokeEvidenceFiles/);
+  assert.match(service, /parseFinalizeEvidenceResponse\(await invokeEvidenceFiles/);
+  assert.match(service, /parseDealEvidenceRows\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseEvidenceSignedViewerResponse\(await invokeEvidenceFiles/);
+  assert.match(service, /parseEvidenceLifecycleSnapshotResponse\(await invokeEvidenceMaintenance/);
+  assert.match(service, /parseEvidenceInventoryResponse\(await invokeEvidenceMaintenance/);
+  assert.match(service, /parseEvidenceJobIdResponse\(await invokeEvidenceMaintenance/);
+  assert.match(service, /parseEvidenceHoldKeyResponse\(await invokeEvidenceMaintenance/);
+  assert.match(service, /parseEvidenceAlertAcknowledgementResponse\(await invokeEvidenceMaintenance/);
+  assert.match(service, /parseAdminDisputeRows\(await readBoundedJson\(response\)/);
+  assert.doesNotMatch(service, /invokeEvidenceFiles<T>/);
+  assert.doesNotMatch(service, /invokeEvidenceMaintenance<T>/);
+  assert.doesNotMatch(service, /as DealEvidence\[\]/);
+  assert.doesNotMatch(service, /as AdminDispute\[\]/);
+  assert.doesNotMatch(service, /as DealEvidenceViewer/);
+
+  assert.match(schemas, /dealivra\.evidence\.response-rejection\.v1/);
+  assert.match(schemas, /deleted_evidence_contract_invalid/);
+  assert.match(schemas, /snapshot_collection_contract_invalid/);
+  assert.match(schemas, /resolution_status_contract_invalid/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+});
+
+test('browser evidence and dispute mutation requests and reviewed errors are runtime validated', async () => {
+  const schemas = await import('../src/services/evidenceBoundarySchemas.ts');
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const intakeId = '22222222-2222-4222-8222-222222222222';
+  const evidenceId = '33333333-3333-4333-8333-333333333333';
+  const holdKey = '44444444-4444-4444-8444-444444444444';
+  const alertId = '55555555-5555-4555-8555-555555555555';
+  const disputeId = '66666666-6666-4666-8666-666666666666';
+
+  assert.deepEqual(
+    schemas.parseEvidenceFilesRequest({
+      action: 'request-upload',
+      dealId,
+      uploaderRole: 'seller',
+      evidenceType: 'seller_item_photo',
+      fileName: '  packed-item.webp  ',
+      claimedMimeType: 'image/webp',
+      fileSize: 2_048,
+    }),
+    {
+      action: 'request-upload',
+      dealId,
+      uploaderRole: 'seller',
+      evidenceType: 'seller_item_photo',
+      fileName: 'packed-item.webp',
+      claimedMimeType: 'image/webp',
+      fileSize: 2_048,
+    },
+  );
+  assert.deepEqual(
+    schemas.parseEvidenceFilesRequest({
+      action: 'finalize-upload',
+      intakeId,
+    }),
+    { action: 'finalize-upload', intakeId },
+  );
+  assert.deepEqual(
+    schemas.parseEvidenceFilesRequest({
+      action: 'signed-url',
+      evidenceId,
+    }),
+    { action: 'signed-url', evidenceId },
+  );
+  assert.deepEqual(
+    schemas.parseEvidenceMaintenanceRequest({
+      action: 'release-legal-hold',
+      evidenceId,
+      holdKey,
+      reason: '  The approved legal hold can now be released.  ',
+    }),
+    {
+      action: 'release-legal-hold',
+      evidenceId,
+      holdKey,
+      reason: 'The approved legal hold can now be released.',
+    },
+  );
+  assert.deepEqual(
+    schemas.parseEvidenceMaintenanceRequest({
+      action: 'acknowledge-alert',
+      alertId,
+    }),
+    { action: 'acknowledge-alert', alertId },
+  );
+  assert.deepEqual(
+    schemas.parseOpenDisputeRequest({
+      p_deal_id: dealId,
+      p_reason: '  The delivered item does not match the shared agreement.  ',
+    }),
+    {
+      p_deal_id: dealId,
+      p_reason: 'The delivered item does not match the shared agreement.',
+    },
+  );
+  assert.deepEqual(
+    schemas.parseResolveDisputeRequest({
+      p_dispute_id: disputeId,
+      p_decision: 'cancelled',
+      p_resolution_note: '  Both parties withdrew the case.  ',
+    }),
+    {
+      p_dispute_id: disputeId,
+      p_decision: 'cancelled',
+      p_resolution_note: 'Both parties withdrew the case.',
+    },
+  );
+  assert.deepEqual(
+    schemas.parseFinancialDisputeRequest({
+      disputeId,
+      decision: 'resolved_buyer',
+      note: '  Evidence supports a full refund.  ',
+    }),
+    {
+      disputeId,
+      decision: 'resolved_buyer',
+      note: 'Evidence supports a full refund.',
+    },
+  );
+
+  assert.deepEqual(
+    schemas.parseEvidenceEdgeErrorEnvelope(
+      {
+        error: 'Verify your authenticator before continuing.',
+        code: 'mfa_required',
+      },
+      403,
+      'evidence_files_error',
+    ),
+    {
+      message: 'Verify your authenticator before continuing.',
+      code: 'mfa_required',
+    },
+  );
+  assert.deepEqual(
+    schemas.parsePostgrestErrorEnvelope(
+      {
+        code: 'P0001',
+        details: null,
+        hint: null,
+        message: 'This deal already has an open dispute',
+      },
+      400,
+      'dispute_open_error',
+    ),
+    {
+      message: 'This deal already has an open dispute',
+      code: 'P0001',
+    },
+  );
+  assert.deepEqual(
+    schemas.parseStorageErrorEnvelope(
+      {
+        statusCode: '409',
+        error: 'Duplicate',
+        message: 'The object already exists.',
+      },
+      409,
+    ),
+    {
+      message: 'The object already exists.',
+      code: null,
+    },
+  );
+});
+
+test('invalid evidence and dispute mutation boundaries fail closed without logging case data', async () => {
+  const schemas = await import('../src/services/evidenceBoundarySchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const evidenceId = '33333333-3333-4333-8333-333333333333';
+  const privateReason = 'private-customer-dispute-reason';
+  const privateFileName = 'private-customer-file.webp';
+  const privateProviderDiagnostic = 'private-provider-diagnostic';
+
+  try {
+    assert.throws(
+      () => schemas.parseEvidenceFilesRequest({
+        action: 'request-upload',
+        dealId,
+        uploaderRole: 'seller',
+        evidenceType: 'buyer_damage_photo',
+        fileName: privateFileName,
+        claimedMimeType: 'image/webp',
+        fileSize: 2_048,
+      }),
+      error => (
+        error instanceof schemas.EvidenceBoundaryValidationError
+        && error.boundary === 'evidence_files_request'
+        && error.issue === 'evidence_type_invalid'
+      ),
+    );
+    assert.throws(
+      () => schemas.parseEvidenceMaintenanceRequest({
+        action: 'approve-deletion',
+        evidenceId,
+        reason: 'short',
+      }),
+      /10 to 1,000/i,
+    );
+    assert.throws(
+      () => schemas.parseOpenDisputeRequest({
+        p_deal_id: dealId,
+        p_reason: privateReason.repeat(100),
+      }),
+      /10 to 2,000/i,
+    );
+    assert.throws(
+      () => schemas.parseEvidenceEdgeErrorEnvelope(
+        {
+          error: privateProviderDiagnostic,
+          code: 'evidence_service_error',
+          provider_token: 'private-provider-token',
+        },
+        503,
+        'evidence_files_error',
+      ),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => schemas.parsePostgrestErrorEnvelope(
+        {
+          message: privateProviderDiagnostic,
+          code: 'P0001',
+          private_case_reason: privateReason,
+        },
+        400,
+        'dispute_open_error',
+      ),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => schemas.parseStorageErrorEnvelope(
+        {
+          statusCode: '500',
+          error: 'StorageError',
+          message: privateProviderDiagnostic,
+        },
+        409,
+      ),
+      /processed safely/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.evidence\.boundary-rejection\.v1/);
+  assert.match(serializedLogs, /evidence_files_request/);
+  assert.match(serializedLogs, /evidence_maintenance_request/);
+  assert.match(serializedLogs, /dispute_open_request/);
+  assert.match(serializedLogs, /evidence_files_error/);
+  assert.match(serializedLogs, /evidence_storage_error/);
+  assert.doesNotMatch(serializedLogs, /private-customer-file/);
+  assert.doesNotMatch(serializedLogs, /private-customer-dispute-reason/);
+  assert.doesNotMatch(serializedLogs, /private-provider-diagnostic/);
+  assert.doesNotMatch(serializedLogs, /private-provider-token/);
+});
+
+test('the ninth ARC-004 boundary validates evidence and dispute mutation requests and errors', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/evidenceBoundarySchemas.ts');
+
+  for (const parser of [
+    'parseEvidenceFilesRequest',
+    'parseEvidenceMaintenanceRequest',
+    'parseOpenDisputeRequest',
+    'parseResolveDisputeRequest',
+    'parseFinancialDisputeRequest',
+    'parseEvidenceEdgeErrorEnvelope',
+    'parsePostgrestErrorEnvelope',
+    'parseStorageErrorEnvelope',
+  ]) {
+    assert.match(service, new RegExp(`${parser}\\(`));
+    assert.match(schemas, new RegExp(`function ${parser}\\(`));
+  }
+  for (const boundary of [
+    'evidence_files_error',
+    'evidence_maintenance_error',
+    'evidence_list_error',
+    'dispute_open_error',
+    'dispute_queue_error',
+    'dispute_resolve_error',
+  ]) {
+    assert.match(service, new RegExp(`'${boundary}'`));
+  }
+  assert.doesNotMatch(service, /function safeEvidenceServiceError/);
+  assert.doesNotMatch(
+    service,
+    /data\?\.message\|\|data\?\.error\|\|'Could not upload evidence file'/,
+  );
+  assert.match(schemas, /dealivra\.evidence\.boundary-rejection\.v1/);
+  assert.match(schemas, /request_shape_invalid/);
+  assert.match(schemas, /status_code_invalid/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+});
+
+test('communication and safety-report response schemas accept governed service contracts', async () => {
+  const schemas = await import('../src/services/interactionRuntimeSchemas.ts');
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const senderId = '22222222-2222-4222-8222-222222222222';
+  const inquiryId = '33333333-3333-4333-8333-333333333333';
+  const offerId = '44444444-4444-4444-8444-444444444444';
+  const reportId = '55555555-5555-4555-8555-555555555555';
+  const closedReportId = '66666666-6666-4666-8666-666666666666';
+  const older = '2025-01-01T10:00:00.000Z';
+  const newer = '2025-01-01T11:00:00.000Z';
+
+  const notifications = schemas.parseDealNotificationRows([
+    {
+      id: `inquiry-reply-${inquiryId}`,
+      deal_id: dealId,
+      public_id: 'AB12CD34',
+      title: 'Seller replied to your question',
+      event_type: 'inquiry_replied',
+      created_at: newer,
+      is_mine: false,
+      is_read: false,
+    },
+    {
+      id: '42',
+      deal_id: dealId,
+      public_id: 'AB12CD34',
+      title: 'You accepted the shared terms',
+      event_type: 'terms_accepted',
+      created_at: older,
+      is_mine: true,
+      is_read: true,
+    },
+  ]);
+  assert.equal(notifications.length, 2);
+
+  const messages = schemas.parseDealMessageRows([
+    {
+      id: 1,
+      sender_id: senderId,
+      sender_name: 'Buyer',
+      body: 'Is the original receipt included?',
+      created_at: older,
+      is_mine: false,
+    },
+    {
+      id: 2,
+      sender_id: dealId,
+      sender_name: 'Seller',
+      body: 'Yes, the original receipt is included.',
+      created_at: newer,
+      is_mine: true,
+    },
+  ]);
+  assert.equal(messages[1].id, 2);
+
+  const offers = schemas.parseDealOfferRows([
+    {
+      id: offerId,
+      amount_cents: 125_00,
+      status: 'pending',
+      buyer_name: 'Buyer',
+      created_at: newer,
+      is_mine: true,
+    },
+  ]);
+  assert.equal(offers[0].amount_cents, 125_00);
+
+  const inquiries = schemas.parseDealInquiryRows([
+    {
+      id: inquiryId,
+      buyer_name: 'Buyer',
+      body: 'Does the item include its original receipt?',
+      seller_reply: 'Yes, it is included.',
+      created_at: older,
+      replied_at: newer,
+      is_mine: true,
+    },
+  ]);
+  assert.equal(inquiries[0].seller_reply, 'Yes, it is included.');
+
+  assert.equal(schemas.parseInquiryIdResponse(inquiryId), inquiryId);
+  assert.equal(schemas.parseCurrentUserDealSellerResponse(true), true);
+  assert.equal(schemas.parseSafetyReportIdResponse(reportId), reportId);
+
+  const reports = schemas.parseAdminReportRows([
+    {
+      report_id: reportId,
+      deal_id: dealId,
+      public_id: 'AB12CD34',
+      title: 'Verified phone',
+      reason: 'The public listing contains suspicious payment instructions.',
+      report_status: 'open',
+      moderation_status: 'visible',
+      created_at: newer,
+      reporter_name: 'Reporter',
+      seller_name: 'Seller',
+      resolution_note: null,
+    },
+    {
+      report_id: closedReportId,
+      deal_id: senderId,
+      public_id: 'ZX98YU76',
+      title: 'Reviewed laptop',
+      reason: 'The listing required a manual safety review.',
+      report_status: 'reviewed',
+      moderation_status: 'hidden',
+      created_at: older,
+      reporter_name: 'Second Reporter',
+      seller_name: 'Second Seller',
+      resolution_note: 'Hidden while the seller supplies ownership evidence.',
+    },
+  ]);
+  assert.equal(reports[1].moderation_status, 'hidden');
+});
+
+test('invalid communication responses fail closed without logging private conversation or report data', async () => {
+  const schemas = await import('../src/services/interactionRuntimeSchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const senderId = '22222222-2222-4222-8222-222222222222';
+  const inquiryId = '33333333-3333-4333-8333-333333333333';
+  const reportId = '55555555-5555-4555-8555-555555555555';
+  const privateMessage = 'private-message-with-bank-details';
+  const privateQuestion = 'private-question-about-delivery-address';
+  const privateReport = 'private-report-with-customer-contact-details';
+
+  try {
+    assert.throws(
+      () => schemas.parseDealNotificationRows([{
+        id: '42',
+        deal_id: dealId,
+        public_id: 'AB12CD34',
+        title: 'Private notification title',
+        event_type: 'terms_accepted',
+        created_at: '2025-01-01T10:00:00.000Z',
+        is_mine: true,
+        is_read: false,
+      }]),
+      error => (
+        error instanceof schemas.InteractionResponseValidationError
+        && error.boundary === 'notification_list'
+        && error.issue === 'notification_read_state_invalid'
+      ),
+    );
+    assert.throws(
+      () => schemas.parseDealMessageRows([{
+        id: 1,
+        sender_id: senderId,
+        sender_name: 'Private Buyer',
+        body: ` ${privateMessage}`,
+        created_at: '2025-01-01T10:00:00.000Z',
+        is_mine: false,
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseDealOfferRows([{
+        id: '44444444-4444-4444-8444-444444444444',
+        amount_cents: -125_00,
+        status: 'pending',
+        buyer_name: 'Private Buyer',
+        created_at: '2025-01-01T10:00:00.000Z',
+        is_mine: true,
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseDealInquiryRows([{
+        id: inquiryId,
+        buyer_name: 'Private Buyer',
+        body: privateQuestion,
+        seller_reply: 'Private seller reply',
+        created_at: '2025-01-01T10:00:00.000Z',
+        replied_at: null,
+        is_mine: true,
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseCurrentUserDealSellerResponse('true'),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseAdminReportRows([{
+        report_id: reportId,
+        deal_id: dealId,
+        public_id: 'AB12CD34',
+        title: 'Private listing title',
+        reason: privateReport,
+        report_status: 'reviewed',
+        moderation_status: 'hidden',
+        created_at: '2025-01-01T10:00:00.000Z',
+        reporter_name: 'Private Reporter',
+        seller_name: 'Private Seller',
+        resolution_note: null,
+      }]),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(
+    serializedLogs,
+    /dealivra\.interaction\.response-rejection\.v1/,
+  );
+  assert.match(serializedLogs, /notification_list/);
+  assert.match(serializedLogs, /message_list/);
+  assert.match(serializedLogs, /offer_list/);
+  assert.match(serializedLogs, /inquiry_list/);
+  assert.match(serializedLogs, /current_user_deal_seller/);
+  assert.match(serializedLogs, /admin_report_list/);
+  assert.doesNotMatch(serializedLogs, /private-message-with-bank-details/);
+  assert.doesNotMatch(serializedLogs, /private-question-about-delivery-address/);
+  assert.doesNotMatch(serializedLogs, /private-report-with-customer-contact-details/);
+  assert.doesNotMatch(serializedLogs, /12500/);
+});
+
+test('the fifth ARC-004 boundary validates communication and safety-report success responses', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/interactionRuntimeSchemas.ts');
+
+  assert.match(service, /parseDealNotificationRows\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseDealMessageRows\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseDealOfferRows\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseDealInquiryRows\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseInquiryIdResponse\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseCurrentUserDealSellerResponse\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseSafetyReportIdResponse\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseAdminReportRows\(await readBoundedJson\(response\)/);
+  assert.doesNotMatch(service, /as DealNotification\[\]/);
+  assert.doesNotMatch(service, /as DealMessage\[\]/);
+  assert.doesNotMatch(service, /as DealOffer\[\]/);
+  assert.doesNotMatch(service, /as DealInquiry\[\]/);
+  assert.doesNotMatch(service, /as AdminReport\[\]/);
+
+  assert.match(
+    schemas,
+    /dealivra\.interaction\.response-rejection\.v1/,
+  );
+  assert.match(schemas, /notification_read_state_invalid/);
+  assert.match(schemas, /inquiry_reply_state_invalid/);
+  assert.match(schemas, /report_resolution_state_invalid/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+});
+
+test('browser communication, offer, inquiry, and safety-report requests and errors are runtime validated', async () => {
+  const schemas = await import('../src/services/interactionBoundarySchemas.ts');
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const offerId = '22222222-2222-4222-8222-222222222222';
+  const inquiryId = '33333333-3333-4333-8333-333333333333';
+  const reportId = '44444444-4444-4444-8444-444444444444';
+
+  assert.deepEqual(schemas.parseNotificationListRequest({ p_limit: 12 }), {
+    p_limit: 12,
+  });
+  assert.deepEqual(schemas.parseNotificationDealReadRequest({
+    p_deal_id: dealId,
+  }), { p_deal_id: dealId });
+  assert.deepEqual(schemas.parseNotificationAllReadRequest({}), {});
+  assert.deepEqual(schemas.parseMessageListRequest({ p_deal_id: dealId }), {
+    p_deal_id: dealId,
+  });
+  assert.deepEqual(schemas.parseSendDealMessageRequest({
+    p_deal_id: dealId,
+    p_body: '  The receipt is inside the package.  ',
+  }), {
+    p_deal_id: dealId,
+    p_body: 'The receipt is inside the package.',
+  });
+  assert.deepEqual(schemas.parseCreateOfferRequest({
+    p_public_id: ' ab12cd34 ',
+    p_amount_cents: 125_00,
+    p_typed_name: '  Buyer Name  ',
+  }), {
+    p_public_id: 'AB12CD34',
+    p_amount_cents: 125_00,
+    p_typed_name: 'Buyer Name',
+  });
+  assert.deepEqual(schemas.parseOfferListRequest({ p_deal_id: dealId }), {
+    p_deal_id: dealId,
+  });
+  assert.deepEqual(schemas.parseRespondOfferRequest({
+    p_offer_id: offerId,
+    p_accept: true,
+  }), {
+    p_offer_id: offerId,
+    p_accept: true,
+  });
+  assert.deepEqual(schemas.parseCreateInquiryRequest({
+    p_public_id: 'AB12CD34',
+    p_body: '  Does this include the original receipt?  ',
+  }), {
+    p_public_id: 'AB12CD34',
+    p_body: 'Does this include the original receipt?',
+  });
+  assert.deepEqual(schemas.parseInquiryListRequest({ p_deal_id: dealId }), {
+    p_deal_id: dealId,
+  });
+  assert.deepEqual(schemas.parseReplyInquiryRequest({
+    p_inquiry_id: inquiryId,
+    p_reply: '  Yes, it is included.  ',
+  }), {
+    p_inquiry_id: inquiryId,
+    p_reply: 'Yes, it is included.',
+  });
+  assert.deepEqual(schemas.parseCurrentUserDealSellerRequest({
+    p_deal_id: dealId,
+  }), { p_deal_id: dealId });
+  assert.deepEqual(schemas.parseSafetyReportRequest({
+    p_public_id: 'AB12CD34',
+    p_category: 'Misleading information',
+    p_details: '  The public description conflicts with the item photo.  ',
+  }), {
+    p_public_id: 'AB12CD34',
+    p_category: 'Misleading information',
+    p_details: 'The public description conflicts with the item photo.',
+  });
+  assert.deepEqual(schemas.parseAdminReportListRequest({
+    p_status: 'open',
+  }), { p_status: 'open' });
+  assert.deepEqual(schemas.parseAdminReportResolutionRequest({
+    p_report_id: reportId,
+    p_decision: 'reviewed',
+    p_resolution_note: '  Evidence reviewed and the listing was restricted.  ',
+  }), {
+    p_report_id: reportId,
+    p_decision: 'reviewed',
+    p_resolution_note: 'Evidence reviewed and the listing was restricted.',
+  });
+  assert.deepEqual(schemas.parseDealModerationRequest({
+    p_deal_id: dealId,
+    p_status: 'hidden',
+    p_note: '  Hidden pending ownership evidence.  ',
+  }), {
+    p_deal_id: dealId,
+    p_status: 'hidden',
+    p_note: 'Hidden pending ownership evidence.',
+  });
+  assert.deepEqual(schemas.parseInteractionPostgrestErrorEnvelope({
+    code: 'P0001',
+    details: null,
+    hint: null,
+    message: 'Only the seller can respond',
+  }, 400, 'offer_response_error'), {
+    message: 'Only the seller can respond',
+    code: 'P0001',
+  });
+});
+
+test('invalid interaction request and error boundaries fail closed without logging private content', async () => {
+  const schemas = await import('../src/services/interactionBoundarySchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const privateMessage = 'private-message-with-bank-account';
+  const privateQuestion = 'private-question-with-home-address';
+  const privateReport = 'private-report-with-customer-phone-number';
+  const privateProvider = 'private-postgrest-database-diagnostic';
+
+  try {
+    assert.throws(
+      () => schemas.parseSendDealMessageRequest({
+        p_deal_id: dealId,
+        p_body: privateMessage,
+        sender_id: 'private-sender-id',
+      }),
+      error => (
+        error instanceof schemas.InteractionBoundaryValidationError
+        && error.boundary === 'message_send_request'
+        && error.issue === 'request_shape_invalid'
+      ),
+    );
+    assert.throws(
+      () => schemas.parseCreateOfferRequest({
+        p_public_id: 'AB12CD34',
+        p_amount_cents: 99,
+        p_typed_name: 'Private Buyer',
+      }),
+      /valid offer amount/i,
+    );
+    assert.throws(
+      () => schemas.parseCreateInquiryRequest({
+        p_public_id: 'AB12CD34',
+        p_body: `${privateQuestion}\u0000`,
+      }),
+      /Question must contain/i,
+    );
+    assert.throws(
+      () => schemas.parseSafetyReportRequest({
+        p_public_id: 'AB12CD34',
+        p_category: 'Send money now',
+        p_details: privateReport,
+      }),
+      /valid report category/i,
+    );
+    assert.throws(
+      () => schemas.parseAdminReportResolutionRequest({
+        p_report_id: 'not-a-report-id',
+        p_decision: 'reviewed',
+        p_resolution_note: privateReport,
+      }),
+      /selected report is invalid/i,
+    );
+    assert.throws(
+      () => schemas.parseInteractionPostgrestErrorEnvelope({
+        code: 'P0001',
+        details: privateProvider,
+        hint: null,
+        message: 'Could not send message',
+        internal_query: privateProvider,
+      }, 400, 'message_send_error'),
+      /processed safely/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.interaction\.boundary-rejection\.v1/);
+  assert.match(serializedLogs, /message_send_request/);
+  assert.match(serializedLogs, /offer_create_request/);
+  assert.match(serializedLogs, /inquiry_create_request/);
+  assert.match(serializedLogs, /safety_report_create_request/);
+  assert.match(serializedLogs, /admin_report_resolve_request/);
+  assert.match(serializedLogs, /message_send_error/);
+  assert.doesNotMatch(serializedLogs, /private-message-with-bank-account/);
+  assert.doesNotMatch(serializedLogs, /private-question-with-home-address/);
+  assert.doesNotMatch(serializedLogs, /private-report-with-customer-phone-number/);
+  assert.doesNotMatch(serializedLogs, /private-postgrest-database-diagnostic/);
+  assert.doesNotMatch(serializedLogs, /private-sender-id/);
+});
+
+test('the eleventh ARC-004 boundary validates every browser communication request and reviewed error', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/interactionBoundarySchemas.ts');
+
+  for (const parser of [
+    'parseNotificationListRequest',
+    'parseNotificationDealReadRequest',
+    'parseNotificationAllReadRequest',
+    'parseMessageListRequest',
+    'parseSendDealMessageRequest',
+    'parseCreateOfferRequest',
+    'parseOfferListRequest',
+    'parseRespondOfferRequest',
+    'parseCreateInquiryRequest',
+    'parseInquiryListRequest',
+    'parseReplyInquiryRequest',
+    'parseCurrentUserDealSellerRequest',
+    'parseSafetyReportRequest',
+    'parseAdminReportListRequest',
+    'parseAdminReportResolutionRequest',
+    'parseDealModerationRequest',
+  ]) {
+    assert.match(service, new RegExp(`${parser}\\(`));
+  }
+  for (const boundary of [
+    'notification_list_error',
+    'notification_read_error',
+    'message_list_error',
+    'message_send_error',
+    'offer_create_error',
+    'offer_list_error',
+    'offer_response_error',
+    'inquiry_create_error',
+    'inquiry_list_error',
+    'inquiry_reply_error',
+    'safety_report_create_error',
+    'admin_report_list_error',
+    'admin_report_resolve_error',
+    'deal_moderation_error',
+  ]) {
+    assert.match(service, new RegExp(`'${boundary}'`));
+  }
+  assert.match(
+    schemas,
+    /dealivra\.interaction\.boundary-rejection\.v1/,
+  );
+  assert.match(schemas, /maximumAmountCents = 100_000_000_000/);
+  assert.match(schemas, /Duplicate or stolen photos/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(
+    service,
+    /d\?\.message\|\|'Could not (?:submit report|load report queue|send message|send offer|load offers|respond to offer)'/,
+  );
+});
+
+test('administrator finance and catalog response schemas accept governed projections', async () => {
+  const schemas = await import('../src/services/adminRuntimeSchemas.ts');
+  const { currencyCodes } = await import('../src/currency.ts');
+  const transactionId = '11111111-1111-4111-8111-111111111111';
+  const secondTransactionId = '22222222-2222-4222-8222-222222222222';
+  const dealId = '33333333-3333-4333-8333-333333333333';
+  const secondDealId = '44444444-4444-4444-8444-444444444444';
+  const older = '2026-07-29T10:00:00.000Z';
+  const newer = '2026-07-29T11:00:00.000Z';
+
+  assert.equal(schemas.parseAdminAccessResponse(true), true);
+  assert.equal(schemas.parseAdminAccessResponse(false), false);
+
+  const summary = schemas.parseAdminRevenueSummaryRows([{
+    currency: 'USD',
+    total_payment_volume_cents: 50_000,
+    total_commission_earned_cents: 1_000,
+    total_released_to_sellers_cents: 19_000,
+    total_protected_cents: 20_000,
+    total_refunded_cents: 5_000,
+    payment_count: 5,
+    released_count: 2,
+    refunded_count: 1,
+    disputed_count: 1,
+  }]);
+  assert.equal(summary.total_payment_volume_cents, 50_000);
+  assert.equal(summary.currency, 'USD');
+
+  const transactions = schemas.parseAdminRevenueTransactionRows([
+    {
+      transaction_id: transactionId,
+      deal_id: dealId,
+      public_id: 'AB12CD34',
+      title: 'Verified phone',
+      status: 'funds_secured',
+      currency: 'USD',
+      item_amount_cents: 12_500,
+      platform_fee_cents: 625,
+      seller_amount_cents: 11_875,
+      seller_name: 'Verified Seller',
+      buyer_name: 'Verified Buyer',
+      created_at: newer,
+      updated_at: newer,
+    },
+    {
+      transaction_id: secondTransactionId,
+      deal_id: secondDealId,
+      public_id: 'EF56GH78',
+      title: 'Verified laptop',
+      status: 'released',
+      currency: 'USD',
+      item_amount_cents: 20_000,
+      platform_fee_cents: 1_000,
+      seller_amount_cents: 19_000,
+      seller_name: 'Second Seller',
+      buyer_name: 'Second Buyer',
+      created_at: older,
+      updated_at: newer,
+    },
+  ]);
+  assert.equal(transactions.length, 2);
+  assert.equal(transactions[1].seller_amount_cents, 19_000);
+
+  const catalog = schemas.parseAdminCatalogAdoptionRows([
+    {
+      window_days: 30,
+      catalog_version: '2026-07-29.1',
+      category_id: 'phone',
+      deal_count: 12,
+      structured_brand_count: 10,
+      structured_model_count: 9,
+      manual_fallback_count: 2,
+      draft_count: 3,
+      published_count: 4,
+      accepted_count: 3,
+      completed_count: 2,
+      latest_deal_at: newer,
+    },
+    {
+      window_days: 30,
+      catalog_version: 'legacy',
+      category_id: 'general',
+      deal_count: 3,
+      structured_brand_count: 0,
+      structured_model_count: 0,
+      manual_fallback_count: 3,
+      draft_count: 1,
+      published_count: 1,
+      accepted_count: 1,
+      completed_count: 0,
+      latest_deal_at: older,
+    },
+  ], 30);
+  assert.equal(catalog[0].category_id, 'phone');
+  assert.equal(catalog[1].catalog_version, 'legacy');
+  assert.deepEqual(
+    [...new Set(schemas.adminCurrencyCodes)].sort(),
+    [...new Set(currencyCodes)].sort(),
+  );
+});
+
+test('invalid administrator projections fail closed without logging finance or customer data', async () => {
+  const schemas = await import('../src/services/adminRuntimeSchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const privateTitle = 'private-customer-listing-title';
+  const privateSeller = 'private-seller-name';
+  const privateBuyer = 'private-buyer-name';
+  const transactionId = '11111111-1111-4111-8111-111111111111';
+  const dealId = '33333333-3333-4333-8333-333333333333';
+  const createdAt = '2026-07-29T10:00:00.000Z';
+
+  try {
+    assert.throws(
+      () => schemas.parseAdminAccessResponse('true'),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseAdminRevenueSummaryRows([{
+        currency: 'USD',
+        total_payment_volume_cents: 100,
+        total_commission_earned_cents: 10,
+        total_released_to_sellers_cents: 90,
+        total_protected_cents: 50,
+        total_refunded_cents: 0,
+        payment_count: 1,
+        released_count: 1,
+        refunded_count: 0,
+        disputed_count: 0,
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseAdminRevenueTransactionRows([{
+        transaction_id: transactionId,
+        deal_id: dealId,
+        public_id: 'AB12CD34',
+        title: privateTitle,
+        status: 'funds_secured',
+        currency: 'USD',
+        item_amount_cents: 12_500,
+        platform_fee_cents: 625,
+        seller_amount_cents: 11_000,
+        seller_name: privateSeller,
+        buyer_name: privateBuyer,
+        created_at: createdAt,
+        updated_at: createdAt,
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseAdminCatalogAdoptionRows([{
+        window_days: 7,
+        catalog_version: 'private-catalog-version',
+        category_id: 'private-category',
+        deal_count: 2,
+        structured_brand_count: 1,
+        structured_model_count: 2,
+        manual_fallback_count: 0,
+        draft_count: 2,
+        published_count: 0,
+        accepted_count: 0,
+        completed_count: 0,
+        latest_deal_at: createdAt,
+      }], 30),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.admin\.response-rejection\.v1/);
+  assert.match(serializedLogs, /admin_revenue_transactions/);
+  assert.doesNotMatch(serializedLogs, /private-customer-listing-title/);
+  assert.doesNotMatch(serializedLogs, /private-seller-name/);
+  assert.doesNotMatch(serializedLogs, /private-buyer-name/);
+  assert.doesNotMatch(serializedLogs, /private-catalog-version/);
+  assert.doesNotMatch(serializedLogs, /12500/);
+});
+
+test('the sixth ARC-004 boundary validates administrator finance and catalog success responses', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/adminRuntimeSchemas.ts');
+
+  assert.match(service, /parseAdminAccessResponse\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseAdminRevenueSummaryRows\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseAdminRevenueTransactionRows\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseAdminCatalogAdoptionRows\(await readBoundedJson\(response\)/);
+  assert.doesNotMatch(service, /as AdminRevenueSummary\[\]/);
+  assert.doesNotMatch(service, /as AdminRevenueTransaction\[\]/);
+  assert.doesNotMatch(service, /as AdminCatalogAdoption\[\]/);
+
+  assert.match(schemas, /dealivra\.admin\.response-rejection\.v1/);
+  assert.match(schemas, /summary_amount_contract_invalid/);
+  assert.match(schemas, /transaction_amounts_do_not_balance/);
+  assert.match(schemas, /catalog_window_contract_invalid/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+});
+
+test('browser administrator finance and catalog requests and errors are runtime validated', async () => {
+  const schemas = await import('../src/services/adminBoundarySchemas.ts');
+
+  assert.deepEqual(schemas.parseAdminAccessRequest({}), {});
+  assert.deepEqual(schemas.parseAdminRevenueSummaryRequest({}), {});
+  assert.deepEqual(schemas.parseAdminRevenueTransactionsRequest({
+    p_limit: 100,
+  }), { p_limit: 100 });
+  assert.deepEqual(schemas.parseAdminCatalogAdoptionRequest({
+    p_days: 30,
+  }), { p_days: 30 });
+  assert.deepEqual(schemas.parseAdminPostgrestErrorEnvelope({
+    code: 'P0001',
+    details: null,
+    hint: null,
+    message: 'Admin access required',
+  }, 403, 'admin_revenue_summary_error'), {
+    message: 'Admin access required',
+    code: 'P0001',
+  });
+});
+
+test('invalid administrator request and error boundaries fail closed without logging finance data', async () => {
+  const schemas = await import('../src/services/adminBoundarySchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const privateFinance = 'private-finance-ledger-diagnostic';
+  const privateCatalog = 'private-catalog-adoption-diagnostic';
+
+  try {
+    assert.throws(
+      () => schemas.parseAdminAccessRequest({
+        role: 'admin',
+      }),
+      error => (
+        error instanceof schemas.AdminBoundaryValidationError
+        && error.boundary === 'admin_access_request'
+        && error.issue === 'request_shape_invalid'
+      ),
+    );
+    assert.throws(
+      () => schemas.parseAdminRevenueTransactionsRequest({
+        p_limit: 201,
+      }),
+      /limit from 1 to 200/i,
+    );
+    assert.throws(
+      () => schemas.parseAdminCatalogAdoptionRequest({
+        p_days: 365,
+      }),
+      /7, 30, or 90 day/i,
+    );
+    assert.throws(
+      () => schemas.parseAdminPostgrestErrorEnvelope({
+        code: 'P0001',
+        details: privateFinance,
+        hint: privateCatalog,
+        message: 'Admin access required',
+        query: privateFinance,
+      }, 403, 'admin_revenue_transactions_error'),
+      /processed safely/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.admin\.boundary-rejection\.v1/);
+  assert.match(serializedLogs, /admin_access_request/);
+  assert.match(serializedLogs, /admin_revenue_transactions_request/);
+  assert.match(serializedLogs, /admin_catalog_adoption_request/);
+  assert.match(serializedLogs, /admin_revenue_transactions_error/);
+  assert.doesNotMatch(serializedLogs, /private-finance-ledger-diagnostic/);
+  assert.doesNotMatch(serializedLogs, /private-catalog-adoption-diagnostic/);
+  assert.doesNotMatch(serializedLogs, /"role":"admin"/);
+  assert.doesNotMatch(serializedLogs, /201|365/);
+});
+
+test('the twelfth ARC-004 boundary validates every browser administrator finance and catalog request and reviewed error', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/adminBoundarySchemas.ts');
+
+  for (const parser of [
+    'parseAdminAccessRequest',
+    'parseAdminRevenueSummaryRequest',
+    'parseAdminRevenueTransactionsRequest',
+    'parseAdminCatalogAdoptionRequest',
+  ]) {
+    assert.match(service, new RegExp(`${parser}\\(`));
+  }
+  for (const boundary of [
+    'admin_revenue_summary_error',
+    'admin_revenue_transactions_error',
+    'admin_catalog_adoption_error',
+  ]) {
+    assert.match(service, new RegExp(`'${boundary}'`));
+  }
+  assert.match(schemas, /dealivra\.admin\.boundary-rejection\.v1/);
+  assert.match(schemas, /source\.p_limit > 200/);
+  assert.match(schemas, /source\.p_days !== 90/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(
+    service,
+    /d\?\.message\|\|'Could not load (?:revenue summary|revenue transactions|catalog adoption)'/,
+  );
+});
+
+test('public trust and risk schemas accept reviewed RPC projections', async () => {
+  const schemas = await import('../src/services/trustRuntimeSchemas.ts');
+  const memberSince = '2025-07-29T10:00:00.000Z';
+  const newestRating = '2026-07-29T11:00:00.000Z';
+  const olderRating = '2026-07-28T11:00:00.000Z';
+
+  assert.deepEqual(schemas.parseDealRiskAssessmentRows([{
+    risk_score: 73,
+    risk_level: 'high',
+    signals: [
+      'unverified_seller',
+      'new_account',
+      'no_photos',
+      'community_reports',
+    ],
+  }]), {
+    risk_score: 73,
+    risk_level: 'high',
+    signals: [
+      'unverified_seller',
+      'new_account',
+      'no_photos',
+      'community_reports',
+    ],
+  });
+  assert.deepEqual(schemas.parseDealRiskAssessmentRows([{
+    risk_score: 0,
+    risk_level: 'low',
+    signals: ['no_flags'],
+  }]), {
+    risk_score: 0,
+    risk_level: 'low',
+    signals: ['no_flags'],
+  });
+  assert.equal(schemas.parseDealRiskAssessmentRows([]), null);
+
+  const seller = schemas.parsePublicSellerTrustProfileRows([{
+    display_name: 'Verified Seller',
+    verification_status: 'verified',
+    member_since: memberSince,
+    completed_sales: 12,
+    rating_count: 8,
+    average_rating: 4.5,
+  }]);
+  assert.equal(seller.display_name, 'Verified Seller');
+  assert.equal(seller.average_rating, 4.5);
+  assert.equal(schemas.parsePublicSellerTrustProfileRows([]), null);
+
+  assert.deepEqual(schemas.parseTrustPassportSettingsRows([{
+    public_id: 'A1B2C3D4E5F6',
+    enabled: true,
+  }]), {
+    public_id: 'A1B2C3D4E5F6',
+    enabled: true,
+  });
+  assert.equal(
+    schemas.parseTrustPassportToggleResponse('A1B2C3D4E5F6'),
+    'A1B2C3D4E5F6',
+  );
+
+  const passport = schemas.parsePublicTrustPassportRows([{
+    display_name: 'Verified Seller',
+    verification_status: 'verified',
+    member_since: memberSince,
+    completed_deals: 15,
+    completed_sales: 12,
+    completed_purchases: 3,
+    rating_count: 8,
+    average_rating: 4.5,
+    recent_ratings: [
+      { stars: 5, created_at: newestRating },
+      { stars: 4, created_at: olderRating },
+    ],
+  }]);
+  assert.equal(passport.completed_deals, 15);
+  assert.equal(passport.recent_ratings.length, 2);
+  assert.equal(schemas.parsePublicTrustPassportRows([]), null);
+});
+
+test('invalid public trust and risk projections fail closed without logging profile data', async () => {
+  const schemas = await import('../src/services/trustRuntimeSchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const privateName = 'private-passport-display-name';
+  const privatePublicId = 'A1B2C3D4E5F6';
+  const privateRatingTimestamp = '2026-07-29T11:23:45.000Z';
+
+  try {
+    assert.throws(
+      () => schemas.parseDealRiskAssessmentRows([{
+        risk_score: 18,
+        risk_level: 'high',
+        signals: ['unverified_seller'],
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseDealRiskAssessmentRows([{
+        risk_score: 18,
+        risk_level: 'low',
+        signals: ['no_flags', 'unverified_seller'],
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parsePublicSellerTrustProfileRows([{
+        display_name: privateName,
+        verification_status: 'verified',
+        member_since: '2025-07-29T10:00:00.000Z',
+        completed_sales: 12,
+        rating_count: 0,
+        average_rating: 5,
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseTrustPassportSettingsRows([{
+        public_id: privatePublicId.toLowerCase(),
+        enabled: true,
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parsePublicTrustPassportRows([{
+        display_name: privateName,
+        verification_status: 'verified',
+        member_since: '2025-07-29T10:00:00.000Z',
+        completed_deals: 14,
+        completed_sales: 12,
+        completed_purchases: 3,
+        rating_count: 2,
+        average_rating: 4.5,
+        recent_ratings: [
+          { stars: 4, created_at: '2026-07-28T11:00:00.000Z' },
+          { stars: 5, created_at: privateRatingTimestamp },
+        ],
+      }]),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.trust\.response-rejection\.v1/);
+  assert.match(serializedLogs, /deal_risk_assessment/);
+  assert.match(serializedLogs, /public_seller_trust_profile/);
+  assert.match(serializedLogs, /trust_passport_settings/);
+  assert.match(serializedLogs, /public_trust_passport/);
+  assert.doesNotMatch(serializedLogs, /private-passport-display-name/);
+  assert.doesNotMatch(serializedLogs, /A1B2C3D4E5F6/);
+  assert.doesNotMatch(serializedLogs, /2026-07-29T11:23:45/);
+  assert.doesNotMatch(serializedLogs, /4\.5/);
+});
+
+test('the seventh ARC-004 boundary validates public trust and risk success responses', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/trustRuntimeSchemas.ts');
+
+  assert.match(service, /parseDealRiskAssessmentRows\(await readBoundedJson\(response\)/);
+  assert.match(service, /parsePublicSellerTrustProfileRows\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseTrustPassportSettingsRows\(await readBoundedJson\(response\)/);
+  assert.match(service, /parseTrustPassportToggleResponse\(await readBoundedJson\(response\)/);
+  assert.match(service, /parsePublicTrustPassportRows\(await readBoundedJson\(response\)/);
+  assert.doesNotMatch(service, /as RiskAssessment\[\]/);
+  assert.doesNotMatch(service, /as PublicTrustProfile\[\]/);
+  assert.doesNotMatch(service, /as TrustPassportSettings\[\]/);
+  assert.doesNotMatch(service, /as TrustPassport\[\]/);
+
+  assert.match(schemas, /dealivra\.trust\.response-rejection\.v1/);
+  assert.match(schemas, /risk_score_contract_invalid/);
+  assert.match(schemas, /average_rating_without_ratings/);
+  assert.match(schemas, /completed_deal_counts_invalid/);
+  assert.match(schemas, /recent_rating_order_invalid/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+});
+
+test('browser trust, passport, and risk requests and errors are runtime validated', async () => {
+  const schemas = await import('../src/services/trustBoundarySchemas.ts');
+
+  assert.deepEqual(schemas.parseDealRiskRequest({
+    p_public_id: ' ab12cd34 ',
+  }), { p_public_id: 'AB12CD34' });
+  assert.deepEqual(schemas.parsePublicSellerTrustRequest({
+    p_public_id: 'ZX98YU76',
+  }), { p_public_id: 'ZX98YU76' });
+  assert.deepEqual(schemas.parseTrustPassportSettingsRequest({}), {});
+  assert.deepEqual(schemas.parseTrustPassportToggleRequest({
+    p_enabled: true,
+  }), { p_enabled: true });
+  assert.deepEqual(schemas.parsePublicTrustPassportRequest({
+    p_public_id: ' a1b2c3d4e5f6 ',
+  }), { p_public_id: 'A1B2C3D4E5F6' });
+  assert.deepEqual(schemas.parseTrustPostgrestErrorEnvelope({
+    code: 'P0001',
+    details: null,
+    hint: null,
+    message: 'Trust profile is unavailable',
+  }, 404, 'public_seller_trust_error'), {
+    code: 'P0001',
+  });
+});
+
+test('invalid trust request and error boundaries fail closed without logging profile or provider data', async () => {
+  const schemas = await import('../src/services/trustBoundarySchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const privatePublicId = 'A1B2C3D4E5F6';
+  const privateProvider = 'private-trust-provider-diagnostic';
+
+  try {
+    assert.throws(
+      () => schemas.parseDealRiskRequest({
+        p_public_id: 'AB12CD34',
+        seller_id: 'private-seller-id',
+      }),
+      error => (
+        error instanceof schemas.TrustBoundaryValidationError
+        && error.boundary === 'deal_risk_request'
+        && error.issue === 'request_shape_invalid'
+      ),
+    );
+    assert.throws(
+      () => schemas.parseTrustPassportSettingsRequest({
+        user_id: 'private-user-id',
+      }),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => schemas.parseTrustPassportToggleRequest({
+        p_enabled: 'true',
+      }),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => schemas.parsePublicTrustPassportRequest({
+        p_public_id: `${privatePublicId}ZZ`,
+      }),
+      /passport link is invalid/i,
+    );
+    assert.throws(
+      () => schemas.parseTrustPostgrestErrorEnvelope({
+        code: 'P0001',
+        details: privateProvider,
+        hint: null,
+        message: 'Trust profile is unavailable',
+        profile: privateProvider,
+      }, 404, 'public_trust_passport_error'),
+      /processed safely/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.trust\.boundary-rejection\.v1/);
+  assert.match(serializedLogs, /deal_risk_request/);
+  assert.match(serializedLogs, /trust_passport_settings_request/);
+  assert.match(serializedLogs, /trust_passport_toggle_request/);
+  assert.match(serializedLogs, /public_trust_passport_request/);
+  assert.match(serializedLogs, /public_trust_passport_error/);
+  assert.doesNotMatch(serializedLogs, /private-seller-id/);
+  assert.doesNotMatch(serializedLogs, /private-user-id/);
+  assert.doesNotMatch(serializedLogs, /private-trust-provider-diagnostic/);
+  assert.doesNotMatch(serializedLogs, /A1B2C3D4E5F6/);
+});
+
+test('the thirteenth ARC-004 boundary validates every browser trust request and reviewed error', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const schemas = readText('src/services/trustBoundarySchemas.ts');
+
+  for (const parser of [
+    'parseDealRiskRequest',
+    'parsePublicSellerTrustRequest',
+    'parseTrustPassportSettingsRequest',
+    'parseTrustPassportToggleRequest',
+    'parsePublicTrustPassportRequest',
+  ]) {
+    assert.match(service, new RegExp(`${parser}\\(`));
+  }
+  for (const boundary of [
+    'deal_risk_error',
+    'public_seller_trust_error',
+    'trust_passport_settings_error',
+    'trust_passport_toggle_error',
+    'public_trust_passport_error',
+  ]) {
+    assert.match(service, new RegExp(`'${boundary}'`));
+  }
+  assert.match(schemas, /dealivra\.trust\.boundary-rejection\.v1/);
+  assert.match(schemas, /trustPublicIdPattern = \/\^\[A-F0-9\]\{12\}\$\//);
+  assert.deepEqual(
+    [...schemas.matchAll(/return \{ code \};/g)].length,
+    1,
+  );
+  assert.doesNotMatch(schemas, /return \{ message/);
+  assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(
+    service,
+    /d\?\.message\|\|'Could not (?:load|update) passport settings'/,
+  );
+});
+
+test('delivery, meeting, handoff, and inspection schemas accept reviewed responses', async () => {
+  const schemas = await import('../src/services/deliveryRuntimeSchemas.ts');
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const recordId = '22222222-2222-4222-8222-222222222222';
+  const actorId = '33333333-3333-4333-8333-333333333333';
+  const past = new Date(Date.now() - 60_000).toISOString();
+  const future = new Date(Date.now() + 60 * 60_000).toISOString();
+
+  assert.deepEqual(schemas.parseDealMeetingRows([{
+    id: recordId,
+    deal_id: dealId,
+    proposed_by: actorId,
+    location_name: 'Central police exchange zone',
+    address: '100 Main Street, Austin, TX 78701',
+    scheduled_at: future,
+    status: 'confirmed',
+    seller_arrived: true,
+    buyer_arrived: false,
+  }]), [{
+    id: recordId,
+    deal_id: dealId,
+    proposed_by: actorId,
+    location_name: 'Central police exchange zone',
+    address: '100 Main Street, Austin, TX 78701',
+    scheduled_at: future,
+    status: 'confirmed',
+    seller_arrived: true,
+    buyer_arrived: false,
+  }]);
+  assert.equal(schemas.parseHandoffPinResponse('004219'), '004219');
+  assert.deepEqual(schemas.parseDealInspectionRows([{
+    agreement_version: 2,
+    item_reviewed: true,
+    price_confirmed: true,
+    handoff_confirmed: true,
+    reference_checked: true,
+    inspected_at: past,
+    buyer_name: 'Buyer Name',
+  }])[0].agreement_version, 2);
+  assert.deepEqual(schemas.parseDealShipmentRows([{
+    id: recordId,
+    deal_id: dealId,
+    carrier: 'UPS',
+    tracking_number: '1Z999AA10123456784',
+    status: 'shipped',
+    shipped_at: past,
+    delivered_at: null,
+  }])[0].status, 'shipped');
+  assert.deepEqual(schemas.parseDealDeliveryDetailsRows([{
+    recipient_name: 'Buyer Name',
+    full_address: '100 Main Street, Apt 5B, Austin, TX 78701',
+    country: 'United States',
+    instructions: 'Leave with the staffed front desk.',
+    updated_at: past,
+    locked: false,
+  }])[0].locked, false);
+  assert.deepEqual(schemas.parseDealMeetingRows([]), []);
+  assert.deepEqual(schemas.parseDealInspectionRows([]), []);
+  assert.deepEqual(schemas.parseDealShipmentRows([]), []);
+  assert.deepEqual(schemas.parseDealDeliveryDetailsRows([]), []);
+});
+
+test('invalid delivery responses fail closed without logging addresses, tracking, or PIN data', async () => {
+  const schemas = await import('../src/services/deliveryRuntimeSchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const privateAddress = '987 Private Lane, Unit 42, Austin, TX 78701';
+  const privateTracking = '1ZPRIVATE123456789';
+  const privatePin = '903117';
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const recordId = '22222222-2222-4222-8222-222222222222';
+  const actorId = '33333333-3333-4333-8333-333333333333';
+  const past = new Date(Date.now() - 60_000).toISOString();
+
+  try {
+    assert.throws(
+      () => schemas.parseDealMeetingRows([{
+        id: recordId,
+        deal_id: dealId,
+        proposed_by: actorId,
+        location_name: 'Safe exchange',
+        address: privateAddress,
+        scheduled_at: new Date(Date.now() + 60_000).toISOString(),
+        status: 'confirmed',
+        seller_arrived: true,
+        buyer_arrived: true,
+        handoff_pin_hash: 'private-hash',
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseHandoffPinResponse(privatePin.slice(0, 5)),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseDealShipmentRows([{
+        id: recordId,
+        deal_id: dealId,
+        carrier: 'UPS',
+        tracking_number: privateTracking,
+        status: 'delivered',
+        shipped_at: past,
+        delivered_at: null,
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseDealDeliveryDetailsRows([{
+        recipient_name: 'Buyer Name',
+        full_address: privateAddress,
+        country: 'United States',
+        instructions: null,
+        updated_at: past,
+        locked: 'false',
+      }]),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.delivery\.response-rejection\.v1/);
+  assert.match(serializedLogs, /deal_meeting/);
+  assert.match(serializedLogs, /handoff_pin/);
+  assert.match(serializedLogs, /deal_shipment/);
+  assert.match(serializedLogs, /delivery_details/);
+  assert.doesNotMatch(serializedLogs, /987 Private Lane/);
+  assert.doesNotMatch(serializedLogs, /1ZPRIVATE/);
+  assert.doesNotMatch(serializedLogs, /903117/);
+  assert.doesNotMatch(serializedLogs, /private-hash/);
+});
+
+test('browser delivery and handoff requests and errors are runtime validated', async () => {
+  const schemas = await import('../src/services/deliveryBoundarySchemas.ts');
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const nowMs = 1_700_000_000_000;
+  const meetingAt = new Date(nowMs + 60 * 60_000).toISOString();
+  const dealRequest = { p_deal_id: dealId };
+
+  for (const parser of [
+    schemas.parseDealMeetingReadRequest,
+    schemas.parseMeetingConfirmationRequest,
+    schemas.parseMeetingArrivalRequest,
+    schemas.parseHandoffPinGenerateRequest,
+    schemas.parseDealInspectionReadRequest,
+    schemas.parseDealShipmentReadRequest,
+    schemas.parseShippingEvidenceReadinessRequest,
+    schemas.parseDeliveryDetailsReadRequest,
+    schemas.parseDealActionPlanRequest,
+    schemas.parseShipmentDeliveryConfirmationRequest,
+  ]) {
+    assert.deepEqual(parser(dealRequest), dealRequest);
+  }
+  assert.deepEqual(schemas.parseMeetingProposalRequest({
+    p_deal_id: dealId,
+    p_location_name: '  Central police exchange zone  ',
+    p_address: '  100 Main Street, Austin, TX 78701  ',
+    p_scheduled_at: meetingAt,
+  }, nowMs), {
+    p_deal_id: dealId,
+    p_location_name: 'Central police exchange zone',
+    p_address: '100 Main Street, Austin, TX 78701',
+    p_scheduled_at: meetingAt,
+  });
+  assert.deepEqual(schemas.parseHandoffCompleteRequest({
+    p_deal_id: dealId,
+    p_pin: '004219',
+  }), { p_deal_id: dealId, p_pin: '004219' });
+  assert.equal(
+    schemas.parseDealInspectionRecordRequest({
+      p_deal_id: dealId,
+      p_item_reviewed: true,
+      p_price_confirmed: true,
+      p_handoff_confirmed: true,
+      p_reference_checked: true,
+    }).p_reference_checked,
+    true,
+  );
+  assert.deepEqual(schemas.parseDeliveryDetailsSaveRequest({
+    p_deal_id: dealId,
+    p_recipient_name: ' Buyer Name ',
+    p_full_address: ' 100 Main Street, Apt 5B, Austin, TX 78701 ',
+    p_country: ' United States ',
+    p_instructions: ' Leave with the staffed front desk. ',
+  }), {
+    p_deal_id: dealId,
+    p_recipient_name: 'Buyer Name',
+    p_full_address: '100 Main Street, Apt 5B, Austin, TX 78701',
+    p_country: 'United States',
+    p_instructions: 'Leave with the staffed front desk.',
+  });
+  assert.deepEqual(schemas.parseShipmentCreateRequest({
+    p_deal_id: dealId,
+    p_carrier: ' UPS ',
+    p_tracking_number: ' 1z999aa10123456784 ',
+  }), {
+    p_deal_id: dealId,
+    p_carrier: 'UPS',
+    p_tracking_number: '1Z999AA10123456784',
+  });
+  assert.deepEqual(schemas.parseDeliveryPostgrestErrorEnvelope({
+    code: 'P0001',
+    details: null,
+    hint: null,
+    message: 'Shipment is unavailable for this deal',
+  }, 409, 'shipment_create_error'), { code: 'P0001' });
+});
+
+test('invalid delivery request and error boundaries fail closed without logging private logistics data', async () => {
+  const schemas = await import('../src/services/deliveryBoundarySchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const privateAddress = '987 Private Lane, Unit 42, Austin, TX 78701';
+  const privateTracking = '1ZPRIVATE123456789';
+  const privateProvider = 'private-postgrest-logistics-detail';
+
+  try {
+    assert.throws(
+      () => schemas.parseMeetingProposalRequest({
+        p_deal_id: dealId,
+        p_location_name: 'Safe exchange',
+        p_address: privateAddress,
+        p_scheduled_at: 'not-a-time',
+      }),
+      /valid meeting time/i,
+    );
+    assert.throws(
+      () => schemas.parseHandoffCompleteRequest({
+        p_deal_id: dealId,
+        p_pin: '12345A',
+      }),
+      /six-digit/i,
+    );
+    assert.throws(
+      () => schemas.parseDealInspectionRecordRequest({
+        p_deal_id: dealId,
+        p_item_reviewed: true,
+        p_price_confirmed: true,
+        p_handoff_confirmed: false,
+        p_reference_checked: true,
+      }),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => schemas.parseShipmentCreateRequest({
+        p_deal_id: dealId,
+        p_carrier: 'UPS',
+        p_tracking_number: `${privateTracking}<script>`,
+      }),
+      /valid tracking number/i,
+    );
+    assert.throws(
+      () => schemas.parseDeliveryPostgrestErrorEnvelope({
+        code: 'P0001',
+        details: privateProvider,
+        hint: null,
+        message: 'Shipment rejected',
+        address: privateAddress,
+      }, 409, 'shipment_create_error'),
+      /processed safely/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(serializedLogs, /dealivra\.delivery\.boundary-rejection\.v1/);
+  assert.match(serializedLogs, /meeting_proposal_request/);
+  assert.match(serializedLogs, /handoff_complete_request/);
+  assert.match(serializedLogs, /deal_inspection_record_request/);
+  assert.match(serializedLogs, /shipment_create_request/);
+  assert.match(serializedLogs, /shipment_create_error/);
+  assert.doesNotMatch(serializedLogs, /987 Private Lane/);
+  assert.doesNotMatch(serializedLogs, /1ZPRIVATE/);
+  assert.doesNotMatch(serializedLogs, /private-postgrest-logistics-detail/);
+});
+
+test('the fourteenth ARC-004 boundary validates delivery success, request, and error contracts', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const requestSchemas = readText('src/services/deliveryBoundarySchemas.ts');
+  const responseSchemas = readText('src/services/deliveryRuntimeSchemas.ts');
+
+  for (const parser of [
+    'parseDealMeetingReadRequest',
+    'parseMeetingProposalRequest',
+    'parseMeetingConfirmationRequest',
+    'parseMeetingArrivalRequest',
+    'parseHandoffPinGenerateRequest',
+    'parseHandoffCompleteRequest',
+    'parseDealInspectionReadRequest',
+    'parseDealInspectionRecordRequest',
+    'parseDealShipmentReadRequest',
+    'parseShippingEvidenceReadinessRequest',
+    'parseDeliveryDetailsReadRequest',
+    'parseDeliveryDetailsSaveRequest',
+    'parseDealActionPlanRequest',
+    'parseShipmentCreateRequest',
+    'parseShipmentDeliveryConfirmationRequest',
+    'parseDealMeetingRows',
+    'parseHandoffPinResponse',
+    'parseDealInspectionRows',
+    'parseDealShipmentRows',
+    'parseDealDeliveryDetailsRows',
+  ]) {
+    assert.match(service, new RegExp(`${parser}\\(`));
+  }
+  assert.match(
+    service,
+    /select=id,deal_id,proposed_by,location_name,address,scheduled_at,status,seller_arrived,buyer_arrived/,
+  );
+  assert.match(
+    service,
+    /select=id,deal_id,carrier,tracking_number,status,shipped_at,delivered_at/,
+  );
+  assert.doesNotMatch(service, /deal_(?:meetings|shipments)\?[^`]*select=\*/);
+  assert.match(requestSchemas, /dealivra\.delivery\.boundary-rejection\.v1/);
+  assert.match(responseSchemas, /dealivra\.delivery\.response-rejection\.v1/);
+  assert.match(requestSchemas, /handoff_pin_invalid/);
+  assert.match(responseSchemas, /delivery_state_invalid/);
+  assert.doesNotMatch(requestSchemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(responseSchemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(
+    service,
+    /d\?\.message\|\|'Could not (?:load meeting|generate PIN|complete deal|load inspection receipt|save inspection receipt|check shipping evidence|save delivery address|save shipment|confirm delivery)'/,
+  );
+});
+
+test('profile, session, rating, timeline, and participant schemas accept reviewed contracts', async () => {
+  const schemas = await import('../src/services/accountActivityRuntimeSchemas.ts');
+  const now = Date.now();
+  const recent = new Date(now - 60_000).toISOString();
+  const older = new Date(now - 120_000).toISOString();
+  const oldest = new Date(now - 180_000).toISOString();
+  const expiry = new Date(now + 60 * 60_000).toISOString();
+  const sessionId = '11111111-1111-4111-8111-111111111111';
+  const otherSessionId = '22222222-2222-4222-8222-222222222222';
+  const eventId = '33333333-3333-4333-8333-333333333333';
+  const dealId = '44444444-4444-4444-8444-444444444444';
+
+  const profile = schemas.parseProfileSummaryRows([{
+    display_name: 'Account Owner',
+    verification_status: 'verified',
+    member_since: oldest,
+    completed_deals: 7,
+    rating_count: 2,
+    average_rating: 4.5,
+    recent_ratings: [
+      { stars: 5, comment: 'Clear communication', created_at: recent },
+      { stars: 4, comment: null, created_at: older },
+    ],
+  }])[0];
+  assert.equal(profile.completed_deals, 7);
+  assert.equal(profile.recent_ratings.length, 2);
+
+  const sessions = schemas.parseAccountSessionRows([
+    {
+      session_id: sessionId,
+      created_at: oldest,
+      last_active_at: recent,
+      expires_at: expiry,
+      user_agent: 'Chrome on Windows',
+      current_session: true,
+    },
+    {
+      session_id: otherSessionId,
+      created_at: oldest,
+      last_active_at: older,
+      expires_at: null,
+      user_agent: 'Safari on iPhone',
+      current_session: false,
+    },
+  ]);
+  assert.equal(sessions[0].current_session, true);
+  assert.equal(sessions[1].current_session, false);
+  assert.equal(
+    schemas.parseIdentityVerificationResponse('pending'),
+    'pending',
+  );
+
+  const timeline = schemas.parseTimelineEventRows([
+    {
+      id: eventId,
+      event_type: 'meeting_confirmed',
+      created_at: recent,
+      is_mine: false,
+    },
+    {
+      id: `created-${dealId}`,
+      event_type: 'deal_published',
+      created_at: oldest,
+      is_mine: true,
+    },
+  ]);
+  assert.equal(timeline[0].event_type, 'meeting_confirmed');
+  assert.equal(timeline[1].id, `created-${dealId}`);
+
+  const participants = schemas.parseDealParticipantsRows([{
+    seller_name: 'Seller Name',
+    seller_verification: 'verified',
+    buyer_name: 'Buyer Name',
+    buyer_verification: 'pending',
+    accepted_at: older,
+    viewer_role: 'buyer',
+  }]);
+  assert.equal(participants[0].viewer_role, 'buyer');
+  assert.deepEqual(schemas.parseProfileSummaryRows([]), []);
+  assert.deepEqual(schemas.parseAccountSessionRows([]), []);
+  assert.deepEqual(schemas.parseTimelineEventRows([]), []);
+  assert.deepEqual(schemas.parseDealParticipantsRows([]), []);
+});
+
+test('invalid account activity responses fail closed without logging identity or device data', async () => {
+  const schemas = await import('../src/services/accountActivityRuntimeSchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const privateName = 'Private Account Name';
+  const privateDevice = 'Private Browser Fingerprint';
+  const privateComment = 'Private rating narrative';
+  const now = Date.now();
+  const recent = new Date(now - 60_000).toISOString();
+  const older = new Date(now - 120_000).toISOString();
+
+  try {
+    assert.throws(
+      () => schemas.parseProfileSummaryRows([{
+        display_name: privateName,
+        verification_status: 'verified',
+        member_since: older,
+        completed_deals: 1,
+        rating_count: 0,
+        average_rating: 5,
+        recent_ratings: [{
+          stars: 5,
+          comment: privateComment,
+          created_at: recent,
+        }],
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseAccountSessionRows([
+        {
+          session_id: '11111111-1111-4111-8111-111111111111',
+          created_at: older,
+          last_active_at: recent,
+          expires_at: null,
+          user_agent: privateDevice,
+          current_session: false,
+        },
+        {
+          session_id: '22222222-2222-4222-8222-222222222222',
+          created_at: older,
+          last_active_at: older,
+          expires_at: null,
+          user_agent: privateDevice,
+          current_session: true,
+        },
+      ]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseTimelineEventRows([{
+        id: '33333333-3333-4333-8333-333333333333',
+        event_type: 'Private Event',
+        created_at: recent,
+        is_mine: true,
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseDealParticipantsRows([{
+        seller_name: privateName,
+        seller_verification: 'verified',
+        buyer_name: 'Buyer Name',
+        buyer_verification: 'pending',
+        accepted_at: older,
+        viewer_role: 'observer',
+      }]),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(
+    serializedLogs,
+    /dealivra\.account-activity\.response-rejection\.v1/,
+  );
+  assert.match(serializedLogs, /profile_summary/);
+  assert.match(serializedLogs, /account_sessions/);
+  assert.match(serializedLogs, /deal_timeline/);
+  assert.match(serializedLogs, /deal_participants/);
+  assert.doesNotMatch(serializedLogs, /Private Account Name/);
+  assert.doesNotMatch(serializedLogs, /Private Browser Fingerprint/);
+  assert.doesNotMatch(serializedLogs, /Private rating narrative/);
+});
+
+test('browser account activity requests and errors are runtime validated', async () => {
+  const schemas = await import('../src/services/accountActivityBoundarySchemas.ts');
+  const dealId = '11111111-1111-4111-8111-111111111111';
+
+  assert.deepEqual(schemas.parseProfileSummaryRequest({}), {});
+  assert.deepEqual(schemas.parseAccountSessionsRequest({}), {});
+  assert.deepEqual(schemas.parseIdentityVerificationRequest({}), {});
+  assert.deepEqual(schemas.parseRatingSubmitRequest({
+    p_deal_id: dealId,
+    p_stars: 5,
+    p_comment: '  Clear communication and careful packaging.  ',
+  }), {
+    p_deal_id: dealId,
+    p_stars: 5,
+    p_comment: 'Clear communication and careful packaging.',
+  });
+  assert.deepEqual(schemas.parseDealTimelineRequest({
+    p_deal_id: dealId,
+  }), { p_deal_id: dealId });
+  assert.deepEqual(schemas.parseDealParticipantsRequest({
+    p_deal_id: dealId,
+  }), { p_deal_id: dealId });
+  assert.deepEqual(schemas.parseAccountActivityPostgrestErrorEnvelope({
+    code: 'P0001',
+    details: null,
+    hint: null,
+    message: 'Profile is unavailable',
+  }, 404, 'profile_summary_error'), { code: 'P0001' });
+});
+
+test('invalid account activity boundaries fail closed without logging ratings or provider data', async () => {
+  const schemas = await import('../src/services/accountActivityBoundarySchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const privateComment = 'Private rating account narrative';
+  const privateProvider = 'private-account-provider-detail';
+
+  try {
+    assert.throws(
+      () => schemas.parseProfileSummaryRequest({
+        user_id: 'private-user-id',
+      }),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => schemas.parseRatingSubmitRequest({
+        p_deal_id: dealId,
+        p_stars: 6,
+        p_comment: privateComment,
+      }),
+      /1 to 5/i,
+    );
+    assert.throws(
+      () => schemas.parseDealTimelineRequest({
+        p_deal_id: 'not-a-uuid',
+      }),
+      /selected deal is invalid/i,
+    );
+    assert.throws(
+      () => schemas.parseAccountActivityPostgrestErrorEnvelope({
+        code: 'P0001',
+        details: privateProvider,
+        hint: null,
+        message: 'Profile is unavailable',
+        email: 'private@example.test',
+      }, 404, 'profile_summary_error'),
+      /processed safely/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(
+    serializedLogs,
+    /dealivra\.account-activity\.boundary-rejection\.v1/,
+  );
+  assert.match(serializedLogs, /profile_summary_request/);
+  assert.match(serializedLogs, /rating_submit_request/);
+  assert.match(serializedLogs, /deal_timeline_request/);
+  assert.match(serializedLogs, /profile_summary_error/);
+  assert.doesNotMatch(serializedLogs, /private-user-id/);
+  assert.doesNotMatch(serializedLogs, /Private rating account narrative/);
+  assert.doesNotMatch(serializedLogs, /private-account-provider-detail/);
+  assert.doesNotMatch(serializedLogs, /private@example\.test/);
+});
+
+test('the fifteenth ARC-004 boundary validates account activity success, request, and error contracts', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const requestSchemas = readText(
+    'src/services/accountActivityBoundarySchemas.ts',
+  );
+  const responseSchemas = readText(
+    'src/services/accountActivityRuntimeSchemas.ts',
+  );
+
+  for (const parser of [
+    'parseProfileSummaryRequest',
+    'parseAccountSessionsRequest',
+    'parseIdentityVerificationRequest',
+    'parseRatingSubmitRequest',
+    'parseDealTimelineRequest',
+    'parseDealParticipantsRequest',
+    'parseProfileSummaryRows',
+    'parseAccountSessionRows',
+    'parseIdentityVerificationResponse',
+    'parseTimelineEventRows',
+    'parseDealParticipantsRows',
+  ]) {
+    assert.match(service, new RegExp(`${parser}\\(`));
+  }
+  for (const boundary of [
+    'profile_summary_error',
+    'account_sessions_error',
+    'identity_verification_error',
+    'rating_submit_error',
+    'deal_timeline_error',
+    'deal_participants_error',
+  ]) {
+    assert.match(service, new RegExp(`'${boundary}'`));
+  }
+  assert.match(
+    requestSchemas,
+    /dealivra\.account-activity\.boundary-rejection\.v1/,
+  );
+  assert.match(
+    responseSchemas,
+    /dealivra\.account-activity\.response-rejection\.v1/,
+  );
+  assert.match(responseSchemas, /current_session_order_invalid/);
+  assert.match(responseSchemas, /recent_rating_order_invalid/);
+  assert.doesNotMatch(requestSchemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(responseSchemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(service, /as ProfileSummary\[\]/);
+  assert.doesNotMatch(service, /as AccountSession\[\]/);
+  assert.doesNotMatch(service, /as TimelineEvent\[\]/);
+  assert.doesNotMatch(service, /as DealParticipants\[\]/);
+  assert.doesNotMatch(
+    service,
+    /d\?\.message\|\|'Could not (?:submit rating|load profile|load signed-in devices|request verification|load timeline)'/,
+  );
+});
+
+test('agreement, declaration, renewal, access-code, and watchlist schemas accept reviewed contracts', async () => {
+  const schemas = await import('../src/services/agreementRuntimeSchemas.ts');
+  const now = Date.now();
+  const recent = new Date(now - 60_000).toISOString();
+  const expiry = new Date(now + 7 * 24 * 60 * 60_000).toISOString();
+  const currentHash = 'a'.repeat(64);
+  const legacyHash = 'b'.repeat(64);
+
+  assert.deepEqual(schemas.parseSellerDeclarationRows([{
+    attested: true,
+    attested_at: recent,
+  }])[0].attested, true);
+
+  const document = schemas.parseAgreementDocumentRows([{
+    schema_version: 'dealivra.agreement.v1',
+    public_id: 'DEAL1234',
+    version: 2,
+    title: 'Reviewed laptop',
+    description: 'A carefully documented laptop with disclosed wear.',
+    identifier: '1234',
+    catalog_identity: {
+      category_id: 'phone',
+      catalog_version: '2026-07-29.1',
+      brand_id: 'apple',
+      brand_label: 'Apple',
+      model_id: 'iphone-16',
+      model_label: 'iPhone 16',
+      variant_id: 'pro-256gb',
+      variant_label: 'Pro 256 GB',
+    },
+    seller_declarations: {
+      has_authority_to_sell: true,
+      not_stolen_counterfeit_or_prohibited: true,
+      known_defects_and_material_facts_disclosed: true,
+      attested_at: recent,
+    },
+    price_cents: 125000,
+    currency: 'USD',
+    condition: 'Good',
+    delivery_method: 'Ship to buyer',
+    expires_at: expiry,
+    content_hash: currentHash,
+    legacy_content_hash: legacyHash,
+    created_at: recent,
+    acceptance_count: 0,
+    is_current: true,
+  }])[0];
+  assert.equal(document.public_id, 'DEAL1234');
+  assert.equal(document.catalog_identity.variant_id, 'pro-256gb');
+
+  const history = schemas.parseAgreementHistoryRows([
+    {
+      version: 2,
+      price_cents: 125000,
+      currency: 'USD',
+      condition: 'Good',
+      delivery_method: 'Ship to buyer',
+      content_hash: currentHash,
+      created_at: recent,
+      acceptance_count: 0,
+      is_current: true,
+    },
+    {
+      version: 1,
+      price_cents: 130000,
+      currency: 'USD',
+      condition: 'Good',
+      delivery_method: 'Ship to buyer',
+      content_hash: legacyHash,
+      created_at: new Date(now - 120_000).toISOString(),
+      acceptance_count: 0,
+      is_current: false,
+    },
+  ]);
+  assert.deepEqual(history.map(row => row.version), [2, 1]);
+
+  assert.equal(schemas.parseAgreementVerificationRows([{
+    matched: true,
+    public_id: 'DEAL1234',
+    version: 2,
+    is_current: true,
+    created_at: recent,
+  }])[0].matched, true);
+  assert.equal(schemas.parseDealRenewalRows([{
+    agreement_version: 3,
+    expires_at: expiry,
+  }])[0].agreement_version, 3);
+  assert.equal(schemas.parseAcceptanceProtectionResponse(true), true);
+  assert.equal(schemas.parseBuyerAccessCodeResponse('004271'), '004271');
+  assert.equal(schemas.parseBuyerAccessCodeResponse(null), null);
+  assert.equal(schemas.parseWatchlistStateResponse(false), false);
+});
+
+test('invalid agreement responses fail closed without logging terms, access codes, or hashes', async () => {
+  const schemas = await import('../src/services/agreementRuntimeSchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const privateDescription = 'Private unreleased agreement narrative';
+  const privateHash = 'c'.repeat(64);
+  const privateCode = '917204';
+  const recent = new Date(Date.now() - 60_000).toISOString();
+
+  try {
+    assert.throws(
+      () => schemas.parseAgreementDocumentRows([{
+        schema_version: 'dealivra.agreement.v1',
+        public_id: 'DEAL1234',
+        version: 1,
+        title: 'Reviewed item',
+        description: privateDescription,
+        identifier: null,
+        catalog_identity: null,
+        seller_declarations: null,
+        price_cents: 10000,
+        currency: 'USD',
+        condition: 'Good',
+        delivery_method: 'Ship to buyer',
+        expires_at: null,
+        content_hash: privateHash,
+        legacy_content_hash: privateHash,
+        created_at: recent,
+        acceptance_count: 0,
+        is_current: true,
+        unreviewed_private_field: 'private',
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseAgreementHistoryRows([
+        {
+          version: 1,
+          price_cents: 10000,
+          currency: 'USD',
+          condition: 'Good',
+          delivery_method: 'Ship to buyer',
+          content_hash: privateHash,
+          created_at: recent,
+          acceptance_count: 0,
+          is_current: false,
+        },
+      ]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseAgreementVerificationRows([{
+        matched: false,
+        public_id: 'DEAL1234',
+        version: 1,
+        is_current: true,
+        created_at: recent,
+      }]),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseBuyerAccessCodeResponse(privateCode + '9'),
+      /invalid response/i,
+    );
+    assert.throws(
+      () => schemas.parseWatchlistStateResponse('false'),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(
+    serializedLogs,
+    /dealivra\.agreement\.response-rejection\.v1/,
+  );
+  assert.match(serializedLogs, /agreement_document/);
+  assert.match(serializedLogs, /agreement_history/);
+  assert.match(serializedLogs, /agreement_verification/);
+  assert.match(serializedLogs, /buyer_access_code/);
+  assert.match(serializedLogs, /watchlist_state/);
+  assert.doesNotMatch(serializedLogs, /Private unreleased agreement narrative/);
+  assert.doesNotMatch(serializedLogs, new RegExp(privateHash));
+  assert.doesNotMatch(serializedLogs, new RegExp(privateCode));
+});
+
+test('browser agreement and Deal Link requests and errors are runtime validated', async () => {
+  const schemas = await import('../src/services/agreementBoundarySchemas.ts');
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const contentHash = 'A'.repeat(64);
+
+  assert.deepEqual(schemas.parseSellerDeclarationRequest({
+    p_public_id: ' deal1234 ',
+  }), { p_public_id: 'DEAL1234' });
+  assert.deepEqual(schemas.parseAgreementDocumentRequest({
+    p_public_id: 'deal1234',
+    p_version: null,
+  }), { p_public_id: 'DEAL1234', p_version: null });
+  assert.deepEqual(schemas.parseAgreementHistoryRequest({
+    p_public_id: 'deal1234',
+  }), { p_public_id: 'DEAL1234' });
+  assert.deepEqual(schemas.parseAgreementVerificationRequest({
+    p_public_id: 'deal1234',
+    p_content_hash: contentHash,
+  }), {
+    p_public_id: 'DEAL1234',
+    p_content_hash: contentHash.toLowerCase(),
+  });
+  assert.deepEqual(schemas.parseDealLinkRenewalRequest({
+    p_deal_id: dealId.toUpperCase(),
+    p_days: 14,
+  }), { p_deal_id: dealId, p_days: 14 });
+  assert.deepEqual(schemas.parseAcceptanceProtectionRequest({
+    p_public_id: 'deal1234',
+  }), { p_public_id: 'DEAL1234' });
+  assert.deepEqual(schemas.parseBuyerAccessCodeRequest({
+    p_deal_id: dealId,
+    p_enabled: true,
+  }), { p_deal_id: dealId, p_enabled: true });
+  assert.deepEqual(schemas.parseWatchlistReadRequest({
+    p_public_id: 'deal1234',
+  }), { p_public_id: 'DEAL1234' });
+  assert.deepEqual(schemas.parseWatchlistWriteRequest({
+    p_public_id: 'deal1234',
+    p_saved: true,
+  }), { p_public_id: 'DEAL1234', p_saved: true });
+  assert.deepEqual(schemas.parseAgreementPostgrestErrorEnvelope({
+    code: 'P0001',
+    details: null,
+    hint: null,
+    message: 'Agreement unavailable',
+  }, 404, 'agreement_document_error'), { code: 'P0001' });
+});
+
+test('invalid agreement request boundaries fail closed without logging identifiers or provider data', async () => {
+  const schemas = await import('../src/services/agreementBoundarySchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const privateHash = 'private-agreement-hash';
+  const privateProvider = 'private-provider-agreement-detail';
+
+  try {
+    assert.throws(
+      () => schemas.parseAgreementDocumentRequest({
+        p_public_id: 'not valid',
+        p_version: 1,
+      }),
+      /valid Deal Link/i,
+    );
+    assert.throws(
+      () => schemas.parseAgreementVerificationRequest({
+        p_public_id: 'DEAL1234',
+        p_content_hash: privateHash,
+      }),
+      /64-character/i,
+    );
+    assert.throws(
+      () => schemas.parseDealLinkRenewalRequest({
+        p_deal_id: '11111111-1111-4111-8111-111111111111',
+        p_days: 365,
+      }),
+      /renewal period/i,
+    );
+    assert.throws(
+      () => schemas.parseBuyerAccessCodeRequest({
+        p_deal_id: '11111111-1111-4111-8111-111111111111',
+        p_enabled: 'true',
+      }),
+      /buyer access protection/i,
+    );
+    assert.throws(
+      () => schemas.parseAgreementPostgrestErrorEnvelope({
+        code: 'P0001',
+        details: privateProvider,
+        hint: null,
+        message: 'Agreement unavailable',
+        private_email: 'private@example.test',
+      }, 404, 'agreement_document_error'),
+      /processed safely/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(
+    serializedLogs,
+    /dealivra\.agreement\.boundary-rejection\.v1/,
+  );
+  assert.match(serializedLogs, /agreement_document_request/);
+  assert.match(serializedLogs, /agreement_verification_request/);
+  assert.match(serializedLogs, /deal_link_renewal_request/);
+  assert.match(serializedLogs, /buyer_access_code_request/);
+  assert.match(serializedLogs, /agreement_document_error/);
+  assert.doesNotMatch(serializedLogs, /private-agreement-hash/);
+  assert.doesNotMatch(serializedLogs, /private-provider-agreement-detail/);
+  assert.doesNotMatch(serializedLogs, /private@example\.test/);
+});
+
+test('the sixteenth ARC-004 boundary validates agreement, link, access-code, and watchlist contracts', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const requestSchemas = readText(
+    'src/services/agreementBoundarySchemas.ts',
+  );
+  const responseSchemas = readText(
+    'src/services/agreementRuntimeSchemas.ts',
+  );
+
+  for (const parser of [
+    'parseSellerDeclarationRequest',
+    'parseAgreementDocumentRequest',
+    'parseAgreementHistoryRequest',
+    'parseAgreementVerificationRequest',
+    'parseDealLinkRenewalRequest',
+    'parseAcceptanceProtectionRequest',
+    'parseBuyerAccessCodeRequest',
+    'parseWatchlistReadRequest',
+    'parseWatchlistWriteRequest',
+    'parseSellerDeclarationRows',
+    'parseAgreementDocumentRows',
+    'parseAgreementHistoryRows',
+    'parseAgreementVerificationRows',
+    'parseDealRenewalRows',
+    'parseAcceptanceProtectionResponse',
+    'parseBuyerAccessCodeResponse',
+    'parseWatchlistStateResponse',
+  ]) {
+    assert.match(service, new RegExp(`${parser}\\(`));
+  }
+  for (const boundary of [
+    'seller_declaration_error',
+    'agreement_document_error',
+    'agreement_history_error',
+    'agreement_verification_error',
+    'deal_link_renewal_error',
+    'acceptance_protection_error',
+    'buyer_access_code_error',
+    'watchlist_read_error',
+    'watchlist_write_error',
+  ]) {
+    assert.match(service, new RegExp(`'${boundary}'`));
+  }
+  assert.match(
+    requestSchemas,
+    /dealivra\.agreement\.boundary-rejection\.v1/,
+  );
+  assert.match(
+    responseSchemas,
+    /dealivra\.agreement\.response-rejection\.v1/,
+  );
+  assert.match(responseSchemas, /version_order_invalid/);
+  assert.match(responseSchemas, /current_version_order_invalid/);
+  assert.match(responseSchemas, /seller_declaration_invalid/);
+  assert.doesNotMatch(requestSchemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(responseSchemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(service, /as AgreementDocumentSnapshot\[\]/);
+  assert.doesNotMatch(service, /as AgreementHistoryVersion\[\]/);
+  assert.doesNotMatch(service, /as AgreementVerificationResult\[\]/);
+  assert.doesNotMatch(service, /as DealRenewalResult\[\]/);
+  assert.doesNotMatch(
+    service,
+    /Boolean\(await response\.json\(\)\)/,
+  );
+  assert.doesNotMatch(
+    service,
+    /data\?\.message\|\|'Could not update buyer access'/,
+  );
+  assert.doesNotMatch(
+    service,
+    /d\?\.message\|\|'Could not (?:check|update) saved deal'/,
+  );
+});
+
+test('browser deal mutation requests and responses are runtime validated', async () => {
+  const requests = await import('../src/services/dealMutationBoundarySchemas.ts');
+  const responses = await import('../src/services/dealMutationRuntimeSchemas.ts');
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const ownerId = '22222222-2222-4222-8222-222222222222';
+  const mediaId = '33333333-3333-4333-8333-333333333333';
+  const timestamp = '2026-07-30T12:00:00.000Z';
+  const catalog = {
+    category_id: 'phone',
+    catalog_version: '2026-07-29.1',
+    catalog_brand_id: 'apple',
+    catalog_brand_label: 'Apple',
+    catalog_model_id: 'iphone-16',
+    catalog_model_label: 'iPhone 16',
+    model_year: null,
+    catalog_variant_id: '128-gb',
+    catalog_variant_label: '128 GB',
+  };
+
+  assert.deepEqual(requests.parseDealDraftCreateRequest({
+    seller_id: ownerId.toUpperCase(),
+    title: '  iPhone 16  ',
+    description: '  ',
+    price_cents: 125000,
+    currency: 'usd',
+    condition: 'Good',
+    serial_last_four: ' A1B2 ',
+    delivery_method: 'Ship to buyer',
+    status: 'draft',
+    current_agreement_version: 0,
+    published_at: null,
+    expires_at: timestamp,
+    ...catalog,
+  }), {
+    seller_id: ownerId,
+    title: 'iPhone 16',
+    description: '',
+    price_cents: 125000,
+    currency: 'USD',
+    condition: 'Good',
+    serial_last_four: 'A1B2',
+    delivery_method: 'Ship to buyer',
+    status: 'draft',
+    current_agreement_version: 0,
+    published_at: null,
+    expires_at: timestamp,
+    ...catalog,
+  });
+  assert.deepEqual(requests.parseDealPublishRequest({
+    p_deal_id: dealId.toUpperCase(),
+    p_title: ' iPhone 16 ',
+    p_description: ' Includes all known wear and a small frame scratch. ',
+    p_price_cents: 125000,
+    p_currency: 'usd',
+    p_condition: 'Good',
+    p_serial_last_four: 'A1B2',
+    p_delivery_method: 'Ship to buyer',
+    p_expires_in_days: 7,
+  }), {
+    p_deal_id: dealId,
+    p_title: 'iPhone 16',
+    p_description: 'Includes all known wear and a small frame scratch.',
+    p_price_cents: 125000,
+    p_currency: 'USD',
+    p_condition: 'Good',
+    p_serial_last_four: 'A1B2',
+    p_delivery_method: 'Ship to buyer',
+    p_expires_in_days: 7,
+  });
+  assert.deepEqual(requests.parseDealCancelRequest({
+    p_deal_id: dealId,
+    p_reason: '  Buyer and seller agreed to cancel.  ',
+  }), {
+    p_deal_id: dealId,
+    p_reason: 'Buyer and seller agreed to cancel.',
+  });
+  assert.deepEqual(requests.parsePublicDealRequest({
+    p_public_id: ' deal1234 ',
+  }), { p_public_id: 'DEAL1234' });
+  assert.deepEqual(requests.parsePublicDealAcceptRequest({
+    p_public_id: 'deal1234',
+    p_typed_name: '  Taylor Morgan  ',
+    p_access_code: '123456',
+  }), {
+    p_public_id: 'DEAL1234',
+    p_typed_name: 'Taylor Morgan',
+    p_access_code: '123456',
+  });
+
+  const publicUrl =
+    `https://project.supabase.co/storage/v1/object/public/deal-media/${ownerId}/${dealId}/${mediaId}.webp`;
+  assert.deepEqual(requests.parseMediaDeleteRequest({
+    dealId,
+    ownerId,
+    publicUrl,
+    supabaseUrl: 'https://project.supabase.co',
+  }), {
+    dealId,
+    storagePath: `${ownerId}/${dealId}/${mediaId}.webp`,
+  });
+  assert.deepEqual(requests.parseMediaReorderRequest({
+    dealId,
+    ownerId,
+    publicUrls: [publicUrl],
+    supabaseUrl: 'https://project.supabase.co',
+  }), {
+    p_deal_id: dealId,
+    p_paths: [`${ownerId}/${dealId}/${mediaId}.webp`],
+  });
+  assert.deepEqual(requests.parseMediaUploadBatchRequest({
+    dealId,
+    ownerId,
+    startIndex: 2,
+    fileCount: 3,
+  }), {
+    dealId,
+    ownerId,
+    startIndex: 2,
+    fileCount: 3,
+  });
+  assert.deepEqual(requests.parseDealMutationPostgrestErrorEnvelope({
+    code: 'P0001',
+    details: null,
+    hint: null,
+    message: 'Provider detail',
+  }, 409, 'deal_publish_error'), { code: 'P0001' });
+  assert.equal(responses.parsePublishedDealVersionResponse(2), 2);
+  assert.equal(
+    responses.parsePublicDealAcceptanceResponse('accepted'),
+    'accepted',
+  );
+});
+
+test('invalid deal mutation boundaries fail closed without logging deal, media, or provider data', async () => {
+  const requests = await import('../src/services/dealMutationBoundarySchemas.ts');
+  const responses = await import('../src/services/dealMutationRuntimeSchemas.ts');
+  const originalConsoleError = console.error;
+  const logs = [];
+  console.error = (...values) => logs.push(values);
+  const dealId = '11111111-1111-4111-8111-111111111111';
+  const ownerId = '22222222-2222-4222-8222-222222222222';
+  const privateMediaUrl =
+    `https://attacker.example/storage/v1/object/public/deal-media/${ownerId}/${dealId}/33333333-3333-4333-8333-333333333333.webp`;
+  const privateProvider = 'private-provider-deal-detail';
+
+  try {
+    assert.throws(
+      () => requests.parseDealDraftCreateRequest({
+        seller_id: ownerId,
+        title: 'Valid title',
+        description: '',
+        price_cents: Number.NaN,
+        currency: 'USD',
+        condition: 'Good',
+        serial_last_four: null,
+        delivery_method: 'Ship to buyer',
+        status: 'draft',
+        current_agreement_version: 0,
+        published_at: null,
+        expires_at: '2026-07-30T12:00:00.000Z',
+        category_id: 'general',
+        catalog_version: 'legacy',
+        catalog_brand_id: null,
+        catalog_brand_label: null,
+        catalog_model_id: null,
+        catalog_model_label: null,
+        model_year: null,
+        catalog_variant_id: null,
+        catalog_variant_label: null,
+      }),
+      /valid price/i,
+    );
+    assert.throws(
+      () => requests.parseDealPublishRequest({
+        p_deal_id: dealId,
+        p_title: 'Valid title',
+        p_description: 'Too short',
+        p_price_cents: 5000,
+        p_currency: 'USD',
+        p_condition: 'Good',
+        p_serial_last_four: null,
+        p_delivery_method: 'Ship to buyer',
+        p_expires_in_days: 365,
+      }),
+      /description|processed safely/i,
+    );
+    assert.throws(
+      () => requests.parseMediaDeleteRequest({
+        dealId,
+        ownerId,
+        publicUrl: privateMediaUrl,
+        supabaseUrl: 'https://project.supabase.co',
+      }),
+      /not trusted/i,
+    );
+    assert.throws(
+      () => requests.parseMediaReorderRequest({
+        dealId,
+        ownerId,
+        publicUrls: [
+          `https://project.supabase.co/storage/v1/object/public/deal-media/${ownerId}/${dealId}/33333333-3333-4333-8333-333333333333.webp`,
+          `https://project.supabase.co/storage/v1/object/public/deal-media/${ownerId}/${dealId}/33333333-3333-4333-8333-333333333333.webp`,
+        ],
+        supabaseUrl: 'https://project.supabase.co',
+      }),
+      /media order/i,
+    );
+    assert.throws(
+      () => requests.parseDealMutationPostgrestErrorEnvelope({
+        code: 'P0001',
+        details: privateProvider,
+        hint: null,
+        message: 'Could not publish',
+        buyer_email: 'private@example.test',
+      }, 409, 'deal_publish_error'),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => responses.parsePublicDealAcceptanceResponse(
+        'accepted:private@example.test',
+      ),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(
+    serializedLogs,
+    /dealivra\.deal-mutation\.boundary-rejection\.v1/,
+  );
+  assert.match(
+    serializedLogs,
+    /dealivra\.deal-mutation\.response-rejection\.v1/,
+  );
+  assert.match(serializedLogs, /deal_draft_create_request/);
+  assert.match(serializedLogs, /deal_publish_request/);
+  assert.match(serializedLogs, /media_delete_request/);
+  assert.match(serializedLogs, /media_reorder_request/);
+  assert.match(serializedLogs, /deal_publish_error/);
+  assert.doesNotMatch(serializedLogs, /attacker\.example/);
+  assert.doesNotMatch(serializedLogs, /private-provider-deal-detail/);
+  assert.doesNotMatch(serializedLogs, /private@example\.test/);
+});
+
+test('the seventeenth ARC-004 boundary validates all Deal mutation contracts', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const requestSchemas = readText(
+    'src/services/dealMutationBoundarySchemas.ts',
+  );
+  const responseSchemas = readText(
+    'src/services/dealMutationRuntimeSchemas.ts',
+  );
+
+  for (const parser of [
+    'parseDealDraftCreateRequest',
+    'parseDealDraftUpdateRequest',
+    'parseDealExpirationDays',
+    'parseDealIdRequest',
+    'parseDealOwnerContext',
+    'parseDealPublishRequest',
+    'parsePublishedDealUpdateRequest',
+    'parseDealCancelRequest',
+    'parseSavedDealsRequest',
+    'parsePublicDealRequest',
+    'parsePublicDealAcceptRequest',
+    'parseMediaUploadBatchRequest',
+    'parseMediaRecordInsertRequest',
+    'parseMediaDeleteRequest',
+    'parseMediaReorderRequest',
+    'parsePublishedDealVersionResponse',
+    'parsePublicDealAcceptanceResponse',
+  ]) {
+    assert.match(service, new RegExp(`${parser}\\(`));
+  }
+  for (const boundary of [
+    'deal_draft_create_error',
+    'deal_draft_update_error',
+    'deal_publish_error',
+    'deal_update_published_error',
+    'deal_cancel_error',
+    'saved_deals_error',
+    'public_deal_error',
+    'public_deal_accept_error',
+    'media_record_insert_error',
+    'media_delete_error',
+    'media_reorder_error',
+  ]) {
+    assert.match(service, new RegExp(`'${boundary}'`));
+  }
+  assert.match(
+    requestSchemas,
+    /dealivra\.deal-mutation\.boundary-rejection\.v1/,
+  );
+  assert.match(
+    responseSchemas,
+    /dealivra\.deal-mutation\.response-rejection\.v1/,
+  );
+  assert.match(requestSchemas, /candidate\.origin !== expected\.origin/);
+  assert.match(requestSchemas, /new Set\(paths\)\.size !== paths\.length/);
+  assert.match(requestSchemas, /maximumPriceCents/);
+  assert.doesNotMatch(requestSchemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(responseSchemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(
+    service,
+    /data\?\.message \|\| 'Could not accept this deal'/,
+  );
+  assert.doesNotMatch(
+    service,
+    /d\?\.message\|\|'Could not (?:load saved deals|cancel deal)'/,
+  );
+  assert.doesNotMatch(
+    service,
+    /const marker='\/storage\/v1\/object\/public\/deal-media\/'/,
+  );
+  assert.doesNotMatch(
+    service,
+    /return await response\.json\(\) as number/,
+  );
+});
+
+test('account-name mutation requests and provider errors fail closed', async () => {
+  const schemas = await import(
+    '../src/services/accountMutationBoundarySchemas.ts'
+  );
+  const userId = '11111111-1111-4111-8111-111111111111';
+
+  assert.deepEqual(
+    schemas.parseAccountNameUpdateRequest({
+      userId: userId.toUpperCase(),
+      displayName: '  Nika Melikishvili  ',
+    }),
+    {
+      userId,
+      displayName: 'Nika Melikishvili',
+      authBody: {
+        data: {
+          display_name: 'Nika Melikishvili',
+        },
+      },
+      profileBody: {
+        display_name: 'Nika Melikishvili',
+      },
+    },
+  );
+  assert.deepEqual(
+    schemas.parseAccountAuthErrorEnvelope({
+      error_code: 'user_not_found',
+      msg: 'User not found',
+    }, 404),
+    { code: 'user_not_found' },
+  );
+  assert.deepEqual(
+    schemas.parseAccountProfileErrorEnvelope({
+      code: '23505',
+      details: null,
+      hint: null,
+      message: 'duplicate key',
+    }, 409),
+    { code: '23505' },
+  );
+
+  assert.throws(
+    () => schemas.parseAccountNameUpdateRequest({
+      userId,
+      displayName: 'A',
+    }),
+    /2 to 80 characters/i,
+  );
+  assert.throws(
+    () => schemas.parseAccountNameUpdateRequest({
+      userId,
+      displayName: 'Nika\nMelikishvili',
+    }),
+    /2 to 80 characters/i,
+  );
+  assert.throws(
+    () => schemas.parseAccountNameUpdateRequest({
+      userId,
+      displayName: 'Valid Name',
+      isAdmin: true,
+    }),
+    /processed safely/i,
+  );
+  assert.throws(
+    () => schemas.parseAccountAuthErrorEnvelope({
+      message: 'provider failure',
+      email: 'private@example.test',
+    }, 400),
+    /processed safely/i,
+  );
+  assert.throws(
+    () => schemas.parseAccountProfileErrorEnvelope({
+      message: 'provider failure',
+      details: { private: true },
+    }, 500),
+    /processed safely/i,
+  );
+});
+
+test('historical payment records are exact, bounded, and state-consistent', async () => {
+  const requests = await import(
+    '../src/services/legacyPaymentBoundarySchemas.ts'
+  );
+  const responses = await import(
+    '../src/services/legacyPaymentRuntimeSchemas.ts'
+  );
+  const dealId = '22222222-2222-4222-8222-222222222222';
+
+  assert.deepEqual(
+    requests.parseLegacyPaymentRecordRequest({
+      p_deal_id: dealId.toUpperCase(),
+    }),
+    { p_deal_id: dealId },
+  );
+  assert.deepEqual(
+    requests.parseLegacyPaymentPostgrestErrorEnvelope({
+      code: 'P0001',
+      details: null,
+      hint: null,
+      message: 'record unavailable',
+    }, 403),
+    { code: 'P0001' },
+  );
+  assert.deepEqual(responses.parseLegacyPaymentRecordRows([]), []);
+  assert.deepEqual(
+    responses.parseLegacyPaymentRecordRows([{
+      method: 'card_invoice',
+      buyer_confirmed_at: '2026-07-20T10:00:00.000Z',
+      buyer_marked_sent_at: '2026-07-20T10:01:00.000Z',
+      seller_marked_received_at: '2026-07-20T10:02:00.000Z',
+      updated_at: '2026-07-20T10:03:00.000Z',
+      viewer_role: 'buyer',
+    }]),
+    [{
+      method: 'card_invoice',
+      buyer_confirmed_at: '2026-07-20T10:00:00.000Z',
+      buyer_marked_sent_at: '2026-07-20T10:01:00.000Z',
+      seller_marked_received_at: '2026-07-20T10:02:00.000Z',
+      updated_at: '2026-07-20T10:03:00.000Z',
+      viewer_role: 'buyer',
+    }],
+  );
+
+  assert.throws(
+    () => requests.parseLegacyPaymentRecordRequest({
+      p_deal_id: dealId,
+      participant_id: 'private',
+    }),
+    /could not be loaded safely/i,
+  );
+  assert.throws(
+    () => responses.parseLegacyPaymentRecordRows([{
+      method: 'cash_at_handoff',
+      buyer_confirmed_at: null,
+      buyer_marked_sent_at: '2026-07-20T10:01:00.000Z',
+      seller_marked_received_at: null,
+      updated_at: '2026-07-20T10:03:00.000Z',
+      viewer_role: 'seller',
+    }]),
+    /invalid response/i,
+  );
+  assert.throws(
+    () => responses.parseLegacyPaymentRecordRows([{
+      method: 'bank_transfer',
+      buyer_confirmed_at: '2026-07-20T10:02:00.000Z',
+      buyer_marked_sent_at: '2026-07-20T10:01:00.000Z',
+      seller_marked_received_at: null,
+      updated_at: '2026-07-20T10:03:00.000Z',
+      viewer_role: 'buyer',
+    }]),
+    /invalid response/i,
+  );
+  assert.throws(
+    () => responses.parseLegacyPaymentRecordRows([{
+      method: 'cash_at_handoff',
+      buyer_confirmed_at: null,
+      buyer_marked_sent_at: null,
+      seller_marked_received_at: null,
+      updated_at: '2999-07-20T10:03:00.000Z',
+      viewer_role: 'seller',
+    }]),
+    /invalid response/i,
+  );
+});
+
+test('account and historical-payment rejection logs remain privacy safe', async () => {
+  const account = await import(
+    '../src/services/accountMutationBoundarySchemas.ts'
+  );
+  const paymentRequests = await import(
+    '../src/services/legacyPaymentBoundarySchemas.ts'
+  );
+  const paymentResponses = await import(
+    '../src/services/legacyPaymentRuntimeSchemas.ts'
+  );
+  const logs = [];
+  const originalConsoleError = console.error;
+  console.error = (...values) => logs.push(values);
+
+  try {
+    assert.throws(
+      () => account.parseAccountNameUpdateRequest({
+        userId: 'private-user-id',
+        displayName: 'private@example.test',
+      }),
+      /verified|processed safely/i,
+    );
+    assert.throws(
+      () => account.parseAccountAuthErrorEnvelope({
+        message: 'private-provider-account-detail',
+        email: 'private@example.test',
+      }, 400),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => paymentRequests.parseLegacyPaymentPostgrestErrorEnvelope({
+        message: 'private-provider-payment-detail',
+        buyer_email: 'private@example.test',
+      }, 500),
+      /could not be loaded safely/i,
+    );
+    assert.throws(
+      () => paymentResponses.parseLegacyPaymentRecordRows([{
+        method: 'other',
+        buyer_confirmed_at: null,
+        buyer_marked_sent_at: null,
+        seller_marked_received_at: null,
+        updated_at: '2026-07-20T10:03:00.000Z',
+        viewer_role: 'buyer',
+        customer_email: 'private@example.test',
+      }]),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(
+    serializedLogs,
+    /dealivra\.account-mutation\.boundary-rejection\.v1/,
+  );
+  assert.match(
+    serializedLogs,
+    /dealivra\.legacy-payment\.boundary-rejection\.v1/,
+  );
+  assert.match(
+    serializedLogs,
+    /dealivra\.legacy-payment\.response-rejection\.v1/,
+  );
+  assert.doesNotMatch(serializedLogs, /private-user-id/);
+  assert.doesNotMatch(serializedLogs, /private-provider-account-detail/);
+  assert.doesNotMatch(serializedLogs, /private-provider-payment-detail/);
+  assert.doesNotMatch(serializedLogs, /private@example\.test/);
+});
+
+test('the eighteenth ARC-004 boundary retires legacy payment mutations', () => {
+  const service = readText('src/services/supabaseRest.ts');
+  const accountSchemas = readText(
+    'src/services/accountMutationBoundarySchemas.ts',
+  );
+  const paymentRequestSchemas = readText(
+    'src/services/legacyPaymentBoundarySchemas.ts',
+  );
+  const paymentResponseSchemas = readText(
+    'src/services/legacyPaymentRuntimeSchemas.ts',
+  );
+  const stripeSetup = readText(
+    'supabase/stripe_protected_payments_setup.sql',
+  );
+  const productionHardening = readText(
+    'supabase/production_auth_rbac_hardening.sql',
+  );
+  const roleMatrix = readText(
+    'supabase/tests/authenticated_rpc_cross_role_rollback.sql',
+  );
+  const retiredFunctions = [
+    'set_deal_payment_method',
+    'confirm_deal_payment_method',
+    'mark_deal_payment_sent',
+    'mark_deal_payment_received',
+  ];
+
+  for (const parser of [
+    'parseAccountNameUpdateRequest',
+    'parseAccountAuthErrorEnvelope',
+    'parseAccountProfileErrorEnvelope',
+    'parseLegacyPaymentRecordRequest',
+    'parseLegacyPaymentPostgrestErrorEnvelope',
+    'parseLegacyPaymentRecordRows',
+  ]) {
+    assert.match(service, new RegExp(`${parser}\\(`));
+  }
+  for (const functionName of retiredFunctions) {
+    assert.match(
+      stripeSetup,
+      new RegExp(
+        `revoke execute on function public\\.${functionName}\\(`,
+      ),
+    );
+    assert.doesNotMatch(
+      productionHardening,
+      new RegExp(`'${functionName}'`),
+    );
+    assert.doesNotMatch(
+      roleMatrix,
+      new RegExp(`'${functionName}\\(`),
+    );
+    assert.doesNotMatch(
+      service,
+      new RegExp(`export async function ${functionName}`),
+    );
+    assert.doesNotMatch(
+      service,
+      new RegExp(`/rpc/${functionName}`),
+    );
+  }
+  assert.match(service, /\/rpc\/get_deal_payment_record/);
+  assert.match(productionHardening, /'get_deal_payment_record'/);
+  assert.match(roleMatrix, /'get_deal_payment_record\(uuid\)'/);
+  assert.match(
+    accountSchemas,
+    /dealivra\.account-mutation\.boundary-rejection\.v1/,
+  );
+  assert.match(
+    paymentRequestSchemas,
+    /dealivra\.legacy-payment\.boundary-rejection\.v1/,
+  );
+  assert.match(
+    paymentResponseSchemas,
+    /dealivra\.legacy-payment\.response-rejection\.v1/,
+  );
+  assert.match(service, /let authRollbackSucceeded=false/);
+  assert.doesNotMatch(
+    service,
+    /data\?\.msg\|\|data\?\.error_description/,
+  );
+  assert.doesNotMatch(accountSchemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(paymentRequestSchemas, /console\.error\([^)]*value/);
+  assert.doesNotMatch(paymentResponseSchemas, /console\.error\([^)]*value/);
+});
+
+test('support-case requests are exact, bounded, and normalized', async () => {
+  const schemas = await import('../src/services/supportBoundarySchemas.ts');
+  const dealId = '33333333-3333-4333-8333-333333333333';
+
+  assert.deepEqual(
+    schemas.parseCreateSupportCaseRequest({
+      p_deal_id: dealId.toUpperCase(),
+      p_category: 'delivery_issue',
+      p_subject: '  Package did not arrive  ',
+      p_message: '  Tracking has not changed for three days.  ',
+    }),
+    {
+      p_deal_id: dealId,
+      p_category: 'delivery_issue',
+      p_subject: 'Package did not arrive',
+      p_message: 'Tracking has not changed for three days.',
+    },
+  );
+  assert.deepEqual(schemas.parseMySupportCasesRequest({}), {});
+  assert.deepEqual(
+    schemas.parseSupportCaseReadRequest({
+      p_public_reference: ' sc-a1b2c3d4e5f6 ',
+    }),
+    { p_public_reference: 'SC-A1B2C3D4E5F6' },
+  );
+  assert.deepEqual(
+    schemas.parseReplySupportCaseRequest({
+      p_public_reference: 'SC-A1B2C3D4E5F6',
+      p_message: 'Here is the requested tracking update.',
+    }),
+    {
+      p_public_reference: 'SC-A1B2C3D4E5F6',
+      p_message: 'Here is the requested tracking update.',
+    },
+  );
+  assert.deepEqual(
+    schemas.parseSupportQueueRequest({ p_scope: 'mine' }),
+    { p_scope: 'mine' },
+  );
+  assert.deepEqual(
+    schemas.parseSupportCaseClaimRequest({
+      p_public_reference: 'SC-A1B2C3D4E5F6',
+    }),
+    { p_public_reference: 'SC-A1B2C3D4E5F6' },
+  );
+  assert.deepEqual(
+    schemas.parseResolveSupportCaseRequest({
+      p_public_reference: 'SC-A1B2C3D4E5F6',
+      p_resolution_message: 'The carrier confirmed delivery and receipt.',
+    }),
+    {
+      p_public_reference: 'SC-A1B2C3D4E5F6',
+      p_resolution_message: 'The carrier confirmed delivery and receipt.',
+    },
+  );
+  assert.deepEqual(
+    schemas.parseSupportPostgrestErrorEnvelope({
+      code: 'P0001',
+      details: null,
+      hint: null,
+      message: 'support case unavailable',
+    }, 403),
+    { code: 'P0001' },
+  );
+
+  for (const operation of [
+    () => schemas.parseCreateSupportCaseRequest({
+      p_deal_id: null,
+      p_category: 'delivery_issue',
+      p_subject: 'Valid subject',
+      p_message: 'Valid support message.',
+      requester_id: 'private-user',
+    }),
+    () => schemas.parseCreateSupportCaseRequest({
+      p_deal_id: null,
+      p_category: 'billing_admin',
+      p_subject: 'Valid subject',
+      p_message: 'Valid support message.',
+    }),
+    () => schemas.parseCreateSupportCaseRequest({
+      p_deal_id: null,
+      p_category: 'other',
+      p_subject: 'Private\nsubject',
+      p_message: 'Valid support message.',
+    }),
+    () => schemas.parseSupportCaseReadRequest({
+      p_public_reference: '../private',
+    }),
+    () => schemas.parseSupportQueueRequest({ p_scope: 'all' }),
+    () => schemas.parseSupportPostgrestErrorEnvelope({
+      message: 'provider detail',
+      requester_email: 'private@example.test',
+    }, 500),
+  ]) {
+    assert.throws(operation, /valid|characters|processed safely/i);
+  }
+});
+
+test('support-case responses reject excess data and inconsistent state', async () => {
+  const schemas = await import('../src/services/supportRuntimeSchemas.ts');
+  const summary = {
+    public_reference: 'SC-A1B2C3D4E5F6',
+    deal_public_id: 'AB12CD34',
+    category: 'delivery_issue',
+    subject: 'Package did not arrive',
+    status: 'waiting_support',
+    priority: 'normal',
+    first_response_due_at: '2026-07-21T10:00:00.000Z',
+    resolution_due_at: '2026-07-23T10:00:00.000Z',
+    created_at: '2026-07-20T10:00:00.000Z',
+    updated_at: '2026-07-20T10:01:00.000Z',
+  };
+
+  assert.equal(
+    schemas.parseSupportReferenceResponse('SC-A1B2C3D4E5F6'),
+    'SC-A1B2C3D4E5F6',
+  );
+  assert.equal(schemas.parseSupportMutationResponse(null), undefined);
+  assert.deepEqual(schemas.parseSupportCaseSummaryRows([summary]), [summary]);
+  assert.deepEqual(
+    schemas.parseSupportCaseDetailRows([{
+      ...summary,
+      message_id: '44444444-4444-4444-8444-444444444444',
+      message_body: 'Tracking has not changed for three days.',
+      message_author: 'requester',
+      message_is_mine: true,
+      message_created_at: '2026-07-20T10:00:05.000Z',
+    }]),
+    {
+      ...summary,
+      messages: [{
+        id: '44444444-4444-4444-8444-444444444444',
+        body: 'Tracking has not changed for three days.',
+        author: 'requester',
+        is_mine: true,
+        created_at: '2026-07-20T10:00:05.000Z',
+      }],
+    },
+  );
+  assert.deepEqual(
+    schemas.parseSupportQueueRows([{
+      public_reference: 'SC-A1B2C3D4E5F6',
+      category: 'safety_concern',
+      priority: 'urgent',
+      status: 'open',
+      assignment_state: 'unassigned',
+      first_response_due_at: '2026-07-20T11:00:00.000Z',
+      resolution_due_at: '2026-07-21T10:00:00.000Z',
+      created_at: '2026-07-20T10:00:00.000Z',
+      updated_at: '2026-07-20T10:00:00.000Z',
+    }]),
+    [{
+      public_reference: 'SC-A1B2C3D4E5F6',
+      category: 'safety_concern',
+      priority: 'urgent',
+      status: 'open',
+      assignment_state: 'unassigned',
+      first_response_due_at: '2026-07-20T11:00:00.000Z',
+      resolution_due_at: '2026-07-21T10:00:00.000Z',
+      created_at: '2026-07-20T10:00:00.000Z',
+      updated_at: '2026-07-20T10:00:00.000Z',
+    }],
+  );
+
+  for (const operation of [
+    () => schemas.parseSupportReferenceResponse('SC-private'),
+    () => schemas.parseSupportMutationResponse({ ok: true }),
+    () => schemas.parseSupportCaseSummaryRows([{
+      ...summary,
+      requester_email: 'private@example.test',
+    }]),
+    () => schemas.parseSupportCaseDetailRows([{
+      ...summary,
+      message_id: '44444444-4444-4444-8444-444444444444',
+      message_body: 'Tracking has not changed for three days.',
+      message_author: 'admin',
+      message_is_mine: false,
+      message_created_at: '2026-07-20T10:00:05.000Z',
+    }]),
+    () => schemas.parseSupportQueueRows([{
+      public_reference: 'SC-A1B2C3D4E5F6',
+      category: 'delivery_issue',
+      priority: 'normal',
+      status: 'resolved',
+      assignment_state: 'mine',
+      first_response_due_at: '2026-07-21T10:00:00.000Z',
+      resolution_due_at: '2026-07-23T10:00:00.000Z',
+      created_at: '2026-07-20T10:00:00.000Z',
+      updated_at: '2026-07-20T10:01:00.000Z',
+    }]),
+  ]) {
+    assert.throws(operation, /invalid response/i);
+  }
+});
+
+test('support-case rejection diagnostics never include customer content', async () => {
+  const requests = await import('../src/services/supportBoundarySchemas.ts');
+  const responses = await import('../src/services/supportRuntimeSchemas.ts');
+  const logs = [];
+  const originalConsoleError = console.error;
+  console.error = (...values) => logs.push(values);
+
+  try {
+    assert.throws(
+      () => requests.parseCreateSupportCaseRequest({
+        p_deal_id: null,
+        p_category: 'other',
+        p_subject: 'private@example.test',
+        p_message: 'private-message-content',
+        requester_id: 'private-user-id',
+      }),
+      /processed safely/i,
+    );
+    assert.throws(
+      () => responses.parseSupportCaseSummaryRows([{
+        public_reference: 'SC-A1B2C3D4E5F6',
+        customer_message: 'private-message-content',
+      }]),
+      /invalid response/i,
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  const serializedLogs = JSON.stringify(logs);
+  assert.match(
+    serializedLogs,
+    /dealivra\.support\.boundary-rejection\.v1/,
+  );
+  assert.match(
+    serializedLogs,
+    /dealivra\.support\.response-rejection\.v1/,
+  );
+  assert.doesNotMatch(serializedLogs, /private@example\.test/);
+  assert.doesNotMatch(serializedLogs, /private-message-content/);
+  assert.doesNotMatch(serializedLogs, /private-user-id/);
+});
+
+test('support cases are staged behind exact assignment and privacy boundaries', () => {
+  const setup = readText('supabase/support_case_setup.sql');
+  const rollback = readText(
+    'supabase/tests/support_case_authorization_rollback.sql',
+  );
+  const hardening = readText('supabase/production_auth_rbac_hardening.sql');
+  const roleMatrix = readText(
+    'supabase/tests/authenticated_rpc_cross_role_rollback.sql',
+  );
+  const requests = readText('src/services/supportBoundarySchemas.ts');
+  const responses = readText('src/services/supportRuntimeSchemas.ts');
+  const service = readText('src/services/supabaseRest.ts');
+  const flags = readText('src/featureFlags.ts');
+  const profile = readText('src/AccountProfileWorkspace.tsx');
+  const center = readText('src/SupportCaseCenter.tsx');
+  const functions = [
+    'create_support_case',
+    'get_my_support_cases',
+    'get_support_case',
+    'reply_support_case',
+    'get_support_queue',
+    'claim_support_case',
+    'resolve_support_case',
+  ];
+
+  assert.match(setup, /alter table public\.support_cases enable row level security/);
+  assert.match(
+    setup,
+    /revoke all on table public\.support_cases\s+from public, anon, authenticated/,
+  );
+  assert.match(
+    setup,
+    /revoke all on table public\.support_case_messages\s+from public, anon, authenticated/,
+  );
+  assert.match(setup, /support_case_messages_reject_update_delete/);
+  assert.match(setup, /support_case_messages_reject_truncate/);
+  assert.match(setup, /pg_advisory_xact_lock/);
+  assert.match(setup, /active_case_count >= 5/);
+  assert.match(setup, /assigned_to = viewer/);
+  assert.match(setup, /assigned_to = operator_id/);
+  assert.match(setup, /auth\.jwt\(\) ->> 'aal'/);
+  assert.match(setup, /support_case_opened/);
+  assert.match(setup, /support_case_claimed/);
+  assert.match(setup, /support_case_replied/);
+  assert.match(setup, /support_case_resolved/);
+
+  for (const functionName of functions) {
+    assert.match(setup, new RegExp(`function public\\.${functionName}\\(`));
+    assert.match(hardening, new RegExp(`'${functionName}'`));
+    assert.match(roleMatrix, new RegExp(`'${functionName}\\(`));
+    assert.match(service, new RegExp(`/rpc/${functionName}`));
+  }
+  for (const parser of [
+    'parseCreateSupportCaseRequest',
+    'parseMySupportCasesRequest',
+    'parseSupportCaseReadRequest',
+    'parseReplySupportCaseRequest',
+    'parseSupportQueueRequest',
+    'parseSupportCaseClaimRequest',
+    'parseResolveSupportCaseRequest',
+    'parseSupportPostgrestErrorEnvelope',
+    'parseSupportReferenceResponse',
+    'parseSupportMutationResponse',
+    'parseSupportCaseSummaryRows',
+    'parseSupportCaseDetailRows',
+    'parseSupportQueueRows',
+  ]) {
+    assert.match(service, new RegExp(`${parser}\\(`));
+  }
+  assert.match(flags, /VITE_SUPPORT_CASES_ENABLED/);
+  assert.match(flags, /=== 'enabled'/);
+  assert.match(profile, /supportCasesEnabled \? <SupportCaseCenter/);
+  assert.match(center, /Never include passwords/);
+  assert.match(center, /Do not use support chat for an immediate emergency/);
+  assert.match(rollback, /Support tables are not deny-by-default/);
+  assert.match(rollback, /Support queue privacy or AAL2 boundary changed/);
+  assert.match(requests, /dealivra\.support\.boundary-rejection\.v1/);
+  assert.match(responses, /dealivra\.support\.response-rejection\.v1/);
+  assert.doesNotMatch(requests, /console\.error\([^)]*value/);
+  assert.doesNotMatch(responses, /console\.error\([^)]*value/);
+});
+
+test('runtime rejection reporter accepts only three bounded dimensions', async () => {
+  const reporter = await import(
+    '../src/services/runtimeRejectionReporter.ts'
+  );
+  const event = {
+    schema: 'dealivra.support.response-rejection.v1',
+    boundary: 'support_case_detail',
+    issue: 'record_shape_invalid',
+  };
+
+  assert.deepEqual(reporter.normalizeRuntimeRejection(event), event);
+  for (const invalid of [
+    null,
+    [],
+    { ...event, customer_email: 'private@example.test' },
+    { ...event, schema: 'dealivra.unknown.event.v1' },
+    { ...event, boundary: 'support/case' },
+    { ...event, issue: 'x'.repeat(97) },
+  ]) {
+    assert.equal(reporter.normalizeRuntimeRejection(invalid), null);
+  }
+});
+
+test('runtime rejection intake is same-origin, staged, and privacy safe', async () => {
+  const originalMode = process.env.DEALIVRA_RUNTIME_REJECTION_MODE;
+  const originalEnvironment = process.env.VERCEL_ENV;
+  const originalCommit = process.env.VERCEL_GIT_COMMIT_SHA;
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = value => warnings.push(String(value));
+
+  const request = (
+    body,
+    {
+      method = 'POST',
+      origin = 'https://dealivra.test',
+      host = 'dealivra.test',
+      contentType = 'application/json',
+    } = {},
+  ) => ({
+    method,
+    headers: {
+      origin,
+      host,
+      'content-type': contentType,
+    },
+    body,
+  });
+  const valid = {
+    schema: 'dealivra.support.response-rejection.v1',
+    boundary: 'support_case_detail',
+    issue: 'record_shape_invalid',
+    occurrence_count: 1,
+  };
+
+  try {
+    process.env.DEALIVRA_RUNTIME_REJECTION_MODE = 'staged';
+    const staged = createResponse();
+    await runtimeRejectionHandler(request(valid), staged);
+    assert.equal(staged.statusCode, 204);
+    assert.equal(staged.ended, true);
+    assert.equal(warnings.length, 0);
+
+    process.env.DEALIVRA_RUNTIME_REJECTION_MODE = 'enforced';
+    process.env.VERCEL_ENV = 'preview';
+    process.env.VERCEL_GIT_COMMIT_SHA = 'a'.repeat(40);
+
+    const missingOrigin = createResponse();
+    await runtimeRejectionHandler(
+      request(valid, { origin: null }),
+      missingOrigin,
+    );
+    assert.equal(missingOrigin.statusCode, 403);
+
+    const method = createResponse();
+    await runtimeRejectionHandler(
+      request(valid, { method: 'GET' }),
+      method,
+    );
+    assert.equal(method.statusCode, 405);
+    assert.equal(method.headers.get('allow'), 'POST');
+
+    const crossOrigin = createResponse();
+    await runtimeRejectionHandler(
+      request(valid, { origin: 'https://attacker.test' }),
+      crossOrigin,
+    );
+    assert.equal(crossOrigin.statusCode, 403);
+
+    const contentType = createResponse();
+    await runtimeRejectionHandler(
+      request(valid, { contentType: 'text/plain' }),
+      contentType,
+    );
+    assert.equal(contentType.statusCode, 415);
+
+    const excess = createResponse();
+    await runtimeRejectionHandler(request({
+      ...valid,
+      rejected_payload: 'private-message-content',
+    }), excess);
+    assert.equal(excess.statusCode, 400);
+    assert.equal(warnings.length, 0);
+
+    const oversized = createResponse();
+    await runtimeRejectionHandler(request('x'.repeat(1_025)), oversized);
+    assert.equal(oversized.statusCode, 400);
+
+    process.env.DEALIVRA_RUNTIME_REJECTION_MODE = 'unexpected';
+    const disabled = createResponse();
+    await runtimeRejectionHandler(request(valid), disabled);
+    assert.equal(disabled.statusCode, 503);
+    assert.equal(warnings.length, 0);
+
+    process.env.DEALIVRA_RUNTIME_REJECTION_MODE = 'enforced';
+    const accepted = createResponse();
+    await runtimeRejectionHandler(request(valid), accepted);
+    assert.equal(accepted.statusCode, 204);
+    assert.equal(accepted.ended, true);
+    assert.equal(warnings.length, 1);
+
+    const logged = JSON.parse(warnings[0]);
+    assert.deepEqual(
+      {
+        schema: logged.schema,
+        environment: logged.environment,
+        release: logged.release,
+        event_schema: logged.event_schema,
+        boundary: logged.boundary,
+        issue: logged.issue,
+        occurrence_count: logged.occurrence_count,
+      },
+      {
+        schema: 'dealivra.runtime-rejection-monitor.v1',
+        environment: 'preview',
+        release: 'a'.repeat(40),
+        event_schema: valid.schema,
+        boundary: valid.boundary,
+        issue: valid.issue,
+        occurrence_count: 1,
+      },
+    );
+    assert.match(logged.event_id, /^[0-9a-f-]{36}$/);
+    assert.ok(Number.isFinite(Date.parse(logged.received_at)));
+    assert.doesNotMatch(warnings[0], /private-message-content/);
+    assert.doesNotMatch(warnings[0], /dealivra\.test/);
+  } finally {
+    console.warn = originalWarn;
+    if (originalMode === undefined) {
+      delete process.env.DEALIVRA_RUNTIME_REJECTION_MODE;
+    } else {
+      process.env.DEALIVRA_RUNTIME_REJECTION_MODE = originalMode;
+    }
+    if (originalEnvironment === undefined) {
+      delete process.env.VERCEL_ENV;
+    } else {
+      process.env.VERCEL_ENV = originalEnvironment;
+    }
+    if (originalCommit === undefined) {
+      delete process.env.VERCEL_GIT_COMMIT_SHA;
+    } else {
+      process.env.VERCEL_GIT_COMMIT_SHA = originalCommit;
+    }
+  }
+});
+
+test('every runtime schema uses the governed rejection transport', () => {
+  const reporter = readText('src/services/runtimeRejectionReporter.ts');
+  const endpoint = readText('api/security/runtime-rejection.mjs');
+  const schemaFiles = [
+    'accountActivityBoundarySchemas.ts',
+    'accountActivityRuntimeSchemas.ts',
+    'accountMutationBoundarySchemas.ts',
+    'adminBoundarySchemas.ts',
+    'adminRuntimeSchemas.ts',
+    'agreementBoundarySchemas.ts',
+    'agreementRuntimeSchemas.ts',
+    'authBoundarySchemas.ts',
+    'authRuntimeSchemas.ts',
+    'dealMutationBoundarySchemas.ts',
+    'dealMutationRuntimeSchemas.ts',
+    'deliveryBoundarySchemas.ts',
+    'deliveryRuntimeSchemas.ts',
+    'evidenceBoundarySchemas.ts',
+    'evidenceRuntimeSchemas.ts',
+    'interactionBoundarySchemas.ts',
+    'interactionRuntimeSchemas.ts',
+    'legacyPaymentBoundarySchemas.ts',
+    'legacyPaymentRuntimeSchemas.ts',
+    'paymentBoundarySchemas.ts',
+    'paymentRuntimeSchemas.ts',
+    'runtimeSchemas.ts',
+    'supportBoundarySchemas.ts',
+    'supportRuntimeSchemas.ts',
+    'trustBoundarySchemas.ts',
+    'trustRuntimeSchemas.ts',
+  ];
+
+  for (const file of schemaFiles) {
+    const source = readText(`src/services/${file}`);
+    assert.match(source, /reportRuntimeRejection\(\{/);
+    assert.match(
+      source,
+      /from '\.\/runtimeRejectionReporter\.ts'/,
+    );
+    assert.doesNotMatch(
+      source,
+      /console\.error\('\[dealivra-.*rejection\]'/,
+    );
+  }
+  assert.match(reporter, /maximumTransportsPerMinute = 20/);
+  assert.match(reporter, /signatureCooldownMs = 30_000/);
+  assert.match(reporter, /sendBoundedDiagnostic\(/);
+  assert.match(reporter, /\/api\/security\/runtime-rejection/);
+  assert.doesNotMatch(reporter, /location\.(?:href|pathname|search|hash)/);
+  assert.match(endpoint, /DEALIVRA_RUNTIME_REJECTION_MODE/);
+  assert.match(endpoint, /mode === 'staged'/);
+  assert.match(endpoint, /mode !== 'enforced'/);
+  assert.match(endpoint, /maximumBodyBytes = 1_024/);
+  assert.match(endpoint, /Object\.keys\(value\)\.length !== 4/);
+  assert.match(endpoint, /dealivra\.runtime-rejection-monitor\.v1/);
+  assert.doesNotMatch(endpoint, /x-forwarded-for/i);
+  assert.doesNotMatch(endpoint, /user-agent/i);
+  assert.doesNotMatch(endpoint, /\breferer\b/i);
+  assert.doesNotMatch(endpoint, /headers?\[['"]cookie/i);
+});
+
+test('client failure reporter accepts only fixed non-sensitive categories', async () => {
+  const reporter = await import('../src/services/clientFailureReporter.ts');
+  const renderFailure = {
+    schema: 'dealivra.client-failure.v1',
+    boundary: 'application_render',
+    issue: 'react_render_failed',
+  };
+
+  assert.deepEqual(reporter.normalizeClientFailure(renderFailure), renderFailure);
+  assert.deepEqual(
+    reporter.normalizeClientFailure({
+      schema: 'dealivra.client-failure.v1',
+      boundary: 'browser_runtime',
+      issue: 'unhandled_promise_rejection',
+    }),
+    {
+      schema: 'dealivra.client-failure.v1',
+      boundary: 'browser_runtime',
+      issue: 'unhandled_promise_rejection',
+    },
+  );
+  for (const invalid of [
+    null,
+    [],
+    { ...renderFailure, componentStack: 'at PrivateDeal' },
+    { ...renderFailure, error: 'token=private' },
+    { ...renderFailure, boundary: 'browser_runtime' },
+    { ...renderFailure, issue: 'arbitrary_failure' },
+    {
+      schema: 'dealivra.client-failure.v1',
+      boundary: 'application_bootstrap',
+      issue: 'react_render_failed',
+    },
+  ]) {
+    assert.equal(reporter.normalizeClientFailure(invalid), null);
+  }
+});
+
+test('client failure intake is default-off, exact, and privacy safe', async () => {
+  const originalMode = process.env.DEALIVRA_CLIENT_FAILURE_MODE;
+  const originalEnvironment = process.env.VERCEL_ENV;
+  const originalCommit = process.env.VERCEL_GIT_COMMIT_SHA;
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = value => warnings.push(String(value));
+
+  const request = (
+    body,
+    {
+      method = 'POST',
+      origin = 'https://dealivra.test',
+      host = 'dealivra.test',
+      contentType = 'application/json',
+    } = {},
+  ) => ({
+    method,
+    headers: {
+      origin,
+      host,
+      'content-type': contentType,
+    },
+    body,
+  });
+  const valid = {
+    schema: 'dealivra.client-failure.v1',
+    boundary: 'application_render',
+    issue: 'react_render_failed',
+    occurrence_count: 1,
+  };
+
+  try {
+    delete process.env.DEALIVRA_CLIENT_FAILURE_MODE;
+    const staged = createResponse();
+    await clientFailureHandler(request(valid), staged);
+    assert.equal(staged.statusCode, 204);
+    assert.equal(staged.ended, true);
+    assert.equal(warnings.length, 0);
+
+    process.env.DEALIVRA_CLIENT_FAILURE_MODE = 'enforced';
+    process.env.VERCEL_ENV = 'preview';
+    process.env.VERCEL_GIT_COMMIT_SHA = 'b'.repeat(40);
+
+    const method = createResponse();
+    await clientFailureHandler(request(valid, { method: 'GET' }), method);
+    assert.equal(method.statusCode, 405);
+    assert.equal(method.headers.get('allow'), 'POST');
+
+    const crossOrigin = createResponse();
+    await clientFailureHandler(
+      request(valid, { origin: 'https://attacker.test' }),
+      crossOrigin,
+    );
+    assert.equal(crossOrigin.statusCode, 403);
+
+    const contentType = createResponse();
+    await clientFailureHandler(
+      request(valid, { contentType: 'text/plain' }),
+      contentType,
+    );
+    assert.equal(contentType.statusCode, 415);
+
+    for (const body of [
+      { ...valid, stack: 'at PrivateDeal' },
+      { ...valid, issue: 'arbitrary_failure' },
+      {
+        ...valid,
+        boundary: 'application_bootstrap',
+        issue: 'react_render_failed',
+      },
+      'x'.repeat(513),
+    ]) {
+      const rejected = createResponse();
+      await clientFailureHandler(request(body), rejected);
+      assert.equal(rejected.statusCode, 400);
+    }
+    assert.equal(warnings.length, 0);
+
+    process.env.DEALIVRA_CLIENT_FAILURE_MODE = 'invalid';
+    const unavailable = createResponse();
+    await clientFailureHandler(request(valid), unavailable);
+    assert.equal(unavailable.statusCode, 503);
+
+    process.env.DEALIVRA_CLIENT_FAILURE_MODE = 'enforced';
+    const accepted = createResponse();
+    await clientFailureHandler(request(valid), accepted);
+    assert.equal(accepted.statusCode, 204);
+    assert.equal(accepted.ended, true);
+    assert.equal(warnings.length, 1);
+
+    const logged = JSON.parse(warnings[0]);
+    assert.deepEqual(
+      {
+        schema: logged.schema,
+        environment: logged.environment,
+        release: logged.release,
+        event_schema: logged.event_schema,
+        boundary: logged.boundary,
+        issue: logged.issue,
+        occurrence_count: logged.occurrence_count,
+      },
+      {
+        schema: 'dealivra.client-failure-monitor.v1',
+        environment: 'preview',
+        release: 'b'.repeat(40),
+        event_schema: valid.schema,
+        boundary: valid.boundary,
+        issue: valid.issue,
+        occurrence_count: 1,
+      },
+    );
+    assert.match(logged.event_id, /^[0-9a-f-]{36}$/);
+    assert.ok(Number.isFinite(Date.parse(logged.received_at)));
+    assert.doesNotMatch(warnings[0], /PrivateDeal|token|dealivra\.test/);
+  } finally {
+    console.warn = originalWarn;
+    if (originalMode === undefined) {
+      delete process.env.DEALIVRA_CLIENT_FAILURE_MODE;
+    } else {
+      process.env.DEALIVRA_CLIENT_FAILURE_MODE = originalMode;
+    }
+    if (originalEnvironment === undefined) {
+      delete process.env.VERCEL_ENV;
+    } else {
+      process.env.VERCEL_ENV = originalEnvironment;
+    }
+    if (originalCommit === undefined) {
+      delete process.env.VERCEL_GIT_COMMIT_SHA;
+    } else {
+      process.env.VERCEL_GIT_COMMIT_SHA = originalCommit;
+    }
+  }
+});
+
+test('render and bootstrap failures use the governed recovery boundary', () => {
+  const boundary = readText('src/AppErrorBoundary.tsx');
+  const main = readText('src/main.tsx');
+  const reporter = readText('src/services/clientFailureReporter.ts');
+  const endpoint = readText('api/security/client-failure.mjs');
+
+  assert.match(boundary, /reportClientFailure\(\{/);
+  assert.match(boundary, /boundary: 'application_render'/);
+  assert.match(boundary, /issue: 'react_render_failed'/);
+  assert.match(boundary, /return <ApplicationFailurePage \/>/);
+  assert.doesNotMatch(boundary, /error\.name/);
+  assert.doesNotMatch(boundary, /errorInfo\.componentStack/);
+
+  assert.match(main, /catch \{/);
+  assert.match(main, /issue: 'bundle_load_failed'/);
+  assert.match(main, /<ApplicationFailurePage \/>/);
+  assert.match(main, /addEventListener\('error'/);
+  assert.match(main, /issue: 'window_error'/);
+  assert.match(main, /addEventListener\('unhandledrejection'/);
+  assert.match(main, /issue: 'unhandled_promise_rejection'/);
+  assert.match(main, /issue: 'localization_initialization_failed'/);
+
+  assert.match(reporter, /maximumTransportsPerMinute = 10/);
+  assert.match(reporter, /signatureCooldownMs = 30_000/);
+  assert.match(reporter, /sendBoundedDiagnostic\(/);
+  assert.doesNotMatch(reporter, /location\.(?:href|pathname|search|hash)/);
+  assert.match(endpoint, /DEALIVRA_CLIENT_FAILURE_MODE/);
+  assert.match(endpoint, /maximumBodyBytes = 512/);
+  assert.match(endpoint, /Object\.keys\(value\)\.length !== 4/);
+  assert.match(endpoint, /dealivra\.client-failure-monitor\.v1/);
+  assert.doesNotMatch(endpoint, /x-forwarded-for|user-agent|\breferer\b/i);
+  assert.doesNotMatch(endpoint, /headers?\[['"]cookie/i);
+});
+
+test('server failures are fixed-category, correlated, and privacy safe', async () => {
+  const reporter = await import('../server/serverFailureReporter.mjs');
+  const auth = await import('../server/authShared.mjs');
+  const originalError = console.error;
+  const originalEnvironment = process.env.VERCEL_ENV;
+  const originalCommit = process.env.VERCEL_GIT_COMMIT_SHA;
+  const errors = [];
+  console.error = value => errors.push(String(value));
+
+  try {
+    process.env.VERCEL_ENV = 'preview';
+    process.env.VERCEL_GIT_COMMIT_SHA = 'c'.repeat(40);
+    const event = {
+      schema: 'dealivra.server-failure.v1',
+      boundary: 'catalog_read',
+      issue: 'catalog_unavailable',
+    };
+
+    assert.deepEqual(reporter.normalizeServerFailure(event), {
+      event_schema: event.schema,
+      boundary: event.boundary,
+      issue: event.issue,
+    });
+    assert.equal(reporter.recordServerFailure(event), true);
+    for (const invalid of [
+      null,
+      [],
+      { ...event, error: 'private provider message' },
+      { ...event, boundary: 'catalog/read' },
+      { ...event, issue: 'database_row_private' },
+    ]) {
+      assert.equal(reporter.normalizeServerFailure(invalid), null);
+      assert.equal(reporter.recordServerFailure(invalid), false);
+    }
+
+    auth.logAuthFailure(
+      'login',
+      new Error('fetch failed token=private customer@example.test'),
+    );
+    auth.logAuthFailure(
+      'signup',
+      new Error('Authentication service is not configured.'),
+    );
+    auth.logAuthFailure(
+      'refresh',
+      new Error('Service URL is invalid: https://secret.example.test'),
+    );
+    auth.logAuthFailure(
+      'password:change',
+      new Error('customer@example.test failed with private profile data'),
+    );
+
+    assert.equal(errors.length, 5);
+    const records = errors.map(value => JSON.parse(value));
+    for (const record of records) {
+      assert.equal(record.schema, 'dealivra.server-failure-monitor.v1');
+      assert.equal(record.event_schema, 'dealivra.server-failure.v1');
+      assert.equal(record.environment, 'preview');
+      assert.equal(record.release, 'c'.repeat(40));
+      assert.match(record.event_id, /^[0-9a-f-]{36}$/);
+      assert.ok(Number.isFinite(Date.parse(record.occurred_at)));
+      assert.match(record.boundary, /^[a-z][a-z0-9_]{1,95}$/);
+    }
+    assert.deepEqual(
+      records.slice(1).map(({ boundary, issue }) => ({ boundary, issue })),
+      [
+        { boundary: 'auth_login', issue: 'provider_unavailable' },
+        { boundary: 'auth_signup', issue: 'configuration_missing' },
+        { boundary: 'auth_refresh', issue: 'configuration_invalid' },
+        { boundary: 'auth_password_change', issue: 'unexpected_failure' },
+      ],
+    );
+    assert.doesNotMatch(
+      errors.join('\n'),
+      /private|customer@example|secret\.example|token=/i,
+    );
+  } finally {
+    console.error = originalError;
+    if (originalEnvironment === undefined) {
+      delete process.env.VERCEL_ENV;
+    } else {
+      process.env.VERCEL_ENV = originalEnvironment;
+    }
+    if (originalCommit === undefined) {
+      delete process.env.VERCEL_GIT_COMMIT_SHA;
+    } else {
+      process.env.VERCEL_GIT_COMMIT_SHA = originalCommit;
+    }
+  }
+});
+
+test('current Vercel service failures use the governed server reporter', () => {
+  const reporter = readText('server/serverFailureReporter.mjs');
+  const auth = readText('server/authShared.mjs');
+  const catalog = readText('api/catalog.mjs');
+  const vin = readText('api/vehicles/vin.mjs');
+
+  assert.match(reporter, /Object\.keys\(value\)\.length !== 3/);
+  assert.match(reporter, /dealivra\.server-failure-monitor\.v1/);
+  assert.match(reporter, /event_id: randomUUID\(\)/);
+  assert.doesNotMatch(
+    reporter,
+    /error\.(?:message|name|stack)|request\.headers|x-forwarded-for|user-agent/i,
+  );
+
+  assert.match(auth, /recordServerFailure\(\{/);
+  assert.match(auth, /boundary,/);
+  assert.match(auth, /issue,/);
+  assert.doesNotMatch(auth, /diagnosticTokens/);
+  assert.doesNotMatch(auth, /current\[(?:property|['"]message['"])\]/);
+
+  assert.match(catalog, /boundary: 'catalog_read'/);
+  assert.match(catalog, /issue: 'catalog_unavailable'/);
+  assert.match(vin, /boundary: 'vehicle_vin_decode'/);
+  assert.match(vin, /'provider_timeout'/);
+  assert.match(vin, /'provider_response_invalid'/);
+  assert.match(vin, /'provider_unavailable'/);
+});
+
+test('privacy-safe Web Vitals use fixed quality buckets only', async () => {
+  const reporter = readText('src/services/webVitalReporter.ts');
+  const endpoint = readText('api/security/web-vital.mjs');
+  const main = readText('src/main.tsx');
+  const warnings = [];
+  const originalInfo = console.info;
+  const originalMode = process.env.DEALIVRA_WEB_VITAL_MODE;
+  const originalEnvironment = process.env.VERCEL_ENV;
+  const originalCommit = process.env.VERCEL_GIT_COMMIT_SHA;
+  console.info = value => warnings.push(String(value));
+
+  const request = (
+    body,
+    {
+      method = 'POST',
+      origin = 'https://dealivra.test',
+      host = 'dealivra.test',
+      contentType = 'application/json',
+    } = {},
+  ) => ({
+    method,
+    headers: {
+      origin,
+      host,
+      'content-type': contentType,
+    },
+    body,
+  });
+  const valid = {
+    schema: 'dealivra.web-vital.v1',
+    metric: 'lcp',
+    rating: 'needs_improvement',
+    bucket: '2500_4000',
+    occurrence_count: 1,
+  };
+
+  try {
+    delete process.env.DEALIVRA_WEB_VITAL_MODE;
+    const staged = createResponse();
+    await webVitalHandler(request(valid), staged);
+    assert.equal(staged.statusCode, 204);
+    assert.equal(warnings.length, 0);
+
+    process.env.DEALIVRA_WEB_VITAL_MODE = 'enforced';
+    process.env.VERCEL_ENV = 'preview';
+    process.env.VERCEL_GIT_COMMIT_SHA = 'd'.repeat(40);
+
+    for (const [body, options, expectedStatus] of [
+      [valid, { method: 'GET' }, 405],
+      [valid, { origin: 'https://attacker.test' }, 403],
+      [valid, { contentType: 'text/plain' }, 415],
+      [{ ...valid, exact_value: 3123.2 }, {}, 400],
+      [{ ...valid, bucket: 'over_4000' }, {}, 400],
+      [{ ...valid, metric: 'navigation' }, {}, 400],
+      ['x'.repeat(513), {}, 400],
+    ]) {
+      const rejected = createResponse();
+      await webVitalHandler(request(body, options), rejected);
+      assert.equal(rejected.statusCode, expectedStatus);
+    }
+    assert.equal(warnings.length, 0);
+
+    const accepted = createResponse();
+    await webVitalHandler(request(valid), accepted);
+    assert.equal(accepted.statusCode, 204);
+    assert.equal(warnings.length, 1);
+    const record = JSON.parse(warnings[0]);
+    assert.deepEqual(
+      {
+        schema: record.schema,
+        environment: record.environment,
+        release: record.release,
+        event_schema: record.event_schema,
+        metric: record.metric,
+        rating: record.rating,
+        bucket: record.bucket,
+        occurrence_count: record.occurrence_count,
+      },
+      {
+        schema: 'dealivra.web-vital-monitor.v1',
+        environment: 'preview',
+        release: 'd'.repeat(40),
+        event_schema: valid.schema,
+        metric: valid.metric,
+        rating: valid.rating,
+        bucket: valid.bucket,
+        occurrence_count: 1,
+      },
+    );
+    assert.match(record.event_id, /^[0-9a-f-]{36}$/);
+    assert.ok(Number.isFinite(Date.parse(record.received_at)));
+    assert.doesNotMatch(warnings[0], /dealivra\.test|customer|route|device/i);
+  } finally {
+    console.info = originalInfo;
+    if (originalMode === undefined) {
+      delete process.env.DEALIVRA_WEB_VITAL_MODE;
+    } else {
+      process.env.DEALIVRA_WEB_VITAL_MODE = originalMode;
+    }
+    if (originalEnvironment === undefined) {
+      delete process.env.VERCEL_ENV;
+    } else {
+      process.env.VERCEL_ENV = originalEnvironment;
+    }
+    if (originalCommit === undefined) {
+      delete process.env.VERCEL_GIT_COMMIT_SHA;
+    } else {
+      process.env.VERCEL_GIT_COMMIT_SHA = originalCommit;
+    }
+  }
+
+  assert.match(reporter, /classifyWebVital/);
+  assert.match(reporter, /'under_2500'/);
+  assert.match(reporter, /'0_1_0_25'/);
+  assert.match(reporter, /'200_500'/);
+  assert.match(reporter, /sendBoundedDiagnostic\(/);
+  assert.doesNotMatch(
+    reporter,
+    /location\.(?:href|pathname|search|hash)|navigator\.userAgent/,
+  );
+  assert.match(endpoint, /DEALIVRA_WEB_VITAL_MODE/);
+  assert.match(endpoint, /maximumBodyBytes = 512/);
+  assert.match(endpoint, /Object\.keys\(value\)\.length !== 5/);
+  assert.doesNotMatch(endpoint, /x-forwarded-for|user-agent|\breferer\b/i);
+  assert.match(main, /startWebVitalMonitoring\(\)/);
+});
+
+test('production builds enforce explicit JavaScript and CSS budgets', () => {
+  const packageJson = readJson('package.json');
+  const budget = readText('scripts/verify-build-budgets.mjs');
+
+  assert.equal(
+    packageJson.scripts['performance:budgets'],
+    'node scripts/verify-build-budgets.mjs',
+  );
+  assert.match(packageJson.scripts.build, /npm run performance:budgets$/);
+  assert.match(budget, /maximumJavaScriptChunkBytes: 400_000/);
+  assert.match(budget, /maximumCssChunkBytes: 200_000/);
+  assert.match(budget, /maximumTotalJavaScriptBytes: 825_000/);
+  assert.match(budget, /maximumTotalCssBytes: 290_000/);
+  assert.match(budget, /throw new Error\(`Build performance budget exceeded:/);
+});
+
+test('health endpoint is minimal, uncached, and read-only', () => {
+  const getResponse = createResponse();
+  healthHandler({ method: 'GET', headers: {} }, getResponse);
+  assert.equal(getResponse.statusCode, 200);
+  assert.deepEqual(getResponse.payload, {
+    schema: 'dealivra.health.v1',
+    status: 'alive',
+  });
+  assert.equal(getResponse.headers.get('cache-control'), 'no-store, max-age=0');
+  assert.equal(getResponse.headers.get('x-content-type-options'), 'nosniff');
+
+  const headResponse = createResponse();
+  healthHandler({ method: 'HEAD', headers: {} }, headResponse);
+  assert.equal(headResponse.statusCode, 200);
+  assert.equal(headResponse.ended, true);
+  assert.equal(headResponse.payload, undefined);
+
+  const postResponse = createResponse();
+  healthHandler({ method: 'POST', headers: {} }, postResponse);
+  assert.equal(postResponse.statusCode, 405);
+  assert.equal(postResponse.headers.get('allow'), 'GET, HEAD');
+
+  const source = readText('api/health.mjs');
+  assert.doesNotMatch(
+    source,
+    /process\.env|commit|release|database|supabase|stripe|hostname|request\.headers/i,
+  );
+});
+
+test('protected synthetic checks are read-only, bounded, and secret safe', () => {
+  const packageJson = readJson('package.json');
+  const source = readText('scripts/run-protected-synthetic.mjs');
+
+  assert.equal(
+    packageJson.scripts['smoke:protected'],
+    'node scripts/run-protected-synthetic.mjs',
+  );
+  assert.match(source, /method: 'GET'/);
+  assert.match(source, /redirect: 'manual'/);
+  assert.match(source, /AbortSignal\.timeout\(requestTimeoutMs\)/);
+  assert.match(source, /maximumResponseBytes = 1_000_000/);
+  assert.match(source, /DEALIVRA_SYNTHETIC_BYPASS_SECRET/);
+  assert.match(source, /'x-vercel-protection-bypass': secret/);
+  assert.match(source, /DEALIVRA_SYNTHETIC_PRODUCTION_MODE/);
+  assert.match(source, /read_only_confirmed/);
+  assert.match(source, /'\/api\/health'/);
+  assert.match(source, /'\/terms'/);
+  assert.match(source, /'\/\?start=signin'/);
+  assert.match(source, /'\/api\/catalog\?category=phone'/);
+  assert.match(source, /dealivra\.synthetic\.result\.v1/);
+  assert.match(source, /status: 'failed'/);
+  assert.doesNotMatch(
+    source,
+    /method:\s*'(?:POST|PUT|PATCH|DELETE)'|path:\s*'\/api\/(?:auth|payments?)|authorization|body:/i,
+  );
+  assert.doesNotMatch(source, /console\.(?:log|error)\([^)]*secret/i);
+});
+
+test('operational records collapse to fixed non-identifying counters', () => {
+  assert.deepEqual(
+    classifyOperationalRecord({
+      schema: 'dealivra.payment.operation.v1',
+      outcome: 'failed',
+      severity: 'error',
+      error_code: 'payment_intent_mismatch',
+      correlation_id: 'private-correlation',
+      deal_id: 'private-deal',
+      customer_email: 'customer@example.test',
+    }),
+    ['payment_failures', 'payment_integrity_events'],
+  );
+  assert.deepEqual(
+    classifyOperationalRecord({
+      schema: 'dealivra.auth.rejection.v1',
+      status: 429,
+      code: 'over_request_rate_limit',
+      submitted_email: 'customer@example.test',
+    }),
+    ['auth_abuse_events'],
+  );
+  assert.deepEqual(
+    classifyOperationalRecord({
+      schema: 'dealivra.web-vital-monitor.v1',
+      metric: 'lcp',
+      rating: 'good',
+      exact_value: 1_500,
+    }),
+    [],
+  );
+  assert.deepEqual(classifyOperationalRecord(null), []);
+  assert.deepEqual(classifyOperationalRecord({ schema: 'unknown' }), []);
+
+  const records = [
+    {
+      schema: 'dealivra.synthetic.result.v1',
+      status: 'failed',
+      target_url: 'https://private-preview.example.test',
+    },
+    {
+      schema: 'dealivra.payment.operation.v1',
+      outcome: 'failed',
+      severity: 'error',
+      error_code: 'provider_configuration_error',
+      provider_request_id: 'private-provider-request',
+    },
+    {
+      schema: 'dealivra.payment.operation.v1',
+      outcome: 'failed',
+      error_code: 'release_reconciliation_required',
+      deal_id: 'private-deal',
+    },
+    {
+      schema: 'dealivra.security.notification.v1',
+      event: 'worker_failed',
+      secret: 'private-worker-secret',
+    },
+    ...Array.from({ length: 5 }, () => ({
+      schema: 'dealivra.server-failure-monitor.v1',
+      message: 'private database error',
+    })),
+    ...Array.from({ length: 20 }, () => ({
+      schema: 'dealivra.web-vital-monitor.v1',
+      metric: 'inp',
+      rating: 'poor',
+      route: '/private-deal',
+    })),
+    ...Array.from({ length: 50 }, () => ({
+      schema: 'dealivra.auth.rejection.v1',
+      status: 429,
+      email: 'customer@example.test',
+    })),
+  ];
+  const snapshot = buildOperationalSnapshot({
+    schema: 'dealivra.monitoring-window.v1',
+    environment: 'preview',
+    release: 'e'.repeat(40),
+    window_started_at: '2026-07-30T12:00:00Z',
+    window_minutes: 5,
+  }, records);
+
+  assert.ok(snapshot);
+  assert.equal(snapshot.counters.synthetic_failures, 1);
+  assert.equal(snapshot.counters.payment_failures, 2);
+  assert.equal(snapshot.counters.payment_configuration_events, 1);
+  assert.equal(snapshot.counters.payment_integrity_events, 1);
+  assert.equal(snapshot.counters.security_notification_failures, 1);
+  assert.equal(snapshot.counters.server_failures, 5);
+  assert.equal(snapshot.counters.poor_web_vitals, 20);
+  assert.equal(snapshot.counters.auth_abuse_events, 50);
+  assert.deepEqual(
+    snapshot.alerts.map(({ code, severity }) => ({ code, severity })),
+    [
+      { code: 'critical_journey_failed', severity: 'critical' },
+      { code: 'payment_integrity_event', severity: 'critical' },
+      { code: 'payment_configuration_failure', severity: 'critical' },
+      { code: 'security_notification_failure', severity: 'high' },
+      { code: 'server_failure_cluster', severity: 'high' },
+      { code: 'auth_abuse_cluster', severity: 'high' },
+      { code: 'poor_web_vital_cluster', severity: 'warning' },
+    ],
+  );
+  assert.doesNotMatch(
+    JSON.stringify(snapshot),
+    /private|customer@example|deal_id|provider_request|target_url|message|secret/i,
+  );
+});
+
+test('operational alert windows reject invalid or unbounded input', () => {
+  const metadata = {
+    schema: 'dealivra.monitoring-window.v1',
+    environment: 'preview',
+    release: 'unknown',
+    window_started_at: '2026-07-30T12:00:00Z',
+    window_minutes: 5,
+  };
+  assert.equal(
+    buildOperationalSnapshot({ ...metadata, extra: true }, []),
+    null,
+  );
+  assert.equal(
+    buildOperationalSnapshot({ ...metadata, environment: 'customer' }, []),
+    null,
+  );
+  assert.equal(
+    buildOperationalSnapshot({ ...metadata, window_minutes: 60 }, []),
+    null,
+  );
+  assert.equal(
+    buildOperationalSnapshot(metadata, Array(10_001).fill(null)),
+    null,
+  );
+
+  const source = readText('server/monitoring/operationalAlertPolicy.mjs');
+  assert.match(source, /maximumRecordsPerWindow = 10_000/);
+  assert.match(source, /dealivra\.operational-alert\.v1/);
+  assert.match(source, /freeze_financial_action_and_page_payment_owner/);
+  assert.doesNotMatch(
+    source,
+    /console\.|fetch\(|releasePayment|refundPayment|retryPayment|request\.headers/i,
+  );
+});
+
+test('incident control freezes critical releases and enforces ordered recovery', () => {
+  const declaration = {
+    schema: 'dealivra.incident-declaration.v1',
+    incident_id: 'INC-TEST0001',
+    severity: 'critical',
+    category: 'payment_integrity',
+    public_impact: true,
+    declared_at: '2026-07-30T12:00:00Z',
+  };
+  let incident = declareIncident(declaration);
+  assert.ok(incident);
+  assert.equal(incident.status, 'declared');
+  assert.equal(incident.release_gate, 'frozen');
+  assert.equal(incident.financial_safety, 'frozen');
+  assert.equal(incident.evidence_preservation, 'required');
+  assert.equal(incident.status_communication, 'draft_required');
+
+  assert.equal(
+    transitionIncident(incident, {
+      schema: 'dealivra.incident-transition.v1',
+      action: 'resolve',
+      occurred_at: '2026-07-30T12:01:00Z',
+    }),
+    null,
+  );
+  assert.equal(
+    transitionIncident(incident, {
+      schema: 'dealivra.incident-transition.v1',
+      action: 'triage',
+      occurred_at: '2026-07-30T11:59:00Z',
+    }),
+    null,
+  );
+
+  for (const [action, occurredAt, status] of [
+    ['triage', '2026-07-30T12:02:00Z', 'triaged'],
+    ['contain', '2026-07-30T12:05:00Z', 'contained'],
+    ['monitor', '2026-07-30T12:10:00Z', 'monitoring'],
+    ['resolve', '2026-07-30T12:30:00Z', 'resolved'],
+  ]) {
+    incident = transitionIncident(incident, {
+      schema: 'dealivra.incident-transition.v1',
+      action,
+      occurred_at: occurredAt,
+    });
+    assert.ok(incident);
+    assert.equal(incident.status, status);
+  }
+
+  assert.equal(incident.release_gate, 'frozen');
+  assert.equal(incident.financial_safety, 'frozen');
+  assert.equal(incident.evidence_preservation, 'active');
+  assert.equal(incident.status_communication, 'final_update_required');
+  const publicDraft = incidentPublicTemplate(incident);
+  assert.deepEqual(publicDraft, {
+    schema: 'dealivra.status-draft.v1',
+    incident_id: declaration.incident_id,
+    status: 'resolved',
+    message: 'This incident is resolved. We continue our internal review.',
+    publication: 'requires_authorized_review',
+  });
+  assert.doesNotMatch(
+    JSON.stringify(publicDraft),
+    /payment|provider|customer|account|evidence|cause/i,
+  );
+});
+
+test('incident evidence keeps hashes and excludes raw material', () => {
+  const incident = declareIncident({
+    schema: 'dealivra.incident-declaration.v1',
+    incident_id: 'INC-TEST0002',
+    severity: 'high',
+    category: 'privacy',
+    public_impact: false,
+    declared_at: '2026-07-30T13:00:00Z',
+  });
+  assert.ok(incident);
+  assert.equal(incidentPublicTemplate(incident), null);
+
+  const manifest = buildIncidentEvidenceManifest(incident, [
+    {
+      schema: 'dealivra.incident-evidence.v1',
+      kind: 'log_snapshot',
+      sha256: 'b'.repeat(64),
+      collected_at: '2026-07-30T13:01:00Z',
+    },
+    {
+      schema: 'dealivra.incident-evidence.v1',
+      kind: 'deployment',
+      sha256: 'c'.repeat(64),
+      collected_at: '2026-07-30T13:02:00Z',
+    },
+  ]);
+  assert.ok(manifest);
+  assert.equal(manifest.raw_content_included, false);
+  assert.equal(manifest.entries.length, 2);
+  assert.equal(
+    buildIncidentEvidenceManifest(incident, [{
+      schema: 'dealivra.incident-evidence.v1',
+      kind: 'log_snapshot',
+      sha256: 'b'.repeat(64),
+      collected_at: '2026-07-30T13:01:00Z',
+      raw_log: 'customer@example.test private error',
+    }]),
+    null,
+  );
+  assert.equal(
+    buildIncidentEvidenceManifest(incident, Array(101).fill({})),
+    null,
+  );
+});
+
+test('incident drill is a local no-network release gate', () => {
+  const packageJson = readJson('package.json');
+  const policy = readText('server/monitoring/incidentControl.mjs');
+  const drill = readText('scripts/run-incident-control-drill.mjs');
+
+  assert.equal(
+    packageJson.scripts['incident:drill'],
+    'node scripts/run-incident-control-drill.mjs',
+  );
+  assert.match(packageJson.scripts.verify, /npm run incident:drill/);
+  assert.match(policy, /publication: 'requires_authorized_review'/);
+  assert.match(policy, /raw_content_included: false/);
+  assert.match(drill, /release_gate, 'frozen'/);
+  assert.match(drill, /dealivra\.incident-drill-result\.v1/);
+  assert.doesNotMatch(
+    `${policy}\n${drill}`,
+    /fetch\(|https?:\/\/|console\.(?:warn|error)|writeFile|unlink|supabase|stripe/i,
+  );
+});
+
+test('application services are split into cacheable bounded chunks', () => {
+  const packageJson = readJson('package.json');
+  const viteConfig = readText('vite.config.ts');
+  const budgetGate = readText('scripts/verify-build-budgets.mjs');
+
+  assert.match(packageJson.scripts.dev, /--configLoader native/);
+  assert.match(packageJson.scripts.build, /vite build --configLoader native/);
+  assert.match(packageJson.scripts.preview, /--configLoader native/);
+  assert.match(readText('scripts/smoke-preview.mjs'), /configLoader: 'native'/);
+  assert.match(viteConfig, /name: 'deal-services'/);
+  assert.match(viteConfig, /test: \/src\[\\\\\/\]services\[\\\\\/\]\//);
+  assert.match(viteConfig, /includeDependenciesRecursively: false/);
+  assert.match(viteConfig, /maxSize: 240_000/);
+  assert.match(budgetGate, /maximumJavaScriptChunkBytes: 400_000/);
+  assert.doesNotMatch(
+    `${viteConfig}\n${packageJson.scripts.build}`,
+    /chunkSizeWarningLimit|manualChunks|--logLevel silent/,
+  );
+});
+
+test('release evidence binds a clean exact commit to bounded file hashes', () => {
+  const requiredPaths = [
+    '.github/workflows/ci.yml',
+    '.nvmrc',
+    'catalog/active-release.json',
+    'dist/assets/app.css',
+    'dist/assets/app.js',
+    'dist/index.html',
+    'package-lock.json',
+    'package.json',
+    'scripts/create-release-evidence.mjs',
+    'scripts/scan-repository-secrets.mjs',
+    'scripts/verify-browser-storage-policy.mjs',
+    'scripts/verify-build-budgets.mjs',
+    'scripts/verify-dependency-policy.mjs',
+    'scripts/verify-outbound-transport-policy.mjs',
+    'server/releaseEvidencePolicy.mjs',
+    'src/catalog.v1.json',
+    'vercel.json',
+    'vite.config.ts',
+  ];
+  const files = requiredPaths
+    .map((path, index) => ({
+      path,
+      sha256: (index % 10).toString().repeat(64),
+      bytes: index + 1,
+    }))
+    .sort((left, right) => (
+      left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+    ));
+  const input = {
+    schema: 'dealivra.release-evidence.v1',
+    commit: 'a'.repeat(40),
+    node: '24.x',
+    catalog_version: '2026-07-29.1',
+    checks: [...requiredReleaseChecks],
+    files,
+  };
+  const evidence = buildReleaseEvidence(input);
+
+  assert.ok(evidence);
+  assert.equal(evidence.commit, input.commit);
+  assert.equal(evidence.source_tree, 'clean');
+  assert.equal(evidence.network_access, 'not_required');
+  assert.equal(evidence.production_authorization, 'not_granted');
+  assert.equal(
+    evidence.total_bytes,
+    files.reduce((total, file) => total + file.bytes, 0),
+  );
+  assert.doesNotMatch(
+    JSON.stringify(evidence),
+    /customer@example|bearer\s|sk_(?:live|test)|token_value|[A-Z]:\\|absolute_path|environment_variable/i,
+  );
+
+  assert.equal(
+    buildReleaseEvidence({ ...input, checks: input.checks.slice(1) }),
+    null,
+  );
+  assert.equal(
+    buildReleaseEvidence({ ...input, files: [...files].reverse() }),
+    null,
+  );
+  assert.equal(
+    buildReleaseEvidence({
+      ...input,
+      files: files.map(file => (
+        file.path === 'package.json'
+          ? { ...file, path: '../package.json' }
+          : file
+      )).sort((left, right) => (
+        left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+      )),
+    }),
+    null,
+  );
+  assert.equal(
+    buildReleaseEvidence({
+      ...input,
+      files: files.map(file => (
+        file.path === 'package.json'
+          ? { ...file, content: 'private' }
+          : file
+      )),
+    }),
+    null,
+  );
+});
+
+test('CI release evidence is exact-commit, clean-tree, and retained', () => {
+  const packageJson = readJson('package.json');
+  const workflow = readText('.github/workflows/ci.yml');
+  const script = readText('scripts/create-release-evidence.mjs');
+  const policy = readText('server/releaseEvidencePolicy.mjs');
+  const ignore = readText('.gitignore');
+
+  assert.equal(
+    packageJson.scripts['release:evidence'],
+    'node scripts/create-release-evidence.mjs',
+  );
+  assert.match(workflow, /npm audit --audit-level=high[\s\S]+npm run release:evidence/);
+  assert.match(workflow, /DEALIVRA_RELEASE_COMMIT: \$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /actions\/upload-artifact@v4/);
+  assert.match(workflow, /if-no-files-found: error/);
+  assert.match(workflow, /retention-days: 30/);
+  assert.match(script, /git\(\['rev-parse', 'HEAD'\]\)/);
+  assert.match(script, /git\(\['status', '--porcelain=v1', '--untracked-files=all'\]\)/);
+  assert.match(script, /workflowCommit !== requestedCommit/);
+  assert.match(script, /createHash\('sha256'\)/);
+  assert.match(policy, /production_authorization: 'not_granted'/);
+  assert.match(policy, /'browser_storage_policy_passed'/);
+  assert.match(policy, /'outbound_transport_policy_passed'/);
+  assert.match(script, /'scripts\/verify-browser-storage-policy\.mjs'/);
+  assert.match(script, /'scripts\/verify-outbound-transport-policy\.mjs'/);
+  assert.match(ignore, /^release-evidence\/$/m);
+  assert.doesNotMatch(
+    `${script}\n${policy}`,
+    /fetch\(|https?:\/\/|process\.env\[[^\]]+\]|console\.(?:warn|error)|shell:\s*true/i,
+  );
+});
+
+test('locked dependencies follow the reviewed offline supply-chain policy', () => {
+  const packageJson = readJson('package.json');
+  const policy = readText('scripts/verify-dependency-policy.mjs');
+  const evidencePolicy = readText('server/releaseEvidencePolicy.mjs');
+
+  assert.equal(
+    packageJson.scripts['dependency:policy'],
+    'node scripts/verify-dependency-policy.mjs',
+  );
+  assert.match(
+    packageJson.scripts.verify,
+    /catalog:verify && npm run dependency:policy && npm run security:browser-storage && npm run security:transport && npm run typecheck/,
+  );
+  assert.match(policy, /lockfile\.lockfileVersion !== 3/);
+  assert.match(policy, /url\.protocol === 'https:'/);
+  assert.match(policy, /url\.hostname === 'registry\.npmjs\.org'/);
+  assert.match(policy, /Buffer\.from\(encoded, 'base64'\)\.length === 64/);
+  assert.match(policy, /maximumLockedPackages = 150/);
+  assert.match(policy, /'MPL-2\.0'/);
+  assert.match(policy, /\['node_modules\/fsevents', '2\.3\.3'\]/);
+  assert.match(policy, /record\.dev !== true/);
+  assert.match(policy, /record\.optional !== true/);
+  assert.match(evidencePolicy, /'dependency_policy_passed'/);
+  assert.doesNotMatch(
+    policy,
+    /fetch\(|https?:\/\/(?!registry\.npmjs\.org)|node:child_process|writeFile|shell:\s*true/i,
+  );
+});
+
+test('service worker caches only immutable public build assets', () => {
+  const serviceWorker = readText('public/sw.js');
+  const main = readText('src/main.tsx');
+  const vercel = readJson('vercel.json');
+  const rootHeaders = vercel.headers.find(entry => entry.source === '/')?.headers ?? [];
+  const indexHeaders = vercel.headers.find(entry => entry.source === '/index.html')?.headers ?? [];
+  const serviceWorkerHeaders = vercel.headers.find(entry => entry.source === '/sw.js')?.headers ?? [];
+
+  assert.match(serviceWorker, /IMMUTABLE_ASSET_PATH/);
+  assert.match(serviceWorker, /request\.method !== 'GET'/);
+  assert.match(serviceWorker, /url\.origin === self\.location\.origin/);
+  assert.match(serviceWorker, /url\.search === ''/);
+  assert.match(serviceWorker, /response\.type !== 'basic'/);
+  assert.match(serviceWorker, /name\.startsWith\('dealivra-'\)/);
+  assert.match(serviceWorker, /name\.startsWith\('dealsafe-'\)/);
+  assert.doesNotMatch(serviceWorker, /cache\.addAll|cache\.put\(\s*['"`]\/['"`]/);
+  assert.doesNotMatch(serviceWorker, /mode\s*===\s*['"]navigate|caches\.match\(\s*['"`]\/['"`]/);
+  assert.match(main, /register\('\/sw\.js', \{ updateViaCache: 'none' \}\)/);
+  assert.match(main, /registration => registration\.update\(\)/);
+  for (const headers of [rootHeaders, indexHeaders, serviceWorkerHeaders]) {
+    assert.ok(headers.some(header => (
+      header.key === 'Cache-Control'
+      && header.value === 'no-cache, no-store, must-revalidate'
+    )));
+  }
+});
+
+test('payment provider mutations have independent default-off Sandbox gates', async () => {
+  const {
+    paymentCapabilityDecision,
+    paymentCapabilityEnvironment,
+  } = await import('../supabase/functions/_shared/payment-mode.ts');
+  const values = new Map();
+  const readEnvironment = name => values.get(name);
+  const capabilities = [
+    'seller_onboarding',
+    'checkout',
+    'payout_release',
+    'refund',
+  ];
+
+  assert.deepEqual(Object.keys(paymentCapabilityEnvironment), capabilities);
+  for (const capability of capabilities) {
+    assert.deepEqual(paymentCapabilityDecision(capability, readEnvironment), {
+      allowed: false,
+      capability,
+      mode: 'disabled',
+      code: 'payment_capability_disabled',
+    });
+
+    const variable = paymentCapabilityEnvironment[capability];
+    values.set(variable, 'sandbox');
+    assert.deepEqual(paymentCapabilityDecision(capability, readEnvironment), {
+      allowed: true,
+      capability,
+      mode: 'sandbox',
+      code: null,
+    });
+
+    for (const invalid of ['SANDBOX', 'production', 'live', 'enabled', 'true']) {
+      values.set(variable, invalid);
+      assert.deepEqual(paymentCapabilityDecision(capability, readEnvironment), {
+        allowed: false,
+        capability,
+        mode: 'invalid',
+        code: 'payment_configuration_invalid',
+      });
+    }
+    values.delete(variable);
+  }
+
+  const common = readText('supabase/functions/_shared/common.ts');
+  const connect = readText('supabase/functions/stripe-connect/index.ts');
+  const checkout = readText('supabase/functions/stripe-create-checkout/index.ts');
+  const release = readText('supabase/functions/stripe-release-payment/index.ts');
+  const dispute = readText('supabase/functions/stripe-resolve-dispute/index.ts');
+  const webhook = readText('supabase/functions/stripe-webhook/index.ts');
+  const environment = readText('.env.example');
+
+  assert.match(common, /paymentCapabilityDecision\(\s*capability/);
+  assert.match(common, /decision\.mode === "disabled"/);
+  assert.match(common, /decision\.code \|\| "payment_configuration_invalid"/);
+  assert.match(connect, /body\.action === "onboard"[\s\S]*requireSandboxPaymentCapability\("seller_onboarding"\)/);
+  assert.match(connect, /account\.id !== accountId[\s\S]*account\.livemode === true/);
+  assert.match(connect, /!stripeAccountPattern\.test\(account\.id\) \|\| account\.livemode === true/);
+  assert.match(checkout, /requireSandboxPaymentCapability\("checkout"\)[\s\S]*DEALIVRA_PLATFORM_FEE_BPS/);
+  assert.match(release, /requireSandboxPaymentCapability\("payout_release"\)[\s\S]*prepare_stripe_financial_command/);
+  assert.match(dispute, /requireSandboxPaymentCapability\(\s*action === "refund" \? "refund" : "payout_release"/);
+  assert.doesNotMatch(webhook, /requireSandboxPaymentCapability/);
+  for (const variable of Object.values(paymentCapabilityEnvironment)) {
+    assert.match(environment, new RegExp(`^${variable}=disabled$`, 'm'));
+  }
+});
+
+test('payment request bodies are bounded before database or provider work', async () => {
+  const {
+    PaymentJsonBoundaryError,
+    readBoundedPaymentJson,
+  } = await import('../supabase/functions/_shared/payment-json-boundary.ts');
+  const makeRequest = (
+    body,
+    headers = { 'content-type': 'application/json' },
+  ) => new Request('https://dealivra.test/payment', {
+    method: 'POST',
+    headers,
+    body,
+  });
+  const expectBoundaryCode = code => error => (
+    error instanceof PaymentJsonBoundaryError
+    && error.code === code
+    && error.message === 'Payment request body was rejected'
+  );
+
+  assert.deepEqual(
+    await readBoundedPaymentJson(
+      makeRequest('{"dealId":"deal-id"}'),
+      ['dealId'],
+    ),
+    { dealId: 'deal-id' },
+  );
+  assert.deepEqual(
+    await readBoundedPaymentJson(
+      makeRequest(
+        '{"action":"status"}',
+        { 'content-type': 'application/json; charset=UTF-8' },
+      ),
+      ['action', 'dealPublicId'],
+    ),
+    { action: 'status' },
+  );
+  await assert.rejects(
+    () => readBoundedPaymentJson(
+      makeRequest('{}', { 'content-type': 'text/plain' }),
+      ['dealId'],
+    ),
+    expectBoundaryCode('content_type_invalid'),
+  );
+  await assert.rejects(
+    () => readBoundedPaymentJson(
+      makeRequest('{}', {
+        'content-type': 'application/json',
+        'content-length': '999999',
+      }),
+      ['dealId'],
+    ),
+    expectBoundaryCode('body_too_large'),
+  );
+  await assert.rejects(
+    () => readBoundedPaymentJson(
+      makeRequest(`{"note":"${'😀'.repeat(2_100)}"}`),
+      ['note'],
+    ),
+    expectBoundaryCode('body_too_large'),
+  );
+  for (const [body, code] of [
+    ['', 'body_empty'],
+    ['{', 'json_invalid'],
+    ['null', 'shape_invalid'],
+    ['[]', 'shape_invalid'],
+    ['"deal-id"', 'shape_invalid'],
+    ['{"dealId":"deal-id","unexpected":true}', 'shape_invalid'],
+    ['{"__proto__":{"polluted":true}}', 'shape_invalid'],
+  ]) {
+    await assert.rejects(
+      () => readBoundedPaymentJson(makeRequest(body), ['dealId']),
+      error => (
+        error instanceof PaymentJsonBoundaryError
+        && [
+          code,
+          'content_type_invalid',
+          'content_length_invalid',
+          'body_too_large',
+          'body_empty',
+          'json_invalid',
+          'shape_invalid',
+        ].includes(error.code)
+        && error.message === 'Payment request body was rejected'
+      ),
+    );
+  }
+  await assert.rejects(
+    () => readBoundedPaymentJson(makeRequest('{}'), ['dealId', 'dealId']),
+    /Payment JSON boundary configuration is invalid/,
+  );
+
+  const common = readText('supabase/functions/_shared/common.ts');
+  const handlers = [
+    readText('supabase/functions/stripe-connect/index.ts'),
+    readText('supabase/functions/stripe-create-checkout/index.ts'),
+    readText('supabase/functions/stripe-release-payment/index.ts'),
+    readText('supabase/functions/stripe-resolve-dispute/index.ts'),
+  ];
+  const webhook = readText('supabase/functions/stripe-webhook/index.ts');
+
+  assert.match(common, /readBoundedPaymentJson\(request, allowedKeys\)/);
+  assert.match(common, /error instanceof PaymentJsonBoundaryError/);
+  assert.match(common, /error\.code === "body_too_large" \? 413 : 400/);
+  for (const handler of handlers) {
+    assert.match(handler, /requireUser\(request\)[\s\S]*readPaymentJson/);
+    assert.doesNotMatch(handler, /request\.json\(\)/);
+  }
+  assert.match(handlers[0], /readPaymentJson<[\s\S]*\["action", "dealPublicId"\]/);
+  assert.match(handlers[1], /readPaymentJson<\{ dealId\?: string \}>\([\s\S]*\["dealId"\]/);
+  assert.match(handlers[2], /readPaymentJson<\{ dealId\?: string \}>\([\s\S]*\["dealId"\]/);
+  assert.match(handlers[3], /readPaymentJson<\{[\s\S]*\["disputeId", "decision", "note"\]/);
+  assert.doesNotMatch(webhook, /readPaymentJson|readBoundedPaymentJson/);
+  assert.match(webhook, /readBoundedRequestText\(request, maxWebhookBytes\)/);
+  assert.doesNotMatch(webhook, /request\.text\(\)/);
+});
+
+test('payment and evidence request streams stop before unbounded body allocation', async () => {
+  const {
+    RequestBodyBoundaryError,
+    readBoundedRequestText,
+  } = await import('../supabase/functions/_shared/request-body-boundary.ts');
+  const {
+    EvidenceJsonBoundaryError,
+    readBoundedEvidenceJson,
+  } = await import('../supabase/functions/_shared/evidence-json-boundary.ts');
+  const request = (body, headers = { 'content-type': 'application/json' }) =>
+    new Request('https://dealivra.test/evidence', {
+      method: 'POST',
+      headers,
+      body,
+    });
+  const evidenceActions = {
+    'signed-url': ['action', 'evidenceId'],
+    'request-upload': [
+      'action',
+      'claimedMimeType',
+      'dealId',
+      'evidenceType',
+      'fileName',
+      'fileSize',
+      'uploaderRole',
+    ],
+  };
+  const expectEvidenceCode = code => error => (
+    error instanceof EvidenceJsonBoundaryError
+    && error.code === code
+    && error.message === 'Evidence request body was rejected'
+  );
+
+  assert.deepEqual(
+    await readBoundedEvidenceJson(
+      request('{"action":"signed-url","evidenceId":"record-id"}'),
+      evidenceActions,
+    ),
+    { action: 'signed-url', evidenceId: 'record-id' },
+  );
+  await assert.rejects(
+    () => readBoundedEvidenceJson(
+      request('{"action":"signed-url","evidenceId":"record-id","extra":true}'),
+      evidenceActions,
+    ),
+    expectEvidenceCode('shape_invalid'),
+  );
+  await assert.rejects(
+    () => readBoundedEvidenceJson(
+      request('{"action":"unreviewed"}'),
+      evidenceActions,
+    ),
+    expectEvidenceCode('action_invalid'),
+  );
+  await assert.rejects(
+    () => readBoundedEvidenceJson(
+      request('{}', { 'content-type': 'text/plain' }),
+      evidenceActions,
+    ),
+    expectEvidenceCode('content_type_invalid'),
+  );
+  await assert.rejects(
+    () => readBoundedEvidenceJson(
+      request(`{"action":"signed-url","evidenceId":"${'😀'.repeat(4_100)}"}`),
+      evidenceActions,
+    ),
+    expectEvidenceCode('body_too_large'),
+  );
+
+  const oversizedStream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(200));
+      controller.enqueue(new Uint8Array(200));
+      controller.close();
+    },
+  });
+  const streamedRequest = new Request('https://dealivra.test/evidence', {
+    method: 'POST',
+    body: oversizedStream,
+    duplex: 'half',
+  });
+  await assert.rejects(
+    () => readBoundedRequestText(streamedRequest, 256),
+    error => (
+      error instanceof RequestBodyBoundaryError
+      && error.code === 'body_too_large'
+      && error.message === 'Request body was rejected'
+    ),
+  );
+
+  const paymentBoundary = readText('supabase/functions/_shared/payment-json-boundary.ts');
+  const evidenceFiles = readText('supabase/functions/evidence-files/index.ts');
+  const evidenceMaintenance = readText('supabase/functions/evidence-maintenance/index.ts');
+  assert.match(paymentBoundary, /readBoundedRequestText\(request, maximumBytes\)/);
+  assert.doesNotMatch(paymentBoundary, /request\.text\(\)/);
+  for (const handler of [evidenceFiles, evidenceMaintenance]) {
+    assert.match(handler, /readBoundedEvidenceJson\(/);
+    assert.doesNotMatch(handler, /request\.json\(\)/);
+  }
+  assert.match(
+    evidenceFiles,
+    /const body = await readEvidenceAction\(request\);[\s\S]*const user = await requireUser\(request\)/,
+  );
+  assert.match(
+    evidenceMaintenance,
+    /const body = await readMaintenanceAction<AdminAction>[\s\S]*const user = await requireUser\(request\)/,
+  );
+  assert.match(evidenceMaintenance, /scheduledActionKeys/);
+});
+
+test('evidence Storage downloads are exact-length streams before byte validation', async () => {
+  const {
+    BinaryBodyBoundaryError,
+    readExactBinaryBody,
+  } = await import('../supabase/functions/_shared/binary-body-boundary.ts');
+  const exactBody = {
+    size: 3,
+    stream: () => new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]));
+        controller.enqueue(new Uint8Array([3]));
+        controller.close();
+      },
+    }),
+  };
+  assert.deepEqual(
+    await readExactBinaryBody(exactBody, 3, 10),
+    new Uint8Array([1, 2, 3]),
+  );
+
+  let cancelled = false;
+  const dishonestBody = {
+    size: 3,
+    stream: () => new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2, 3, 4]));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    }),
+  };
+  await assert.rejects(
+    () => readExactBinaryBody(dishonestBody, 3, 10),
+    error => (
+      error instanceof BinaryBodyBoundaryError
+      && error.code === 'size_mismatch'
+      && error.message === 'Binary body was rejected'
+    ),
+  );
+  assert.equal(cancelled, true);
+  await assert.rejects(
+    () => readExactBinaryBody(new Blob([new Uint8Array([1, 2])]), 3, 10),
+    error => error instanceof BinaryBodyBoundaryError && error.code === 'size_mismatch',
+  );
+
+  const evidenceFiles = readText('supabase/functions/evidence-files/index.ts');
+  const evidenceMaintenance = readText('supabase/functions/evidence-maintenance/index.ts');
+  for (const handler of [evidenceFiles, evidenceMaintenance]) {
+    assert.match(handler, /readExactBinaryBody\(/);
+    assert.doesNotMatch(handler, /file\.arrayBuffer\(\)/);
+  }
+  assert.match(
+    evidenceFiles,
+    /rejectIntake\(claimedIntake, "rejected", "file_size_mismatch"\)/,
+  );
+  assert.match(
+    evidenceMaintenance,
+    /observedSizeBytes = Number\.isSafeInteger\(file\.size\) \? file\.size : null/,
+  );
+});
+
+test('Stripe transport responses are timed out and bounded before semantic use', async () => {
+  const {
+    StripeResponseBoundaryError,
+    readBoundedStripeJson,
+  } = await import('../supabase/functions/_shared/stripe-response-boundary.ts');
+  const jsonResponse = (body, headers = {}) => new Response(body, {
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      ...headers,
+    },
+  });
+  const expectBoundaryCode = code => error => (
+    error instanceof StripeResponseBoundaryError
+    && error.code === code
+    && error.message === 'Stripe response was rejected'
+  );
+
+  assert.deepEqual(
+    await readBoundedStripeJson(jsonResponse('{"id":"acct_test"}')),
+    { id: 'acct_test' },
+  );
+  assert.deepEqual(
+    await readBoundedStripeJson(new Response('{"id":"pi_test"}', {
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+    })),
+    { id: 'pi_test' },
+  );
+  await assert.rejects(
+    () => readBoundedStripeJson(new Response('{}', {
+      headers: {
+        'content-type': 'text/html',
+      },
+    })),
+    expectBoundaryCode('content_type_invalid'),
+  );
+  await assert.rejects(
+    () => readBoundedStripeJson(jsonResponse('{}', {
+      'content-length': '999999',
+    })),
+    expectBoundaryCode('response_too_large'),
+  );
+  await assert.rejects(
+    () => readBoundedStripeJson(jsonResponse(
+      `{"value":"${'😀'.repeat(66_000)}"}`,
+    )),
+    expectBoundaryCode('response_too_large'),
+  );
+  for (const [body, code] of [
+    ['', 'response_empty'],
+    ['{', 'json_invalid'],
+    ['null', 'shape_invalid'],
+    ['[]', 'shape_invalid'],
+    ['"provider-value"', 'shape_invalid'],
+  ]) {
+    await assert.rejects(
+      () => readBoundedStripeJson(jsonResponse(body)),
+      error => (
+        error instanceof StripeResponseBoundaryError
+        && [
+          code,
+          'content_type_invalid',
+          'content_length_invalid',
+          'response_too_large',
+          'response_empty',
+          'json_invalid',
+          'shape_invalid',
+        ].includes(error.code)
+        && error.message === 'Stripe response was rejected'
+      ),
+    );
+  }
+  await assert.rejects(
+    () => readBoundedStripeJson(jsonResponse('{}'), 263_000),
+    /Stripe response boundary configuration is invalid/,
+  );
+
+  const common = readText('supabase/functions/_shared/common.ts');
+  const observability = readText('supabase/functions/_shared/payment-observability.ts');
+  const responseBoundary = readText('supabase/functions/_shared/stripe-response-boundary.ts');
+
+  assert.match(common, /const stripeRequestTimeoutMs = 10_000/);
+  assert.match(common, /signal: AbortSignal\.timeout\(stripeRequestTimeoutMs\)/);
+  assert.match(common, /data = await readBoundedStripeJson\(response\)/);
+  assert.match(common, /error\.name === "AbortError" \|\| error\.name === "TimeoutError"/);
+  assert.match(common, /"provider_response_invalid"/);
+  assert.doesNotMatch(common, /const data = await response\.json/);
+  assert.doesNotMatch(observability, /provider\.message/);
+  assert.match(responseBoundary, /readBoundedResponseText\(response, maximumBytes\)/);
+  assert.doesNotMatch(responseBoundary, /response\.text\(\)/);
+});
+
+test('browser data responses are bounded before runtime-schema validation', async () => {
+  const {
+    BrowserResponseBoundaryError,
+    fetchWithDeadline,
+    readBoundedJson,
+    readBoundedText,
+    readExactArrayBuffer,
+    readExactBlobArrayBuffer,
+  } = await import('../src/services/browserResponseBoundary.ts');
+  const jsonResponse = (body, headers = {}) => new Response(body, {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      ...headers,
+    },
+  });
+  const expectBoundaryCode = code => error => (
+    error instanceof BrowserResponseBoundaryError
+    && error.code === code
+    && error.message === 'Remote response was rejected'
+  );
+
+  assert.deepEqual(
+    await readBoundedJson(jsonResponse('{"records":[{"id":"safe"}]}')),
+    { records: [{ id: 'safe' }] },
+  );
+  assert.deepEqual(
+    await readBoundedJson(new Response('[1,2]', {
+      headers: { 'content-type': 'application/vnd.pgrst.array+json' },
+    })),
+    [1, 2],
+  );
+  assert.equal(await readBoundedJson(new Response(null, { status: 204 })), null);
+  assert.equal(
+    await readBoundedText(new Response('DEALIVRA_MFA_REQUIRED'), 64),
+    'DEALIVRA_MFA_REQUIRED',
+  );
+  assert.deepEqual(
+    new Uint8Array(await readExactArrayBuffer(
+      new Response(new Uint8Array([1, 2, 3]), {
+        headers: { 'content-length': '3' },
+      }),
+      3,
+    )),
+    new Uint8Array([1, 2, 3]),
+  );
+  assert.deepEqual(
+    new Uint8Array(await readExactBlobArrayBuffer(
+      new Blob([new Uint8Array([4, 5, 6])]),
+      3,
+    )),
+    new Uint8Array([4, 5, 6]),
+  );
+
+  await assert.rejects(
+    () => readBoundedJson(new Response('{}', {
+      headers: { 'content-type': 'text/html' },
+    })),
+    expectBoundaryCode('content_type_invalid'),
+  );
+  await assert.rejects(
+    () => readBoundedJson(jsonResponse('{}', {
+      'content-length': 'not-a-number',
+    })),
+    expectBoundaryCode('content_length_invalid'),
+  );
+  await assert.rejects(
+    () => readBoundedJson(jsonResponse('{}', {
+      'content-length': '1048577',
+    })),
+    expectBoundaryCode('response_too_large'),
+  );
+  await assert.rejects(
+    () => readBoundedJson(jsonResponse(`{"value":"${'😀'.repeat(300_000)}"}`)),
+    expectBoundaryCode('response_too_large'),
+  );
+  await assert.rejects(
+    () => readBoundedJson(jsonResponse('{')),
+    expectBoundaryCode('json_invalid'),
+  );
+  await assert.rejects(
+    () => readExactArrayBuffer(
+      new Response(new Uint8Array([1, 2, 3, 4])),
+      3,
+    ),
+    expectBoundaryCode('response_size_mismatch'),
+  );
+  await assert.rejects(
+    () => readExactArrayBuffer(
+      new Response(new Uint8Array([1, 2]), {
+        headers: { 'content-length': '2' },
+      }),
+      3,
+    ),
+    expectBoundaryCode('response_size_mismatch'),
+  );
+  await assert.rejects(
+    () => readExactArrayBuffer(new Response(new Uint8Array([1])), 52_428_801),
+    /Browser binary boundary configuration is invalid/,
+  );
+  await assert.rejects(
+    () => readExactBlobArrayBuffer(
+      new Blob([new Uint8Array([1, 2, 3])]),
+      2,
+    ),
+    expectBoundaryCode('response_size_mismatch'),
+  );
+  await assert.rejects(
+    () => readBoundedJson(jsonResponse('{}'), 4_194_305),
+    /Browser response boundary configuration is invalid/,
+  );
+  await assert.rejects(
+    () => fetchWithDeadline('data:application/json,{}', {}, 120_001),
+    /Browser request deadline configuration is invalid/,
+  );
+
+  const response = await fetchWithDeadline('data:application/json,%7B%22ok%22%3Atrue%7D');
+  assert.deepEqual(await readBoundedJson(response), { ok: true });
+
+  const client = readText('src/services/supabaseRest.ts');
+  assert.match(client, /fetchWithDeadline\(/);
+  assert.match(client, /readBoundedJson\(/);
+  assert.match(client, /readBoundedText\(response\.clone\(\),16_384\)/);
+  assert.match(client, /readExactArrayBuffer\(response,data\.fileSizeBytes\)/);
+  assert.match(client, /readExactBlobArrayBuffer\(preparedFile,preparedFile\.size\)/);
+  assert.doesNotMatch(client, /preparedFile\.arrayBuffer\(\)/);
+  assert.doesNotMatch(client, /\.json\(\)/);
+  assert.doesNotMatch(client, /clone\(\)\.text\(\)/);
+  assert.doesNotMatch(client, /response\.arrayBuffer\(\)/);
+  assert.doesNotMatch(
+    client.replaceAll('fetchWithDeadline(', ''),
+    /\bfetch\(/,
+  );
+
+  const catalogClient = readText('src/services/catalogService.ts');
+  assert.match(catalogClient, /fetchWithDeadline\(`\/api\/catalog/);
+  assert.match(catalogClient, /fetchWithDeadline\('\/api\/vehicles\/vin'/);
+  assert.match(catalogClient, /validateCatalogResponse\(await readBoundedJson\(response\)/);
+  assert.match(catalogClient, /await readBoundedJson\(response\) as Record<string, unknown>/);
+  assert.match(catalogClient, /error\.name === 'AbortError' \|\| error\.name === 'TimeoutError'/);
+  assert.doesNotMatch(catalogClient, /\.json\(\)/);
+  assert.doesNotMatch(catalogClient, /\bnew AbortController\(/);
+  assert.doesNotMatch(
+    catalogClient.replaceAll('fetchWithDeadline(', ''),
+    /\bfetch\(/,
+  );
+});
+
+test('outbound transport inventory is deny-by-default and release-gated', async () => {
+  const { verifyOutboundTransportPolicy } = await import(
+    '../scripts/verify-outbound-transport-policy.mjs'
+  );
+  const result = verifyOutboundTransportPolicy(rootPath);
+  const packageJson = readJson('package.json');
+  const policy = readText('scripts/verify-outbound-transport-policy.mjs');
+
+  assert.deepEqual(result, {
+    schema: 'dealivra.outbound-transport-policy-result.v1',
+    status: 'passed',
+    direct_fetch_sites: 6,
+    direct_fetch_calls: 8,
+    injected_provider_sites: 1,
+    delegated_diagnostic_sites: 3,
+    bounded_provider_files: 9,
+  });
+  assert.equal(
+    packageJson.scripts['security:transport'],
+    'node scripts/verify-outbound-transport-policy.mjs',
+  );
+  assert.match(packageJson.scripts.verify, /npm run security:transport/);
+  assert.match(policy, /unreviewed direct fetch/);
+  assert.match(policy, /direct whole-body response parser/);
+  assert.match(policy, /server\/vehicleVinShared\.mjs/);
+  assert.match(policy, /supabase\/functions\/security-notifications\/index\.ts/);
+});
+
+test('browser diagnostics use one exact bounded best-effort transport', async () => {
+  const {
+    prepareDiagnosticRequest,
+    sendBoundedDiagnostic,
+  } = await import('../src/services/diagnosticTransport.ts');
+  const transport = readText('src/services/diagnosticTransport.ts');
+  const exactEvent = {
+    schema: 'dealivra.client-failure.v1',
+    boundary: 'application_render',
+    issue: 'react_render_failed',
+    occurrence_count: 1,
+  };
+
+  assert.deepEqual(
+    prepareDiagnosticRequest('/api/security/client-failure', exactEvent),
+    {
+      endpoint: '/api/security/client-failure',
+      body: JSON.stringify(exactEvent),
+    },
+  );
+  assert.equal(
+    prepareDiagnosticRequest(
+      '/api/security/client-failure',
+      { value: 'x'.repeat(513) },
+    ),
+    null,
+  );
+  assert.equal(
+    prepareDiagnosticRequest('/api/security/client-failure', {
+      ...exactEvent,
+      email: 'must-not-leave-browser@example.com',
+    }),
+    null,
+  );
+  assert.equal(
+    prepareDiagnosticRequest('/api/security/client-failure', {
+      ...exactEvent,
+      boundary: 'browser_runtime',
+    }),
+    null,
+  );
+  assert.deepEqual(
+    prepareDiagnosticRequest('/api/security/runtime-rejection', {
+      schema: 'dealivra.auth.response-rejection.v1',
+      boundary: 'provider_response',
+      issue: 'invalid_shape',
+      occurrence_count: 1,
+    }),
+    {
+      endpoint: '/api/security/runtime-rejection',
+      body: JSON.stringify({
+        schema: 'dealivra.auth.response-rejection.v1',
+        boundary: 'provider_response',
+        issue: 'invalid_shape',
+        occurrence_count: 1,
+      }),
+    },
+  );
+  assert.equal(
+    prepareDiagnosticRequest('/api/security/web-vital', {
+      schema: 'dealivra.web-vital.v1',
+      metric: 'lcp',
+      rating: 'good',
+      bucket: 'over_4000',
+      occurrence_count: 1,
+    }),
+    null,
+  );
+  assert.equal(
+    prepareDiagnosticRequest('/api/security/not-reviewed', exactEvent),
+    null,
+  );
+  assert.equal(
+    sendBoundedDiagnostic('/api/security/client-failure', exactEvent),
+    false,
+  );
+  assert.match(transport, /diagnosticTimeoutMs = 5_000/);
+  assert.match(transport, /AbortSignal\.timeout\(diagnosticTimeoutMs\)/);
+  assert.match(transport, /credentials: 'omit'/);
+  assert.match(transport, /referrerPolicy: 'no-referrer'/);
+  assert.match(transport, /keepalive: true/);
+  assert.doesNotMatch(transport, /location\.|navigator\.|document\./);
+});
+
+test('guest deal drafts have a short exact browser-storage boundary', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealCreationWorkspace.tsx');
+
+  assert.match(app, /guest-create-draft:v2/);
+  assert.match(app, /legacyGuestCreateDraftKey='dealivra:guest-create-draft:v1'/);
+  assert.match(app, /guestCreateDraftLifetime=24\*60\*60\*1000/);
+  assert.match(app, /guestCreateDraftMaximumBytes=16\*1024/);
+  assert.match(app, /new TextEncoder\(\)\.encode\(raw\)\.byteLength>guestCreateDraftMaximumBytes/);
+  assert.match(app, /new TextEncoder\(\)\.encode\(serialized\)\.byteLength>guestCreateDraftMaximumBytes/);
+  assert.match(app, /description:recovery\.draft\.description\.slice\(0,10_000\)/);
+  assert.match(app, /serialNumber:''/);
+  assert.doesNotMatch(app, /draft:\{\.\.\.draft,serialNumber:''\}/);
+  assert.match(workspace, /id="create-item-description"[\s\S]{0,160}maxLength=\{10000\}/);
+});
+
+test('browser storage inventory is deny-by-default and release-gated', async () => {
+  const { verifyBrowserStoragePolicy } = await import(
+    '../scripts/verify-browser-storage-policy.mjs'
+  );
+  const packageJson = readJson('package.json');
+  const result = verifyBrowserStoragePolicy(rootPath);
+
+  assert.deepEqual(result, {
+    schema: 'dealivra.browser-storage-policy-result.v1',
+    status: 'passed',
+    reviewed_files: 4,
+    local_storage_calls: 14,
+    session_storage_calls: 6,
+  });
+  assert.equal(
+    packageJson.scripts['security:browser-storage'],
+    'node scripts/verify-browser-storage-policy.mjs',
+  );
+  assert.match(packageJson.scripts.verify, /npm run security:browser-storage/);
 });

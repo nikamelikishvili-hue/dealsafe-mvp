@@ -23,7 +23,9 @@ context immediately before delivery.
   timeouts remain within the Edge execution budget;
 - only a confirmed Auth email may receive a message;
 - templates are fixed in code and reject unknown keys or malformed payloads;
-- provider reads are capped at 16 KiB and time out after 10 seconds;
+- provider reads time out after 10 seconds and use the shared incremental
+  response boundary: only JSON media, valid UTF-8, a non-array object, and at
+  most 16 KiB are accepted;
 - Resend receives one deterministic idempotency key per outbox record;
 - the database records only the provider delivery reference or a bounded
   failure code;

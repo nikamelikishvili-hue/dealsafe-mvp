@@ -34,6 +34,9 @@ repository verification, Preview deployment, and reviewer decision.
 - NHTSA vPIC remains a server-side VIN reference. Runtime provider output is
   bounded to reviewed fields and is not automatically promoted into the
   catalog.
+- NHTSA responses use a finite deadline and an incremental 256,000-byte
+  stream ceiling before JSON parsing; invalid or excessive responses retain
+  the existing safe manual-entry path.
 - Model names are labels, not guarantees. A provider or manufacturer label
   change creates a new catalog version; existing deals retain the version and
   labels recorded when the agreement was created.
@@ -51,9 +54,12 @@ repository verification, Preview deployment, and reviewer decision.
 7. Merge only after required checks pass. The merge commit is the release
    evidence and the production deployment must reference that exact commit.
 
-The automated validator rejects path traversal, checksum drift, unexpected
-categories, duplicate IDs/labels/models, missing source ownership, unsafe
-analytics dimensions, incomplete evidence, or a destructive rollback plan.
+The automated validator hashes UTF-8 dataset bytes after normalizing CRLF to
+the repository's LF line ending, so the manifest checksum is identical on
+Windows and Linux. It rejects bare carriage returns, path traversal, checksum
+drift, unexpected categories, duplicate IDs/labels/models, missing source
+ownership, unsafe analytics dimensions, incomplete evidence, or a destructive
+rollback plan.
 
 ## Update cadence
 
@@ -104,6 +110,8 @@ required.
 
 ## Release evidence
 
-The initial governed release is `2026-07-27.2`. Its active pointer and immutable
-manifest live under `catalog/`. Future releases add a new manifest rather than
-editing prior evidence.
+The initial governed release is `2026-07-27.2`. Release `2026-07-29.1` is a
+checksum-governance correction for the same reviewed category, brand, model,
+and variant labels; it does not silently expand or remove catalog options. The
+active pointer and immutable manifests live under `catalog/`. Future releases
+add a new manifest rather than editing prior evidence.
