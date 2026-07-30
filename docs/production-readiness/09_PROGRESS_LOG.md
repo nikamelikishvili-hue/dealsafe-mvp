@@ -187,8 +187,8 @@ Vercel protection.
 |---|---|---|
 | FND-001 | Complete | Continue reviewing future updates through CI |
 | FND-002 | In progress | Add formatter/linter and real unit/component suites |
-| FND-003 | In progress | CI file exists; GitHub execution and branch requirement still need confirmation |
-| FND-004 | In progress | Dependency audit exists; secret/SAST/license tooling remains |
+| FND-003 | In progress | GitHub execution is verified and protected `main` requires the current `verify`, CodeQL, and Vercel checks; served-asset comparison, restricted archive, and named promotion approval remain |
+| FND-004 | In progress | Dependency, license, secret, deterministic SBOM, CodeQL, ownership, and branch-protection controls exist; an independent security approver remains |
 | SEC-004 | In progress | Initial headers exist; browser/Preview validation and CSP reporting remain |
 
 ### Next batch
@@ -3790,3 +3790,41 @@ No branch-protection rule or public access changed, no workflow was activated
 on GitHub, and no release was promoted. No endpoint, environment, deployment,
 migration, Supabase, Vercel, Preview, Production, customer data, payment,
 payout, refund, dispute, or real-money state changed.
+
+## 2026-07-30 - FND-003/FND-004 main branch protection activation
+
+### Activated on GitHub
+
+- Protected `main` at
+  `e383a7345619933842ba18f8d4b3ebde80012eaf`.
+- Required every change to arrive through an up-to-date pull request.
+- Required the exact `verify`, `Analyze JavaScript and TypeScript`, and
+  `Vercel` checks.
+- Enforced the policy for the repository administrator.
+- Required signed commits, linear history, stale-review dismissal, and
+  resolved review conversations.
+- Disabled force pushes and branch deletion.
+
+### Verified state
+
+- GitHub reports `main` as protected.
+- Strict status checking, administrator enforcement, signed commits, linear
+  history, and conversation resolution are enabled.
+- The three required checks are bound to their GitHub Actions and Vercel
+  applications rather than an untrusted same-name status.
+- The documentation change recording this activation is itself delivered
+  through the protected pull-request path.
+
+### Residual paid-beta gate
+
+The repository currently has one authorized maintainer, so the required
+approval count remains zero and Code Owner review is not yet required. Before
+paid beta, add a second independent security reviewer, require one approval and
+Code Owner review, and prohibit self-approved security exceptions.
+
+### Operational boundary
+
+Only the GitHub `main` branch protection setting changed. No application
+endpoint, customer record, Supabase or Vercel environment, domain, public
+access, payment, payout, refund, dispute decision, or real-money capability
+changed.
