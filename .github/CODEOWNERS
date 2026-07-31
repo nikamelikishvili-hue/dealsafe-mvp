@@ -1,11 +1,16 @@
 # Security and dependency controls require review by the authorized repository owner.
 /.github/workflows/ci.yml @nikamelikishvili-hue
 /.github/workflows/codeql.yml @nikamelikishvili-hue
+/.github/workflows/served-asset-integrity.yml @nikamelikishvili-hue
 /package.json @nikamelikishvili-hue
 /package-lock.json @nikamelikishvili-hue
 /scripts/create-dependency-sbom.mjs @nikamelikishvili-hue
 /scripts/create-release-evidence.mjs @nikamelikishvili-hue
+/scripts/create-served-asset-manifest.mjs @nikamelikishvili-hue
+/scripts/verify-served-assets.mjs @nikamelikishvili-hue
 /scripts/verify-dependency-policy.mjs @nikamelikishvili-hue
 /server/dependencySbomPolicy.mjs @nikamelikishvili-hue
 /server/releaseEvidencePolicy.mjs @nikamelikishvili-hue
+/server/servedAssetIntegrityPolicy.mjs @nikamelikishvili-hue
 /docs/production-readiness/72_STATIC_ANALYSIS_AND_SBOM_GOVERNANCE.md @nikamelikishvili-hue
+/docs/production-readiness/73_SERVED_ASSET_INTEGRITY.md @nikamelikishvili-hue

@@ -200,7 +200,7 @@ Vercel protection.
 |---|---|---|
 | FND-001 | Complete | Continue reviewing future updates through CI |
 | FND-002 | Complete | Keep expanding component coverage as workflows are rebuilt |
-| FND-003 | In progress | GitHub execution is verified and protected `main` requires the current `verify`, CodeQL, and Vercel checks; served-asset comparison, restricted archive, and named promotion approval remain |
+| FND-003 | In progress | GitHub execution and protected `main` are verified; deterministic exact-host served-asset comparison now exists in the repository, while hosted verifier activation, restricted archive, and named promotion approval remain |
 | FND-004 | In progress | Dependency, license, secret, deterministic SBOM, CodeQL, ownership, and branch-protection controls exist; an independent security approver remains |
 | SEC-004 | In progress | Initial headers exist; browser/Preview validation and CSP reporting remain |
 
@@ -3873,6 +3873,40 @@ This batch changes repository quality controls and deterministic component
 tests only. It does not activate public access, change Supabase or Vercel
 configuration, migrate customer data, or enable payment, payout, refund,
 dispute, or real-money behavior.
+
+## 2026-07-30 - FND-003 served-asset integrity
+
+### Implemented locally for review
+
+- Added a deterministic, exact-source-commit manifest for every regular file
+  emitted by the production build, with sorted paths, byte counts, SHA-256
+  digests, strict file/size ceilings, and no contents or environment values.
+- Added an exact-host HTTPS verifier that rejects redirects, unknown hosts,
+  source-commit mismatches, malformed manifests, oversize responses, partial
+  asset sets, and any byte or digest mismatch.
+- Kept protected Preview bypass credentials restricted to a validated exact
+  host and out of URLs, output, manifests, and retained evidence.
+- Added a trusted-main GitHub verification workflow that cannot execute code
+  from the deployment commit while holding the Preview bypass credential.
+- Bound the served manifest, policy, scripts, workflow, and creation check
+  into deterministic release evidence.
+- Extended local Preview smoke verification to fetch and byte-compare every
+  generated asset.
+- Added `no-store` delivery for the public hash-only manifest while retaining
+  immutable caching for fingerprinted assets.
+
+### Remaining activation gate
+
+Configure exact approved deployment hosts, the optional protected Preview
+bypass secret, and the explicit automatic-verification enable flag. Run and
+retain one successful protected Preview exercise before making this a
+promotion requirement. Restricted long-term evidence retention and named
+technical/security approval remain separate paid-beta gates.
+
+### Activation boundary
+
+No hosted variable, secret, deployment, domain, public-access setting,
+customer record, Supabase resource, or real-money capability changed.
 
 ## 2026-07-30 - FND-005 runtime configuration contract
 

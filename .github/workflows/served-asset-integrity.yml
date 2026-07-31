@@ -1,0 +1,64 @@
+name: Served asset integrity
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      deployment_origin:
+        description: Exact HTTPS origin to verify
+        required: true
+        type: string
+      deployment_commit:
+        description: Exact lowercase source commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: served-assets-${{ github.event.deployment.id || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  verify-served-assets:
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch'
+        || (
+          github.event.deployment_status.state == 'success'
+          && vars.DEALIVRA_SERVED_ASSET_VERIFICATION_ENABLED == 'enabled'
+        )
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: served-asset-verification
+
+    steps:
+      - name: Check out the trusted verifier
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Use the supported Node.js release
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      - name: Verify every served browser asset
+        run: node scripts/verify-served-assets.mjs
+        env:
+          DEALIVRA_DEPLOYMENT_ORIGIN: >-
+            ${{
+              github.event_name == 'workflow_dispatch'
+              && inputs.deployment_origin
+              || github.event.deployment_status.environment_url
+            }}
+          DEALIVRA_DEPLOYMENT_COMMIT: >-
+            ${{
+              github.event_name == 'workflow_dispatch'
+              && inputs.deployment_commit
+              || github.event.deployment.sha
+            }}
+          DEALIVRA_ALLOWED_DEPLOYMENT_HOSTS: ${{ vars.DEALIVRA_ALLOWED_DEPLOYMENT_HOSTS }}
+          DEALIVRA_DEPLOYMENT_BYPASS_TOKEN: ${{ secrets.DEALIVRA_DEPLOYMENT_BYPASS_TOKEN }}

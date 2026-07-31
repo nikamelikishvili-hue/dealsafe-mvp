@@ -74,10 +74,16 @@ Before Production promotion:
 1. require the CI check through branch protection;
 2. review the exact manifest from the successful merge commit;
 3. verify the Vercel deployment source commit equals the manifest commit;
-4. verify the served asset hashes against the retained manifest;
+4. run the exact-host served-asset verifier and retain its successful result;
 5. copy approved evidence to a restricted, retention-governed archive;
 6. record named technical/security release approvers; and
 7. block promotion whenever incident control reports a frozen release gate.
+
+The repository now implements step 4 through the bounded served-asset
+manifest and verifier in
+[73_SERVED_ASSET_INTEGRITY.md](73_SERVED_ASSET_INTEGRITY.md). Hosted
+allowlist/token configuration and a successful protected-Preview activation
+exercise remain required before the result becomes a promotion check.
 
 ## Rollback
 

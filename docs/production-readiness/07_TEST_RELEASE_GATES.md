@@ -148,6 +148,7 @@ Main requires review and all checks. Production deploys a tested commit; it is n
 Each release record links to:
 
 - Commit and deployment.
+- Exact source-commit served-asset verification result.
 - Migration and rollback/forward-fix plan.
 - CI test output.
 - Authorization/RLS report.
@@ -166,4 +167,3 @@ Each release record links to:
 - Database rollback is not assumed; prefer forward-compatible expand/migrate/contract changes.
 - Kill switches separately disable new accounts, new deals, uploads, Checkout creation, payment release, and public sharing.
 - Incorrect payment or authorization behavior triggers immediate containment, not a wait for the next planned release.
-
