@@ -3860,3 +3860,38 @@ This batch changes repository quality controls and deterministic component
 tests only. It does not activate public access, change Supabase or Vercel
 configuration, migrate customer data, or enable payment, payout, refund,
 dispute, or real-money behavior.
+
+## 2026-07-30 - FND-005 runtime configuration contract
+
+### Implemented locally for review
+
+- Added one versioned runtime configuration policy for Local, Preview,
+  Staging, and Production across the application and Supabase Edge targets.
+- Added exact validation for browser/server Supabase alignment, deployment
+  environment alignment, safe-default capability modes, server-only Auth
+  secrets, Stripe Sandbox credentials, security notifications, evidence
+  scanning, and bounded optional configuration.
+- Added a deterministic CI contract gate and a current-environment check that
+  runs before every build.
+- Bound the contract result, policy module, and verifier into deterministic
+  release evidence so an accepted artifact cannot omit the control.
+- Made missing required configuration, malformed optional configuration, and
+  mixed provider/environment configuration block the build.
+- Restricted every report to variable names, scopes, sensitivity classes,
+  fixed issue/status codes, and aggregate counts. No value, length, origin,
+  token, hash, credential, or user data is returned.
+- Added regression coverage for empty Local fallback, incomplete Production,
+  valid Production core, environment/provider mismatch, conditional Auth and
+  Stripe secrets, value non-disclosure, build/CI wiring, and minimal public
+  health.
+- Updated the environment inventory with the runtime selector, Web Vital mode,
+  monitoring modes, build behavior, and the residual hosted
+  provider-separation release gate.
+
+### Activation boundary
+
+The checks evaluate repository fixtures and the environment already supplied
+to a build. No environment value was created, read into documentation, copied,
+rotated, or disclosed. No provider, deployment, migration, Supabase, Vercel,
+Preview, Production, public-access, customer, payment, payout, refund,
+dispute, or real-money state changed.

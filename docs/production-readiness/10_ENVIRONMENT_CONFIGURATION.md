@@ -6,8 +6,9 @@ Dealivra must use separate configuration for Local, Preview, Staging, and Produc
 
 | Variable | Exposure | Required | Purpose | Safe failure |
 |---|---|---:|---|---|
-| `VITE_SUPABASE_URL` | Browser | Yes | Supabase project origin used by the web client | Account and live Deal Link operations show an unavailable message |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Browser | Yes | Browser-safe Supabase publishable or legacy anon key | Account and live Deal Link operations remain disabled |
+| `DEALIVRA_RUNTIME_ENVIRONMENT` | Build/server | Only when a protected Vercel Preview acts as Staging | Exact `local`, `preview`, `staging`, or `production` environment selector; otherwise inferred from `VERCEL_ENV` | Invalid values block the build; an absent value uses the unambiguous Vercel environment or Local |
+| `VITE_SUPABASE_URL` | Browser | Yes outside local static demo | Supabase project origin used by the web client | Account and live Deal Link operations show an unavailable message |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Browser | Yes outside local static demo | Browser-safe Supabase publishable or legacy anon key | Account and live Deal Link operations remain disabled |
 | `SUPABASE_URL` | Server | Yes outside local static demo | Supabase project origin used by same-origin Auth Functions | Auth Function returns a generic `503` and logs a safe diagnostic |
 | `SUPABASE_PUBLISHABLE_KEY` | Server | Yes outside local static demo | Browser-safe publishable key used by Auth Functions | Auth Function returns a generic `503` and logs a safe diagnostic |
 | `DEALIVRA_AUTH_IP_FORWARDING_MODE` | Vercel Auth Function | Required before trusted IP forwarding | Exact `disabled` or `enforced` switch for Supabase Auth proxy client-IP forwarding | Missing defaults to `disabled`; an invalid value or incomplete enforced configuration fails Auth closed |
@@ -27,6 +28,7 @@ Dealivra must use separate configuration for Local, Preview, Staging, and Produc
 | `VITE_SUPPORT_CASES_ENABLED` | Browser | No | Exact `enabled` gate for the staged private support-case center | Missing, empty, or any other value keeps support cases hidden and makes no support RPC calls |
 | `DEALIVRA_RUNTIME_REJECTION_MODE` | Vercel Function | Required before rejection monitoring activation | Exact `staged` or `enforced` switch for the privacy-safe runtime rejection intake | Missing defaults to `staged` and records nothing; an invalid value returns `503` without accepting a report |
 | `DEALIVRA_CLIENT_FAILURE_MODE` | Vercel Function | Required before client-failure monitoring activation | Exact `staged` or `enforced` switch for fixed-category browser failure intake | Missing defaults to `staged` and records nothing; an invalid value returns `503` without accepting a report |
+| `DEALIVRA_WEB_VITAL_MODE` | Vercel Function | Required before Web Vital monitoring activation | Exact `staged` or `enforced` switch for URL-free quality-bucket intake | Missing defaults to `staged` and records nothing; an invalid value returns `503` without accepting a report |
 | `SITE_URL` | Supabase Edge Function | Yes for payment flows | Canonical HTTPS origin used for Stripe redirects and the protected-function origin allowlist | Defaults to `https://dealivra.com`; nonmatching browser calls are denied |
 | `DEALIVRA_ALLOWED_ORIGINS` | Supabase Edge Function | No | Comma-separated additional exact HTTPS origins for an approved environment | Invalid entries are ignored and cannot broaden access |
 | `DEALIVRA_VERCEL_PROJECT_SLUG` | Supabase Edge Function | No | Expected Vercel project prefix for protected Preview deployments | Defaults to the current `dealsafe` project slug |
@@ -56,6 +58,36 @@ entry available.
 | Production | Dedicated production project | Public only after release approval | Production provider accounts, monitored configuration, controlled changes, no sandbox/live mixing |
 
 Preview, Staging, and Production must not share a Supabase project, Stripe account mode, storage bucket, webhook secret, or privileged API credential.
+
+## Machine-enforced contract
+
+The repository has one versioned, machine-readable configuration contract in
+`server/runtimeConfigurationPolicy.mjs`. It distinguishes the application
+runtime from Supabase Edge Functions and evaluates Local, Preview, Staging, and
+Production independently.
+
+- `npm run config:verify` validates deterministic safe-failure fixtures in CI.
+- `npm run config:check` evaluates the current application environment before
+  every production build.
+- Preview and Production require matching browser/server Supabase origins and
+  publishable keys. A mismatch blocks the build.
+- Staging must be selected explicitly when it is hosted as a protected Vercel
+  Preview; its `VERCEL_ENV` must still be compatible with that selection.
+- Conditional credentials become required only when their exact capability is
+  enabled. For example, enforced IP forwarding requires its server-only Auth
+  secret, and Sandbox payment mutations require Stripe test credentials.
+- The report contains only variable names, scopes, sensitivity classes,
+  fixed status/issue codes, and counts. It never contains values, lengths,
+  origins, hashes, credentials, or user data.
+
+The only report states are `configured`, `defaulted`, `staged`, `missing`, and
+`invalid`. Any required `missing` value or any `invalid` value produces
+`blocked` and stops the build. Safe defaults or optional staged capabilities
+produce `degraded` without enabling those capabilities.
+
+The public `/api/health` route intentionally remains a minimal liveness check.
+It does not expose environment readiness, missing variable names, provider
+alignment, or capability state to unauthenticated visitors.
 
 ## Validation rules
 
@@ -150,3 +182,8 @@ Before a public or paid release, the release record must prove:
 - Preview/Staging and Production provider identifiers differ;
 - authentication fails safely when a required value is removed in a controlled test;
 - the final deployment passed automated verification and a protected Preview smoke test.
+
+The repository contract proves safe evaluation and build blocking. It does not
+prove that hosted Preview, Staging, and Production credentials are genuinely
+separate. That external provider-separation evidence remains a mandatory
+release approval record.

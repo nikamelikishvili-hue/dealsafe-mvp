@@ -32,7 +32,8 @@ The bounded manifest records:
 - pinned Node major and active catalog version;
 - the fixed set of checks that precede evidence creation, including the
   browser-storage and outbound-transport deny-by-default policies plus
-  deterministic dependency-SBOM creation;
+  the runtime-configuration contract and deterministic dependency-SBOM
+  creation;
 - repository-relative file paths only;
 - byte count and SHA-256 for each governed input and emitted asset;
 - a clean-tree declaration;
@@ -44,7 +45,8 @@ absolute-path references, no excess fields, at most 5 MB per file, and at most
 catalog inputs, evidence/scanning/budget scripts, CodeQL workflow and scoped
 ownership, the exact CycloneDX SBOM and its generator/policy, both
 browser-storage and outbound-transport policy scripts, policy module, built
-HTML, and at least one built JavaScript and CSS asset. A manifest that omits
+HTML, the runtime-configuration policy and verifier, and at least one built
+JavaScript and CSS asset. A manifest that omits
 any required policy result, control source, or SBOM is rejected.
 
 Customer identifiers, Auth/session values, environment-variable values,

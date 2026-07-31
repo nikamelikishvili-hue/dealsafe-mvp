@@ -2397,6 +2397,135 @@ test('runtime configuration has documented safe-failure and secret-boundary chec
   assert.match(example, /Never use sb_secret_ or service_role/);
 });
 
+test('runtime configuration contract blocks unsafe deployments without exposing values', async () => {
+  const {
+    evaluateRuntimeConfiguration,
+    inferRuntimeEnvironment,
+  } = await import('../server/runtimeConfigurationPolicy.mjs');
+  const {
+    verifyRuntimeConfigurationContract,
+  } = await import('../scripts/verify-runtime-configuration.mjs');
+  const packageJson = readJson('package.json');
+  const fixtureUrl = 'https://fixture.supabase.co';
+  const fixtureKey = 'sb_publishable_fixture_value_123456789';
+  const secretSentinel = `sb_secret_${'s'.repeat(64)}`;
+
+  assert.deepEqual(verifyRuntimeConfigurationContract(), {
+    schema: 'dealivra.runtime-configuration-contract-result.v1',
+    status: 'passed',
+    environments: 4,
+    targets: 3,
+    descriptors: 36,
+    deterministic_fixtures: 6,
+  });
+  assert.equal(inferRuntimeEnvironment({}), 'local');
+  assert.equal(inferRuntimeEnvironment({ VERCEL_ENV: 'preview' }), 'preview');
+  assert.equal(inferRuntimeEnvironment({ VERCEL_ENV: 'production' }), 'production');
+  assert.equal(inferRuntimeEnvironment({
+    VERCEL_ENV: 'preview',
+    DEALIVRA_RUNTIME_ENVIRONMENT: 'staging',
+  }), 'staging');
+  assert.throws(
+    () => inferRuntimeEnvironment({ DEALIVRA_RUNTIME_ENVIRONMENT: 'prod' }),
+    /Explicit runtime environment is invalid/,
+  );
+
+  const blocked = evaluateRuntimeConfiguration({
+    environment: 'production',
+    values: { VERCEL_ENV: 'production' },
+  });
+  assert.equal(blocked.status, 'blocked');
+  assert.equal(blocked.summary.missing, 4);
+  assert.deepEqual(
+    blocked.checks.filter(check => check.status === 'missing').map(check => check.name),
+    [
+      'VITE_SUPABASE_URL',
+      'VITE_SUPABASE_PUBLISHABLE_KEY',
+      'SUPABASE_URL',
+      'SUPABASE_PUBLISHABLE_KEY',
+    ],
+  );
+
+  const configured = evaluateRuntimeConfiguration({
+    environment: 'production',
+    values: {
+      VITE_SUPABASE_URL: fixtureUrl,
+      VITE_SUPABASE_PUBLISHABLE_KEY: fixtureKey,
+      SUPABASE_URL: fixtureUrl,
+      SUPABASE_PUBLISHABLE_KEY: fixtureKey,
+      SUPABASE_AUTH_SECRET_KEY: secretSentinel,
+      VERCEL_ENV: 'production',
+    },
+  });
+  assert.equal(configured.summary.missing, 0);
+  assert.notEqual(configured.status, 'blocked');
+  const serialized = JSON.stringify(configured);
+  assert.ok(configured.checks.every(check => !Object.hasOwn(check, 'value')));
+  assert.equal(serialized.includes(fixtureKey), false);
+  assert.equal(serialized.includes(secretSentinel), false);
+
+  const misaligned = evaluateRuntimeConfiguration({
+    environment: 'preview',
+    values: {
+      VITE_SUPABASE_URL: fixtureUrl,
+      VITE_SUPABASE_PUBLISHABLE_KEY: fixtureKey,
+      SUPABASE_URL: 'https://other.supabase.co',
+      SUPABASE_PUBLISHABLE_KEY: fixtureKey,
+      VERCEL_ENV: 'production',
+    },
+  });
+  assert.equal(misaligned.status, 'blocked');
+  assert.ok(misaligned.checks.some(check => (
+    check.name === 'SUPABASE_PROJECT_ALIGNMENT'
+    && check.issue === 'provider_origins_differ'
+  )));
+  assert.ok(misaligned.checks.some(check => (
+    check.name === 'VERCEL_ENVIRONMENT_ALIGNMENT'
+    && check.issue === 'deployment_environment_mismatch'
+  )));
+
+  const forwarding = evaluateRuntimeConfiguration({
+    environment: 'local',
+    values: { DEALIVRA_AUTH_IP_FORWARDING_MODE: 'enforced' },
+  });
+  assert.equal(forwarding.status, 'blocked');
+  assert.ok(forwarding.checks.some(check => (
+    check.name === 'SUPABASE_AUTH_SECRET_KEY'
+    && check.status === 'missing'
+  )));
+
+  const stripe = evaluateRuntimeConfiguration({
+    environment: 'local',
+    target: 'edge',
+    values: { DEALIVRA_CHECKOUT_MODE: 'sandbox' },
+  });
+  assert.equal(stripe.status, 'blocked');
+  assert.deepEqual(
+    stripe.checks.filter(check => check.status === 'missing').map(check => check.name),
+    ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+  );
+
+  assert.equal(
+    packageJson.scripts['config:verify'],
+    'node scripts/verify-runtime-configuration.mjs --contract',
+  );
+  assert.equal(packageJson.scripts['config:check'], 'node scripts/verify-runtime-configuration.mjs');
+  assert.match(packageJson.scripts.verify, /npm run config:verify/);
+  assert.match(packageJson.scripts.build, /^npm run config:check/);
+});
+
+test('public health remains liveness-only and never exposes configuration readiness', () => {
+  const source = readText('api/health.mjs');
+  assert.doesNotMatch(source, /runtimeConfiguration|process\.env|missing|invalid|degraded/);
+
+  const response = createResponse();
+  healthHandler({ method: 'GET', headers: {} }, response);
+  assert.deepEqual(response.payload, {
+    schema: 'dealivra.health.v1',
+    status: 'alive',
+  });
+});
+
 test('new browser runtime identifiers use Dealivra with explicit legacy cleanup only', () => {
   const addressAutocomplete = readText('src/AddressAutocomplete.tsx');
   const authService = readText('src/services/supabaseRest.ts');
@@ -10132,8 +10261,10 @@ test('release evidence binds a clean exact commit to bounded file hashes', () =>
     'scripts/verify-build-budgets.mjs',
     'scripts/verify-dependency-policy.mjs',
     'scripts/verify-outbound-transport-policy.mjs',
+    'scripts/verify-runtime-configuration.mjs',
     'server/dependencySbomPolicy.mjs',
     'server/releaseEvidencePolicy.mjs',
+    'server/runtimeConfigurationPolicy.mjs',
     'src/catalog.v1.json',
     'vercel.json',
     'vite.config.ts',
@@ -10235,12 +10366,15 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
   assert.match(policy, /production_authorization: 'not_granted'/);
   assert.match(policy, /'browser_storage_policy_passed'/);
   assert.match(policy, /'outbound_transport_policy_passed'/);
+  assert.match(policy, /'runtime_configuration_contract_passed'/);
   assert.match(policy, /'dependency_sbom_created'/);
   assert.match(script, /'release-evidence\/dependency-sbom\.cdx\.json'/);
   assert.match(script, /'scripts\/create-dependency-sbom\.mjs'/);
   assert.match(script, /'server\/dependencySbomPolicy\.mjs'/);
   assert.match(script, /'scripts\/verify-browser-storage-policy\.mjs'/);
   assert.match(script, /'scripts\/verify-outbound-transport-policy\.mjs'/);
+  assert.match(script, /'scripts\/verify-runtime-configuration\.mjs'/);
+  assert.match(script, /'server\/runtimeConfigurationPolicy\.mjs'/);
   assert.match(ignore, /^release-evidence\/$/m);
   assert.doesNotMatch(
     `${script}\n${policy}`,
@@ -10259,7 +10393,7 @@ test('locked dependencies follow the reviewed offline supply-chain policy', () =
   );
   assert.match(
     packageJson.scripts.verify,
-    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run format:check && npm run lint && npm run typecheck/,
+    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run config:verify && npm run format:check && npm run lint && npm run typecheck/,
   );
   assert.match(policy, /lockfile\.lockfileVersion !== 3/);
   assert.match(policy, /url\.protocol === 'https:'/);
