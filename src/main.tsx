@@ -13,6 +13,8 @@ import './workspace-redesign.css';
 import './verification-polish.css';
 import './dealivra-brand.css';
 
+const demoDealPath = '/?deal=DV7K4M2Q';
+
 const analyticsHost = location.hostname === 'dealivra.com'
   || location.hostname === 'www.dealivra.com'
   || location.hostname.endsWith('.vercel.app');
@@ -33,7 +35,7 @@ const destinationPath: Record<Exclude<LandingDestination, 'create' | 'signin' | 
 
 const loadFullApp = async (destination?: LandingDestination) => {
   if (destination === 'demo') {
-    history.pushState({}, '', '/?deal=DV-7K4M2Q');
+    history.pushState({}, '', demoDealPath);
   } else if (destination === 'create' || destination === 'signin' || destination === 'signup') {
     history.pushState({}, '', `/?start=${destination}`);
   } else if (destination) {
