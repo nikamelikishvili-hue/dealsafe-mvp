@@ -19,6 +19,7 @@
     "brand:verify": "node scripts/verify-legacy-identifiers.mjs",
     "config:verify": "node scripts/verify-runtime-configuration.mjs --contract",
     "config:check": "node scripts/verify-runtime-configuration.mjs",
+    "staging:database-target": "node scripts/verify-staging-database-target.mjs",
     "security:secrets": "node scripts/scan-repository-secrets.mjs",
     "security:mfa-matrix": "node scripts/run-mfa-password-only-matrix.mjs",
     "performance:budgets": "node scripts/verify-build-budgets.mjs",

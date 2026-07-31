@@ -2588,7 +2588,7 @@ test('legacy runtime identifiers are machine-governed migration aliases', async 
   const { verifyLegacyIdentifiers } = await import('../scripts/verify-legacy-identifiers.mjs');
   const current = verifyLegacyIdentifiers(rootPath);
   assert.equal(current.status, 'passed');
-  assert.equal(current.legacy_occurrences, 157);
+  assert.equal(current.legacy_occurrences, 170);
   assert.equal(current.approved_aliases, 9);
   assert.equal(packageJson.scripts['brand:verify'], 'node scripts/verify-legacy-identifiers.mjs');
   assert.match(packageJson.scripts.verify, /npm run brand:verify/);
@@ -11505,4 +11505,85 @@ test('browser storage inventory is deny-by-default and release-gated', async () 
     'node scripts/verify-browser-storage-policy.mjs',
   );
   assert.match(packageJson.scripts.verify, /npm run security:browser-storage/);
+});
+
+test('staging database target guard rejects Production and mixed projects', async () => {
+  const { verifyStagingDatabaseTarget } = await import(
+    '../scripts/verify-staging-database-target.mjs'
+  );
+  const valid = {
+    DEALIVRA_DATABASE_ENVIRONMENT: 'staging',
+    DEALIVRA_STAGING_SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst',
+    DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF: 'zyxwvutsrqponmlkjihg',
+    DEALIVRA_STAGING_DATABASE_URL:
+      'postgresql://postgres:secret@db.abcdefghijklmnopqrst.supabase.co/postgres?sslmode=require',
+  };
+
+  assert.deepEqual(verifyStagingDatabaseTarget(valid), {
+    schema: 'dealivra.staging-database-target.v1',
+    status: 'passed',
+    environment: 'staging',
+    project_separation: 'verified',
+    direct_database_host: 'verified',
+    tls: 'required',
+  });
+  assert.throws(
+    () =>
+      verifyStagingDatabaseTarget({
+        ...valid,
+        DEALIVRA_DATABASE_ENVIRONMENT: 'production',
+      }),
+    /must be exactly staging/,
+  );
+  assert.throws(
+    () =>
+      verifyStagingDatabaseTarget({
+        ...valid,
+        DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF:
+          valid.DEALIVRA_STAGING_SUPABASE_PROJECT_REF,
+      }),
+    /must use different Supabase projects/,
+  );
+});
+
+test('database authorization gate is manual-only and covers role isolation', () => {
+  const packageJson = readJson('package.json');
+  const workflow = readText('.github/workflows/staging-database-gate.yml');
+  const migration = readText(
+    'supabase/private_evidence_maintenance_settings_rls.sql',
+  );
+  const privateRegression = readText(
+    'supabase/tests/private_evidence_maintenance_settings_rls_rollback.sql',
+  );
+  const databaseContract = readText(
+    'supabase/tests/database_security_contract_rollback.sql',
+  );
+  const runbook = readText(
+    'docs/production-readiness/74_STAGING_DATABASE_AUTHORIZATION_GATE.md',
+  );
+
+  assert.equal(
+    packageJson.scripts['staging:database-target'],
+    'node scripts/verify-staging-database-target.mjs',
+  );
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /\n\s+push:/);
+  assert.doesNotMatch(workflow, /\n\s+pull_request:/);
+  assert.match(workflow, /environment: staging/);
+  assert.match(workflow, /DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF/);
+  assert.match(workflow, /authenticated_rpc_cross_role_rollback\.sql/);
+  assert.match(migration, /enable row level security/i);
+  assert.match(migration, /revoke all on table[\s\S]*service_role/i);
+  assert.match(privateRegression, /relforcerowsecurity/);
+  assert.match(privateRegression, /function_record\.prosecdef/);
+  assert.match(
+    databaseContract,
+    /namespace\.nspname = 'public'[\s\S]*not class\.relrowsecurity/,
+  );
+  assert.match(
+    databaseContract,
+    /grant_row\.grantee in \('PUBLIC', 'anon', 'authenticated', 'service_role'\)/,
+  );
+  assert.match(runbook, /separate Supabase project for Staging/);
+  assert.match(runbook, /Production, public access, live Supabase resources/);
 });

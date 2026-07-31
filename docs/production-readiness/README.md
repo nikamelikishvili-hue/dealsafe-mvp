@@ -82,6 +82,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [71_BROWSER_STORAGE_INVENTORY.md](71_BROWSER_STORAGE_INVENTORY.md) | Deny-by-default release inventory for persistent and tab-scoped browser storage |
 | [72_STATIC_ANALYSIS_AND_SBOM_GOVERNANCE.md](72_STATIC_ANALYSIS_AND_SBOM_GOVERNANCE.md) | CodeQL SAST, deterministic CycloneDX inventory, scoped ownership, finding SLAs, exceptions, and release evidence |
 | [73_SERVED_ASSET_INTEGRITY.md](73_SERVED_ASSET_INTEGRITY.md) | Commit-bound deployed-asset manifest, exact-host byte verification, protected Preview handling, and activation gates |
+| [74_STAGING_DATABASE_AUTHORIZATION_GATE.md](74_STAGING_DATABASE_AUTHORIZATION_GATE.md) | Isolated Staging Supabase target guard, database-wide authorization contract, private-table RLS remediation, and rollout evidence |
 
 ## Authority and change control
 

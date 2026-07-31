@@ -40,7 +40,7 @@ export const approvedLegacyIdentifierRules = Object.freeze([
   }),
   rule({
     id: 'database-private-schema-compatibility',
-    expectedOccurrences: 120,
+    expectedOccurrences: 133,
     allowedPath: supabaseSql,
     linePattern: /\bdealsafe_private\b/i,
   }),

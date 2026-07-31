@@ -47,10 +47,10 @@ This backlog turns the production specification into controlled delivery work. P
 | ID | Priority | Work | Acceptance |
 |---|---|---|---|
 | DAT-001 | P0 | Convert setup SQL into timestamped migrations | Empty and previous-version databases migrate automatically |
-| DAT-002 | P0 | Inventory every table/view/function/bucket/grant/policy | Machine-readable inventory has an owner and expected roles |
-| DAT-003 | P0 | Add cross-user RLS/function/storage test harness | Anonymous, unrelated, seller, buyer, support, and admin allow/deny matrix passes |
-| DAT-004 | P0 | Harden `security definer` functions and grants | Fixed search path, validated inputs, explicit grants, tests |
-| DAT-005 | P0 | Implement immutable material audit events | Ordinary roles cannot alter/delete events; transitions include correlation IDs |
+| DAT-002 | P0 â€” in progress | Inventory every table/view/function/bucket/grant/policy | Live advisor inventory and a Staging SQL contract exist; machine-readable ownership inventory remains |
+| DAT-003 | P0 â€” in progress | Add cross-user RLS/function/storage test harness | RPC role matrix is behind an exact Staging target guard; real-token HTTP and Storage cases remain |
+| DAT-004 | P0 â€” repository complete | Harden `security definer` functions and grants | Fixed search path, validated inputs, explicit grants, and regression tests are present; Staging proof remains a launch gate |
+| DAT-005 | P0 â€” repository complete | Implement immutable material audit events | Append-only events, correlation IDs, mutation denial, and rollback proof are present; Staging proof remains a launch gate |
 | DAT-006 | P1 | Add PITR, storage backup, retention jobs, and restore drill | RPO/RTO evidence passes |
 | DAT-007 | P1 | Implement privacy export, correction, deletion, and legal hold ledger | End-to-end privacy requests are auditable |
 

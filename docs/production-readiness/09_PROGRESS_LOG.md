@@ -1,5 +1,29 @@
 # Production-readiness progress log
 
+## 2026-07-31 — isolated Staging database authorization gate
+
+### Completed in the repository
+
+- Added a manual-only GitHub `staging` environment workflow that rejects a
+  Production or mixed Supabase target before any SQL runs.
+- Added a defense-in-depth RLS migration for the owner-only private evidence
+  maintenance settings table identified by the live database advisor.
+- Added database-wide RLS, private-schema grant, policy-role, invoker-view,
+  and elevated-function search-path assertions.
+- Put the existing authenticated seller/buyer/outsider/admin RPC matrix behind
+  the exact isolated Staging target guard.
+
+### Verified external state and limits
+
+- The connected Supabase organization currently exposes one active project;
+  a separate Staging project is not yet available.
+- The live remote database reports 27 applied migrations, but the repository
+  does not yet contain a complete timestamped empty-database migration chain.
+- The private maintenance settings table has owner-only ACLs and is not in an
+  exposed schema, but RLS remains required for consistent defense in depth.
+- No Production table, policy, grant, function, project, public-access setting,
+  Vercel alias, or real payment was changed by this batch.
+
 ## 2026-07-30 — FND-006 legacy identifier governance
 
 - Removed the ambiguous legacy Vercel project/team defaults from the Edge
