@@ -10280,7 +10280,7 @@ test('incident drill is a local no-network release gate', () => {
   );
 });
 
-test('application services are split into cacheable bounded chunks', () => {
+test('application services are split into a cycle-safe bounded chunk', () => {
   const packageJson = readJson('package.json');
   const viteConfig = readText('vite.config.ts');
   const budgetGate = readText('scripts/verify-build-budgets.mjs');
@@ -10291,8 +10291,9 @@ test('application services are split into cacheable bounded chunks', () => {
   assert.match(readText('scripts/smoke-preview.mjs'), /configLoader: 'native'/);
   assert.match(viteConfig, /name: 'deal-services'/);
   assert.match(viteConfig, /test: \/src\[\\\\\/\]services\[\\\\\/\]\//);
-  assert.match(viteConfig, /includeDependenciesRecursively: false/);
-  assert.match(viteConfig, /maxSize: 240_000/);
+  assert.match(viteConfig, /includeDependenciesRecursively: true/);
+  assert.doesNotMatch(viteConfig, /includeDependenciesRecursively: false/);
+  assert.match(viteConfig, /maxSize: 400_000/);
   assert.match(budgetGate, /maximumJavaScriptChunkBytes: 400_000/);
   assert.doesNotMatch(
     `${viteConfig}\n${packageJson.scripts.build}`,
