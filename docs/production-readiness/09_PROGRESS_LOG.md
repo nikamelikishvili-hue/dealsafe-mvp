@@ -1,5 +1,18 @@
 # Production-readiness progress log
 
+## 2026-07-30 — FND-006 legacy identifier governance
+
+- Removed the ambiguous legacy Vercel project/team defaults from the Edge
+  origin boundary. Missing Dealivra-named settings now disable wildcard
+  Preview origins instead of broadening the allowlist.
+- Added a fail-closed, value-free legacy identifier inventory over application,
+  server, browser, build, Edge Function, and SQL sources.
+- Bound every retained browser, database, Stripe, fee, cache, and Vercel alias
+  to a named rule, exact location boundary, and reviewed occurrence count.
+- Added `brand:verify` to the full protected verification chain and release
+  evidence inputs. No hosted configuration, database object, payment record,
+  deployment alias, or public-access setting was changed.
+
 This log records completed delivery evidence. A backlog item is not marked complete from code alone when it also requires staging, provider, legal, accessibility, security, or operational evidence.
 
 ## 2026-07-29 — SEC-007 staged sensitive-change enforcement

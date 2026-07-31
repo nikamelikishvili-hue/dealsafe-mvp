@@ -31,8 +31,8 @@ Dealivra must use separate configuration for Local, Preview, Staging, and Produc
 | `DEALIVRA_WEB_VITAL_MODE` | Vercel Function | Required before Web Vital monitoring activation | Exact `staged` or `enforced` switch for URL-free quality-bucket intake | Missing defaults to `staged` and records nothing; an invalid value returns `503` without accepting a report |
 | `SITE_URL` | Supabase Edge Function | Yes for payment flows | Canonical HTTPS origin used for Stripe redirects and the protected-function origin allowlist | Defaults to `https://dealivra.com`; nonmatching browser calls are denied |
 | `DEALIVRA_ALLOWED_ORIGINS` | Supabase Edge Function | No | Comma-separated additional exact HTTPS origins for an approved environment | Invalid entries are ignored and cannot broaden access |
-| `DEALIVRA_VERCEL_PROJECT_SLUG` | Supabase Edge Function | No | Expected Vercel project prefix for protected Preview deployments | Defaults to the current `dealsafe` project slug |
-| `DEALIVRA_VERCEL_TEAM_SLUG` | Supabase Edge Function | No | Expected Vercel team suffix for protected Preview deployments | Defaults to the current `nika13` team slug |
+| `DEALIVRA_VERCEL_PROJECT_SLUG` | Supabase Edge Function | No | Exact Vercel project prefix for protected Preview deployments | Missing configuration disables wildcard Preview origins |
+| `DEALIVRA_VERCEL_TEAM_SLUG` | Supabase Edge Function | No | Exact Vercel team suffix for protected Preview deployments | Missing configuration disables wildcard Preview origins |
 | `DEALIVRA_MALWARE_SCANNER_URL` | Supabase Edge Function | Yes before evidence uploads are enabled | Separate reviewed HTTPS malware-scanner gateway | Quarantined file is rejected; nothing enters the final evidence vault |
 | `DEALIVRA_MALWARE_SCANNER_TOKEN` | Supabase Edge Function | Yes before evidence uploads are enabled | Secret bearer credential for the scanner gateway | Scanner remains fail-closed and returns a safe unavailable message |
 
