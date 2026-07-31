@@ -16,17 +16,19 @@
     "dependency:policy": "node scripts/verify-dependency-policy.mjs",
     "security:browser-storage": "node scripts/verify-browser-storage-policy.mjs",
     "security:transport": "node scripts/verify-outbound-transport-policy.mjs",
+    "config:verify": "node scripts/verify-runtime-configuration.mjs --contract",
+    "config:check": "node scripts/verify-runtime-configuration.mjs",
     "security:secrets": "node scripts/scan-repository-secrets.mjs",
     "security:mfa-matrix": "node scripts/run-mfa-password-only-matrix.mjs",
     "performance:budgets": "node scripts/verify-build-budgets.mjs",
-    "build": "tsc -b && vite build --configLoader native && npm run performance:budgets",
+    "build": "npm run config:check && tsc -b && vite build --configLoader native && npm run performance:budgets",
     "preview": "vite preview --configLoader native",
     "smoke:preview": "node scripts/smoke-preview.mjs",
     "smoke:protected": "node scripts/run-protected-synthetic.mjs",
     "incident:drill": "node scripts/run-incident-control-drill.mjs",
     "release:sbom": "node scripts/create-dependency-sbom.mjs",
     "release:evidence": "node scripts/create-release-evidence.mjs",
-    "verify": "npm run catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run format:check && npm run lint && npm run typecheck && npm test && npm run incident:drill && npm run security:secrets && npm run build && npm run smoke:preview"
+    "verify": "npm run catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run config:verify && npm run format:check && npm run lint && npm run typecheck && npm test && npm run incident:drill && npm run security:secrets && npm run build && npm run smoke:preview"
   },
   "dependencies": {
     "lucide-react": "1.25.0",
