@@ -4394,12 +4394,22 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   );
   assert.match(fulfillment, /meeting-field meeting-field-line-two/);
   const addressAutocomplete = readText('src/AddressAutocomplete.tsx');
-  assert.match(addressAutocomplete, /gmp-error/);
+  const usAddress = readText('src/usAddress.ts');
+  assert.match(
+    addressAutocomplete,
+    /AutocompleteSuggestion\.fetchAutocompleteSuggestions/,
+  );
+  assert.match(addressAutocomplete, /AutocompleteSessionToken/);
+  assert.match(addressAutocomplete, /role="combobox"/);
+  assert.match(addressAutocomplete, /role="listbox"/);
+  assert.match(addressAutocomplete, /Google Maps/);
   assert.match(
     addressAutocomplete,
     /Address suggestions are unavailable\. Enter the address manually\./,
   );
-  assert.match(fulfillment, /\^\\d\{5\}\(\?:-\\d\{4\}\)\?\$/);
+  assert.match(usAddress, /\^\\d\{5\}\(\?:-\\d\{4\}\)\?\$/);
+  assert.match(usAddress, /subpremise/);
+  assert.match(fulfillment, /parts\.addressLine2 \|\| current\.addressLine2/);
   assert.match(fulfillment, /getElementById\('deal-evidence-vault'\)/);
   assert.match(
     fulfillment,

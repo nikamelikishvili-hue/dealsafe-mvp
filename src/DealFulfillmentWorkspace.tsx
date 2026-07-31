@@ -15,6 +15,7 @@ import {
 import { AddressAutocomplete } from './AddressAutocomplete';
 import type { Deal } from './domain';
 import { getAppLanguage, t } from './i18n';
+import { isUsPostalCode, US_STATE_OPTIONS } from './usAddress';
 import {
   completeHandoff,
   confirmMeeting,
@@ -37,63 +38,6 @@ import {
   type SellerShippingEvidenceReadiness,
   type StoredSession,
 } from './services/supabaseRest';
-
-const usStateOptions = [
-  ['AL', 'Alabama'],
-  ['AK', 'Alaska'],
-  ['AZ', 'Arizona'],
-  ['AR', 'Arkansas'],
-  ['CA', 'California'],
-  ['CO', 'Colorado'],
-  ['CT', 'Connecticut'],
-  ['DE', 'Delaware'],
-  ['DC', 'District of Columbia'],
-  ['FL', 'Florida'],
-  ['GA', 'Georgia'],
-  ['HI', 'Hawaii'],
-  ['ID', 'Idaho'],
-  ['IL', 'Illinois'],
-  ['IN', 'Indiana'],
-  ['IA', 'Iowa'],
-  ['KS', 'Kansas'],
-  ['KY', 'Kentucky'],
-  ['LA', 'Louisiana'],
-  ['ME', 'Maine'],
-  ['MD', 'Maryland'],
-  ['MA', 'Massachusetts'],
-  ['MI', 'Michigan'],
-  ['MN', 'Minnesota'],
-  ['MS', 'Mississippi'],
-  ['MO', 'Missouri'],
-  ['MT', 'Montana'],
-  ['NE', 'Nebraska'],
-  ['NV', 'Nevada'],
-  ['NH', 'New Hampshire'],
-  ['NJ', 'New Jersey'],
-  ['NM', 'New Mexico'],
-  ['NY', 'New York'],
-  ['NC', 'North Carolina'],
-  ['ND', 'North Dakota'],
-  ['OH', 'Ohio'],
-  ['OK', 'Oklahoma'],
-  ['OR', 'Oregon'],
-  ['PA', 'Pennsylvania'],
-  ['RI', 'Rhode Island'],
-  ['SC', 'South Carolina'],
-  ['SD', 'South Dakota'],
-  ['TN', 'Tennessee'],
-  ['TX', 'Texas'],
-  ['UT', 'Utah'],
-  ['VT', 'Vermont'],
-  ['VA', 'Virginia'],
-  ['WA', 'Washington'],
-  ['WV', 'West Virginia'],
-  ['WI', 'Wisconsin'],
-  ['WY', 'Wyoming'],
-] as const;
-
-const isUsPostalCode = (value: string) =>
-  /^\d{5}(?:-\d{4})?$/.test(value.trim());
 
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString(getAppLanguage());
@@ -259,12 +203,19 @@ export function MeetingPanel({
                   ...current,
                   streetAddress:
                     parts.streetAddress || current.streetAddress,
+                  addressLine2:
+                    parts.addressLine2 || current.addressLine2,
                   city: parts.city || current.city,
                   state: parts.state || current.state,
                   postalCode: parts.postalCode || current.postalCode,
                 }))
               }
             />
+            <small className="field-help">
+              {t(
+                'If needed, add an apartment, suite, unit, building, or floor.',
+              )}
+            </small>
           </label>
           <label className="meeting-field meeting-field-line-two">
             {t('Address line 2 (optional)')}
@@ -306,7 +257,7 @@ export function MeetingPanel({
               }
             >
               <option value="">{t('Select state')}</option>
-              {usStateOptions.map(([code, name]) => (
+              {US_STATE_OPTIONS.map(([code, name]) => (
                 <option
                   key={code}
                   value={code}
@@ -1062,6 +1013,8 @@ export function ShippingPanel({
                     ...current,
                     streetAddress:
                       parts.streetAddress || current.streetAddress,
+                    addressLine2:
+                      parts.addressLine2 || current.addressLine2,
                     city: parts.city || current.city,
                     state: parts.state || current.state,
                     postalCode: parts.postalCode || current.postalCode,
@@ -1121,7 +1074,7 @@ export function ShippingPanel({
                 }
               >
                 <option value="">{t('Select state')}</option>
-                {usStateOptions.map(([code, name]) => (
+                {US_STATE_OPTIONS.map(([code, name]) => (
                   <option
                     key={code}
                     value={code}

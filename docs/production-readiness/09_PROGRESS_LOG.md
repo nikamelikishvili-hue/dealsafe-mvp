@@ -3621,6 +3621,42 @@ domain changed, environment value created, migration applied, or customer,
 Supabase, Vercel, Preview, Production, public-access, payment, payout, refund,
 dispute, or real-money state changed.
 
+## 2026-07-30 - UX-004 standardized U.S. address entry
+
+### Implemented locally for review
+
+- Replaced the opaque hosted address element with a controlled native input
+  backed by Google Places Autocomplete Data API, a bounded debounce, fresh
+  session tokens, U.S.-only street-address suggestions, and visible provider
+  attribution.
+- Preserved manual entry at every state, including missing configuration,
+  provider failure, no matches, and incomplete Google results.
+- Added keyboard listbox behavior, focus-visible controls, live non-blocking
+  status messages, a clear action, reduced-motion support, and responsive
+  suggestion placement.
+- Centralized U.S. state and ZIP/ZIP+4 validation and Google address parsing,
+  including legacy component names, full state-name normalization, street
+  numbers, postal suffixes, and `subpremise`.
+- Connected the same parsed street, apartment/suite/unit, city, state, and ZIP
+  fields to both the in-person meeting and buyer shipping workflows.
+- Kept Address line 2 visible and editable with explicit apartment, suite,
+  unit, building, floor, and mailbox guidance.
+- Added deterministic component contracts for the manual fallback,
+  combobox semantics, full U.S. parsing, state normalization, ZIP validation,
+  and apartment/suite/unit preservation.
+- Replaced the corrupted setup note with a value-free Google Cloud, Vercel,
+  restriction, and acceptance guide.
+
+### Review and activation boundary
+
+The browser key remains restricted configuration and is not stored in the
+repository or test output. This batch changes address-entry presentation and
+client-side parsing only. It does not change private-address authorization,
+database storage, Supabase resources, hosted variables, public access,
+customer records, payment, payout, refund, dispute, or real-money behavior.
+Protected Preview mouse, keyboard, mobile, provider-failure, and exact-origin
+acceptance remain required before UX-004 can be marked complete.
+
 ## 2026-07-30 - SEC-024 outbound transport inventory
 
 ### Implemented locally for review
