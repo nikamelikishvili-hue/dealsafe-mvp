@@ -15,6 +15,7 @@ Object.defineProperty(globalThis, 'document', {
 const { AccountEntryPage, ForgotPasswordEntry } = await import('../../src/AccountEntryPages');
 const { AddressAutocomplete } = await import('../../src/AddressAutocomplete');
 const { BrandLogo } = await import('../../src/BrandLogo');
+const { isUsPostalCode, normalizeUsState, parseGoogleUsAddress } = await import('../../src/usAddress');
 
 const noop = () => {};
 
@@ -26,8 +27,47 @@ test('address entry always renders a usable manual line-one fallback', () => {
   assert.match(markup, /autoComplete="address-line1"/);
   assert.match(markup, /placeholder="Street address"/);
   assert.match(markup, /value="15900 N Bay"/);
+  assert.match(markup, /role="combobox"/);
+  assert.match(markup, /aria-autocomplete="list"/);
+  assert.match(markup, /aria-label="Clear street address"/);
   assert.match(markup, /role="status"/);
   assert.match(markup, /Address suggestions are unavailable\. Enter the address manually\./);
+});
+
+test('Google address parts populate a complete US delivery address including unit and ZIP+4', () => {
+  const parsed = parseGoogleUsAddress([
+    { longText: '15900', shortText: '15900', types: ['street_number'] },
+    { longText: 'North Bay Road', shortText: 'N Bay Rd', types: ['route'] },
+    { longText: 'Apartment 7B', shortText: 'Apt 7B', types: ['subpremise'] },
+    { longText: 'Miami Beach', shortText: 'Miami Beach', types: ['locality'] },
+    {
+      longText: 'Florida',
+      shortText: 'FL',
+      types: ['administrative_area_level_1'],
+    },
+    { longText: '33141', shortText: '33141', types: ['postal_code'] },
+    { longText: '2140', shortText: '2140', types: ['postal_code_suffix'] },
+    { longText: 'United States', shortText: 'US', types: ['country'] },
+  ]);
+
+  assert.deepEqual(parsed, {
+    streetAddress: '15900 North Bay Road',
+    addressLine2: 'Apartment 7B',
+    city: 'Miami Beach',
+    state: 'FL',
+    postalCode: '33141-2140',
+    country: 'US',
+    hasStreetNumber: true,
+    isComplete: true,
+  });
+});
+
+test('US address helpers accept full state names and reject incomplete ZIP codes', () => {
+  assert.equal(normalizeUsState('New York'), 'NY');
+  assert.equal(normalizeUsState('ny'), 'NY');
+  assert.equal(isUsPostalCode('10001'), true);
+  assert.equal(isUsPostalCode('10001-1234'), true);
+  assert.equal(isUsPostalCode('1000'), false);
 });
 
 test('sign-in form preserves password-manager semantics and explicit button behavior', () => {
