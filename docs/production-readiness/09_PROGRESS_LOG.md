@@ -3979,18 +3979,22 @@ rotated, or disclosed. No provider, deployment, migration, Supabase, Vercel,
 Preview, Production, public-access, customer, payment, payout, refund,
 dispute, or real-money state changed.
 
-## 2026-07-31 - UX-004 cycle-safe hosted address Preview
+## 2026-07-31 - UX-004 hosted address Preview recovery
 
 ### Implemented locally for review
 
-- Reproduced the hosted blank-page failure with the Preview configuration
-  shape and traced it to an `app -> service -> app` initialization cycle.
-- Kept the cacheable service boundary while capturing its reviewed dependency
-  closure recursively, eliminating the import back to the app chunk.
-- Added a regression rule requiring recursive dependency capture and retaining
+- Reproduced the hosted recovery screen with the Preview configuration shape
+  and retained the browser Console evidence before changing the implementation.
+- Confirmed that the application bundle loaded successfully and traced the
+  failure to the legacy hyphenated Sample Deal identifier being rejected by
+  every hardened public Deal boundary.
+- Replaced the Sample and local fallback identifiers with the canonical
+  uppercase alphanumeric format and added a regression rule preventing the
+  invalid legacy form from returning.
+- Kept the cacheable service boundary with recursive dependency capture and
   the existing 400,000-byte JavaScript chunk ceiling.
 - Verified the environment-shaped production bundle renders the landing page
-  without a new browser Console error before resuming the address-flow review.
+  and opens the complete Sample Deal Room without a recovery screen.
 
 ### Activation boundary
 
