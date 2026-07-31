@@ -37,7 +37,7 @@ This backlog turns the production specification into controlled delivery work. P
 | UX-001 | P0 | Consolidate semantic tokens and remove uncontrolled feature overrides | Governed screens use approved tokens and contrast tests pass |
 | UX-002 | P0 | Build accessible core component primitives | Component tests cover keyboard, focus, names, errors, loading, touch targets |
 | UX-003 | P0 | Rebuild Deal Workspace information hierarchy | One next action is visible and focusable at every state |
-| UX-004 | P0 | Standardize US address and apartment/suite/unit workflow | State and ZIP are required/validated; private fields never appear publicly |
+| UX-004 | P0 | **In progress locally:** standardized native US address autocomplete and manual fallback now share one parser; meeting and shipping flows expose apartment/suite/unit, state, and ZIP/ZIP+4 fields | State and ZIP are required/validated; private fields never appear publicly; protected Preview keyboard/mobile acceptance remains |
 | UX-005 | P0 | Normalize responsive behavior across 320–1440 px | No overlap/horizontal page scroll; sticky UI does not obscure focus |
 | UX-006 | P1 | Add visual-regression stories for public, auth, creation, deal, payment, delivery, dispute, admin | Approved snapshots run in CI |
 | UX-007 | P1 | Conduct moderated usability and accessibility sessions | Critical repeated confusion is resolved and documented |

@@ -3621,6 +3621,42 @@ domain changed, environment value created, migration applied, or customer,
 Supabase, Vercel, Preview, Production, public-access, payment, payout, refund,
 dispute, or real-money state changed.
 
+## 2026-07-30 - UX-004 standardized U.S. address entry
+
+### Implemented locally for review
+
+- Replaced the opaque hosted address element with a controlled native input
+  backed by Google Places Autocomplete Data API, a bounded debounce, fresh
+  session tokens, U.S.-only street-address suggestions, and visible provider
+  attribution.
+- Preserved manual entry at every state, including missing configuration,
+  provider failure, no matches, and incomplete Google results.
+- Added keyboard listbox behavior, focus-visible controls, live non-blocking
+  status messages, a clear action, reduced-motion support, and responsive
+  suggestion placement.
+- Centralized U.S. state and ZIP/ZIP+4 validation and Google address parsing,
+  including legacy component names, full state-name normalization, street
+  numbers, postal suffixes, and `subpremise`.
+- Connected the same parsed street, apartment/suite/unit, city, state, and ZIP
+  fields to both the in-person meeting and buyer shipping workflows.
+- Kept Address line 2 visible and editable with explicit apartment, suite,
+  unit, building, floor, and mailbox guidance.
+- Added deterministic component contracts for the manual fallback,
+  combobox semantics, full U.S. parsing, state normalization, ZIP validation,
+  and apartment/suite/unit preservation.
+- Replaced the corrupted setup note with a value-free Google Cloud, Vercel,
+  restriction, and acceptance guide.
+
+### Review and activation boundary
+
+The browser key remains restricted configuration and is not stored in the
+repository or test output. This batch changes address-entry presentation and
+client-side parsing only. It does not change private-address authorization,
+database storage, Supabase resources, hosted variables, public access,
+customer records, payment, payout, refund, dispute, or real-money behavior.
+Protected Preview mouse, keyboard, mobile, provider-failure, and exact-origin
+acceptance remain required before UX-004 can be marked complete.
+
 ## 2026-07-30 - SEC-024 outbound transport inventory
 
 ### Implemented locally for review
@@ -3942,3 +3978,25 @@ to a build. No environment value was created, read into documentation, copied,
 rotated, or disclosed. No provider, deployment, migration, Supabase, Vercel,
 Preview, Production, public-access, customer, payment, payout, refund,
 dispute, or real-money state changed.
+
+## 2026-07-31 - UX-004 hosted address Preview recovery
+
+### Implemented locally for review
+
+- Reproduced the hosted recovery screen with the Preview configuration shape
+  and retained the browser Console evidence before changing the implementation.
+- Confirmed that the application bundle loaded successfully and traced the
+  failure to the legacy hyphenated Sample Deal identifier being rejected by
+  every hardened public Deal boundary.
+- Replaced the Sample and local fallback identifiers with the canonical
+  uppercase alphanumeric format and added a regression rule preventing the
+  invalid legacy form from returning.
+- Kept the cacheable service boundary with recursive dependency capture and
+  the existing 400,000-byte JavaScript chunk ceiling.
+- Verified the environment-shaped production bundle renders the landing page
+  and opens the complete Sample Deal Room without a recovery screen.
+
+### Activation boundary
+
+No hosted variable value, Supabase resource, Production alias, public-access
+setting, customer record, or real-money capability changed.
