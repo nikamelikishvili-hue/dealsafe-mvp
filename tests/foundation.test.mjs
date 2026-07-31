@@ -4394,12 +4394,22 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   );
   assert.match(fulfillment, /meeting-field meeting-field-line-two/);
   const addressAutocomplete = readText('src/AddressAutocomplete.tsx');
-  assert.match(addressAutocomplete, /gmp-error/);
+  const usAddress = readText('src/usAddress.ts');
+  assert.match(
+    addressAutocomplete,
+    /AutocompleteSuggestion\.fetchAutocompleteSuggestions/,
+  );
+  assert.match(addressAutocomplete, /AutocompleteSessionToken/);
+  assert.match(addressAutocomplete, /role="combobox"/);
+  assert.match(addressAutocomplete, /role="listbox"/);
+  assert.match(addressAutocomplete, /Google Maps/);
   assert.match(
     addressAutocomplete,
     /Address suggestions are unavailable\. Enter the address manually\./,
   );
-  assert.match(fulfillment, /\^\\d\{5\}\(\?:-\\d\{4\}\)\?\$/);
+  assert.match(usAddress, /\^\\d\{5\}\(\?:-\\d\{4\}\)\?\$/);
+  assert.match(usAddress, /subpremise/);
+  assert.match(fulfillment, /parts\.addressLine2 \|\| current\.addressLine2/);
   assert.match(fulfillment, /getElementById\('deal-evidence-vault'\)/);
   assert.match(
     fulfillment,
@@ -10270,7 +10280,7 @@ test('incident drill is a local no-network release gate', () => {
   );
 });
 
-test('application services are split into cacheable bounded chunks', () => {
+test('application services are split into a cycle-safe bounded chunk', () => {
   const packageJson = readJson('package.json');
   const viteConfig = readText('vite.config.ts');
   const budgetGate = readText('scripts/verify-build-budgets.mjs');
@@ -10281,13 +10291,24 @@ test('application services are split into cacheable bounded chunks', () => {
   assert.match(readText('scripts/smoke-preview.mjs'), /configLoader: 'native'/);
   assert.match(viteConfig, /name: 'deal-services'/);
   assert.match(viteConfig, /test: \/src\[\\\\\/\]services\[\\\\\/\]\//);
-  assert.match(viteConfig, /includeDependenciesRecursively: false/);
-  assert.match(viteConfig, /maxSize: 240_000/);
+  assert.match(viteConfig, /includeDependenciesRecursively: true/);
+  assert.doesNotMatch(viteConfig, /includeDependenciesRecursively: false/);
+  assert.match(viteConfig, /maxSize: 400_000/);
   assert.match(budgetGate, /maximumJavaScriptChunkBytes: 400_000/);
   assert.doesNotMatch(
     `${viteConfig}\n${packageJson.scripts.build}`,
     /chunkSizeWarningLimit|manualChunks|--logLevel silent/,
   );
+});
+
+test('sample and local fallback deal identifiers satisfy every public boundary', () => {
+  const main = readText('src/main.tsx');
+  const demoRepository = readText('src/services/demoRepository.ts');
+
+  assert.match(main, /const demoDealPath = '\/\?deal=DV7K4M2Q'/);
+  assert.match(demoRepository, /DEMO_DEAL_PUBLIC_ID = 'DV7K4M2Q'/);
+  assert.match(demoRepository, /publicId: `DV\$\{Math\.random\(\)/);
+  assert.doesNotMatch(`${main}\n${demoRepository}`, /DV-/);
 });
 
 test('served asset manifest is deterministic, bounded, and hash-only', () => {
