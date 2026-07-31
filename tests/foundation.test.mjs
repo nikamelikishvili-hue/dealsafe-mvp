@@ -10301,6 +10301,16 @@ test('application services are split into a cycle-safe bounded chunk', () => {
   );
 });
 
+test('sample and local fallback deal identifiers satisfy every public boundary', () => {
+  const main = readText('src/main.tsx');
+  const demoRepository = readText('src/services/demoRepository.ts');
+
+  assert.match(main, /const demoDealPath = '\/\?deal=DV7K4M2Q'/);
+  assert.match(demoRepository, /DEMO_DEAL_PUBLIC_ID = 'DV7K4M2Q'/);
+  assert.match(demoRepository, /publicId: `DV\$\{Math\.random\(\)/);
+  assert.doesNotMatch(`${main}\n${demoRepository}`, /DV-/);
+});
+
 test('served asset manifest is deterministic, bounded, and hash-only', () => {
   const contents = new Map([
     ['assets/app.css', Buffer.from('body{}')],
