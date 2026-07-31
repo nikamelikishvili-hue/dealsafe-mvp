@@ -24,6 +24,14 @@ import {
   requiredReleaseChecks,
 } from '../server/releaseEvidencePolicy.mjs';
 import {
+  buildServedAssetManifest,
+  compareServedAsset,
+  normalizeDeploymentOrigin,
+  parseAllowedDeploymentHosts,
+  servedAssetUrl,
+  validateServedAssetManifest,
+} from '../server/servedAssetIntegrityPolicy.mjs';
+import {
   buildDependencySbom,
   serializeDependencySbom,
 } from '../server/dependencySbomPolicy.mjs';
@@ -10282,33 +10290,180 @@ test('application services are split into cacheable bounded chunks', () => {
   );
 });
 
+test('served asset manifest is deterministic, bounded, and hash-only', () => {
+  const contents = new Map([
+    ['assets/app.css', Buffer.from('body{}')],
+    ['assets/app.js', Buffer.from('console.log("app")')],
+    ['index.html', Buffer.from('<div id="root"></div>')],
+    ['sw.js', Buffer.from('self.addEventListener("fetch",()=>{})')],
+  ]);
+  const files = [...contents.entries()].map(([path, bytes]) => ({
+    path,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    bytes: bytes.length,
+  }));
+  const manifest = buildServedAssetManifest({
+    schema: 'dealivra.served-asset-manifest.v1',
+    source_commit: 'a'.repeat(40),
+    files,
+  });
+
+  assert.ok(manifest);
+  assert.deepEqual(validateServedAssetManifest(manifest), manifest);
+  assert.equal(manifest.asset_count, files.length);
+  assert.equal(
+    manifest.total_bytes,
+    files.reduce((total, file) => total + file.bytes, 0),
+  );
+  assert.equal(manifest.content_exposure, 'hashes_only');
+  assert.doesNotMatch(JSON.stringify(manifest), /console\.log|<div|fetch|token/i);
+  assert.equal(
+    compareServedAsset(files[0], new Uint8Array(contents.get(files[0].path))).matches,
+    true,
+  );
+  assert.equal(
+    compareServedAsset(files[0], new Uint8Array(Buffer.from('changed'))).matches,
+    false,
+  );
+  assert.equal(
+    buildServedAssetManifest({
+      schema: 'dealivra.served-asset-manifest.v1',
+      source_commit: 'a'.repeat(40),
+      files: [...files].reverse(),
+    }),
+    null,
+  );
+  assert.equal(
+    buildServedAssetManifest({
+      schema: 'dealivra.served-asset-manifest.v1',
+      source_commit: 'a'.repeat(40),
+      files: files.map(file => (
+        file.path === 'index.html'
+          ? { ...file, path: '../index.html' }
+          : file
+      )),
+    }),
+    null,
+  );
+  assert.equal(
+    validateServedAssetManifest({ ...manifest, environment: 'Production' }),
+    null,
+  );
+});
+
+test('served asset verification keeps redirects and protection secrets on exact approved hosts', () => {
+  const allowedHosts = parseAllowedDeploymentHosts(
+    'preview.example.com,production.example.com',
+  );
+  assert.deepEqual(
+    allowedHosts,
+    ['preview.example.com', 'production.example.com'],
+  );
+  assert.equal(
+    normalizeDeploymentOrigin('https://preview.example.com', allowedHosts),
+    'https://preview.example.com',
+  );
+  assert.equal(
+    normalizeDeploymentOrigin('https://untrusted.example.com', allowedHosts),
+    null,
+  );
+  assert.equal(
+    normalizeDeploymentOrigin('https://preview.example.com/path', allowedHosts),
+    null,
+  );
+  assert.equal(
+    normalizeDeploymentOrigin('http://preview.example.com', allowedHosts),
+    null,
+  );
+  assert.equal(
+    normalizeDeploymentOrigin(
+      'http://127.0.0.1:4175',
+      [],
+      { allowLocalPreview: true },
+    ),
+    'http://127.0.0.1:4175',
+  );
+  assert.equal(
+    servedAssetUrl('https://preview.example.com', 'assets/app.js'),
+    'https://preview.example.com/assets/app.js',
+  );
+  assert.equal(
+    servedAssetUrl('https://preview.example.com', '../private'),
+    null,
+  );
+
+  const packageJson = readJson('package.json');
+  const workflow = readText('.github/workflows/served-asset-integrity.yml');
+  const generator = readText('scripts/create-served-asset-manifest.mjs');
+  const verifier = readText('scripts/verify-served-assets.mjs');
+  const smoke = readText('scripts/smoke-preview.mjs');
+  const vercel = readText('vercel.json');
+
+  assert.equal(
+    packageJson.scripts['release:served-manifest'],
+    'node scripts/create-served-asset-manifest.mjs',
+  );
+  assert.equal(
+    packageJson.scripts['release:served-verify'],
+    'node scripts/verify-served-assets.mjs',
+  );
+  assert.match(
+    packageJson.scripts.build,
+    /vite build --configLoader native && npm run release:served-manifest && npm run performance:budgets$/,
+  );
+  assert.match(generator, /VERCEL_GIT_COMMIT_SHA/);
+  assert.match(generator, /GITHUB_SHA/);
+  assert.match(generator, /relative\(distRoot, path\)/);
+  assert.match(verifier, /redirect: 'manual'/);
+  assert.match(verifier, /DEALIVRA_ALLOWED_DEPLOYMENT_HOSTS/);
+  assert.match(verifier, /x-vercel-protection-bypass/);
+  assert.match(verifier, /manifest\.source_commit !== expectedCommit/);
+  assert.match(verifier, /comparison\?\.matches/);
+  assert.match(smoke, /validateServedAssetManifest/);
+  assert.match(smoke, /compareServedAsset/);
+  assert.match(workflow, /vars\.DEALIVRA_SERVED_ASSET_VERIFICATION_ENABLED == 'enabled'/);
+  assert.match(workflow, /ref: main/);
+  assert.doesNotMatch(workflow, /ref:\s*\$\{\{/);
+  assert.match(vercel, /\/dealivra-asset-manifest\.json/);
+  assert.doesNotMatch(
+    `${generator}\n${verifier}`,
+    /console\.log\([^)]*(?:BYPASS|TOKEN)|process\.env\[[^\]]+\]|shell:\s*true/i,
+  );
+});
+
 test('release evidence binds a clean exact commit to bounded file hashes', () => {
   const requiredPaths = [
     '.github/CODEOWNERS',
     '.github/workflows/ci.yml',
     '.github/workflows/codeql.yml',
+    '.github/workflows/served-asset-integrity.yml',
     '.nvmrc',
     'catalog/active-release.json',
     'docs/production-readiness/11_LEGACY_IDENTIFIER_REGISTER.md',
+    'docs/production-readiness/73_SERVED_ASSET_INTEGRITY.md',
     'dist/assets/app.css',
     'dist/assets/app.js',
+    'dist/dealivra-asset-manifest.json',
     'dist/index.html',
     'package-lock.json',
     'package.json',
     'release-evidence/dependency-sbom.cdx.json',
     'scripts/create-dependency-sbom.mjs',
     'scripts/create-release-evidence.mjs',
+    'scripts/create-served-asset-manifest.mjs',
     'scripts/scan-repository-secrets.mjs',
     'scripts/verify-browser-storage-policy.mjs',
     'scripts/verify-build-budgets.mjs',
     'scripts/verify-dependency-policy.mjs',
     'scripts/verify-outbound-transport-policy.mjs',
     'scripts/verify-runtime-configuration.mjs',
+    'scripts/verify-served-assets.mjs',
     'scripts/verify-legacy-identifiers.mjs',
     'server/dependencySbomPolicy.mjs',
     'server/legacyIdentifierPolicy.mjs',
     'server/releaseEvidencePolicy.mjs',
     'server/runtimeConfigurationPolicy.mjs',
+    'server/servedAssetIntegrityPolicy.mjs',
     'src/catalog.v1.json',
     'vercel.json',
     'vite.config.ts',
@@ -10413,6 +10568,7 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
   assert.match(policy, /'legacy_identifier_policy_passed'/);
   assert.match(policy, /'runtime_configuration_contract_passed'/);
   assert.match(policy, /'dependency_sbom_created'/);
+  assert.match(policy, /'served_asset_manifest_created'/);
   assert.match(script, /'release-evidence\/dependency-sbom\.cdx\.json'/);
   assert.match(script, /'scripts\/create-dependency-sbom\.mjs'/);
   assert.match(script, /'server\/dependencySbomPolicy\.mjs'/);
@@ -10420,6 +10576,9 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
   assert.match(script, /'scripts\/verify-outbound-transport-policy\.mjs'/);
   assert.match(script, /'scripts\/verify-runtime-configuration\.mjs'/);
   assert.match(script, /'server\/runtimeConfigurationPolicy\.mjs'/);
+  assert.match(script, /'scripts\/create-served-asset-manifest\.mjs'/);
+  assert.match(script, /'scripts\/verify-served-assets\.mjs'/);
+  assert.match(script, /'server\/servedAssetIntegrityPolicy\.mjs'/);
   assert.match(ignore, /^release-evidence\/$/m);
   assert.doesNotMatch(
     `${script}\n${policy}`,
