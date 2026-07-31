@@ -102,8 +102,9 @@ function exactBrowserOrigins() {
 }
 
 function isOwnedVercelPreview(origin: URL) {
-  const project = (Deno.env.get("DEALIVRA_VERCEL_PROJECT_SLUG") || "dealsafe").trim().toLowerCase();
-  const team = (Deno.env.get("DEALIVRA_VERCEL_TEAM_SLUG") || "nika13").trim().toLowerCase();
+  const project = (Deno.env.get("DEALIVRA_VERCEL_PROJECT_SLUG") || "").trim().toLowerCase();
+  const team = (Deno.env.get("DEALIVRA_VERCEL_TEAM_SLUG") || "").trim().toLowerCase();
+  if (!project || !team) return false;
   if (!/^[a-z0-9-]+$/.test(project) || !/^[a-z0-9-]+$/.test(team)) return false;
 
   const prefix = `${project}-`;

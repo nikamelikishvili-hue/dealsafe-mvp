@@ -27,6 +27,10 @@ import {
   buildDependencySbom,
   serializeDependencySbom,
 } from '../server/dependencySbomPolicy.mjs';
+import {
+  classifyLegacyIdentifierLine,
+  evaluateLegacyIdentifierInventory,
+} from '../server/legacyIdentifierPolicy.mjs';
 
 const root = new URL('../', import.meta.url);
 const rootPath = fileURLToPath(root);
@@ -2526,11 +2530,13 @@ test('public health remains liveness-only and never exposes configuration readin
   });
 });
 
-test('new browser runtime identifiers use Dealivra with explicit legacy cleanup only', () => {
+test('legacy runtime identifiers are machine-governed migration aliases', async () => {
+  const packageJson = readJson('package.json');
   const addressAutocomplete = readText('src/AddressAutocomplete.tsx');
   const authService = readText('src/services/supabaseRest.ts');
   const i18n = readText('src/i18nFull.ts');
   const checkoutFunction = readText('supabase/functions/stripe-create-checkout/index.ts');
+  const edgeCommon = readText('supabase/functions/_shared/common.ts');
   const legacyRegister = readText('docs/production-readiness/11_LEGACY_IDENTIFIER_REGISTER.md');
 
   assert.doesNotMatch(addressAutocomplete, /dealsafe/i);
@@ -2541,8 +2547,43 @@ test('new browser runtime identifiers use Dealivra with explicit legacy cleanup 
   assert.match(i18n, /localStorage\.removeItem\(legacyLanguageKey\)/);
   assert.match(checkoutFunction, /DEALIVRA_PLATFORM_FEE_BPS/);
   assert.match(checkoutFunction, /DEALSAFE_PLATFORM_FEE_BPS/);
+  assert.doesNotMatch(edgeCommon, /VERCEL_PROJECT_SLUG"\) \|\| "dealsafe"/);
+  assert.match(edgeCommon, /if \(!project \|\| !team\) return false/);
   assert.match(legacyRegister, /Approved migration aliases/);
   assert.match(legacyRegister, /must not be reused for a new feature/);
+  assert.match(legacyRegister, /npm run brand:verify/);
+
+  assert.equal(
+    classifyLegacyIdentifierLine(
+      'supabase/functions/stripe-connect/index.ts',
+      'const key = `dealsafe-connect-${user.id}`;',
+    ),
+    'stripe-connect-idempotency-compatibility',
+  );
+  assert.equal(
+    classifyLegacyIdentifierLine(
+      'src/analytics.ts',
+      "const event = 'dealsafe_checkout_started';",
+    ),
+    null,
+  );
+
+  const blocked = evaluateLegacyIdentifierInventory([
+    {
+      path: 'src/analytics.ts',
+      source: "const event = 'dealsafe_checkout_started';",
+    },
+  ]);
+  assert.equal(blocked.status, 'blocked');
+  assert.ok(blocked.issues.some(issue => issue.issue === 'unapproved_legacy_identifier'));
+
+  const { verifyLegacyIdentifiers } = await import('../scripts/verify-legacy-identifiers.mjs');
+  const current = verifyLegacyIdentifiers(rootPath);
+  assert.equal(current.status, 'passed');
+  assert.equal(current.legacy_occurrences, 157);
+  assert.equal(current.approved_aliases, 9);
+  assert.equal(packageJson.scripts['brand:verify'], 'node scripts/verify-legacy-identifiers.mjs');
+  assert.match(packageJson.scripts.verify, /npm run brand:verify/);
 });
 
 test('secret scanner recognizes high-risk credentials without returning their values', async () => {
@@ -10248,6 +10289,7 @@ test('release evidence binds a clean exact commit to bounded file hashes', () =>
     '.github/workflows/codeql.yml',
     '.nvmrc',
     'catalog/active-release.json',
+    'docs/production-readiness/11_LEGACY_IDENTIFIER_REGISTER.md',
     'dist/assets/app.css',
     'dist/assets/app.js',
     'dist/index.html',
@@ -10262,7 +10304,9 @@ test('release evidence binds a clean exact commit to bounded file hashes', () =>
     'scripts/verify-dependency-policy.mjs',
     'scripts/verify-outbound-transport-policy.mjs',
     'scripts/verify-runtime-configuration.mjs',
+    'scripts/verify-legacy-identifiers.mjs',
     'server/dependencySbomPolicy.mjs',
+    'server/legacyIdentifierPolicy.mjs',
     'server/releaseEvidencePolicy.mjs',
     'server/runtimeConfigurationPolicy.mjs',
     'src/catalog.v1.json',
@@ -10366,6 +10410,7 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
   assert.match(policy, /production_authorization: 'not_granted'/);
   assert.match(policy, /'browser_storage_policy_passed'/);
   assert.match(policy, /'outbound_transport_policy_passed'/);
+  assert.match(policy, /'legacy_identifier_policy_passed'/);
   assert.match(policy, /'runtime_configuration_contract_passed'/);
   assert.match(policy, /'dependency_sbom_created'/);
   assert.match(script, /'release-evidence\/dependency-sbom\.cdx\.json'/);
@@ -10393,7 +10438,7 @@ test('locked dependencies follow the reviewed offline supply-chain policy', () =
   );
   assert.match(
     packageJson.scripts.verify,
-    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run config:verify && npm run format:check && npm run lint && npm run typecheck/,
+    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run brand:verify && npm run config:verify && npm run format:check && npm run lint && npm run typecheck/,
   );
   assert.match(policy, /lockfile\.lockfileVersion !== 3/);
   assert.match(policy, /url\.protocol === 'https:'/);
