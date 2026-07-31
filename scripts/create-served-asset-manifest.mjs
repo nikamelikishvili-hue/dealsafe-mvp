@@ -1,10 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
-  lstatSync,
+  closeSync,
+  constants,
+  fstatSync,
+  openSync,
   readFileSync,
   readdirSync,
-  statSync,
   writeFileSync,
 } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
@@ -58,13 +60,22 @@ function listFiles(relativeDirectory = '') {
 
 function assetRecord(relativePath) {
   const path = resolveInsideDist(relativePath);
-  if (!lstatSync(path).isFile()) fail(`${relativePath} is not a regular file`);
-  const contents = readFileSync(path);
-  return {
-    path: relative(distRoot, path).split(sep).join('/'),
-    sha256: createHash('sha256').update(contents).digest('hex'),
-    bytes: statSync(path).size,
-  };
+  const descriptor = openSync(
+    path,
+    constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+  );
+  try {
+    const file = fstatSync(descriptor);
+    if (!file.isFile()) fail(`${relativePath} is not a regular file`);
+    const contents = readFileSync(descriptor);
+    return {
+      path: relative(distRoot, path).split(sep).join('/'),
+      sha256: createHash('sha256').update(contents).digest('hex'),
+      bytes: contents.byteLength,
+    };
+  } finally {
+    closeSync(descriptor);
+  }
 }
 
 const declaredCommits = [
