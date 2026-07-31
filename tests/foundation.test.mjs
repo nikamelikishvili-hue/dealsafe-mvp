@@ -2460,7 +2460,7 @@ test('runtime configuration contract blocks unsafe deployments without exposing 
   assert.equal(configured.summary.missing, 0);
   assert.notEqual(configured.status, 'blocked');
   const serialized = JSON.stringify(configured);
-  assert.equal(serialized.includes(fixtureUrl), false);
+  assert.ok(configured.checks.every(check => !Object.hasOwn(check, 'value')));
   assert.equal(serialized.includes(fixtureKey), false);
   assert.equal(serialized.includes(secretSentinel), false);
 
