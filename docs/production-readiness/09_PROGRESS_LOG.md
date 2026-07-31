@@ -3978,3 +3978,21 @@ to a build. No environment value was created, read into documentation, copied,
 rotated, or disclosed. No provider, deployment, migration, Supabase, Vercel,
 Preview, Production, public-access, customer, payment, payout, refund,
 dispute, or real-money state changed.
+
+## 2026-07-31 - UX-004 cycle-safe hosted address Preview
+
+### Implemented locally for review
+
+- Reproduced the hosted blank-page failure with the Preview configuration
+  shape and traced it to an `app -> service -> app` initialization cycle.
+- Kept the cacheable service boundary while capturing its reviewed dependency
+  closure recursively, eliminating the import back to the app chunk.
+- Added a regression rule requiring recursive dependency capture and retaining
+  the existing 400,000-byte JavaScript chunk ceiling.
+- Verified the environment-shaped production bundle renders the landing page
+  without a new browser Console error before resuming the address-flow review.
+
+### Activation boundary
+
+No hosted variable value, Supabase resource, Production alias, public-access
+setting, customer record, or real-money capability changed.
