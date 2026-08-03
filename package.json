@@ -34,16 +34,16 @@
     "verify": "npm run catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run brand:verify && npm run config:verify && npm run format:check && npm run lint && npm run typecheck && npm test && npm run incident:drill && npm run security:secrets && npm run build && npm run smoke:preview"
   },
   "dependencies": {
-    "lucide-react": "1.25.0",
+    "lucide-react": "1.28.0",
     "qrcode": "1.5.4",
-    "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.6",
     "@types/qrcode": "1.5.6",
-    "@types/react": "19.2.17",
-    "@types/react-dom": "19.2.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "6.0.3",
     "typescript": "5.9.3",
     "vite": "8.1.5"
