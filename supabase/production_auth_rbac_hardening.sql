@@ -141,7 +141,6 @@ grant select on table
   public.deal_media,
   public.deal_meetings,
   public.deal_shipments,
-  public.deal_evidence,
   public.deal_disputes,
   public.ratings
 to authenticated;
@@ -194,8 +193,35 @@ grant insert, delete
 on public.deal_media
 to authenticated;
 
-grant insert
+grant select (
+  id,
+  deal_id,
+  dispute_id,
+  uploader_role,
+  evidence_type,
+  file_name,
+  mime_type,
+  detected_mime_type,
+  file_size_bytes,
+  sha256,
+  scan_status,
+  scanned_at,
+  integrity_status,
+  integrity_checked_at,
+  retention_class,
+  retention_until,
+  lifecycle_status,
+  deleted_at,
+  created_at
+) on public.deal_evidence
+to authenticated;
+
+grant select, insert
 on public.deal_evidence
+to service_role;
+
+grant select
+on public.deal_evidence_safe
 to authenticated;
 
 -- PostgreSQL grants EXECUTE to PUBLIC when functions are created. Remove that
@@ -225,6 +251,7 @@ declare
     'ask_deal_question',
     'assert_my_sensitive_change_allowed',
     'cancel_deal',
+    'can_admin_read_deal_evidence',
     'claim_support_case',
     'complete_handoff',
     'configure_buyer_access_code',
@@ -261,6 +288,7 @@ declare
     'get_seller_shipping_evidence_readiness',
     'get_support_case',
     'get_support_queue',
+    'is_current_auth_session_active',
     'is_current_user_deal_seller',
     'is_deal_saved',
     'is_dealsafe_admin',
@@ -315,12 +343,15 @@ begin
       and routine_proc.proname = any (authenticated_api)
   loop
     execute format(
-      'grant execute on function %s to authenticated',
+      'grant execute on function %s to authenticated, service_role',
       routine.signature
     );
   end loop;
 end
 $$;
+
+grant execute on function public.enforce_active_auth_session()
+to anon, authenticated, service_role;
 
 -- Trigger functions and database-maintenance helpers remain callable only by
 -- their owner/service workflows, never through the public Data API.

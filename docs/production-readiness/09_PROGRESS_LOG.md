@@ -1,5 +1,90 @@
 # Production-readiness progress log
 
+## 2026-08-11 — DAT-002 machine-readable ownership inventory
+
+- Added a read-only catalog inventory for every application table, view,
+  function, Storage bucket, policy, table grant, and routine grant.
+- Each object records its database owner, exposure class, and one reviewed
+  engineering/security steward without reading application rows.
+- Added a fail-closed validator and wired it after the 17-suite protected
+  Staging database gate. Missing object classes, duplicate identities, unsafe
+  owner roles, or unassigned stewards now fail the gate.
+
+## 2026-08-11 — DAT-003 hosted authorization harness prepared
+
+- Added a status-only hosted Data API and Storage matrix for synthetic seller,
+  buyer, outsider, expired, and anonymous Staging sessions.
+- Added positive participant RPC checks, cross-user and expired-session denial,
+  owner-folder Storage writes, and mandatory deletion of both generated probes.
+- Tokens, identities, deal IDs, object paths, bodies, and bytes are excluded
+  from the report. Production and customer data remain outside the harness.
+
+## 2026-08-11 — DAT-001 baseline capture controls prepared
+
+- Added an offline migration-manifest verifier that requires a CLI-generated
+  Staging baseline, canonical timestamp order, unique timestamps, and SHA-256
+  evidence while rejecting Auth user data, database URLs, privileged
+  credentials, and deprecated extension version pins.
+- Added strict and status-only package commands so readiness can be reported
+  before capture without falsely treating a missing baseline as complete.
+- Added a manual-only protected Staging workflow that installs a pinned
+  Supabase CLI, captures the baseline, verifies its manifest, rebuilds a
+  disposable local database, runs all 17 SQL suites and local advisors, and
+  retains only the verified migration artifact for seven days.
+- Documented the official `db pull`, local `db reset`, 17-suite authorization,
+  advisor, upgrade, and forward-rollback evidence path. The baseline itself is
+  still pending because Supabase CLI is not installed in this workspace.
+- Production, public access, customer data, and real payments were not changed.
+
+## 2026-08-10 — isolated Staging authorization suite completed
+
+- Provisioned and used the isolated `dealivra-staging` Supabase project; the
+  Production project remained unchanged.
+- Applied the reviewed schema, authorization, MFA, evidence, dispute, support,
+  payment-command, and audit boundaries to Staging with synthetic-only test
+  fixtures.
+- Corrected the case-administrator evidence policy so it checks dispute
+  membership through a narrow administrator-bound `security definer` helper
+  without exposing dispute rows to ordinary authenticated users.
+- Made PAY-003 verification transaction-bound and provider identifiers unique,
+  preventing repeat test executions from leaving new records or colliding with
+  earlier synthetic fixtures.
+- Passed all 17 rollback-only Staging database suites and all 232 repository
+  foundation tests. Type checking and the production Vite build also pass.
+- Expanded the protected manual Staging database workflow from one
+  representative authorization test to the complete sorted inventory of 17
+  rollback suites. The workflow now fails on inventory drift or the first SQL
+  error, and the 232-test repository contract verifies that behavior.
+- DAT-001 remains open because the historical setup SQL still needs a complete
+  timestamped empty-database migration chain. DAT-003 remains open for
+  real-token HTTP and Storage tests against synthetic Staging identities.
+- No Production database object, customer record, Vercel alias, public-access
+  setting, or real payment mode was changed.
+
+## 2026-07-31 — isolated Staging database authorization gate
+
+### Completed in the repository
+
+- Added a manual-only GitHub `staging` environment workflow that rejects a
+  Production or mixed Supabase target before any SQL runs.
+- Added a defense-in-depth RLS migration for the owner-only private evidence
+  maintenance settings table identified by the live database advisor.
+- Added database-wide RLS, private-schema grant, policy-role, invoker-view,
+  and elevated-function search-path assertions.
+- Put the existing authenticated seller/buyer/outsider/admin RPC matrix behind
+  the exact isolated Staging target guard.
+
+### Verified external state and limits
+
+- The connected Supabase organization currently exposes one active project;
+  a separate Staging project is not yet available.
+- The live remote database reports 27 applied migrations, but the repository
+  does not yet contain a complete timestamped empty-database migration chain.
+- The private maintenance settings table has owner-only ACLs and is not in an
+  exposed schema, but RLS remains required for consistent defense in depth.
+- No Production table, policy, grant, function, project, public-access setting,
+  Vercel alias, or real payment was changed by this batch.
+
 ## 2026-07-30 — FND-006 legacy identifier governance
 
 - Removed the ambiguous legacy Vercel project/team defaults from the Edge

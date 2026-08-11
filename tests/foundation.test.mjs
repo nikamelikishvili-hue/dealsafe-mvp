@@ -39,6 +39,8 @@ import {
   classifyLegacyIdentifierLine,
   evaluateLegacyIdentifierInventory,
 } from '../server/legacyIdentifierPolicy.mjs';
+import { evaluateDatabaseBaseline } from '../scripts/verify-database-baseline.mjs';
+import { validateDatabaseOwnershipInventory } from '../scripts/validate-database-ownership-inventory.mjs';
 
 const root = new URL('../', import.meta.url);
 const rootPath = fileURLToPath(root);
@@ -2588,7 +2590,7 @@ test('legacy runtime identifiers are machine-governed migration aliases', async 
   const { verifyLegacyIdentifiers } = await import('../scripts/verify-legacy-identifiers.mjs');
   const current = verifyLegacyIdentifiers(rootPath);
   assert.equal(current.status, 'passed');
-  assert.equal(current.legacy_occurrences, 157);
+  assert.equal(current.legacy_occurrences, 173);
   assert.equal(current.approved_aliases, 9);
   assert.equal(packageJson.scripts['brand:verify'], 'node scripts/verify-legacy-identifiers.mjs');
   assert.match(packageJson.scripts.verify, /npm run brand:verify/);
@@ -3237,7 +3239,10 @@ test('participant RLS policies evaluate Auth once without changing role semantic
   );
   assert.doesNotMatch(migration, /= auth\.uid\(\)/);
   assert.match(migration, /= \(select auth\.uid\(\)\)/);
-  assert.match(migration, /\(select public\.is_dealsafe_admin\(\)\)/);
+  assert.match(
+    migration,
+    /\(select public\.can_admin_read_deal_evidence\(deal_evidence\.deal_id\)\)/,
+  );
   assert.match(rollbackTests, /DBP-001 governed RLS policy inventory changed/);
   assert.match(rollbackTests, /DBP-001 seller lost RLS read access/);
   assert.match(rollbackTests, /DBP-001 buyer lost RLS read access/);
@@ -11505,4 +11510,192 @@ test('browser storage inventory is deny-by-default and release-gated', async () 
     'node scripts/verify-browser-storage-policy.mjs',
   );
   assert.match(packageJson.scripts.verify, /npm run security:browser-storage/);
+});
+
+test('staging database target guard rejects Production and mixed projects', async () => {
+  const { verifyStagingDatabaseTarget } = await import(
+    '../scripts/verify-staging-database-target.mjs'
+  );
+  const valid = {
+    DEALIVRA_DATABASE_ENVIRONMENT: 'staging',
+    DEALIVRA_STAGING_SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst',
+    DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF: 'zyxwvutsrqponmlkjihg',
+    DEALIVRA_STAGING_DATABASE_URL:
+      'postgresql://postgres:secret@db.abcdefghijklmnopqrst.supabase.co/postgres?sslmode=require',
+  };
+
+  assert.deepEqual(verifyStagingDatabaseTarget(valid), {
+    schema: 'dealivra.staging-database-target.v1',
+    status: 'passed',
+    environment: 'staging',
+    project_separation: 'verified',
+    direct_database_host: 'verified',
+    tls: 'required',
+  });
+  assert.throws(
+    () =>
+      verifyStagingDatabaseTarget({
+        ...valid,
+        DEALIVRA_DATABASE_ENVIRONMENT: 'production',
+      }),
+    /must be exactly staging/,
+  );
+  assert.throws(
+    () =>
+      verifyStagingDatabaseTarget({
+        ...valid,
+        DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF:
+          valid.DEALIVRA_STAGING_SUPABASE_PROJECT_REF,
+      }),
+    /must use different Supabase projects/,
+  );
+});
+
+test('database authorization gate is manual-only and covers role isolation', () => {
+  const packageJson = readJson('package.json');
+  const workflow = readText('.github/workflows/staging-database-gate.yml');
+  const migration = readText(
+    'supabase/private_evidence_maintenance_settings_rls.sql',
+  );
+  const privateRegression = readText(
+    'supabase/tests/private_evidence_maintenance_settings_rls_rollback.sql',
+  );
+  const databaseContract = readText(
+    'supabase/tests/database_security_contract_rollback.sql',
+  );
+  const runbook = readText(
+    'docs/production-readiness/74_STAGING_DATABASE_AUTHORIZATION_GATE.md',
+  );
+
+  assert.equal(
+    packageJson.scripts['staging:database-target'],
+    'node scripts/verify-staging-database-target.mjs',
+  );
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /\n\s+push:/);
+  assert.doesNotMatch(workflow, /\n\s+pull_request:/);
+  assert.match(workflow, /environment: staging/);
+  assert.match(workflow, /DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF/);
+  assert.match(workflow, /-name '\*_rollback\.sql'/);
+  assert.match(workflow, /test "\$\{#tests\[@\]\}" -eq 17/);
+  assert.match(workflow, /psql "\$DEALIVRA_STAGING_DATABASE_URL"/);
+  assert.match(workflow, /-X[\s\S]*-v ON_ERROR_STOP=1/);
+  assert.match(migration, /enable row level security/i);
+  assert.match(migration, /revoke all on table[\s\S]*service_role/i);
+  assert.match(privateRegression, /relforcerowsecurity/);
+  assert.match(privateRegression, /function_record\.prosecdef/);
+  assert.match(
+    databaseContract,
+    /namespace\.nspname = 'public'[\s\S]*not class\.relrowsecurity/,
+  );
+  assert.match(
+    databaseContract,
+    /grant_row\.grantee in \('PUBLIC', 'anon', 'authenticated', 'service_role'\)/,
+  );
+  assert.match(runbook, /separate Supabase project for Staging/);
+  assert.match(runbook, /Production, public access, live Supabase resources/);
+});
+
+test('database baseline inventory is timestamped, data-free, and hash-bound', () => {
+  const valid = evaluateDatabaseBaseline([
+    {
+      name: '20260811000000_dealivra_staging_baseline.sql',
+      content: 'create table public.example (id uuid primary key);\n',
+    },
+    {
+      name: '20260811000001_enable_example_rls.sql',
+      content: 'alter table public.example enable row level security;\n',
+    },
+  ]);
+  assert.equal(valid.status, 'passed');
+  assert.equal(valid.migration_count, 2);
+  assert.match(valid.migrations[0].sha256, /^[a-f0-9]{64}$/);
+  assert.throws(
+    () => evaluateDatabaseBaseline([
+      {
+        name: '20260811000000_dealivra_staging_baseline.sql',
+        content: "insert into auth.users (email) values ('person@example.com');",
+      },
+    ]),
+    /Auth user data/,
+  );
+  assert.throws(
+    () => evaluateDatabaseBaseline([
+      {
+        name: '20260811000000_wrong_baseline.sql',
+        content: 'select 1;',
+      },
+    ]),
+    /first migration must be the CLI-generated/,
+  );
+});
+
+test('database baseline proof is manual, Staging-only, and rebuilds locally', () => {
+  const packageJson = readJson('package.json');
+  const workflow = readText('.github/workflows/staging-database-baseline-proof.yml');
+  const runbook = readText(
+    'docs/production-readiness/75_DATABASE_BASELINE_MIGRATION_PLAN.md',
+  );
+
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /\n\s+push:/);
+  assert.doesNotMatch(workflow, /\n\s+pull_request:/);
+  assert.match(workflow, /environment: staging/);
+  assert.match(workflow, /npm run staging:database-target/);
+  assert.match(workflow, /version: 2\.101\.0/);
+  assert.match(workflow, /supabase db pull dealivra_staging_baseline/);
+  assert.match(workflow, /npm run database:baseline:verify/);
+  assert.match(workflow, /supabase db reset --local/);
+  assert.match(workflow, /test "\$\{#tests\[@\]\}" -eq 17/);
+  assert.match(workflow, /supabase db advisors --local/);
+  assert.match(workflow, /retention-days: 7/);
+  assert.equal(
+    packageJson.scripts['database:baseline:verify'],
+    'node scripts/verify-database-baseline.mjs',
+  );
+  assert.match(runbook, /Production is not a baseline source or a test target/);
+  assert.match(runbook, /Never dump Production\s+data/);
+});
+
+test('Staging HTTP matrix is status-only, cross-user, and cleans synthetic Storage', () => {
+  const packageJson = readJson('package.json');
+  const matrix = readText('scripts/run-staging-http-authorization-matrix.mjs');
+  assert.equal(
+    packageJson.scripts['staging:http-authorization'],
+    'node scripts/run-staging-http-authorization-matrix.mjs',
+  );
+  assert.match(matrix, /get_deal_action_plan/);
+  assert.match(matrix, /Data API outsider/);
+  assert.match(matrix, /Data API expired/);
+  assert.match(matrix, /Storage outsider cross-user upload/);
+  assert.match(matrix, /Storage seller own upload/);
+  assert.match(matrix, /Storage buyer own upload/);
+  assert.match(matrix, /method: 'DELETE'/);
+  assert.doesNotMatch(matrix, /results:[\s\S]{0,200}(?:token|subject|dealId|path)/i);
+});
+
+test('database ownership inventory covers every governed object class', () => {
+  const inventorySql = readText('supabase/database_ownership_inventory.sql');
+  const workflow = readText('.github/workflows/staging-database-gate.yml');
+  const records = ['table', 'view', 'function', 'bucket', 'policy', 'grant'].map((kind, index) => ({
+    schema: 'dealivra.database-ownership-object.v1',
+    kind,
+    identity: `public.synthetic_${index}`,
+    owner_role: 'postgres',
+    exposure: kind === 'bucket' ? 'private_object' : 'data_api_candidate',
+    steward: kind === 'grant' || kind === 'policy' ? 'database_security' : 'platform_engineering',
+  }));
+  const result = validateDatabaseOwnershipInventory(records);
+  assert.equal(result.status, 'passed');
+  assert.equal(result.object_count, 6);
+  assert.throws(
+    () => validateDatabaseOwnershipInventory(records.map(record => ({ ...record, owner_role: 'authenticated' }))),
+    /unsafe owner role/,
+  );
+  assert.match(inventorySql, /information_schema\.table_privileges/);
+  assert.match(inventorySql, /information_schema\.routine_privileges/);
+  assert.match(inventorySql, /from storage\.buckets/);
+  assert.match(inventorySql, /from pg_catalog\.pg_policies/);
+  assert.match(workflow, /database_ownership_inventory\.sql/);
+  assert.match(workflow, /database:ownership:validate/);
 });

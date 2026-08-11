@@ -269,6 +269,25 @@ drop policy if exists "participants upload deal evidence"
 drop policy if exists "participants and case admins read safe evidence"
   on public.deal_evidence;
 
+create or replace function public.can_admin_read_deal_evidence(p_deal_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, auth, pg_temp
+as $$
+  select public.is_dealsafe_admin()
+    and exists (
+      select 1 from public.deal_disputes dispute
+      where dispute.deal_id = p_deal_id
+    );
+$$;
+
+revoke all on function public.can_admin_read_deal_evidence(uuid)
+  from public, anon, authenticated;
+grant execute on function public.can_admin_read_deal_evidence(uuid)
+  to authenticated, service_role;
+
 create policy "participants and case admins read safe evidence"
 on public.deal_evidence
 for select
@@ -283,14 +302,7 @@ using (
         or deal.buyer_id = (select auth.uid())
       )
   )
-  or (
-    (select public.is_dealsafe_admin())
-    and exists (
-      select 1
-      from public.deal_disputes as dispute
-      where dispute.deal_id = deal_evidence.deal_id
-    )
-  )
+  or (select public.can_admin_read_deal_evidence(deal_evidence.deal_id))
 );
 
 revoke all on table public.deal_evidence

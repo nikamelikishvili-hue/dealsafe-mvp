@@ -16,12 +16,14 @@ declare
   mutation_policy_count integer;
   correlation_index_count integer;
 begin
-  select data_type, is_nullable, column_default
+  select column_record.data_type,
+         column_record.is_nullable,
+         column_record.column_default
   into column_type, column_nullable, column_default
-  from information_schema.columns
-  where table_schema = 'public'
-    and table_name = 'audit_events'
-    and column_name = 'correlation_id';
+  from information_schema.columns as column_record
+  where column_record.table_schema = 'public'
+    and column_record.table_name = 'audit_events'
+    and column_record.column_name = 'correlation_id';
 
   if column_type is distinct from 'uuid'
     or column_nullable is distinct from 'NO'

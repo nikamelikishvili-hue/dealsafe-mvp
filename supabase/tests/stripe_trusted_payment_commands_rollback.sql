@@ -1,6 +1,8 @@
 -- Rollback-only release evidence for PAY-003.
 -- Execute only inside a transaction after stripe_trusted_payment_commands.sql.
 
+begin;
+
 do $$
 declare
   v_seller_id uuid;
@@ -73,24 +75,34 @@ begin
   values (
     v_seller_id, v_buyer_id, 'PAY-003 checkout test',
     'Rollback-only trusted checkout reservation.', 12500, 'USD',
-    'Good', 'Ship to buyer', 'accepted', 1
+    'Good', 'Ship to buyer', 'draft', 0
   )
   returning id into v_deal_id;
 
-  insert into public.agreement_versions (
-    deal_id, version, terms_json, content_hash, created_by
-  )
-  values (
-    v_deal_id,
-    1,
-    jsonb_build_object('title', 'PAY-003 checkout test', 'price_cents', 12500, 'currency', 'USD'),
-    repeat('a', 64),
-    v_seller_id
-  )
-  on conflict (deal_id, version) do update
-  set terms_json = excluded.terms_json,
-      content_hash = excluded.content_hash
-  returning id into v_agreement_id;
+  select id into v_agreement_id
+  from public.agreement_versions
+  where deal_id = v_deal_id
+    and version = 1;
+
+  if v_agreement_id is null then
+    insert into public.agreement_versions (
+      deal_id, version, terms_json, content_hash, created_by
+    )
+    values (
+      v_deal_id,
+      1,
+      jsonb_build_object('title', 'PAY-003 checkout test', 'price_cents', 12500, 'currency', 'USD'),
+      repeat('a', 64),
+      v_seller_id
+    )
+    returning id into v_agreement_id;
+  end if;
+
+  update public.deals
+  set status = 'accepted',
+      current_agreement_version = 1,
+      published_at = now()
+  where id = v_deal_id;
 
   insert into public.agreement_acceptances (
     agreement_version_id, signer_id, typed_name, consent_text
@@ -129,7 +141,7 @@ begin
   if not public.attach_stripe_checkout_session(
     v_command_id,
     v_token,
-    'cs_test_PAY003_checkout_12345678',
+    'cs_test_PAY003_' || left(replace(v_deal_id::text, '-', ''), 16),
     null,
     'https://checkout.stripe.com/c/pay/PAY003',
     now() + interval '30 minutes'
@@ -189,7 +201,8 @@ begin
   values (
     v_deal_id, v_buyer_id, v_seller_id, v_seller_account,
     22000, 1000, 21000, 'USD', 'funds_secured',
-    'pi_PAY003_release_12345678', 'ch_PAY003_release_12345678',
+    'pi_PAY003_' || left(replace(v_deal_id::text, '-', ''), 16),
+    'ch_PAY003_' || left(replace(v_deal_id::text, '-', ''), 16),
     'DLV_' || replace(v_deal_id::text, '-', ''), 1, 455, 'sandbox_test_v1', 1
   )
   returning id into v_payment_id;
@@ -241,7 +254,8 @@ begin
 
   begin
     perform public.finalize_stripe_financial_command(
-      v_command_id, v_old_token, 'tr_PAY003_old_fence_12345678', null
+      v_command_id, v_old_token,
+      'tr_PAY003_old_' || left(replace(v_deal_id::text, '-', ''), 16), null
     );
     raise exception 'stale release worker finalized the payment';
   exception when serialization_failure then
@@ -249,7 +263,8 @@ begin
   end;
 
   v_result := public.finalize_stripe_financial_command(
-    v_command_id, v_token, 'tr_PAY003_release_12345678', null
+    v_command_id, v_token,
+    'tr_PAY003_' || left(replace(v_deal_id::text, '-', ''), 16), null
   );
   if not (v_result ->> 'resolved')::boolean then
     raise exception 'release was not finalized';
@@ -286,7 +301,8 @@ begin
   values (
     v_deal_id, v_buyer_id, v_seller_id, v_seller_account,
     33001, 1, 33000, 'USD', 'funds_secured',
-    'pi_PAY003_mismatch_12345678', 'ch_PAY003_mismatch_12345678',
+    'pi_PAY003_' || left(replace(v_deal_id::text, '-', ''), 16),
+    'ch_PAY003_' || left(replace(v_deal_id::text, '-', ''), 16),
     'DLV_' || replace(v_deal_id::text, '-', ''), 1, 1, 'sandbox_test_v1', 1
   )
   returning id into v_payment_id;
@@ -362,7 +378,8 @@ begin
   values (
     v_deal_id, v_buyer_id, v_seller_id, v_seller_account,
     44000, 2000, 42000, 'USD', 'disputed',
-    'pi_PAY003_refund_12345678', 'ch_PAY003_refund_12345678',
+    'pi_PAY003_' || left(replace(v_deal_id::text, '-', ''), 16),
+    'ch_PAY003_' || left(replace(v_deal_id::text, '-', ''), 16),
     'DLV_' || replace(v_deal_id::text, '-', ''), 1, 455, 'sandbox_test_v1', 1
   )
   returning id into v_payment_id;
@@ -394,7 +411,7 @@ begin
   v_result_two := public.finalize_stripe_financial_command(
     (v_result ->> 'commandId')::uuid,
     (v_result ->> 'claimToken')::uuid,
-    're_PAY003_refund_12345678',
+    're_PAY003_' || left(replace(v_deal_id::text, '-', ''), 16),
     'Buyer refund approved after evidence review.'
   );
   if not (v_result_two ->> 'resolved')::boolean then
@@ -422,3 +439,5 @@ begin
   end if;
 end;
 $$;
+
+rollback;

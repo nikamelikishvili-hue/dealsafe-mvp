@@ -9,6 +9,8 @@ declare
   expected_signatures constant text[] := array[
     'accept_deal(text,text,text)',
     'ask_deal_question(text,text)',
+    'assert_my_sensitive_change_allowed(text)',
+    'can_admin_read_deal_evidence(uuid)',
     'cancel_deal(uuid,text)',
     'claim_support_case(text)',
     'complete_handoff(uuid,text)',
@@ -37,9 +39,11 @@ declare
     'get_my_notifications(integer)',
     'get_my_profile_summary()',
     'get_my_saved_deals()',
-    'get_my_support_cases()',
+    'get_my_sensitive_change_holds()',
     'get_my_stripe_connect_status()',
+    'get_my_support_cases()',
     'get_my_trust_passport_settings()',
+    'get_privileged_mfa_recovery_cases(text)',
     'get_protected_payment_status(uuid)',
     'get_seller_shipping_evidence_readiness(uuid)',
     'get_support_case(text)',
@@ -53,9 +57,11 @@ declare
     'mark_arrived(uuid)',
     'mark_deal_activity_read(uuid)',
     'open_deal_dispute(uuid,text)',
+    'open_privileged_mfa_recovery_case(uuid,text,text,text)',
     'propose_meeting(uuid,text,text,timestamp with time zone)',
     'publish_deal_with_seller_declarations(uuid,text,text,bigint,text,text,text,text,integer)',
     'record_deal_inspection(uuid,boolean,boolean,boolean,boolean)',
+    'record_privileged_recovery_identity_proof(uuid,text,text)',
     'renew_deal_link(uuid,integer)',
     'reorder_deal_media(uuid,text[])',
     'reply_deal_inquiry(uuid,text)',
@@ -66,6 +72,7 @@ declare
     'resolve_deal_report(uuid,text,text)',
     'resolve_support_case(text,text)',
     'respond_to_offer(uuid,boolean)',
+    'review_privileged_mfa_recovery_case(uuid,text,text)',
     'send_deal_message(uuid,text)',
     'set_deal_delivery_details(uuid,text,text,text,text)',
     'set_deal_moderation_status(uuid,text,text)',
@@ -124,6 +131,10 @@ begin
       and position('auth.uid()' in lower(pg_get_functiondef(function_record.oid))) = 0
       and position(
         'is_dealsafe_admin()'
+        in lower(pg_get_functiondef(function_record.oid))
+      ) = 0
+      and position(
+        'dealsafe_private.require_security_operator'
         in lower(pg_get_functiondef(function_record.oid))
       ) = 0
   ) then
@@ -196,7 +207,107 @@ begin
      or seller_id is null
      or buyer_id is null
      or outsider_id is null then
-    raise exception 'DAT-004 production role-matrix fixture is incomplete';
+    admin_id := gen_random_uuid();
+    seller_id := gen_random_uuid();
+    buyer_id := gen_random_uuid();
+    outsider_id := gen_random_uuid();
+    member_id := outsider_id;
+
+    insert into auth.users (
+      id,
+      aud,
+      role,
+      email,
+      encrypted_password,
+      email_confirmed_at,
+      raw_app_meta_data,
+      raw_user_meta_data,
+      created_at,
+      updated_at
+    )
+    values
+      (
+        admin_id,
+        'authenticated',
+        'authenticated',
+        'dat004-admin-' || admin_id::text || '@example.invalid',
+        '',
+        now(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        '{"display_name":"DAT-004 Admin"}'::jsonb,
+        now(),
+        now()
+      ),
+      (
+        seller_id,
+        'authenticated',
+        'authenticated',
+        'dat004-seller-' || seller_id::text || '@example.invalid',
+        '',
+        now(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        '{"display_name":"DAT-004 Seller"}'::jsonb,
+        now(),
+        now()
+      ),
+      (
+        buyer_id,
+        'authenticated',
+        'authenticated',
+        'dat004-buyer-' || buyer_id::text || '@example.invalid',
+        '',
+        now(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        '{"display_name":"DAT-004 Buyer"}'::jsonb,
+        now(),
+        now()
+      ),
+      (
+        outsider_id,
+        'authenticated',
+        'authenticated',
+        'dat004-outsider-' || outsider_id::text || '@example.invalid',
+        '',
+        now(),
+        '{"provider":"email","providers":["email"]}'::jsonb,
+        '{"display_name":"DAT-004 Outsider"}'::jsonb,
+        now(),
+        now()
+      );
+
+    insert into public.profiles (id, display_name, app_role)
+    values
+      (admin_id, 'DAT-004 Admin', 'admin'),
+      (seller_id, 'DAT-004 Seller', 'member'),
+      (buyer_id, 'DAT-004 Buyer', 'member'),
+      (outsider_id, 'DAT-004 Outsider', 'member')
+    on conflict (id) do update
+      set display_name = excluded.display_name,
+          app_role = excluded.app_role;
+
+    insert into public.deals (
+      seller_id,
+      buyer_id,
+      title,
+      description,
+      price_cents,
+      condition,
+      delivery_method,
+      status,
+      published_at
+    )
+    values (
+      seller_id,
+      buyer_id,
+      'DAT-004 authorization fixture',
+      'Rollback-only participant authorization fixture.',
+      10000,
+      'good',
+      'shipping',
+      'accepted',
+      now()
+    )
+    returning id into target_deal_id;
   end if;
 
   perform set_config('dat004.admin_id', admin_id::text, true);

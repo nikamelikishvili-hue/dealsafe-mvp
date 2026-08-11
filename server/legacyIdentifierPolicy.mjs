@@ -31,7 +31,7 @@ export const approvedLegacyIdentifierRules = Object.freeze([
   }),
   rule({
     id: 'database-admin-rpc-compatibility',
-    expectedOccurrences: 26,
+    expectedOccurrences: 23,
     allowedPath: path => (
       supabaseSql(path)
       || path === 'src/services/supabaseRest.ts'
@@ -40,7 +40,7 @@ export const approvedLegacyIdentifierRules = Object.freeze([
   }),
   rule({
     id: 'database-private-schema-compatibility',
-    expectedOccurrences: 120,
+    expectedOccurrences: 139,
     allowedPath: supabaseSql,
     linePattern: /\bdealsafe_private\b/i,
   }),

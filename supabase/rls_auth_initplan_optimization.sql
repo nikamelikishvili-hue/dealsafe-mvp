@@ -151,12 +151,5 @@ create policy "participants and case admins read safe evidence"
           or deal.buyer_id = (select auth.uid())
         )
     )
-    or (
-      (select public.is_dealsafe_admin())
-      and exists (
-        select 1
-        from public.deal_disputes dispute
-        where dispute.deal_id = deal_evidence.deal_id
-      )
-    )
+    or (select public.can_admin_read_deal_evidence(deal_evidence.deal_id))
   );
