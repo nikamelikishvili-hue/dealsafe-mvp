@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type MouseEvent } from 'react';
+import { useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { Check, Eye, EyeOff } from 'lucide-react';
 import { t } from './i18n';
 import { publicInfoPaths, type PublicInfoView } from './navigation';
@@ -22,6 +22,7 @@ type AccountEntryPageProps = {
   acceptedPolicies: boolean;
   onAcceptedPoliciesChange: (accepted: boolean) => void;
   message: string;
+  submitting: boolean;
   pendingCreateAction: PendingCreateAction;
   returnToCreate: boolean;
   onBack: () => void;
@@ -39,9 +40,12 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setSending(true);
     setMessage('');
     try {
@@ -50,6 +54,7 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not send reset email');
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };
@@ -59,18 +64,20 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
     <p className="eyebrow">{t('Account recovery')}</p>
     <h1>{t('Reset your password')}</h1>
     <p>{t('Enter your account email. For privacy, the result will not reveal whether an account exists.')}</p>
-    <form onSubmit={submit}>
+    <form onSubmit={submit} aria-busy={sending}>
       <label>
         {t('Email')}
         <input
           required
           type="email"
+          autoComplete="email"
+          disabled={sending}
           value={email}
           onChange={event => setEmail(event.target.value)}
           placeholder="you@example.com"
         />
       </label>
-      {message && <div className="notice">{t(message)}</div>}
+      {message && <div className="notice" role="status" aria-live="polite">{t(message)}</div>}
       <button type="submit" className="primary full" disabled={sending}>
         {t(sending ? 'Sending…' : 'Send reset link')}
       </button>
@@ -82,14 +89,19 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [updating, setUpdating] = useState(false);
+  const updatingRef = useRef(false);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (updatingRef.current) return;
     setMessage('');
     if (password !== confirmPassword) {
       setMessage('Passwords do not match.');
       return;
     }
+    updatingRef.current = true;
+    setUpdating(true);
     try {
       await updateRecoveredPassword(token, password);
       history.replaceState(null, '', location.pathname);
@@ -97,13 +109,16 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
       setTimeout(onDone, 1000);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not update password');
+    } finally {
+      updatingRef.current = false;
+      setUpdating(false);
     }
   };
 
   return <section className="recovery-page">
     <p className="eyebrow">{t('Secure recovery')}</p>
     <h1>{t('Choose a new password')}</h1>
-    <form onSubmit={submit}>
+    <form onSubmit={submit} aria-busy={updating}>
       <label>
         {t('New password')}
         <input
@@ -111,6 +126,8 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
           minLength={12}
           autoComplete="new-password"
           type="password"
+          aria-describedby="recovery-password-requirements"
+          disabled={updating}
           value={password}
           onChange={event => setPassword(event.target.value)}
         />
@@ -122,13 +139,17 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
           minLength={12}
           autoComplete="new-password"
           type="password"
+          aria-describedby="recovery-password-requirements"
+          disabled={updating}
           value={confirmPassword}
           onChange={event => setConfirmPassword(event.target.value)}
         />
       </label>
-      <small>{t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}</small>
-      {message && <div className="notice">{t(message)}</div>}
-      <button type="submit" className="primary full">{t('Update password')}</button>
+      <small id="recovery-password-requirements">{t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}</small>
+      {message && <div className="notice" role="status" aria-live="polite">{t(message)}</div>}
+      <button type="submit" className="primary full" disabled={updating}>
+        {t(updating ? 'Updating password…' : 'Update password')}
+      </button>
     </form>
   </section>;
 }
@@ -143,6 +164,7 @@ export function AccountEntryPage({
   acceptedPolicies,
   onAcceptedPoliciesChange,
   message,
+  submitting,
   pendingCreateAction,
   returnToCreate,
   onBack,
@@ -165,7 +187,7 @@ export function AccountEntryPage({
   };
 
   return <section className="form-wrap auth-wrap">
-    <button type="button" className="back" onClick={onBack}>← {t(returnToCreate ? 'Back to draft' : 'Back')}</button>
+    <button type="button" className="back" disabled={submitting} onClick={onBack}>← {t(returnToCreate ? 'Back to draft' : 'Back')}</button>
     <p className="eyebrow">
       {pendingCreateAction ? 'FINAL STEP · ACCOUNT' : isSignup ? 'START YOUR PRIVATE DEAL' : 'DEALIVRA ACCOUNT'}
     </p>
@@ -199,11 +221,12 @@ export function AccountEntryPage({
       </li>
     </ol>}
 
-    <form onSubmit={onSubmit}>
+    <form onSubmit={onSubmit} aria-busy={submitting}>
       {isSignup && <label>
         {t('Your name')}
         <input
           required
+          disabled={submitting}
           minLength={2}
           maxLength={80}
           autoComplete="name"
@@ -216,6 +239,7 @@ export function AccountEntryPage({
         {t('Email')}
         <input
           required
+          disabled={submitting}
           type="email"
           autoComplete="email"
           placeholder="you@example.com"
@@ -228,6 +252,7 @@ export function AccountEntryPage({
         <span className="password-field">
           <input
             required
+            disabled={submitting}
             minLength={isSignup ? 12 : 1}
             type={passwordVisible ? 'text' : 'password'}
             autoComplete={isSignup ? 'new-password' : 'current-password'}
@@ -237,6 +262,7 @@ export function AccountEntryPage({
           />
           <button
             type="button"
+            disabled={submitting}
             aria-label={t(passwordVisible ? 'Hide password' : 'Show password')}
             onClick={onTogglePassword}
           >
@@ -248,6 +274,7 @@ export function AccountEntryPage({
       {isSignup && <label className="policy-consent">
         <input
           required
+          disabled={submitting}
           type="checkbox"
           checked={acceptedPolicies}
           onChange={event => onAcceptedPoliciesChange(event.target.checked)}
@@ -260,10 +287,20 @@ export function AccountEntryPage({
         </span>
       </label>}
       {message && <div className="notice" role="status">{t(message)}</div>}
-      <button type="submit" className="primary full" disabled={isSignup && !acceptedPolicies}>
-        {t(pendingCreateAction ? pendingAuthAction : isSignup ? 'Create account & continue' : 'Sign in')}
+      <button type="submit" className="primary full" disabled={submitting || (isSignup && !acceptedPolicies)}>
+        {t(
+          submitting
+            ? isSignup
+              ? 'Creating account…'
+              : 'Signing in…'
+            : pendingCreateAction
+              ? pendingAuthAction
+              : isSignup
+                ? 'Create account & continue'
+                : 'Sign in',
+        )}
       </button>
-      <button type="button" className="switch-auth" onClick={onSwitchMode}>
+      <button type="button" className="switch-auth" disabled={submitting} onClick={onSwitchMode}>
         {t(isSignup ? 'Already have an account? Sign in' : 'New to Dealivra? Create account')}
       </button>
     </form>

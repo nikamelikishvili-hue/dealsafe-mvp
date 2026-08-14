@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   BadgeCheck,
   CalendarClock,
@@ -13,9 +13,16 @@ import {
   Truck,
 } from 'lucide-react';
 import { AddressAutocomplete } from './AddressAutocomplete';
+import { copyTextToClipboard } from './clipboard';
+import { useConfirmAction } from './ConfirmActionDialog';
 import type { Deal } from './domain';
 import { getAppLanguage, t } from './i18n';
-import { isUsPostalCode, US_STATE_OPTIONS } from './usAddress';
+import {
+  isUsPostalCode,
+  parseStoredUsAddress,
+  serializeUsAddress,
+  US_STATE_OPTIONS,
+} from './usAddress';
 import {
   completeHandoff,
   confirmMeeting,
@@ -60,18 +67,36 @@ export function MeetingPanel({
     scheduledAt: '',
   });
   const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadVersion, setLoadVersion] = useState(0);
+  const actionInFlight = useRef(false);
 
   useEffect(() => {
     let current = true;
+    setLoaded(false);
+    setLoadFailed(false);
+    setMessage('');
     void getDealMeeting(session, deal.id)
       .then((next) => {
         if (current) setMeeting(next);
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (current) {
+          setLoadFailed(true);
+          setMessage(
+            error instanceof Error ? error.message : 'Could not load meeting details',
+          );
+        }
+      })
+      .finally(() => {
+        if (current) setLoaded(true);
+      });
     return () => {
       current = false;
     };
-  }, [deal.id, session.accessToken]);
+  }, [deal.id, session.accessToken, loadVersion]);
 
   const completeAddress = [
     form.streetAddress.trim(),
@@ -90,7 +115,9 @@ export function MeetingPanel({
 
   const propose = async (event: FormEvent) => {
     event.preventDefault();
-    if (!formComplete) return;
+    if (!formComplete || actionInFlight.current) return;
+    actionInFlight.current = true;
+    setBusy(true);
     setMessage('');
     try {
       await proposeMeeting(
@@ -106,10 +133,16 @@ export function MeetingPanel({
       setMessage(
         error instanceof Error ? error.message : 'Could not propose meeting',
       );
+    } finally {
+      actionInFlight.current = false;
+      setBusy(false);
     }
   };
 
   const confirm = async () => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setBusy(true);
     setMessage('');
     try {
       await confirmMeeting(session, deal.id);
@@ -119,6 +152,9 @@ export function MeetingPanel({
       setMessage(
         error instanceof Error ? error.message : 'Could not confirm meeting',
       );
+    } finally {
+      actionInFlight.current = false;
+      setBusy(false);
     }
   };
 
@@ -139,7 +175,22 @@ export function MeetingPanel({
           </span>
         </div>
       </div>
-      {meeting ? (
+      {!loaded ? (
+        <div className="notice" role="status" aria-live="polite">
+          {t('Loading meeting details...')}
+        </div>
+      ) : loadFailed ? (
+        <div className="notice meeting-load-failure" role="alert">
+          <p>{t(message || 'Could not load meeting details')}</p>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setLoadVersion((version) => version + 1)}
+          >
+            {t('Try again')}
+          </button>
+        </div>
+      ) : meeting ? (
         <div className="meeting-summary">
           <div>
             <MapPinned />
@@ -160,10 +211,13 @@ export function MeetingPanel({
           {meeting.status === 'proposed' &&
             meeting.proposed_by !== session.user.id && (
               <button
+                type="button"
                 className="primary"
+                disabled={busy}
+                aria-busy={busy}
                 onClick={confirm}
               >
-                {t('Confirm meeting')}
+                {t(busy ? 'Confirming…' : 'Confirm meeting')}
               </button>
             )}
           {meeting.status === 'proposed' &&
@@ -310,11 +364,13 @@ export function MeetingPanel({
             />
           </label>
           <button
+            type="submit"
             className="primary meeting-submit"
-            disabled={!formComplete}
+            disabled={!formComplete || busy}
+            aria-busy={busy}
           >
             <CalendarClock size={18} />
-            {t('Propose meeting')}
+            {t(busy ? 'Sending…' : 'Propose meeting')}
           </button>
         </form>
       )}
@@ -355,6 +411,7 @@ export function InspectionRecorder({
   });
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const saveInFlight = useRef(false);
 
   useEffect(() => {
     let current = true;
@@ -383,7 +440,8 @@ export function InspectionRecorder({
     },
   ];
   const save = async () => {
-    if (!complete) return;
+    if (!complete || saveInFlight.current) return;
+    saveInFlight.current = true;
     setSaving(true);
     setMessage('');
     try {
@@ -399,6 +457,7 @@ export function InspectionRecorder({
           : 'Could not save inspection receipt',
       );
     } finally {
+      saveInFlight.current = false;
       setSaving(false);
     }
   };
@@ -450,8 +509,10 @@ export function InspectionRecorder({
         ))}
       </div>
       <button
+        type="button"
         className="primary inspection-save"
         disabled={!complete || saving}
+        aria-busy={saving}
         onClick={save}
       >
         {t(saving ? 'Saving…' : 'Save inspection receipt')}
@@ -488,6 +549,10 @@ export function HandoffPanel({
   const [sellerPin, setSellerPin] = useState('');
   const [message, setMessage] = useState('');
   const [inspectionRecorded, setInspectionRecorded] = useState(false);
+  const [busy, setBusy] = useState<'arrive' | 'pin' | 'finish' | ''>('');
+  const [loadError, setLoadError] = useState('');
+  const [loadVersion, setLoadVersion] = useState(0);
+  const actionInFlight = useRef(false);
 
   const reload = async () => {
     const next = await getDealMeeting(session, deal.id);
@@ -496,22 +561,46 @@ export function HandoffPanel({
   };
   useEffect(() => {
     let current = true;
+    setLoadError('');
     void getDealMeeting(session, deal.id)
       .then((next) => {
         if (current) setMeeting(next);
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (current) {
+          setLoadError(
+            error instanceof Error ? error.message : 'Could not load handoff status',
+          );
+        }
+      });
     return () => {
       current = false;
     };
-  }, [deal.id, session.accessToken]);
+  }, [deal.id, session.accessToken, loadVersion]);
 
+  if (loadError) {
+    return (
+      <section className="handoff-panel">
+        <div className="notice" role="alert">{t(loadError)}</div>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => setLoadVersion((version) => version + 1)}
+        >
+          {t('Try again')}
+        </button>
+      </section>
+    );
+  }
   if (!meeting || meeting.status !== 'confirmed') return null;
   const myArrived =
     deal.viewerRole === 'seller'
       ? meeting.seller_arrived
       : meeting.buyer_arrived;
   const arrive = async () => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setBusy('arrive');
     try {
       await markArrived(session, deal.id);
       await reload();
@@ -520,9 +609,15 @@ export function HandoffPanel({
       setMessage(
         error instanceof Error ? error.message : 'Could not record arrival',
       );
+    } finally {
+      actionInFlight.current = false;
+      setBusy('');
     }
   };
   const makePin = async () => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setBusy('pin');
     try {
       setSellerPin(await generateHandoffPin(session, deal.id));
       setMessage('Show this PIN only after the buyer inspects the item.');
@@ -530,9 +625,15 @@ export function HandoffPanel({
       setMessage(
         error instanceof Error ? error.message : 'Could not generate PIN',
       );
+    } finally {
+      actionInFlight.current = false;
+      setBusy('');
     }
   };
   const finish = async () => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setBusy('finish');
     try {
       await completeHandoff(session, deal.id, pin);
       setMessage('Item receipt confirmed. Deal completed.');
@@ -541,6 +642,9 @@ export function HandoffPanel({
       setMessage(
         error instanceof Error ? error.message : 'Could not complete deal',
       );
+    } finally {
+      actionInFlight.current = false;
+      setBusy('');
     }
   };
 
@@ -560,10 +664,13 @@ export function HandoffPanel({
       </div>
       {!myArrived && (
         <button
+          type="button"
           className="primary"
+          disabled={Boolean(busy)}
+          aria-busy={busy === 'arrive'}
           onClick={arrive}
         >
-          {t('I arrived')}
+          {t(busy === 'arrive' ? 'Saving…' : 'I arrived')}
         </button>
       )}
       {meeting.seller_arrived && meeting.buyer_arrived && (
@@ -592,11 +699,13 @@ export function HandoffPanel({
               </>
             ) : (
               <button
+                type="button"
                 className="primary"
-                disabled={!paymentReady}
+                disabled={!paymentReady || Boolean(busy)}
+                aria-busy={busy === 'pin'}
                 onClick={makePin}
               >
-                {t('Generate handoff PIN')}
+                {t(busy === 'pin' ? 'Generating…' : 'Generate handoff PIN')}
               </button>
             )}
           </div>
@@ -620,13 +729,22 @@ export function HandoffPanel({
               />
             </label>
             <button
+              type="button"
               className="primary"
               disabled={
-                !inspectionRecorded || !paymentReady || pin.length !== 6
+                !inspectionRecorded ||
+                !paymentReady ||
+                pin.length !== 6 ||
+                Boolean(busy)
               }
+              aria-busy={busy === 'finish'}
               onClick={finish}
             >
-              {t('Confirm item received')}
+              {t(
+                busy === 'finish'
+                  ? 'Completing…'
+                  : 'Confirm item received',
+              )}
             </button>
           </div>
         )}
@@ -647,32 +765,6 @@ export function HandoffPanel({
   );
 }
 
-function splitDeliveryAddress(value: string) {
-  const lines = value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const locationLine = lines.at(-1) || '';
-  const usLocation = locationLine.match(
-    /^(.+?),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/i,
-  );
-  if (usLocation)
-    return {
-      streetAddress: lines[0] || '',
-      addressLine2: lines.slice(1, -1).join(' '),
-      city: usLocation[1].trim(),
-      state: usLocation[2].toUpperCase(),
-      postalCode: usLocation[3],
-    };
-  return {
-    streetAddress: lines[0] || '',
-    addressLine2: lines.length > 2 ? lines[1] || '' : '',
-    city: lines.length > 2 ? lines.slice(2).join(' ') : lines[1] || '',
-    state: '',
-    postalCode: '',
-  };
-}
-
 export function ShippingPanel({
   deal,
   session,
@@ -688,6 +780,7 @@ export function ShippingPanel({
   onProgressChanged?: () => void;
   onDelivered: () => void;
 }) {
+  const { confirmAction, confirmDialog } = useConfirmAction();
   const [shipment, setShipment] = useState<DealShipment | null>(null);
   const [delivery, setDelivery] = useState<DealDeliveryDetails | null>(null);
   const [carrier, setCarrier] = useState('');
@@ -696,6 +789,8 @@ export function ShippingPanel({
   const [inspectionRecorded, setInspectionRecorded] = useState(false);
   const [editingAddress, setEditingAddress] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
+  const [shipmentBusy, setShipmentBusy] = useState(false);
+  const mutationInFlight = useRef(false);
   const [readiness, setReadiness] =
     useState<SellerShippingEvidenceReadiness | null>(null);
   const [checkingReadiness, setCheckingReadiness] = useState(false);
@@ -715,7 +810,11 @@ export function ShippingPanel({
     try {
       const next = await getDealShipment(session, deal.id);
       if (isCurrent()) setShipment(next);
-    } catch {}
+    } catch {
+      if (isCurrent()) {
+        setMessage('Shipment status could not be loaded. Try again.');
+      }
+    }
   };
   const loadDelivery = async (isCurrent = () => true) => {
     try {
@@ -723,7 +822,7 @@ export function ShippingPanel({
       if (!isCurrent()) return;
       setDelivery(details);
       if (details) {
-        const parsed = splitDeliveryAddress(details.full_address);
+        const parsed = parseStoredUsAddress(details.full_address);
         setAddress({
           recipientName: details.recipient_name,
           streetAddress: parsed.streetAddress,
@@ -735,7 +834,11 @@ export function ShippingPanel({
           instructions: details.instructions || '',
         });
       }
-    } catch {}
+    } catch {
+      if (isCurrent()) {
+        setMessage('Delivery address could not be loaded. Try again.');
+      }
+    }
   };
   const loadReadiness = async (isCurrent = () => true) => {
     if (deal.viewerRole !== 'seller') return;
@@ -775,17 +878,17 @@ export function ShippingPanel({
 
   const saveAddress = async (event: FormEvent) => {
     event.preventDefault();
-    if (!address.state || !isUsPostalCode(address.postalCode)) return;
+    if (
+      !address.state ||
+      !isUsPostalCode(address.postalCode) ||
+      mutationInFlight.current
+    )
+      return;
+    mutationInFlight.current = true;
     setSavingAddress(true);
     setMessage('');
     try {
-      const storedAddress = [
-        address.streetAddress.trim(),
-        address.addressLine2.trim(),
-        `${address.city.trim()}, ${address.state} ${address.postalCode.trim()}`,
-      ]
-        .filter(Boolean)
-        .join('\n');
+      const storedAddress = serializeUsAddress(address);
       await saveDealDeliveryDetails(
         session,
         deal.id,
@@ -805,17 +908,22 @@ export function ShippingPanel({
           : 'Could not save delivery address',
       );
     } finally {
+      mutationInFlight.current = false;
       setSavingAddress(false);
     }
   };
   const copyAddress = async () => {
     if (!delivery) return;
-    await navigator.clipboard?.writeText(
-      `${delivery.recipient_name}\n${delivery.full_address}\n${delivery.country}${
-        delivery.instructions ? `\n${delivery.instructions}` : ''
-      }`,
-    );
-    setMessage('Address copied.');
+    try {
+      await copyTextToClipboard(
+        `${delivery.recipient_name}\n${delivery.full_address}\n${delivery.country}${
+          delivery.instructions ? `\n${delivery.instructions}` : ''
+        }`,
+      );
+      setMessage('Address copied.');
+    } catch {
+      setMessage('Address could not be copied. Select and copy it manually.');
+    }
   };
 
   const evidenceReady = readiness?.ready === true;
@@ -848,11 +956,14 @@ export function ShippingPanel({
   ).length;
   const saveShipment = async (event: FormEvent) => {
     event.preventDefault();
+    if (mutationInFlight.current) return;
     setMessage('');
     if (!readyToShip) {
       setMessage('Complete the shipping readiness checklist first.');
       return;
     }
+    mutationInFlight.current = true;
+    setShipmentBusy(true);
     try {
       await createDealShipment(session, deal.id, carrier, tracking);
       setMessage('Shipment details saved.');
@@ -864,11 +975,23 @@ export function ShippingPanel({
       setMessage(
         error instanceof Error ? error.message : 'Could not save shipment',
       );
+    } finally {
+      mutationInFlight.current = false;
+      setShipmentBusy(false);
     }
   };
   const delivered = async () => {
-    if (!confirm(t('Confirm that you received and inspected this item?')))
-      return;
+    const confirmed = await confirmAction({
+      title: t('Confirm delivery?'),
+      description: t(
+        'Confirm only after you received and inspected the item. This completes the deal record.',
+      ),
+      confirmLabel: t('Confirm delivery'),
+    });
+    if (!confirmed) return;
+    if (mutationInFlight.current) return;
+    mutationInFlight.current = true;
+    setShipmentBusy(true);
     setMessage('');
     try {
       await confirmShipmentDelivery(session, deal.id);
@@ -881,6 +1004,9 @@ export function ShippingPanel({
       setMessage(
         error instanceof Error ? error.message : 'Could not confirm delivery',
       );
+    } finally {
+      mutationInFlight.current = false;
+      setShipmentBusy(false);
     }
   };
 
@@ -906,6 +1032,7 @@ export function ShippingPanel({
             : 'Address needed';
 
   return (
+    <>
     <section className="shipping-panel no-print">
       <div className="shipping-heading">
         <span className="workflow-icon">
@@ -961,6 +1088,7 @@ export function ShippingPanel({
                 </em>
               )}
               <button
+                type="button"
                 className="secondary"
                 onClick={copyAddress}
               >
@@ -969,6 +1097,7 @@ export function ShippingPanel({
               </button>
               {deal.viewerRole === 'buyer' && !delivery.locked && (
                 <button
+                  type="button"
                   className="secondary"
                   onClick={() => setEditingAddress(true)}
                 >
@@ -1153,8 +1282,10 @@ export function ShippingPanel({
                 </button>
               )}
               <button
+                type="submit"
                 className="primary"
                 disabled={savingAddress || addressIncomplete}
+                aria-busy={savingAddress}
               >
                 {t(savingAddress ? 'Saving…' : 'Save delivery address')}
               </button>
@@ -1223,12 +1354,12 @@ export function ShippingPanel({
               ))}
             </div>
             {checkingReadiness && (
-              <div className="shipping-readiness-status">
+              <div className="shipping-readiness-status" role="status" aria-live="polite">
                 {t('Checking shipping readiness…')}
               </div>
             )}
             {readinessError && (
-              <div className="notice">{t(readinessError)}</div>
+              <div className="notice" role="alert">{t(readinessError)}</div>
             )}
             {!readyToShip && (
               <button
@@ -1284,14 +1415,17 @@ export function ShippingPanel({
             />
           </label>
           <button
+            type="submit"
             className="primary"
             disabled={
               !readyToShip ||
+              shipmentBusy ||
               carrier.trim().length < 2 ||
               tracking.trim().length < 4
             }
+            aria-busy={shipmentBusy}
           >
-            {t('Mark as shipped')}
+            {t(shipmentBusy ? 'Saving shipment…' : 'Mark as shipped')}
           </button>
         </form>
       ) : deal.viewerRole === 'buyer' && delivery ? (
@@ -1310,12 +1444,14 @@ export function ShippingPanel({
         deal.viewerRole === 'buyer' &&
         deal.status === 'accepted' && (
           <button
+            type="button"
             className="primary confirm-delivery"
-            disabled={!inspectionRecorded}
+            disabled={!inspectionRecorded || shipmentBusy}
+            aria-busy={shipmentBusy}
             onClick={delivered}
           >
             <PackageCheck size={18} />
-            {t('Confirm delivery')}
+            {t(shipmentBusy ? 'Confirming delivery…' : 'Confirm delivery')}
           </button>
         )}
       {message && (
@@ -1336,5 +1472,7 @@ export function ShippingPanel({
         )}
       </p>
     </section>
+    {confirmDialog}
+    </>
   );
 }

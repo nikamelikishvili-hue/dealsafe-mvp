@@ -7,17 +7,14 @@ import { configureBuyerAccessCode, getDealAcceptanceProtection } from './service
 import { type DealParticipants } from './services/supabaseRest';
 import { getDealActionPlan, type DealActionPlan } from './services/supabaseRest';
 import { getAppLanguage, t } from './i18n';
-import { AccountProfileWorkspace } from './AccountProfileWorkspace';
 import { MfaLoginVerification } from './MfaLoginVerification';
 import { mfaRequiredEvent, type MfaLoginChallenge } from './services/supabaseRest';
 import { BrandLogo } from './BrandLogo';
-import { DealWorkspace } from './DealWorkspace';
 import {
   DealQrCode,
   FilePreview,
   MediaPreview,
 } from './DealWorkspaceFeatures';
-import { AdministrationWorkspace } from './AdministrationWorkspace';
 import { CatalogSearchPanel } from './CatalogSearchPanel';
 import {
   dealTemplates,
@@ -40,6 +37,8 @@ import {
 } from './SellerDeclarations';
 import type { Deal, DealDraft } from './domain';
 import { formatMoney, toMinorUnits } from './currency';
+import { copyTextToClipboard } from './clipboard';
+import { NetworkStatusBanner } from './NetworkStatusBanner';
 import { filterCatalogDeals, mergeCatalogSearchParams, readCatalogSearchState } from './catalogSearch';
 import { OTHER_CATALOG_VALUE, buildDealCatalogIdentity, buildSmartCatalogTitle, emptySmartCatalogSelection, matchCatalogValue, sanitizeSmartCatalogSelection, vehicleCatalog, vehicleYears, type SmartCatalogSelection } from './smartCatalog';
 import { decodeVehicleVin } from './services/catalogService';
@@ -114,6 +113,22 @@ import './catalog-search.css';
 
 type View = 'home' | 'create' | 'published' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset' | 'link-error' | 'route-loading' | 'not-found' | 'verify' | PublicInfoView;
 
+const AccountProfileWorkspace = React.lazy(() =>
+  import('./AccountProfileWorkspace').then((module) => ({
+    default: module.AccountProfileWorkspace,
+  })),
+);
+const AdministrationWorkspace = React.lazy(() =>
+  import('./AdministrationWorkspace').then((module) => ({
+    default: module.AdministrationWorkspace,
+  })),
+);
+const DealWorkspace = React.lazy(() =>
+  import('./DealWorkspace').then((module) => ({
+    default: module.DealWorkspace,
+  })),
+);
+
 interface InstallPromptEvent extends Event { prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}> }
 const initial: DealDraft = {title:'',description:'',price:'',currency:'USD',condition:'Good',serialNumber:'',deliveryMethod:'Meet in person',expiresInDays:7};
 const formatDateTime=(value:string)=>new Date(value).toLocaleString(getAppLanguage());
@@ -127,7 +142,8 @@ function PublicTrustPassportPage({profile,message,onBack}:{profile:TrustPassport
 }
 
 function DealComparison({deals,onClose,onOpen}:{deals:Deal[];onClose:()=>void;onOpen:(deal:Deal)=>void}){
-  useEffect(()=>{const close=(event:KeyboardEvent)=>{if(event.key==='Escape')onClose()};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close)},[onClose]);
+  const dialogRef=useRef<HTMLElement>(null);const closeButtonRef=useRef<HTMLButtonElement>(null);const onCloseRef=useRef(onClose);onCloseRef.current=onClose;
+  useEffect(()=>{const previouslyFocused=document.activeElement as HTMLElement|null;const previousOverflow=document.body.style.overflow;document.body.style.overflow='hidden';closeButtonRef.current?.focus();const handleKeyDown=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();onCloseRef.current();return}if(event.key!=='Tab')return;const focusable=Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')??[]);if(focusable.length===0){event.preventDefault();closeButtonRef.current?.focus();return}const first=focusable[0];const last=focusable[focusable.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}};window.addEventListener('keydown',handleKeyDown);return()=>{window.removeEventListener('keydown',handleKeyDown);document.body.style.overflow=previousOverflow;previouslyFocused?.focus()}},[]);
   const rows=[
     {label:'Price',value:(deal:Deal)=>dealPrice(deal)},
     {label:'Condition',value:(deal:Deal)=>t(deal.condition)},
@@ -137,7 +153,7 @@ function DealComparison({deals,onClose,onOpen}:{deals:Deal[];onClose:()=>void;on
     {label:'Status',value:(deal:Deal)=>t(isDealExpired(deal)?'expired':deal.status)},
     {label:'Offer expires',value:(deal:Deal)=>deal.expiresAt?formatDateTime(deal.expiresAt):'—'}
   ];
-  return <div className="compare-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)onClose()}}><section className="compare-dialog" role="dialog" aria-modal="true" aria-labelledby="compare-title"><div className="compare-title"><div><p className="eyebrow">{t('Private Watchlist')}</p><h2 id="compare-title">{t('Deal comparison')}</h2><p>{t('Compare price, condition, handoff, and seller trust.')}</p></div><button className="compare-close" aria-label={t('Close comparison')} onClick={onClose}><X/></button></div><div className="compare-scroll"><table><thead><tr><th>{t('Detail')}</th>{deals.map(deal=><th key={deal.id}><span className="compare-cover">{deal.mediaUrls?.[0]?<MediaPreview source={deal.mediaUrls[0]} alt={deal.title}/>:deal.title.slice(0,1).toUpperCase()}</span><b>{deal.title}</b><small>{deal.publicId}</small></th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.label}><th>{t(row.label)}</th>{deals.map(deal=><td key={deal.id}>{row.value(deal)}</td>)}</tr>)}<tr className="compare-actions"><th></th>{deals.map(deal=><td key={deal.id}><button className="primary" onClick={()=>onOpen(deal)}>{t('Open Deal Link')}<ArrowRight size={16}/></button></td>)}</tr></tbody></table></div><p className="compare-note"><ShieldCheck size={17}/>{t('Comparison uses the current details recorded in each Deal Link.')}</p></section></div>
+  return <div className="compare-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)onClose()}}><section ref={dialogRef} className="compare-dialog" role="dialog" aria-modal="true" aria-labelledby="compare-title"><div className="compare-title"><div><p className="eyebrow">{t('Private Watchlist')}</p><h2 id="compare-title">{t('Deal comparison')}</h2><p>{t('Compare price, condition, handoff, and seller trust.')}</p></div><button ref={closeButtonRef} type="button" className="compare-close" aria-label={t('Close comparison')} onClick={onClose}><X aria-hidden="true"/></button></div><div className="compare-scroll"><table><thead><tr><th>{t('Detail')}</th>{deals.map(deal=><th key={deal.id}><span className="compare-cover">{deal.mediaUrls?.[0]?<MediaPreview source={deal.mediaUrls[0]} alt={deal.title}/>:deal.title.slice(0,1).toUpperCase()}</span><b>{deal.title}</b><small>{deal.publicId}</small></th>)}</tr></thead><tbody>{rows.map(row=><tr key={row.label}><th>{t(row.label)}</th>{deals.map(deal=><td key={deal.id}>{row.value(deal)}</td>)}</tr>)}<tr className="compare-actions"><th></th>{deals.map(deal=><td key={deal.id}><button className="primary" onClick={()=>onOpen(deal)}>{t('Open Deal Link')}<ArrowRight size={16}/></button></td>)}</tr></tbody></table></div><p className="compare-note"><ShieldCheck size={17}/>{t('Comparison uses the current details recorded in each Deal Link.')}</p></section></div>
 }
 
 function SavedDealsPanel({items,totalCount,onOpen}:{items:Deal[];totalCount:number;onOpen:(deal:Deal)=>void}){
@@ -193,7 +209,7 @@ function PublishedDealSuccess({deal,warning,session,acceptanceProtected,onProtec
   const flash=(text:string)=>{window.clearTimeout(noticeTimer.current);setNotice(text);noticeTimer.current=window.setTimeout(()=>setNotice(''),2200)};
   const copy=async(value=link,successMessage=value===link?'Deal Link copied.':'Invitation message copied.')=>{
     try{
-      await navigator.clipboard.writeText(value);
+      await copyTextToClipboard(value);
       flash(successMessage);
     }catch{
       flash('Could not copy automatically. Select the link and copy it.');
@@ -289,7 +305,46 @@ function PublishedDealSuccess({deal,warning,session,acceptanceProtected,onProtec
   </section>;
 }
 
-function InstallApp(){const [prompt,setPrompt]=useState<InstallPromptEvent|null>(null);useEffect(()=>{const handler=(event:Event)=>{event.preventDefault();setPrompt(event as InstallPromptEvent)};window.addEventListener('beforeinstallprompt',handler);return()=>window.removeEventListener('beforeinstallprompt',handler)},[]);if(!prompt)return null;const install=async()=>{await prompt.prompt();const choice=await prompt.userChoice;if(choice.outcome==='accepted')setPrompt(null)};return <aside className="install-app no-print"><Smartphone/><div><b>{t('Install Dealivra')}</b><span>{t('Add it to your home screen for faster access.')}</span></div><button className="primary" onClick={install}>{t('Install app')}</button></aside>}
+function InstallApp(){
+  const [installPrompt,setInstallPrompt]=useState<InstallPromptEvent|null>(null);
+  const [installing,setInstalling]=useState(false);
+  const [message,setMessage]=useState('');
+  const installingRef=useRef(false);
+  useEffect(()=>{
+    const handler=(event:Event)=>{
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt',handler);
+    return()=>window.removeEventListener('beforeinstallprompt',handler);
+  },[]);
+  if(!installPrompt)return message?<span className="sr-only" role="status" aria-live="polite">{t(message)}</span>:null;
+  const install=async()=>{
+    if(installingRef.current)return;
+    installingRef.current=true;
+    setInstalling(true);
+    setMessage('');
+    try{
+      await installPrompt.prompt();
+      const choice=await installPrompt.userChoice;
+      setMessage(choice.outcome==='accepted'
+        ?'Dealivra installation started.'
+        :'Installation was cancelled. You can install Dealivra later from your browser menu.');
+      setInstallPrompt(null);
+    }catch{
+      setMessage('Your browser could not start installation. Use its app or home-screen menu instead.');
+    }finally{
+      installingRef.current=false;
+      setInstalling(false);
+    }
+  };
+  return <aside className="install-app no-print" aria-busy={installing}>
+    <Smartphone aria-hidden="true"/>
+    <div><b>{t('Install Dealivra')}</b><span>{t('Add it to your home screen for faster access.')}</span></div>
+    <button type="button" className="primary" disabled={installing} onClick={install}>{t(installing?'Opening installer…':'Install app')}</button>
+    {message?<span className="sr-only" role="status" aria-live="polite">{t(message)}</span>:null}
+  </aside>
+}
 
 type GuestCreateDraftRecovery={
   version:2;
@@ -622,13 +677,17 @@ export function App() {
   const initialRoute=resolveBrowserRoute(location.href);
   const entryView:View=initialRoute.view==='deal'?'route-loading':initialRoute.view;
   const [view,setView]=useState<View>(entryView); const [deals,setDeals]=useState<Deal[]>([]); const [active,setActive]=useState<Deal>(); const [draft,setDraft]=useState<DealDraft>(()=>recoveredCreateDraft?.draft||{...initial}); const [buyer,setBuyer]=useState('');
+  const dealListRequestRef=useRef(0);
   const [session,setSession]=useState<StoredSession|null>(initialSession);
   const user=session?.user??null;
   const [authMode,setAuthMode]=useState<AuthMode>(initialRoute.authMode||'signup');
   const [recoveryToken,setRecoveryToken]=useState(initialRoute.recoveryToken||'');
   const [routeRevision,setRouteRevision]=useState(0);
   const routeRequestRef=useRef(0);
+  const publicDealRequestRef=useRef(0);
+  const profileRequestRef=useRef(0);
   const [mobileMenuOpen,setMobileMenuOpen]=useState(false);
+  const mobileMenuButtonRef=useRef<HTMLButtonElement>(null);
   const [passwordVisible,setPasswordVisible]=useState(false);
   const [acceptedPolicies,setAcceptedPolicies]=useState(false);
   const [returnAfterAuth,setReturnAfterAuth]=useState<View>(initialRoute.view==='create'?'create':'home');
@@ -640,6 +699,8 @@ export function App() {
   const [catalogSelection,setCatalogSelection]=useState<SmartCatalogSelection>(()=>recoveredCreateDraft?.catalogSelection||emptySmartCatalogSelection());
   const catalogSelectionRef=useRef(catalogSelection);
   const [vehicleVinLookup,setVehicleVinLookup]=useState<VehicleVinLookupState>({status:'idle',message:''});
+  const vehicleVinRequestRef=useRef(0);
+  const vehicleVinActiveRef=useRef(false);
   const [agreementChecks,setAgreementChecks]=useState({item:false,price:false,handoff:false});
   const [demoCompleted,setDemoCompleted]=useState(false);
   const [acceptanceProtected,setAcceptanceProtected]=useState(false);
@@ -649,6 +710,12 @@ export function App() {
   const [shippingReadinessByDeal,setShippingReadinessByDeal]=useState<Record<string,ShippingNavigationReadiness>>({});
   const [evidenceRevision,setEvidenceRevision]=useState(0);
   const [creating,setCreating]=useState(false);
+  const createMutationRef=useRef(false);
+  const [accepting,setAccepting]=useState(false);
+  const [authSubmitting,setAuthSubmitting]=useState(false);
+  const authSubmittingRef=useRef(false);
+  const acceptMutationRef=useRef(false);
+  const verificationMutationRef=useRef(false);
   const [createStep,setCreateStep]=useState<CreateFlowStep>(()=>recoveredCreateDraft?.createStep||1);
   const [reviewingDraft,setReviewingDraft]=useState(()=>Boolean(recoveredCreateDraft?.reviewingDraft));
   const [createValidationAttempted,setCreateValidationAttempted]=useState(false);
@@ -682,8 +749,11 @@ export function App() {
   const [publicPassport,setPublicPassport]=useState<TrustPassport|null>(null);
   const [passportMessage,setPassportMessage]=useState('');
   const [savedDeals,setSavedDeals]=useState<Deal[]>([]);
+  const savedDealsRequestRef=useRef(0);
   const [verificationMessage,setVerificationMessage]=useState('');
+  const [verificationRequesting,setVerificationRequesting]=useState(false);
   const [notifications,setNotifications]=useState<DealNotification[]>([]);
+  const notificationRequestRef=useRef(0);
   const [isAdmin,setIsAdmin]=useState(false);
   const [clock,setClock]=useState(Date.now());
   const previousViewRef=useRef<View>(view);
@@ -697,6 +767,23 @@ export function App() {
     });
     return()=>window.cancelAnimationFrame(frame);
   },[view]);
+  useEffect(()=>{
+    if(!mobileMenuOpen)return;
+    const closeOnEscape=(event:KeyboardEvent)=>{
+      if(event.key!=='Escape')return;
+      setMobileMenuOpen(false);
+      window.requestAnimationFrame(()=>mobileMenuButtonRef.current?.focus());
+    };
+    const closeAboveTablet=()=>{
+      if(window.innerWidth>860)setMobileMenuOpen(false);
+    };
+    document.addEventListener('keydown',closeOnEscape);
+    window.addEventListener('resize',closeAboveTablet);
+    return()=>{
+      document.removeEventListener('keydown',closeOnEscape);
+      window.removeEventListener('resize',closeAboveTablet);
+    };
+  },[mobileMenuOpen]);
   useEffect(()=>{
     const scrollToLocation=()=>{
       const id=location.hash.slice(1);
@@ -763,8 +850,8 @@ export function App() {
   useEffect(()=>{if(view==='auth'&&!isSupabaseConfigured)setAuthMessage('Account service is temporarily unavailable. Please try again later.')},[view,authMode]);
   useEffect(()=>{const updated=(event:Event)=>setSession((event as CustomEvent<StoredSession>).detail);const expired=()=>{setSession(null);setMfaLogin(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')};const requiresMfa=()=>{setAuthMessage('Verify or enroll an authenticator before continuing with this protected account.');setView('profile')};window.addEventListener(sessionUpdatedEvent,updated);window.addEventListener(sessionExpiredEvent,expired);window.addEventListener(mfaRequiredEvent,requiresMfa);return()=>{window.removeEventListener(sessionUpdatedEvent,updated);window.removeEventListener(sessionExpiredEvent,expired);window.removeEventListener(mfaRequiredEvent,requiresMfa)}},[]);
   useEffect(()=>{if(!session)return;const recordActivity=()=>markSessionActivity();const events=['pointerdown','keydown','touchstart'] as const;events.forEach(event=>{window.addEventListener(event,recordActivity,{passive:true})});window.addEventListener('focus',recordActivity);return()=>{events.forEach(event=>{window.removeEventListener(event,recordActivity)});window.removeEventListener('focus',recordActivity)}},[session?.user.id]);
-  useEffect(()=>{if(session){listUserDeals(session).then(setDeals).catch(()=>setDeals([]))}else{demoRepository.list().then(setDeals)}},[session]);
-  useEffect(()=>{if(session)getMySavedDeals(session).then(setSavedDeals).catch(()=>setSavedDeals([]));else setSavedDeals([])},[session]);
+  useEffect(()=>{const request=++dealListRequestRef.current;if(session){listUserDeals(session).then(items=>{if(request===dealListRequestRef.current)setDeals(items)}).catch(()=>{if(request===dealListRequestRef.current)setDeals([])})}else{demoRepository.list().then(items=>{if(request===dealListRequestRef.current)setDeals(items)})}return()=>{dealListRequestRef.current+=1}},[session]);
+  useEffect(()=>{const request=++savedDealsRequestRef.current;if(session)getMySavedDeals(session).then(items=>{if(request===savedDealsRequestRef.current)setSavedDeals(items)}).catch(()=>{if(request===savedDealsRequestRef.current)setSavedDeals([])});else setSavedDeals([]);return()=>{savedDealsRequestRef.current+=1}},[session]);
   useEffect(()=>{
     if(session){
       clearGuestCreateDraft();
@@ -800,11 +887,11 @@ export function App() {
     },450);
     return()=>window.clearTimeout(timer);
   },[draft,dealTemplate,catalogSelection,createStep,reviewingDraft,session]);
-  useEffect(()=>{if(!session)return;const renew=()=>{if(!session.expiresAt||session.expiresAt-Date.now()<10*60*1000)refreshSession(session).then(setSession).catch(error=>{if(isTransientAuthenticationError(error)){setAuthMessage(error.message);return}void signOut(session);setSession(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')})};renew();const timer=setInterval(renew,5*60*1000);return()=>clearInterval(timer)},[session?.user.id,session?.expiresAt]);
+  useEffect(()=>{if(!session)return;let current=true;let renewing=false;const renew=()=>{if(renewing)return;if(!session.expiresAt||session.expiresAt-Date.now()<10*60*1000){renewing=true;refreshSession(session).then(next=>{if(current)setSession(next)}).catch(error=>{if(!current)return;if(isTransientAuthenticationError(error)){setAuthMessage(error.message);return}void signOut(session);setSession(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')}).finally(()=>{renewing=false})}};renew();const timer=setInterval(renew,5*60*1000);return()=>{current=false;clearInterval(timer)}},[session?.user.id,session?.expiresAt]);
   useEffect(()=>{catalogSelectionRef.current=catalogSelection},[catalogSelection]);
-  useEffect(()=>{if(!session){setNotifications([]);return}const load=()=>getMyNotifications(session).then(setNotifications).catch(()=>setNotifications([]));void load();const timer=window.setInterval(()=>void load(),30_000);return()=>window.clearInterval(timer)},[session?.accessToken]);
+  useEffect(()=>{if(!session){notificationRequestRef.current+=1;setNotifications([]);return}let current=true;const load=()=>{const request=++notificationRequestRef.current;return getMyNotifications(session).then(items=>{if(current&&request===notificationRequestRef.current)setNotifications(items)}).catch(()=>{if(current&&request===notificationRequestRef.current)setNotifications([])})};void load();const timer=window.setInterval(()=>void load(),30_000);return()=>{current=false;notificationRequestRef.current+=1;window.clearInterval(timer)}},[session?.accessToken]);
   useEffect(()=>{if(view!=='deal'||!active||!session)return;setNotifications(items=>items.map(item=>item.deal_id===active.id?{...item,is_read:true}:item));void markDealNotificationsRead(session,active.id).catch(()=>{})},[view,active?.id,session?.accessToken]);
-  useEffect(()=>{if(session)getAdminAccess(session).then(setIsAdmin).catch(()=>setIsAdmin(false));else setIsAdmin(false)},[session]);
+  useEffect(()=>{if(!session){setIsAdmin(false);return}let current=true;getAdminAccess(session).then(access=>{if(current)setIsAdmin(access)}).catch(()=>{if(current)setIsAdmin(false)});return()=>{current=false}},[session]);
   useEffect(()=>{setBuyer('');setBuyerAccessCode('');setAgreementChecks({item:false,price:false,handoff:false});setDemoCompleted(false)},[active?.publicId,active?.agreementVersion]);
   useEffect(()=>{let current=true;setAcceptanceProtected(false);if(!active||active.status!=='published')return;getDealAcceptanceProtection(active.publicId).then(enabled=>{if(current)setAcceptanceProtected(enabled)}).catch(()=>{});return()=>{current=false}},[active?.publicId,active?.status]);
   useEffect(()=>{
@@ -822,6 +909,8 @@ export function App() {
     if(template===dealTemplate)return;
     const emptySelection=emptySmartCatalogSelection();
     setDealTemplate(template);
+    vehicleVinRequestRef.current+=1;
+    vehicleVinActiveRef.current=false;
     setVehicleVinLookup({status:'idle',message:''});
     catalogSelectionRef.current=emptySelection;
     setCatalogSelection(emptySelection);
@@ -834,10 +923,13 @@ export function App() {
     setDraft(current=>({...current,title:buildSmartCatalogTitle(dealTemplate,next)}));
   };
   const checkVehicleVin=async()=>{
-    if(dealTemplate!=='vehicle'||!identifierEntered||!identifierValid||vehicleVinLookup.status==='loading')return;
+    if(dealTemplate!=='vehicle'||!identifierEntered||!identifierValid||vehicleVinActiveRef.current)return;
+    const request=++vehicleVinRequestRef.current;
+    vehicleVinActiveRef.current=true;
     setVehicleVinLookup({status:'loading',message:'Checking manufacturer data…'});
     try{
       const result=await decodeVehicleVin(draft.serialNumber);
+      if(request!==vehicleVinRequestRef.current)return;
       const matchedBrand=vehicleCatalog.find(item=>item.label.toLocaleLowerCase('en-US')===result.make.toLocaleLowerCase('en-US'));
       const matchedModel=matchedBrand?matchCatalogValue(matchedBrand.models,result.model):'';
       const matchedYear=matchCatalogValue(vehicleYears,result.modelYear);
@@ -856,10 +948,13 @@ export function App() {
         result,
       });
     }catch(error){
+      if(request!==vehicleVinRequestRef.current)return;
       setVehicleVinLookup({
         status:'error',
         message:error instanceof Error?error.message:'VIN could not be checked. Enter the details manually.',
       });
+    }finally{
+      if(request===vehicleVinRequestRef.current)vehicleVinActiveRef.current=false;
     }
   };
   const showCreateErrors=()=>{
@@ -875,7 +970,7 @@ export function App() {
   };
   const goToCreateStep=(step:CreateFlowStep)=>{if(step>createAvailableStep)return;setAuthMessage('');setCreateValidationAttempted(false);setReviewingDraft(step===4);if(step<4)setCreateStep(step);window.requestAnimationFrame(()=>document.getElementById('create-deal-flow')?.scrollIntoView({behavior:'smooth',block:'start'}))};
   const reviewDraft=(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');if(!createItemReady){setCreateStep(1);return}if(!createTermsReady){setCreateStep(2);return}setReviewingDraft(true);window.scrollTo({top:0,behavior:'smooth'})};
-  const resetCreateFlow=()=>{const emptySelection=emptySmartCatalogSelection();clearGuestCreateDraft();setDraft({...initial});setPhotos([]);setDealTemplate('phone');setVehicleVinLookup({status:'idle',message:''});catalogSelectionRef.current=emptySelection;setCatalogSelection(emptySelection);setCreateStep(1);setReviewingDraft(false);setCreateValidationAttempted(false);setSellerDeclarations(emptySellerDeclarations);setPendingCreateAction(null);setDraftRecovered(false);setDraftSavedAt(null)};
+  const resetCreateFlow=()=>{const emptySelection=emptySmartCatalogSelection();clearGuestCreateDraft();vehicleVinRequestRef.current+=1;vehicleVinActiveRef.current=false;setDraft({...initial});setPhotos([]);setDealTemplate('phone');setVehicleVinLookup({status:'idle',message:''});catalogSelectionRef.current=emptySelection;setCatalogSelection(emptySelection);setCreateStep(1);setReviewingDraft(false);setCreateValidationAttempted(false);setSellerDeclarations(emptySellerDeclarations);setPendingCreateAction(null);setDraftRecovered(false);setDraftSavedAt(null)};
   const draftForPersistence=():DealDraft=>({...draft,catalog:buildDealCatalogIdentity(dealTemplate,catalogSelectionRef.current)});
   const updateBrowserAddress=(destination:string,replace=false)=>{
     if(`${location.pathname}${location.search}${location.hash}`===destination)return;
@@ -889,16 +984,28 @@ export function App() {
     setMobileMenuOpen(false);
     setView('auth');
   };
-  const publishDraft=async(activeSession:StoredSession)=>{if(creating)return;setCreating(true);setAuthMessage('');try{let deal=await createUserDeal(activeSession,draftForPersistence());setDeals(x=>[deal,...x]);setActive(deal);if(photos.length){try{const mediaUrls=await uploadDealPhotos(activeSession,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Deal created, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}resetCreateFlow();setActive(deal);setView('published')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save this deal');setView('create')}finally{setCreating(false)}};
-  const saveDraftForSession=async(activeSession:StoredSession)=>{if(creating)return;setCreating(true);setAuthMessage('');try{let deal=await saveUserDealDraft(activeSession,draftForPersistence());setDeals(items=>[deal,...items]);setActive(deal);if(photos.length){try{const mediaUrls=await uploadDealPhotos(activeSession,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Draft saved, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}resetCreateFlow();setView('deal')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save draft');setView('create')}finally{setCreating(false)}};
+  const publishDraft=async(activeSession:StoredSession)=>{if(createMutationRef.current)return;createMutationRef.current=true;setCreating(true);setAuthMessage('');try{let deal=await createUserDeal(activeSession,draftForPersistence());setDeals(x=>[deal,...x]);setActive(deal);if(photos.length){try{const mediaUrls=await uploadDealPhotos(activeSession,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Deal created, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}resetCreateFlow();setActive(deal);setView('published')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save this deal');setView('create')}finally{createMutationRef.current=false;setCreating(false)}};
+  const saveDraftForSession=async(activeSession:StoredSession)=>{if(createMutationRef.current)return;createMutationRef.current=true;setCreating(true);setAuthMessage('');try{let deal=await saveUserDealDraft(activeSession,draftForPersistence());setDeals(items=>[deal,...items]);setActive(deal);if(photos.length){try{const mediaUrls=await uploadDealPhotos(activeSession,deal.id,photos);deal={...deal,mediaUrls};setActive(deal);setDeals(items=>items.map(item=>item.id===deal.id?deal:item))}catch(error){setAuthMessage(`Draft saved, but photos need to be added again: ${error instanceof Error?error.message:'upload failed'}`)}}resetCreateFlow();setView('deal')}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not save draft');setView('create')}finally{createMutationRef.current=false;setCreating(false)}};
   const requestCreateAction=(action:'save'|'publish')=>{
     if(session){void (action==='publish'?publishDraft(session):saveDraftForSession(session));return}
     setPendingCreateAction(action);
     openAuthRoute('signup','create');
   };
   const open=(d:Deal)=>{setActive(d);setView('deal')};
+  const openPublicDeal=async(publicId:string)=>{
+    const request=++publicDealRequestRef.current;
+    setAuthMessage('');
+    try{
+      const deal=await getPublicDeal(publicId);
+      if(request!==publicDealRequestRef.current)return;
+      setActive(deal);
+      setView('deal');
+    }catch(error){
+      if(request===publicDealRequestRef.current)setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable');
+    }
+  };
   const agreementConfirmed=Object.values(agreementChecks).every(Boolean);
-  const accept=async()=>{if(!active||!buyer.trim()||!agreementConfirmed)return;if(active.publicId===DEMO_DEAL_PUBLIC_ID&&!session){setDemoCompleted(true);setAuthMessage('');window.requestAnimationFrame(()=>window.requestAnimationFrame(scrollToAgreement));return}if(isDealExpired(active)){setAuthMessage('This Deal Link can no longer be accepted.');return}if(acceptanceProtected&&!/^[0-9]{6}$/.test(buyerAccessCode)){setAuthMessage('Enter the 6-digit buyer code.');return}if(!session){openAuthRoute('signin','deal');setAuthMessage('Sign in or create an account to accept this deal.');return}try{await acceptPublicDeal(session,active.publicId,buyer.trim(),buyerAccessCode);const deal={...active,status:'accepted' as const,buyerName:buyer.trim(),buyerVerification:'not_started' as const,viewerRole:'buyer' as const};setActive(deal);setAcceptanceProtected(false);setDeals(x=>x.map(d=>d.id===deal.id?deal:d))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not accept this deal')}};
+  const accept=async()=>{if(!active||!buyer.trim()||!agreementConfirmed||acceptMutationRef.current)return;if(active.publicId===DEMO_DEAL_PUBLIC_ID&&!session){setDemoCompleted(true);setAuthMessage('');window.requestAnimationFrame(()=>window.requestAnimationFrame(scrollToAgreement));return}if(isDealExpired(active)){setAuthMessage('This Deal Link can no longer be accepted.');return}if(!session){openAuthRoute('signin','deal');setAuthMessage('Sign in or create an account to accept this deal.');return}acceptMutationRef.current=true;setAccepting(true);try{const protectionRequired=await getDealAcceptanceProtection(active.publicId);setAcceptanceProtected(protectionRequired);if(protectionRequired&&!/^[0-9]{6}$/.test(buyerAccessCode)){setAuthMessage('Enter the 6-digit buyer code.');return}await acceptPublicDeal(session,active.publicId,buyer.trim(),buyerAccessCode);const deal={...active,status:'accepted' as const,buyerName:buyer.trim(),buyerVerification:'not_started' as const,viewerRole:'buyer' as const};setActive(deal);setAcceptanceProtected(false);setDeals(x=>x.map(d=>d.id===deal.id?deal:d))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not accept this deal')}finally{acceptMutationRef.current=false;setAccepting(false)}};
   const openCreate=()=>{updateBrowserAddress('/?start=create');setAuthMessage('');if(session||!isCreateDraftMeaningful(draft,dealTemplate))resetCreateFlow();setView('create')};
   const openDemo=async()=>{const sample=deals.find(deal=>deal.publicId===DEMO_DEAL_PUBLIC_ID)||(await demoRepository.list())[0];if(!sample)return;updateBrowserAddress(`/?deal=${encodeURIComponent(sample.publicId)}`);setAuthMessage('');setBuyer('');setAgreementChecks({item:false,price:false,handoff:false});setDemoCompleted(false);setActive({...sample,viewerRole:'visitor'});setView('deal');window.scrollTo({top:0,behavior:'smooth'})};
   const finishAuthentication=async(nextSession:StoredSession)=>{
@@ -915,13 +1022,13 @@ export function App() {
     updateBrowserAddress(returnAfterAuth==='deal'&&active?`/?deal=${encodeURIComponent(active.publicId)}`:returnAfterAuth==='create'?'/?start=create':'/',true);
     setView(returnAfterAuth);
   };
-  const submitAuth=async(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');try{if(authMode==='signup'){const result=await signUp(authForm.email,authForm.password,authForm.displayName);if(result.session)await finishAuthentication(result.session);else setAuthMessage('Check your email to confirm your account, then return to this tab and sign in. Your completed draft will stay here.')}else{const result=await signIn(authForm.email,authForm.password);if('mfaRequired' in result){setMfaLogin(result);setAuthForm(current=>({...current,password:''}));return}await finishAuthentication(result)}}catch(error){setAuthMessage(error instanceof Error?error.message:'Something went wrong')}};
-  const finishSignedOutSession=()=>{updateBrowserAddress('/',true);setSession(null);setMfaLogin(null);setIsAdmin(false);setView('home')};
+  const submitAuth=async(e:React.FormEvent)=>{e.preventDefault();if(authSubmittingRef.current)return;authSubmittingRef.current=true;setAuthSubmitting(true);setAuthMessage('');try{if(authMode==='signup'){const result=await signUp(authForm.email,authForm.password,authForm.displayName);if(result.session)await finishAuthentication(result.session);else setAuthMessage('Check your email to confirm your account, then return to this tab and sign in. Your completed draft will stay here.')}else{const result=await signIn(authForm.email,authForm.password);if('mfaRequired' in result){setMfaLogin(result);setAuthForm(current=>({...current,password:''}));return}await finishAuthentication(result)}}catch(error){setAuthMessage(error instanceof Error?error.message:'Something went wrong')}finally{authSubmittingRef.current=false;setAuthSubmitting(false)}};
+  const finishSignedOutSession=()=>{publicDealRequestRef.current+=1;profileRequestRef.current+=1;updateBrowserAddress('/',true);setSession(null);setMfaLogin(null);setIsAdmin(false);setView('home')};
   const logout=()=>{void signOut(session);finishSignedOutSession()};
-  const openProfile=async()=>{if(!session)return;setAuthMessage('');setView('profile');try{setProfile(await getMyProfileSummary(session))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not load profile')}};
-  const requestVerification=async()=>{if(!session||!profile)return;setVerificationMessage('');try{const status=await requestIdentityVerification(session);setProfile({...profile,verification_status:status});setVerificationMessage('Request recorded. A verification provider must be connected before identity can be approved.')}catch(error){setVerificationMessage(error instanceof Error?error.message:'Could not request verification')}};
-  const refreshSavedDeals=()=>{if(session)getMySavedDeals(session).then(setSavedDeals).catch(()=>setSavedDeals([]))};
-  const markAllActivityRead=()=>{if(!session)return;setNotifications(items=>items.map(item=>({...item,is_read:true})));void markAllNotificationsRead(session).catch(()=>getMyNotifications(session).then(setNotifications).catch(()=>{}))};
+  const openProfile=async()=>{if(!session)return;const request=++profileRequestRef.current;setAuthMessage('');setView('profile');try{const next=await getMyProfileSummary(session);if(request===profileRequestRef.current)setProfile(next)}catch(error){if(request===profileRequestRef.current)setAuthMessage(error instanceof Error?error.message:'Could not load profile')}};
+  const requestVerification=async()=>{if(!session||!profile||verificationMutationRef.current)return;verificationMutationRef.current=true;setVerificationRequesting(true);setVerificationMessage('');try{const status=await requestIdentityVerification(session);setProfile({...profile,verification_status:status});setVerificationMessage('Request recorded. A verification provider must be connected before identity can be approved.')}catch(error){setVerificationMessage(error instanceof Error?error.message:'Could not request verification')}finally{verificationMutationRef.current=false;setVerificationRequesting(false)}};
+  const refreshSavedDeals=()=>{if(!session)return;const request=++savedDealsRequestRef.current;getMySavedDeals(session).then(items=>{if(request===savedDealsRequestRef.current)setSavedDeals(items)}).catch(()=>{if(request===savedDealsRequestRef.current)setSavedDeals([])})};
+  const markAllActivityRead=()=>{if(!session)return;const request=++notificationRequestRef.current;setNotifications(items=>items.map(item=>({...item,is_read:true})));void markAllNotificationsRead(session).catch(()=>getMyNotifications(session).then(items=>{if(request===notificationRequestRef.current)setNotifications(items)}).catch(()=>{}))};
   const applyDealParticipants=(dealId:string,participants:DealParticipants)=>{const merge=(deal:Deal):Deal=>({...deal,sellerName:participants.seller_name,sellerVerification:participants.seller_verification,buyerName:participants.buyer_name,buyerVerification:participants.buyer_verification,viewerRole:participants.viewer_role});setActive(current=>current?.id===dealId?merge(current):current);setDeals(items=>items.map(item=>item.id===dealId?merge(item):item))};
   const applyDealActionPlan=(dealId:string,plan:DealActionPlan)=>{
     setActionPlanByDeal(items=>{
@@ -1021,18 +1128,19 @@ export function App() {
   return <div className={`app view-${view}${agreementDocumentMode?' agreement-document-view':''}${demoFlowCompleted?' demo-flow-complete':''}`}>
     <a className="skip-link" href="#main-content">{t('Skip to main content')}</a>
     <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{t(currentPageLabel)}</div>
+    <NetworkStatusBanner />
     <header className="site-header"><div className="header-inner">
       <div className="header-brand-group"><a className="brand" href="/" aria-label="Dealivra home" onClick={event=>followHomeLink(event)}><BrandLogo/></a><span className="beta">Launching in the U.S.</span></div>
       <nav className="site-nav" aria-label={t('Primary navigation')}><a href="/" onClick={event=>followHomeLink(event)}>{t(user?'Dashboard':'Home')}</a><a href="/#how-it-works" onClick={event=>followHomeLink(event,'how-it-works')}>{t('How it works')}</a><a href="/#protection" onClick={event=>followHomeLink(event,'protection')}>{t('Protection')}</a><a href={publicInfoPaths.fees} onClick={event=>followInfoLink(event,'fees')}>{t('Fees')}</a></nav>
-      <div className="header-actions">{user&&<button className="header-create" onClick={openCreate}><Plus size={16}/><span>{t('New deal')}</span></button>}<div className="account">{user?<>{isAdmin&&<button className="admin-link" onClick={()=>setView('admin')}><ShieldCheck size={15}/>{t('Admin')}</button>}<button onClick={openProfile}>{user.displayName}</button><button onClick={logout}>{t('Sign out')}</button></>:<><button onClick={()=>openAuthRoute('signin','home')}>{t('Sign in')}</button><button className="header-signup" onClick={()=>openAuthRoute('signup','home')}>{t('Create account')}</button></>}</div><button className="mobile-menu-toggle" aria-label={t(mobileMenuOpen?'Close menu':'Open menu')} aria-expanded={mobileMenuOpen} onClick={()=>setMobileMenuOpen(open=>!open)}>{mobileMenuOpen?<X/>:<Menu/>}</button></div>
+      <div className="header-actions">{user&&<button type="button" className="header-create" onClick={openCreate}><Plus size={16}/><span>{t('New deal')}</span></button>}<div className="account">{user?<>{isAdmin&&<button type="button" className="admin-link" onClick={()=>setView('admin')}><ShieldCheck size={15}/>{t('Admin')}</button>}<button type="button" onClick={openProfile}>{user.displayName}</button><button type="button" onClick={logout}>{t('Sign out')}</button></>:<><button type="button" onClick={()=>openAuthRoute('signin','home')}>{t('Sign in')}</button><button type="button" className="header-signup" onClick={()=>openAuthRoute('signup','home')}>{t('Create account')}</button></>}</div><button ref={mobileMenuButtonRef} type="button" className="mobile-menu-toggle" aria-label={t(mobileMenuOpen?'Close menu':'Open menu')} aria-expanded={mobileMenuOpen} aria-controls="application-mobile-navigation" onClick={()=>setMobileMenuOpen(open=>!open)}>{mobileMenuOpen?<X/>:<Menu/>}</button></div>
     </div></header>
-    {mobileMenuOpen&&<nav className="mobile-menu" aria-label={t('Mobile navigation')}>
+    {mobileMenuOpen&&<nav className="mobile-menu" id="application-mobile-navigation" aria-label={t('Mobile navigation')}>
       <a href="/" onClick={event=>followHomeLink(event)}>{t(user?'Dashboard':'Home')}</a>
       <a href="/#how-it-works" onClick={event=>followHomeLink(event,'how-it-works')}>{t('How it works')}</a>
       <a href="/#protection" onClick={event=>followHomeLink(event,'protection')}>{t('Protection')}</a>
       <a href={publicInfoPaths.fees} onClick={event=>followInfoLink(event,'fees')}>{t('Fees')}</a>
       <a href={publicInfoPaths.disputes} onClick={event=>followInfoLink(event,'disputes')}>{t('Disputes')}</a>
-      {!user&&<><button className="mobile-signin" onClick={()=>openAuthRoute('signin','home')}>{t('Sign in')}</button><button className="mobile-signup" onClick={()=>openAuthRoute('signup','home')}>{t('Create account')}</button></>}
+      {!user&&<><button type="button" className="mobile-signin" onClick={()=>openAuthRoute('signin','home')}>{t('Sign in')}</button><button type="button" className="mobile-signup" onClick={()=>openAuthRoute('signup','home')}>{t('Create account')}</button></>}
     </nav>}
     <main id="main-content" tabIndex={-1}>
       {view==='auth'&&authMode==='signin'&&<ForgotPasswordEntry onOpen={()=>{updateBrowserAddress('/?start=forgot');setView('forgot')}}/>}
@@ -1044,26 +1152,27 @@ export function App() {
       {view==='verify'&&<AgreementVerificationPage onBack={()=>goHomeSection()}/>}
       {isPublicInfoView(view)&&<PublicInfoPage view={view} onBack={()=>goHomeSection()} onCreate={openCreate}/>}
       {view==='home'&&<InstallApp/>}
-      {view==='admin'&&session&&isAdmin&&<AdministrationWorkspace session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/>}
+      {view==='admin'&&session&&isAdmin&&<React.Suspense fallback={<RouteLoading/>}><AdministrationWorkspace session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/></React.Suspense>}
       {view==='published'&&active&&<PublishedDealSuccess deal={active} warning={authMessage} session={session} acceptanceProtected={acceptanceProtected} onProtectionChanged={setAcceptanceProtected} onOpen={()=>{setAuthMessage('');setView('deal')}} onDashboard={()=>goHomeSection()} onCreateAnother={openCreate}/>}
       {view==='create'&&authMessage&&<div className="creation-error notice">{t(authMessage)}</div>}
       {view==='create'&&creating&&<div className="creation-progress notice">{t('Creating your Deal Link…')}</div>}
-      {view==='home'&&user&&<NotificationCenter items={notifications} deals={deals} onOpen={open} onOpenPublic={publicId=>getPublicDeal(publicId).then(deal=>{setActive(deal);setView('deal')}).catch(error=>setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable'))} onMarkAll={markAllActivityRead}/>}
+      {view==='home'&&user&&<NotificationCenter items={notifications} deals={deals} onOpen={open} onOpenPublic={publicId=>void openPublicDeal(publicId)} onMarkAll={markAllActivityRead}/>}
       {view==='home'&&user&&<WorkspaceDealExplorer deals={deals} savedDeals={savedDeals} onOpen={open} onCreate={openCreate}/>}
-      {view==='profile'&&session&&<AccountProfileWorkspace
+      {view==='profile'&&session&&<React.Suspense fallback={<RouteLoading/>}><AccountProfileWorkspace
         session={session}
         profile={profile}
         email={user?.email||''}
         displayName={user?.displayName||''}
         message={authMessage}
         verificationMessage={verificationMessage}
+        verificationRequesting={verificationRequesting}
         onRequestVerification={requestVerification}
         onSessionUpdated={setSession}
         onSignedOut={finishSignedOutSession}
         onNameUpdated={name=>setProfile(current=>current?{...current,display_name:name}:current)}
         onPasswordUpdated={()=>{setSession(null);setMfaLogin(null);setAuthMode('signin');setAuthMessage('Your password was updated. Sign in again with the new password.');setView('auth')}}
         onBack={()=>setView('home')}
-      />}
+      /></React.Suspense>}
       {view==='passport'&&<PublicTrustPassportPage profile={publicPassport} message={passportMessage} onBack={()=>goHomeSection()}/>}
       {view==='home'&&!user&&<GlobalHome onCreate={openCreate} onDemo={openDemo} onInfo={openInfo}/>}
       {view==='auth'&&mfaLogin&&<MfaLoginVerification challenge={mfaLogin} onVerified={finishAuthentication} onCancel={()=>{setMfaLogin(null);setAuthMessage('');setAuthMode('signin')}}/>}
@@ -1077,6 +1186,7 @@ export function App() {
         acceptedPolicies={acceptedPolicies}
         onAcceptedPoliciesChange={setAcceptedPolicies}
         message={authMessage}
+        submitting={authSubmitting}
         pendingCreateAction={pendingCreateAction}
         returnToCreate={returnAfterAuth==='create'}
         onBack={()=>{
@@ -1121,13 +1231,13 @@ export function App() {
         onSelectTemplate={chooseDealTemplate}
         onCatalogSelectionChange={updateCatalogSelection}
         onDraftChange={setDraft}
-        onClearVinLookup={()=>setVehicleVinLookup({status:'idle',message:''})}
+        onClearVinLookup={()=>{vehicleVinRequestRef.current+=1;vehicleVinActiveRef.current=false;setVehicleVinLookup({status:'idle',message:''})}}
         onCheckVehicleVin={()=>void checkVehicleVin()}
         onPhotosChange={setPhotos}
         onReviewDraft={reviewDraft}
         onSubmitStep={submitCreateStep}
       />}
-      {view==='deal'&&active&&dealPrimaryAction&&<DealWorkspace
+      {view==='deal'&&active&&dealPrimaryAction&&<React.Suspense fallback={<RouteLoading/>}><DealWorkspace
         deal={active}
         session={session}
         now={clock}
@@ -1152,6 +1262,7 @@ export function App() {
         onSignIn={()=>openAuthRoute('signin','deal')}
         onRefreshSavedDeals={refreshSavedDeals}
         onAccept={()=>void accept()}
+        accepting={accepting}
         onResetDemo={resetDemoFlow}
         onAgreementCheckChange={(key,checked)=>setAgreementChecks(current=>({...current,[key]:checked}))}
         onBuyerChange={setBuyer}
@@ -1167,7 +1278,7 @@ export function App() {
         onOpenProtection={()=>scrollToDealSection('deal-safety')}
         onOpenRecords={()=>scrollToDealSection('deal-records')}
         onPrimaryAction={runDealPrimaryAction}
-      />}
+      /></React.Suspense>}
     </main><footer><div><BrandLogo className="footer-brand-logo"/><span>Global vision · U.S. launch · English (US) · USD</span></div><nav aria-label={t('Legal and protection')}><a href={publicInfoPaths['buyer-protection']} onClick={event=>{event.preventDefault();openInfo('buyer-protection')}}>{t('Buyer protection')}</a><a href={publicInfoPaths['seller-protection']} onClick={event=>{event.preventDefault();openInfo('seller-protection')}}>{t('Seller protection')}</a><a href={publicInfoPaths.fees} onClick={event=>{event.preventDefault();openInfo('fees')}}>{t('Fees')}</a><a href={publicInfoPaths.disputes} onClick={event=>{event.preventDefault();openInfo('disputes')}}>{t('Disputes')}</a><a href={verifyPath} onClick={event=>{event.preventDefault();openVerify()}}>{t('Verify agreement')}</a><a href={publicInfoPaths.terms} onClick={event=>{event.preventDefault();openInfo('terms')}}>{t('Terms')}</a><a href={publicInfoPaths.privacy} onClick={event=>{event.preventDefault();openInfo('privacy')}}>{t('Privacy')}</a></nav></footer>
   </div>
 }

@@ -15,7 +15,8 @@ Object.defineProperty(globalThis, 'document', {
 const { AccountEntryPage, ForgotPasswordEntry } = await import('../../src/AccountEntryPages');
 const { AddressAutocomplete } = await import('../../src/AddressAutocomplete');
 const { BrandLogo } = await import('../../src/BrandLogo');
-const { isUsPostalCode, normalizeUsState, parseGoogleUsAddress } = await import('../../src/usAddress');
+const { isUsPostalCode, normalizeUsState, parseGoogleUsAddress, parseStoredUsAddress, serializeUsAddress } =
+  await import('../../src/usAddress');
 
 const noop = () => {};
 
@@ -29,9 +30,12 @@ test('address entry always renders a usable manual line-one fallback', () => {
   assert.match(markup, /value="15900 N Bay"/);
   assert.match(markup, /role="combobox"/);
   assert.match(markup, /aria-autocomplete="list"/);
+  assert.match(markup, /aria-haspopup="listbox"/);
+  assert.match(markup, /aria-describedby="[^"]+"/);
+  assert.match(markup, /aria-busy="false"/);
   assert.match(markup, /aria-label="Clear street address"/);
   assert.match(markup, /role="status"/);
-  assert.match(markup, /Address suggestions are unavailable\. Enter the address manually\./);
+  assert.match(markup, /Automatic suggestions are not configured\. Enter the complete address manually\./);
 });
 
 test('Google address parts populate a complete US delivery address including unit and ZIP+4', () => {
@@ -68,6 +72,25 @@ test('US address helpers accept full state names and reject incomplete ZIP codes
   assert.equal(isUsPostalCode('10001'), true);
   assert.equal(isUsPostalCode('10001-1234'), true);
   assert.equal(isUsPostalCode('1000'), false);
+});
+
+test('stored delivery addresses preserve address line two, state, and ZIP+4', () => {
+  const stored = serializeUsAddress({
+    streetAddress: '15900 North Bay Road',
+    addressLine2: 'Apartment 7B',
+    city: 'Miami Beach',
+    state: 'Florida',
+    postalCode: '33141-2140',
+  });
+
+  assert.equal(stored, '15900 North Bay Road\nApartment 7B\nMiami Beach, FL 33141-2140');
+  assert.deepEqual(parseStoredUsAddress(stored), {
+    streetAddress: '15900 North Bay Road',
+    addressLine2: 'Apartment 7B',
+    city: 'Miami Beach',
+    state: 'FL',
+    postalCode: '33141-2140',
+  });
 });
 
 test('sign-in form preserves password-manager semantics and explicit button behavior', () => {

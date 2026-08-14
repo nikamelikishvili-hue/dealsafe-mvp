@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import clientFailureHandler from '../api/security/client-failure.mjs';
 import cspReportHandler from '../api/security/csp-report.mjs';
 import runtimeRejectionHandler from '../api/security/runtime-rejection.mjs';
@@ -4003,6 +4004,23 @@ test('browser route resolver preserves deep links and rejects unknown paths', as
   assert.doesNotMatch(errorBoundary, /\{error\.message\}/);
 });
 
+test('public and authenticated mobile navigation can close without pointer input', () => {
+  const app = readText('src/app.tsx');
+  const landing = readText('src/PublicLanding.tsx');
+
+  for (const source of [app, landing]) {
+    assert.match(source, /mobileMenuButtonRef/);
+    assert.match(source, /event\.key\s*!==\s*'Escape'/);
+    assert.match(source, /mobileMenuButtonRef\.current\?\.focus\(\)/);
+    assert.match(source, /window\.innerWidth\s*>\s*860/);
+    assert.match(source, /aria-expanded=\{mobileMenuOpen\}/);
+    assert.match(source, /aria-controls=/);
+  }
+  assert.match(app, /id="application-mobile-navigation"/);
+  assert.match(landing, /id="mobile-navigation"/);
+  assert.match(landing, /Make every private deal <br \/><span>clear from the start\.<\/span>/);
+});
+
 test('public route presentation and metadata are isolated from application state', () => {
   const app = readText('src/app.tsx');
   const publicRoutes = readText('src/PublicRoutePages.tsx');
@@ -4067,9 +4085,12 @@ test('account profile and security workspace is isolated without moving session 
 
   assert.match(
     app,
-    /import \{ AccountProfileWorkspace \} from '\.\/AccountProfileWorkspace'/,
+    /import\('\.\/AccountProfileWorkspace'\)/,
   );
-  assert.match(app, /view==='profile'&&session&&<AccountProfileWorkspace/);
+  assert.match(
+    app,
+    /view==='profile'&&session&&<React\.Suspense[\s\S]*<AccountProfileWorkspace/,
+  );
   assert.match(app, /onSessionUpdated=\{setSession\}/);
   assert.match(app, /onSignedOut=\{finishSignedOutSession\}/);
   assert.match(app, /onRequestVerification=\{requestVerification\}/);
@@ -4134,7 +4155,7 @@ test('deal workspace shell is isolated without moving transaction orchestration'
   const shell = readText('src/DealWorkspaceShell.tsx');
 
   assert.match(app, /from '\.\/DealWorkspaceShell'/);
-  assert.match(app, /from '\.\/DealWorkspace'/);
+  assert.match(app, /import\('\.\/DealWorkspace'\)/);
   assert.match(app, /<DealWorkspace/);
   assert.match(app, /resolveDealPrimaryAction\(\{/);
   assert.match(workspace, /<DealWorkspaceNavigation/);
@@ -4266,7 +4287,7 @@ test('seller declaration presentation is isolated without moving publication', (
     /getPublicSellerDeclaration\(deal\.publicId\)/,
   );
   assert.match(declarations, /if \(current\)/);
-  assert.match(declarations, /\[deal\.publicId\]/);
+  assert.match(declarations, /\[deal\.publicId, loadVersion\]/);
   assert.match(
     declarations,
     /These confirmations are recorded when the Deal Link is published\./,
@@ -4301,7 +4322,7 @@ test('participant evidence workspace is isolated with security controls intact',
   assert.match(evidence, /listDealEvidence\(session, deal\.id\)/);
   assert.match(evidence, /uploadDealEvidence\(/);
   assert.match(evidence, /for \(const file of files\)/);
-  assert.match(evidence, /if \(current\) setItems\(next\)/);
+  assert.match(evidence, /if \(request === loadSequenceRef\.current\) setItems\(next\)/);
   assert.match(evidence, /\[deal\.id, session\.accessToken, role\]/);
   assert.match(evidence, /<EvidenceViewer/);
   assert.match(
@@ -4339,7 +4360,7 @@ test('payment and seller payout workspace is isolated with guarded polling', () 
   assert.match(payment, /startStripeConnectOnboarding\(session, deal\.publicId\)/);
   assert.match(payment, /createProtectedCheckout\(session, deal\.id\)/);
   assert.match(payment, /let current = true/);
-  assert.match(payment, /if \(!current\) return/);
+  assert.match(payment, /if \(!current \|\| request !== loadRequest\.current\) return/);
   assert.match(payment, /window\.clearInterval\(timer\)/);
   assert.match(payment, /popup\.opener = null/);
   assert.match(payment, /id="payment-status-panel"/);
@@ -4407,14 +4428,34 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   assert.match(addressAutocomplete, /AutocompleteSessionToken/);
   assert.match(addressAutocomplete, /role="combobox"/);
   assert.match(addressAutocomplete, /role="listbox"/);
+  assert.match(addressAutocomplete, /aria-describedby=\{statusId\}/);
+  assert.match(addressAutocomplete, /aria-busy=\{queryState === 'loading'\}/);
+  assert.match(addressAutocomplete, /const selectionMutationRef = useRef\(false\)/);
+  assert.match(addressAutocomplete, /if \(!library \|\| selectionMutationRef\.current\) return/);
+  assert.match(addressAutocomplete, /const selectionRequest = \+\+requestSequence\.current/);
+  assert.ok((addressAutocomplete.match(/selectionRequest !== requestSequence\.current/g) ?? []).length >= 2);
+  assert.ok((addressAutocomplete.match(/requestSequence\.current \+= 1/g) ?? []).length >= 3);
   assert.match(addressAutocomplete, /Google Maps/);
   assert.match(
     addressAutocomplete,
-    /Address suggestions are unavailable\. Enter the address manually\./,
+    /Automatic suggestions are temporarily unavailable\. Enter the complete address manually\./,
   );
   assert.match(usAddress, /\^\\d\{5\}\(\?:-\\d\{4\}\)\?\$/);
   assert.match(usAddress, /subpremise/);
   assert.match(fulfillment, /parts\.addressLine2 \|\| current\.addressLine2/);
+  assert.match(fulfillment, /copyTextToClipboard\(/);
+  assert.match(
+    fulfillment,
+    /Address could not be copied\. Select and copy it manually\./,
+  );
+  assert.doesNotMatch(fulfillment, /catch\s*\{\s*\}/);
+  const fulfillmentActionButtons = [
+    ...fulfillment.matchAll(/<button\b[^>]*\bonClick=\{[^>]*>/gs),
+  ];
+  assert.ok(fulfillmentActionButtons.length > 0);
+  for (const [button] of fulfillmentActionButtons) {
+    assert.match(button, /\btype="button"/);
+  }
   assert.match(fulfillment, /getElementById\('deal-evidence-vault'\)/);
   assert.match(
     fulfillment,
@@ -4426,10 +4467,503 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   );
 });
 
+test('every button inside a form declares its submission behavior', () => {
+  const files = [
+    'src/AccountEntryPages.tsx',
+    'src/AccountMfaSecurity.tsx',
+    'src/AccountProfileWorkspace.tsx',
+    'src/DealCreationWorkspace.tsx',
+    'src/DealEvidenceWorkspace.tsx',
+    'src/DealFulfillmentWorkspace.tsx',
+    'src/DealPaymentWorkspace.tsx',
+    'src/DealResolutionWorkspace.tsx',
+    'src/DealWorkspaceFeatures.tsx',
+    'src/MfaLoginVerification.tsx',
+    'src/SupportCaseCenter.tsx',
+  ];
+  const missing = [];
+
+  for (const file of files) {
+    const source = readText(file);
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const visit = (node, formDepth = 0) => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      const tagName = opening?.tagName.getText(sourceFile);
+      const nextFormDepth = formDepth + (tagName === 'form' ? 1 : 0);
+      if (tagName === 'button' && nextFormDepth > 0) {
+        const hasType = opening.attributes.properties.some(
+          attribute =>
+            ts.isJsxAttribute(attribute)
+            && attribute.name.getText(sourceFile) === 'type',
+        );
+        if (!hasType) {
+          const location = sourceFile.getLineAndCharacterOfPosition(
+            opening.getStart(sourceFile),
+          );
+          missing.push(`${file}:${location.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, child => visit(child, nextFormDepth));
+    };
+    visit(sourceFile);
+  }
+
+  assert.deepEqual(missing, []);
+});
+
+test('every button outside a form declares an interactive behavior', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const missing = [];
+
+  for (const file of files) {
+    const source = readText(file);
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const visit = (node, formDepth = 0) => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      const tagName = opening?.tagName.getText(sourceFile);
+      const nextFormDepth = formDepth + (tagName === 'form' ? 1 : 0);
+      if (tagName === 'button' && nextFormDepth === 0) {
+        const attributes = new Set(
+          opening.attributes.properties
+            .filter(ts.isJsxAttribute)
+            .map(attribute => attribute.name.getText(sourceFile)),
+        );
+        if (!attributes.has('onClick') && !attributes.has('disabled')) {
+          const location = sourceFile.getLineAndCharacterOfPosition(
+            opening.getStart(sourceFile),
+          );
+          missing.push(`${file}:${location.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, child => visit(child, nextFormDepth));
+    };
+    visit(sourceFile);
+  }
+
+  assert.deepEqual(missing, []);
+});
+
+test('every button exposes an accessible name', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const unnamed = [];
+
+  const hasReadableChild = node => {
+    if (ts.isJsxText(node)) return node.getText().trim().length > 0;
+    if (ts.isJsxExpression(node)) return Boolean(node.expression);
+    if (ts.isJsxElement(node)) return node.children.some(hasReadableChild);
+    return false;
+  };
+
+  for (const file of files) {
+    const source = readText(file);
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const visit = node => {
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(sourceFile) === 'button') {
+        const attributes = new Set(
+          node.openingElement.attributes.properties
+            .filter(ts.isJsxAttribute)
+            .map(attribute => attribute.name.getText(sourceFile)),
+        );
+        if (
+          !attributes.has('aria-label') &&
+          !attributes.has('aria-labelledby') &&
+          !attributes.has('title') &&
+          !node.children.some(hasReadableChild)
+        ) {
+          const location = sourceFile.getLineAndCharacterOfPosition(
+            node.openingElement.getStart(sourceFile),
+          );
+          unnamed.push(`${file}:${location.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+
+  assert.deepEqual(unnamed, []);
+});
+
+test('every form control has an accessible name', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const unnamed = [];
+
+  for (const file of files) {
+    const source = readText(file);
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const visit = (node, labelDepth = 0) => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      const tagName = opening?.tagName.getText(sourceFile);
+      const nextLabelDepth = labelDepth + (tagName === 'label' ? 1 : 0);
+      if (['input', 'select', 'textarea'].includes(tagName) && nextLabelDepth === 0) {
+        const attributes = new Map(
+          opening.attributes.properties
+            .filter(ts.isJsxAttribute)
+            .map(attribute => [attribute.name.getText(sourceFile), attribute]),
+        );
+        const type = attributes.get('type')?.initializer?.getText(sourceFile);
+        const id = attributes.get('id')?.initializer?.getText(sourceFile);
+        const hasExplicitLabel =
+          typeof id === 'string' && source.includes(`htmlFor=${id}`);
+        const hasAccessibleName =
+          attributes.has('aria-label')
+          || attributes.has('aria-labelledby')
+          || hasExplicitLabel;
+        if (type !== '"hidden"' && !hasAccessibleName) {
+          const location = sourceFile.getLineAndCharacterOfPosition(
+            opening.getStart(sourceFile),
+          );
+          unnamed.push(`${file}:${location.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, child => visit(child, nextLabelDepth));
+    };
+    visit(sourceFile);
+  }
+
+  assert.deepEqual(unnamed, []);
+});
+
+test('browser copy actions use the governed clipboard fallback', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(
+      entry =>
+        entry.isFile()
+        && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))
+        && entry.name !== 'clipboard.ts',
+    )
+    .map(entry => `src/${entry.name}`);
+  const bypasses = files.filter(file => /navigator\.clipboard/.test(readText(file)));
+  const clipboard = readText('src/clipboard.ts');
+
+  assert.deepEqual(bypasses, []);
+  assert.match(clipboard, /navigator\.clipboard\?\.writeText/);
+  assert.match(clipboard, /document\.execCommand\('copy'\)/);
+  assert.match(readText('src/DealWorkspaceFeatures.tsx'), /copyTextToClipboard/);
+  assert.match(readText('src/AgreementRecordSummary.tsx'), /copyTextToClipboard/);
+});
+
+test('critical confirmations use one keyboard-safe application dialog', () => {
+  const dialog = readText('src/ConfirmActionDialog.tsx');
+  const criticalFiles = [
+    'src/AdministrationWorkspace.tsx',
+    'src/DealFulfillmentWorkspace.tsx',
+    'src/DealResolutionWorkspace.tsx',
+    'src/DealWorkspaceFeatures.tsx',
+  ];
+
+  assert.match(dialog, /role="alertdialog"/);
+  assert.match(dialog, /aria-modal="true"/);
+  assert.match(dialog, /event\.key === 'Escape'/);
+  assert.match(dialog, /previousFocusRef\.current\?\.focus\(\)/);
+  assert.match(dialog, /event\.key !== 'Tab'/);
+  for (const file of criticalFiles) {
+    const source = readText(file);
+    assert.doesNotMatch(source, /(?:window\.)?confirm\s*\(/);
+    assert.match(source, /useConfirmAction/);
+  }
+});
+
+test('application connectivity state is visible and privacy safe', () => {
+  const app = readText('src/app.tsx');
+  const banner = readText('src/NetworkStatusBanner.tsx');
+
+  assert.match(app, /<NetworkStatusBanner \/>/);
+  assert.match(banner, /window\.addEventListener\('offline', offline\)/);
+  assert.match(banner, /window\.addEventListener\('online', online\)/);
+  assert.match(banner, /role="status"/);
+  assert.match(banner, /aria-live="assertive"/);
+  assert.match(banner, /window\.clearTimeout\(clearTimer\.current\)/);
+  assert.doesNotMatch(banner, /fetch\(|sendBeacon|localStorage|sessionStorage/);
+});
+
+test('heavy authenticated workspaces load only when requested', () => {
+  const app = readText('src/app.tsx');
+
+  for (const moduleName of [
+    'AccountProfileWorkspace',
+    'AdministrationWorkspace',
+    'DealWorkspace',
+  ]) {
+    assert.doesNotMatch(
+      app,
+      new RegExp(`import \\{ ${moduleName} \\} from`),
+      `${moduleName} returned to the initial application bundle`,
+    );
+    assert.match(app, new RegExp(`React\\.lazy\\(\\(\\) =>[\\s\\S]*import\\('\\./${moduleName}'\\)`));
+  }
+  assert.ok((app.match(/<React\.Suspense fallback=\{<RouteLoading\/>\}>/g) || []).length >= 3);
+});
+
+test('account entry prevents duplicate authentication requests', () => {
+  const app = readText('src/app.tsx');
+  const entry = readText('src/AccountEntryPages.tsx');
+
+  assert.match(app, /const \[authSubmitting,setAuthSubmitting\]=useState\(false\)/);
+  assert.match(app, /const authSubmittingRef=useRef\(false\)/);
+  assert.match(app, /if\(authSubmittingRef\.current\)return/);
+  assert.match(app, /authSubmittingRef\.current=true/);
+  assert.match(app, /setAuthSubmitting\(true\)/);
+  assert.match(app, /finally\{authSubmittingRef\.current=false;setAuthSubmitting\(false\)\}/);
+  assert.match(app, /submitting=\{authSubmitting\}/);
+  assert.match(entry, /aria-busy=\{submitting\}/);
+  assert.match(
+    entry,
+    /disabled=\{submitting \|\| \(isSignup && !acceptedPolicies\)\}/,
+  );
+  assert.match(entry, /'Creating account…'/);
+  assert.match(entry, /'Signing in…'/);
+});
+
+test('password recovery and MFA verification are single-flight actions', () => {
+  const entry = readText('src/AccountEntryPages.tsx');
+  const mfa = readText('src/MfaLoginVerification.tsx');
+
+  assert.match(entry, /const sendingRef = useRef\(false\)/);
+  assert.match(entry, /if \(sendingRef\.current\) return/);
+  assert.match(entry, /sendingRef\.current = true/);
+  assert.match(entry, /sendingRef\.current = false/);
+  assert.match(entry, /const updatingRef = useRef\(false\)/);
+  assert.match(entry, /if \(updatingRef\.current\) return/);
+  assert.match(entry, /aria-busy=\{updating\}/);
+  assert.match(entry, /disabled=\{updating\}/);
+  assert.match(mfa, /const busyRef=useRef\(false\)/);
+  assert.match(mfa, /if\(busyRef\.current\)return/);
+  assert.match(mfa, /busyRef\.current=true/);
+  assert.match(mfa, /busyRef\.current=false/);
+  assert.match(mfa, /aria-busy=\{busy\}/);
+});
+
+test('privileged account mutations reject same-tick duplicate actions', () => {
+  const profile = readText('src/AccountProfileWorkspace.tsx');
+  const factors = readText('src/AccountMfaSecurity.tsx');
+  const sessions = readText('src/AccountSessionSecurity.tsx');
+
+  assert.match(profile, /const savingNameRef = useRef\(false\)/);
+  assert.match(profile, /if \(savingNameRef\.current\) return/);
+  assert.match(profile, /const savingPasswordRef = useRef\(false\)/);
+  assert.match(profile, /if \(savingPasswordRef\.current\) return/);
+  assert.match(profile, /aria-busy=\{savingPassword\}/);
+  assert.match(factors, /const busyRef=useRef\(false\)/);
+  assert.ok((factors.match(/if\(busyRef\.current\)return/g) || []).length >= 4);
+  assert.ok((factors.match(/busyRef\.current=false/g) || []).length >= 4);
+  assert.match(sessions, /const busyRef=useRef\(false\)/);
+  assert.ok((sessions.match(/if\(busyRef\.current\)return/g) || []).length >= 2);
+  assert.ok((sessions.match(/busyRef\.current=false/g) || []).length >= 2);
+});
+
+test('install-app prompt reports its real outcome and cannot run twice', () => {
+  const app = readText('src/app.tsx');
+
+  assert.match(app, /const \[installPrompt,setInstallPrompt\]=useState/);
+  assert.match(app, /const installingRef=useRef\(false\)/);
+  assert.match(app, /if\(installingRef\.current\)return/);
+  assert.match(app, /await installPrompt\.userChoice/);
+  assert.match(app, /setInstallPrompt\(null\)/);
+  assert.match(app, /disabled=\{installing\}/);
+  assert.match(app, /role="status" aria-live="polite"/);
+  assert.match(app, /Your browser could not start installation/);
+});
+
+test('compact mobile navigation and demo actions retain full touch targets', () => {
+  const globalStyles = readText('src/global-redesign.css');
+  const workspaceStyles = readText('src/workspace-redesign.css');
+
+  assert.match(
+    globalStyles,
+    /\.site-header \.mobile-menu-toggle\{width:44px;height:44px/,
+  );
+  assert.match(
+    globalStyles,
+    /\.mobile-menu a,\.mobile-menu button\{min-height:44px/,
+  );
+  assert.match(
+    workspaceStyles,
+    /\.preview-next button\{min-width:44px;min-height:44px/,
+  );
+});
+
+test('secondary account and recovery actions retain full touch targets', () => {
+  const globalStyles = readText('src/global-redesign.css');
+  const workspaceStyles = readText('src/workspace-redesign.css');
+  const recoveryStyles = readText('src/recovery.css');
+  const baseStyles = readText('src/styles.css');
+  const reviewStyles = readText('src/create-review.css');
+
+  assert.match(globalStyles, /\.app>footer nav a\{min-height:44px/);
+  assert.match(globalStyles, /\.site-nav a,\.site-nav button,\.site-header \.account button\{\s*min-height:44px/);
+  assert.match(globalStyles, /\.password-field button\{[^}]*width:44px;height:44px/);
+  assert.match(workspaceStyles, /\.create-draft-recovery button\{[^}]*min-height:44px/);
+  assert.match(recoveryStyles, /\.forgot-entry button\{min-height:44px/);
+  assert.match(baseStyles, /\.switch-auth\{width:100%;min-height:44px/);
+  assert.match(reviewStyles, /\.draft-review-save button\{min-height:44px/);
+});
+
+test('dense workspace controls retain full touch targets', () => {
+  const catalogSearch = readText('src/catalog-search.css');
+  const smartCatalog = readText('src/smart-catalog.css');
+  const agreementExport = readText('src/agreement-export.css');
+  const workspace = readText('src/workspace-redesign.css');
+  const support = readText('src/support-case.css');
+  const sessions = readText('src/session-security.css');
+
+  assert.match(catalogSearch, /\.catalog-clear-filters\{\s*min-height:44px/);
+  assert.match(smartCatalog, /\.catalog-category-toggle\{\s*width:100%;\s*min-height:44px/);
+  assert.match(agreementExport, /\.agreement-export-actions button\{min-height:44px/);
+  assert.match(agreementExport, /\.agreement-document-toolbar button\{min-height:44px/);
+  assert.match(workspace, /\.deal-workspace-bar \.back\{min-height:44px/);
+  assert.match(workspace, /\.deal-workspace-bar nav button\{min-height:44px/);
+  assert.match(workspace, /\.create-validation-summary li button\{width:100%;min-height:44px/);
+  assert.match(support, /\.icon-button\{width:44px;height:44px/);
+  assert.match(sessions, /\.session-confirmation button\{min-height:44px/);
+});
+
+test('account recovery progress and guidance are announced accessibly', () => {
+  const accountEntry = readText('src/AccountEntryPages.tsx');
+
+  assert.match(accountEntry, /autoComplete="email"/);
+  assert.ok((accountEntry.match(/role="status" aria-live="polite"/g) || []).length >= 2);
+  assert.ok((accountEntry.match(/aria-describedby="recovery-password-requirements"/g) || []).length >= 2);
+  assert.match(accountEntry, /id="recovery-password-requirements"/);
+});
+
+test('dynamic account and deal feedback is announced without stealing focus', () => {
+  const account = readText('src/AccountProfileWorkspace.tsx');
+  const payment = readText('src/DealPaymentWorkspace.tsx');
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+  const publicRoutes = readText('src/PublicRoutePages.tsx');
+
+  assert.doesNotMatch(account, /message \? <div className="notice">/);
+  assert.match(account, /role="status" aria-live="polite"/);
+  assert.match(payment, /payment\?\.failure_message[\s\S]*role="alert"/);
+  assert.match(fulfillment, /shipping-readiness-status" role="status" aria-live="polite"/);
+  assert.match(fulfillment, /readinessError[\s\S]*className="notice" role="alert"/);
+  assert.doesNotMatch(features, /\{message && <div className="notice">/);
+  assert.doesNotMatch(features, /\{error && <div className="notice">/);
+  assert.match(publicRoutes, /DealLinkError[\s\S]*className="notice" role="alert"/);
+});
+
+test('payment redirects reject same-tick duplicate financial actions', () => {
+  const payment = readText('src/DealPaymentWorkspace.tsx');
+
+  assert.match(payment, /const actionInFlight = useRef\(false\)/);
+  assert.ok(
+    (payment.match(/if \(actionInFlight\.current\) return;/g) || []).length >= 2,
+  );
+  assert.ok(
+    (payment.match(/actionInFlight\.current = true;/g) || []).length >= 2,
+  );
+  assert.ok(
+    (payment.match(/actionInFlight\.current = false;/g) || []).length >= 2,
+  );
+});
+
+test('fulfillment mutations reject same-tick duplicate submissions', () => {
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(fulfillment, /const saveInFlight = useRef\(false\)/);
+  assert.match(fulfillment, /const mutationInFlight = useRef\(false\)/);
+  assert.ok(
+    (fulfillment.match(/const actionInFlight = useRef\(false\)/g) || [])
+      .length >= 2,
+  );
+  assert.ok(
+    (fulfillment.match(/if \(actionInFlight\.current\) return;/g) || [])
+      .length >= 4,
+  );
+  assert.ok(
+    (fulfillment.match(/mutationInFlight\.current = true;/g) || []).length >=
+      3,
+  );
+  assert.match(fulfillment, /disabled=\{!inspectionRecorded \|\| shipmentBusy\}/);
+  assert.ok((fulfillment.match(/aria-busy=/g) || []).length >= 8);
+  assert.match(fulfillment, /shipmentBusy \? 'Saving shipment…'/);
+  assert.match(fulfillment, /shipmentBusy \? 'Confirming delivery…'/);
+});
+
+test('deal communications, offers, and publication are single-flight', () => {
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.ok(
+    (features.match(/const requestInFlight = useRef\(false\)/g) || []).length >=
+      2,
+  );
+  assert.match(features, /const mutationInFlight = useRef\(false\)/);
+  assert.ok(
+    (features.match(/requestInFlight\.current = true;/g) || []).length >= 4,
+  );
+  assert.ok(
+    (features.match(/requestInFlight\.current = false;/g) || []).length >= 4,
+  );
+  assert.match(features, /if \(busy \|\| mutationInFlight\.current\) return/);
+});
+
+test('form-adjacent workspace actions declare their button behavior', () => {
+  const actionSurfaces = [
+    'src/AccountProfileWorkspace.tsx',
+    'src/DealCreationWorkspace.tsx',
+    'src/DealPaymentWorkspace.tsx',
+    'src/EvidenceLifecycleCenter.tsx',
+    'src/PublicRoutePages.tsx',
+  ];
+
+  for (const file of actionSurfaces) {
+    assert.doesNotMatch(
+      readText(file),
+      /<button(?![^>]*\btype=)[^>]*>/,
+      `${file} contains a button with implicit submit behavior`,
+    );
+  }
+});
+
 test('participant resolution and private deal chat are isolated safely', () => {
   const app = readText('src/app.tsx');
   const workspace = readText('src/DealWorkspace.tsx');
   const resolution = readText('src/DealResolutionWorkspace.tsx');
+  const chatStyles = readText('src/chat.css');
 
   assert.match(workspace, /from '\.\/DealResolutionWorkspace'/);
   assert.match(workspace, /<RatingPanel deal=\{deal\}/);
@@ -4463,6 +4997,16 @@ test('participant resolution and private deal chat are isolated safely', () => {
   assert.match(resolution, /window\.clearInterval\(timer\)/);
   assert.match(resolution, /aria-controls="deal-chat-panel"/);
   assert.match(resolution, /aria-live="polite"/);
+  assert.match(resolution, /<X aria-hidden="true" size=\{19\} \/>/);
+  assert.match(resolution, /if \(event\.key === 'Escape'\)/);
+  assert.match(resolution, /launcherRef\.current\?\.focus\(\)/);
+  assert.match(chatStyles, /\.view-deal \.deal-chat-float/);
+  assert.match(
+    chatStyles,
+    /bottom:calc\(92px \+ env\(safe-area-inset-bottom\)\)/,
+  );
+  assert.match(chatStyles, /max-height:calc\(100dvh - 174px/);
+  assert.match(chatStyles, /overscroll-behavior:contain/);
   assert.doesNotMatch(
     resolution,
     /resolveAdminDisputeFinancial|resolveAdminDispute|setAdminDealVisibility|createProtectedCheckout|createDealShipment|confirmShipmentDelivery|uploadDealEvidence|acceptPublicDeal|publishUserDealDraft|signIn|signUp/,
@@ -4476,9 +5020,9 @@ test('administration operations are isolated behind the central access gate', ()
   assert.match(app, /getAdminAccess\(session\)/);
   assert.match(
     app,
-    /view==='admin'&&session&&isAdmin&&<AdministrationWorkspace session=\{session\}/,
+    /view==='admin'&&session&&isAdmin&&<React\.Suspense[\s\S]*<AdministrationWorkspace session=\{session\}/,
   );
-  assert.match(app, /from '\.\/AdministrationWorkspace'/);
+  assert.match(app, /import\('\.\/AdministrationWorkspace'\)/);
   assert.doesNotMatch(
     app,
     /function AdminCatalogCenter|function AdminEvidenceReview|function AdminRevenueCenter|function AdminDisputeCenter|function AdminReportCenter/,
@@ -4508,7 +5052,8 @@ test('administration operations are isolated behind the central access gate', ()
     administration,
     /Buyer and seller resolutions perform the confirmed Stripe refund or release\. Closing a dispute moves no funds\./,
   );
-  assert.match(administration, /if \(!confirm\(t\(prompt\)\)\) return/);
+  assert.match(administration, /await confirmAction\(\{/);
+  assert.match(administration, /title: t\('Confirm dispute decision'\)/);
   assert.doesNotMatch(
     administration,
     /getAdminAccess|signIn|signUp|acceptPublicDeal|publishUserDealDraft|createProtectedCheckout|createDealShipment|uploadDealEvidence/,
@@ -4520,7 +5065,10 @@ test('deal workspace composition is isolated while central transaction ownership
   const workspace = readText('src/DealWorkspace.tsx');
   const features = readText('src/DealWorkspaceFeatures.tsx');
 
-  assert.match(app, /import \{ DealWorkspace \} from '\.\/DealWorkspace'/);
+  assert.match(
+    app,
+    /const DealWorkspace = React\.lazy\(\(\) =>[\s\S]*import\('\.\/DealWorkspace'\)/,
+  );
   assert.equal(
     (app.match(/<DealWorkspace\b/g) || []).length,
     1,
@@ -9503,6 +10051,18 @@ test('client failure reporter accepts only fixed non-sensitive categories', asyn
       issue: 'unhandled_promise_rejection',
     },
   );
+  assert.deepEqual(
+    reporter.normalizeClientFailure({
+      schema: 'dealivra.client-failure.v1',
+      boundary: 'address_autocomplete',
+      issue: 'suggestion_request_failed',
+    }),
+    {
+      schema: 'dealivra.client-failure.v1',
+      boundary: 'address_autocomplete',
+      issue: 'suggestion_request_failed',
+    },
+  );
   for (const invalid of [
     null,
     [],
@@ -9945,8 +10505,11 @@ test('production builds enforce explicit JavaScript and CSS budgets', () => {
   );
   assert.match(packageJson.scripts.build, /npm run performance:budgets$/);
   assert.match(budget, /maximumJavaScriptChunkBytes: 400_000/);
+  assert.match(budget, /maximumInitialApplicationBytes: 160_000/);
+  assert.match(budget, /\^app-\[A-Za-z0-9_-\]\+\\\.js\$/);
+  assert.match(budget, /Expected exactly one initial application chunk/);
   assert.match(budget, /maximumCssChunkBytes: 200_000/);
-  assert.match(budget, /maximumTotalJavaScriptBytes: 825_000/);
+  assert.match(budget, /maximumTotalJavaScriptBytes: 830_000/);
   assert.match(budget, /maximumTotalCssBytes: 290_000/);
   assert.match(budget, /throw new Error\(`Build performance budget exceeded:/);
 });
@@ -11411,6 +11974,22 @@ test('browser diagnostics use one exact bounded best-effort transport', async ()
       body: JSON.stringify(exactEvent),
     },
   );
+  const autocompleteFailure = {
+    schema: 'dealivra.client-failure.v1',
+    boundary: 'address_autocomplete',
+    issue: 'provider_load_failed',
+    occurrence_count: 1,
+  };
+  assert.deepEqual(
+    prepareDiagnosticRequest(
+      '/api/security/client-failure',
+      autocompleteFailure,
+    ),
+    {
+      endpoint: '/api/security/client-failure',
+      body: JSON.stringify(autocompleteFailure),
+    },
+  );
   assert.equal(
     prepareDiagnosticRequest(
       '/api/security/client-failure',
@@ -11698,4 +12277,303 @@ test('database ownership inventory covers every governed object class', () => {
   assert.match(inventorySql, /from pg_catalog\.pg_policies/);
   assert.match(workflow, /database_ownership_inventory\.sql/);
   assert.match(workflow, /database:ownership:validate/);
+});
+
+test('media preview is keyboard-contained and respects dynamic mobile viewports', () => {
+  const workspace = readText('src/DealWorkspaceFeatures.tsx');
+  const styles = readText('src/media-zoom.css');
+
+  assert.match(workspace, /role="dialog"/);
+  assert.match(workspace, /aria-modal="true"/);
+  assert.match(workspace, /document\.body\.style\.overflow = 'hidden'/);
+  assert.match(workspace, /event\.key === 'Escape'/);
+  assert.match(workspace, /event\.key !== 'Tab'/);
+  assert.match(workspace, /previouslyFocused\?\.focus\(\)/);
+  assert.match(workspace, /ref=\{closeButtonRef\}/);
+  assert.match(workspace, /<X aria-hidden="true" size=\{20\} \/>/);
+  assert.match(workspace, /className="media-lightbox-content"/);
+  assert.match(styles, /max-height:\s*90dvh/);
+  assert.match(styles, /env\(safe-area-inset-top\)/);
+  assert.match(styles, /env\(safe-area-inset-right\)/);
+});
+
+test('deal comparison is keyboard-contained and uses the dynamic viewport', () => {
+  const app = readText('src/app.tsx');
+  const styles = readText('src/watchlist.css');
+
+  assert.match(app, /ref=\{dialogRef\} className="compare-dialog"/);
+  assert.match(app, /ref=\{closeButtonRef\}/);
+  assert.match(app, /document\.body\.style\.overflow='hidden'/);
+  assert.match(app, /event\.key==='Escape'/);
+  assert.match(app, /event\.key!=='Tab'/);
+  assert.match(app, /previouslyFocused\?\.focus\(\)/);
+  assert.match(styles, /max-height:calc\(100dvh - 48px\)/);
+  assert.match(styles, /overscroll-behavior:contain/);
+  assert.match(styles, /env\(safe-area-inset-bottom\)/);
+});
+
+test('global motion preferences suppress nonessential animation and smooth scrolling', () => {
+  const styles = readText('src/global-redesign.css');
+
+  assert.match(styles, /@media\(prefers-reduced-motion:reduce\)/);
+  assert.match(styles, /\*,\*::before,\*::after\{[^}]*animation-duration:\.01ms!important/);
+  assert.match(styles, /\*,\*::before,\*::after\{[^}]*animation-iteration-count:1!important/);
+  assert.match(styles, /\*,\*::before,\*::after\{[^}]*transition-duration:\.01ms!important/);
+  assert.match(styles, /html\{scroll-behavior:auto\}/);
+});
+
+test('resolution mutations use same-tick single-flight guards', () => {
+  const workspace = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(workspace, /const savingRef = useRef\(false\)/);
+  assert.match(workspace, /if \(savingRef\.current\) return;[\s\S]*savingRef\.current = true/);
+  assert.match(workspace, /if \(!mode \|\| savingRef\.current\) return;[\s\S]*savingRef\.current = true/);
+  assert.match(workspace, /if \(!session \|\| sendingRef\.current \|\| details\.trim\(\)\.length < 10\) return/);
+  assert.match(workspace, /if \(!body\.trim\(\) \|\| sendingRef\.current\) return/);
+  assert.match(workspace, /aria-busy=\{sending\}/);
+});
+
+test('support case mutations use same-tick single-flight guards', () => {
+  const workspace = readText('src/SupportCaseCenter.tsx');
+
+  assert.match(workspace, /const savingRef = useRef\(false\)/);
+  assert.match(workspace, /if \(savingRef\.current\) return;[\s\S]*savingRef\.current = true/);
+  assert.match(workspace, /if \(!selected \|\| savingRef\.current\) return;[\s\S]*savingRef\.current = true/);
+  assert.equal((workspace.match(/aria-busy=\{saving\}/g) ?? []).length, 2);
+  assert.match(workspace, /const lifecycleRef = useRef\(0\)/);
+  assert.ok((workspace.match(/lifecycle !== lifecycleRef\.current/g) ?? []).length >= 5);
+  assert.ok((workspace.match(/lifecycle === lifecycleRef\.current/g) ?? []).length >= 2);
+});
+
+test('trust passport visibility is protected against duplicate mutations', () => {
+  const workspace = readText('src/AccountProfileWorkspace.tsx');
+
+  assert.match(workspace, /function TrustPassportControls/);
+  assert.match(workspace, /const savingRef = useRef\(false\)/);
+  assert.match(workspace, /if \(!settings \|\| savingRef\.current\) return;[\s\S]*savingRef\.current = true/);
+  assert.match(workspace, /finally \{[\s\S]*savingRef\.current = false;[\s\S]*setSaving\(false\)/);
+  assert.match(workspace, /aria-busy=\{saving\}/);
+});
+
+test('agreement verification and evidence uploads are single-flight', () => {
+  const verification = readText('src/AgreementVerificationPage.tsx');
+  const evidence = readText('src/DealEvidenceWorkspace.tsx');
+
+  assert.match(verification, /const checkingRef = useRef\(false\)/);
+  assert.match(verification, /if \(checkingRef\.current\) return/);
+  assert.match(verification, /checkingRef\.current = true/);
+  assert.match(evidence, /const busyRef = useRef\(false\)/);
+  assert.match(evidence, /if \(!files\.length \|\| busyRef\.current\) return/);
+  assert.match(evidence, /busyRef\.current = true/);
+  assert.match(evidence, /aria-busy=\{busy\}/);
+});
+
+test('deal media and editor mutations use same-tick guards', () => {
+  const workspace = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(workspace, /const uploadingRef = useRef\(false\)/);
+  assert.match(workspace, /if \(!files\.length \|\| uploadingRef\.current\) return/);
+  assert.match(workspace, /const removingRef = useRef\(false\)/);
+  assert.match(workspace, /if \(removingRef\.current\) return/);
+  assert.match(workspace, /export function CoverSelector[\s\S]*const savingRef = useRef\(false\)/);
+  assert.match(workspace, /export function DealEditor[\s\S]*if \(savingRef\.current\) return/);
+});
+
+test('administrative dispute and moderation decisions are single-flight', () => {
+  const workspace = readText('src/AdministrationWorkspace.tsx');
+
+  assert.match(workspace, /function AdminDisputeCenter[\s\S]*const savingRef = useRef\(false\)/);
+  assert.match(workspace, /if \(note\.length < 3 \|\| savingRef\.current\) return/);
+  assert.match(workspace, /function AdminReportCenter[\s\S]*const openingDealRef = useRef\(false\)/);
+  assert.match(workspace, /if \(openingDealRef\.current\) return/);
+  assert.ok((workspace.match(/savingRef\.current = true/g) ?? []).length >= 3);
+});
+
+test('watchlist, access-code, and renewal mutations are single-flight', () => {
+  const workspace = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(workspace, /export function SaveDealButton[\s\S]*const mutationRef = useRef\(false\)/);
+  assert.match(workspace, /if \(mutationRef\.current\) return/);
+  assert.match(workspace, /export function BuyerAccessCodeManager[\s\S]*const busyRef = useRef\(false\)/);
+  assert.match(workspace, /if \(busyRef\.current\) return;[\s\S]*busyRef\.current = true/);
+  assert.match(workspace, /export function DealRenewalPanel[\s\S]*const savingRef = useRef\(false\)/);
+});
+
+test('restricted evidence lifecycle actions are mutually single-flight', () => {
+  const workspace = readText('src/EvidenceLifecycleCenter.tsx');
+
+  assert.match(workspace, /const busyRef=useRef\(false\)/);
+  assert.ok((workspace.match(/if\(busyRef\.current\)return/g) ?? []).length >= 2);
+  assert.ok((workspace.match(/busyRef\.current=true/g) ?? []).length >= 2);
+  assert.match(workspace, /aria-busy=\{Boolean\(busy\)\}/);
+  assert.match(workspace, /const loadSequenceRef=useRef\(0\)/);
+  assert.ok((workspace.match(/request===loadSequenceRef\.current/g) ?? []).length >= 3);
+});
+
+test('deal evidence list ignores stale deal and session responses', () => {
+  const workspace = readText('src/DealEvidenceWorkspace.tsx');
+  assert.match(workspace, /const loadSequenceRef = useRef\(0\)/);
+  assert.match(workspace, /const request = \+\+loadSequenceRef\.current/);
+  assert.ok((workspace.match(/request === loadSequenceRef\.current/g) ?? []).length >= 2);
+  assert.match(workspace, /loadSequenceRef\.current \+= 1/);
+});
+
+test('TypeScript UI sources do not contain common UTF-8 mojibake sequences', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && /\.tsx?$/.test(entry.name))
+    .map(entry => `src/${entry.name}`);
+  for (const file of files) {
+    assert.doesNotMatch(readText(file), /â€¦|â€”|Â·|â€™|Ã|ðŸ/, file);
+  }
+});
+
+test('application-level deal and verification mutations are same-tick guarded', () => {
+  const app = readText('src/app.tsx');
+
+  assert.match(app, /const createMutationRef=useRef\(false\)/);
+  assert.ok((app.match(/if\(createMutationRef\.current\)return/g) ?? []).length >= 2);
+  assert.match(app, /const acceptMutationRef=useRef\(false\)/);
+  assert.match(app, /acceptMutationRef\.current=true[\s\S]*finally\{acceptMutationRef\.current=false;setAccepting\(false\)\}/);
+  assert.match(app, /const protectionRequired=await getDealAcceptanceProtection\(active\.publicId\)/);
+  assert.match(app, /setAcceptanceProtected\(protectionRequired\);if\(protectionRequired&&!\/\^\[0-9\]\{6\}\$\/\.test\(buyerAccessCode\)\)/);
+  assert.match(app, /protectionRequired[\s\S]*await acceptPublicDeal\(session,active\.publicId,buyer\.trim\(\),buyerAccessCode\)/);
+  assert.match(app, /const verificationMutationRef=useRef\(false\)/);
+  assert.match(app, /verificationMutationRef\.current=true[\s\S]*finally\{verificationMutationRef\.current=false;setVerificationRequesting\(false\)\}/);
+  assert.match(app, /setVerificationRequesting\(true\)/);
+  assert.match(app, /verificationRequesting=\{verificationRequesting\}/);
+  assert.match(app, /accepting=\{accepting\}/);
+  const workspace = readText('src/DealWorkspace.tsx');
+  assert.match(workspace, /disabled=\{!agreementActionReady \|\| accepting\}/);
+  assert.match(workspace, /aria-busy=\{accepting\}/);
+  assert.match(workspace, /accepting \? 'Accepting…' : 'Accept these terms'/);
+  const profile = readText('src/AccountProfileWorkspace.tsx');
+  assert.match(profile, /disabled=\{requesting\}/);
+  assert.match(profile, /aria-busy=\{requesting\}/);
+  assert.match(profile, /requesting \? 'Requesting…' : 'Request verification'/);
+});
+
+test('VIN decoding cannot overwrite a newer identifier selection', () => {
+  const app = readText('src/app.tsx');
+  assert.match(app, /const vehicleVinRequestRef=useRef\(0\)/);
+  assert.match(app, /const vehicleVinActiveRef=useRef\(false\)/);
+  assert.match(app, /const request=\+\+vehicleVinRequestRef\.current/);
+  assert.ok((app.match(/request!==vehicleVinRequestRef\.current/g) ?? []).length >= 2);
+  assert.match(app, /if\(request===vehicleVinRequestRef\.current\)vehicleVinActiveRef\.current=false/);
+  assert.match(app, /onClearVinLookup=\{\(\)=>\{vehicleVinRequestRef\.current\+=1;vehicleVinActiveRef\.current=false/);
+});
+
+test('session-scoped background responses cannot repopulate signed-out state', () => {
+  const app = readText('src/app.tsx');
+  assert.match(app, /let current=true;let renewing=false;const renew=\(\)=>\{if\(renewing\)return/);
+  assert.match(app, /renewing=true;refreshSession\(session\)/);
+  assert.match(app, /\.finally\(\(\)=>\{renewing=false\}\)/);
+  assert.match(app, /refreshSession\(session\)\.then\(next=>\{if\(current\)setSession\(next\)\}\)/);
+  assert.match(app, /const notificationRequestRef=useRef\(0\)/);
+  assert.match(app, /getMyNotifications\(session\)\.then\(items=>\{if\(current&&request===notificationRequestRef\.current\)setNotifications\(items\)\}\)/);
+  assert.match(app, /markAllNotificationsRead\(session\)\.catch\(\(\)=>getMyNotifications\(session\)\.then\(items=>\{if\(request===notificationRequestRef\.current\)setNotifications\(items\)\}\)/);
+  assert.match(app, /getAdminAccess\(session\)\.then\(access=>\{if\(current\)setIsAdmin\(access\)\}\)/);
+  assert.ok((app.match(/return\(\)=>\{current=false/g) ?? []).length >= 3);
+  assert.match(app, /const dealListRequestRef=useRef\(0\)/);
+  assert.match(app, /const savedDealsRequestRef=useRef\(0\)/);
+  assert.ok((app.match(/request===dealListRequestRef\.current/g) ?? []).length >= 3);
+  assert.ok((app.match(/request===savedDealsRequestRef\.current/g) ?? []).length >= 4);
+});
+
+test('offer loading ignores responses from a previous deal or session', () => {
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+  assert.match(features, /const loadSequenceRef = useRef\(0\)/);
+  assert.match(features, /const request = \+\+loadSequenceRef\.current/);
+  assert.match(features, /request === loadSequenceRef\.current\) setOffers\(next\)/);
+  assert.match(features, /loadSequenceRef\.current \+= 1/);
+});
+
+test('profile and notification deal navigation ignore stale responses', () => {
+  const app = readText('src/app.tsx');
+  assert.match(app, /const publicDealRequestRef=useRef\(0\)/);
+  assert.match(app, /const profileRequestRef=useRef\(0\)/);
+  assert.match(app, /const request=\+\+publicDealRequestRef\.current/);
+  assert.match(app, /request!==publicDealRequestRef\.current/);
+  assert.match(app, /request===publicDealRequestRef\.current/);
+  assert.match(app, /const openProfile=async\(\)=>\{if\(!session\)return;const request=\+\+profileRequestRef\.current/);
+  assert.ok((app.match(/request===profileRequestRef\.current/g) ?? []).length >= 2);
+  assert.match(app, /onOpenPublic=\{publicId=>void openPublicDeal\(publicId\)\}/);
+});
+
+test('payment and account security refreshes ignore stale responses', () => {
+  const payment = readText('src/DealPaymentWorkspace.tsx');
+  const sessions = readText('src/AccountSessionSecurity.tsx');
+  const mfa = readText('src/AccountMfaSecurity.tsx');
+
+  assert.match(payment, /const loadRequest = useRef\(0\)/);
+  assert.match(payment, /const request = \+\+loadRequest\.current/);
+  assert.ok((payment.match(/request !== loadRequest\.current/g) ?? []).length >= 2);
+  assert.match(payment, /loadRequest\.current \+= 1/);
+
+  for (const source of [sessions, mfa]) {
+    assert.match(source, /const loadRequestRef=useRef\(0\)/);
+    assert.ok((source.match(/\+\+loadRequestRef\.current/g) ?? []).length >= 2);
+    assert.ok((source.match(/request===loadRequestRef\.current/g) ?? []).length >= 2);
+    assert.match(source, /loadRequestRef\.current\+=1/);
+  }
+});
+
+test('transaction polling renders only the newest completed request', () => {
+  const payment = readText('src/DealPaymentWorkspace.tsx');
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.ok((payment.match(/const loadRequest = useRef\(0\)/g) ?? []).length >= 2);
+  assert.ok((payment.match(/request === loadRequest\.current/g) ?? []).length >= 2);
+  assert.ok((payment.match(/loadRequest\.current \+= 1/g) ?? []).length >= 2);
+
+  assert.ok((features.match(/const loadRequestRef = useRef\(0\)/g) ?? []).length >= 3);
+  assert.ok((features.match(/request === loadRequestRef\.current/g) ?? []).length >= 4);
+  assert.ok((features.match(/loadRequestRef\.current \+= 1/g) ?? []).length >= 3);
+  assert.match(features, /request !== loadRequestRef\.current \|\| !record/);
+  assert.match(payment, /Payment receipt is temporarily unavailable\. Retrying automatically\./);
+  assert.match(payment, /setLoadError\(''\)/);
+  assert.match(payment, /role="status" aria-live="polite"/);
+});
+
+test('meeting and watchlist reads fail visibly without exposing false state', () => {
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(fulfillment, /const \[loaded, setLoaded\] = useState\(false\)/);
+  assert.match(fulfillment, /setLoaded\(false\);[\s\S]*getDealMeeting\(session, deal\.id\)/);
+  assert.match(fulfillment, /Could not load meeting details/);
+  assert.match(fulfillment, /!loaded \? \([\s\S]*Loading meeting details/);
+  assert.match(fulfillment, /loadFailed \? \([\s\S]*meeting-load-failure/);
+  assert.match(fulfillment, /setLoadVersion\(\(version\) => version \+ 1\)/);
+  assert.match(fulfillment, /Could not load handoff status/);
+  assert.match(fulfillment, /if \(loadError\) \{[\s\S]*role="alert"[\s\S]*Try again/);
+  assert.match(features, /Could not check whether this deal is saved\. Try again\./);
+  assert.match(features, /Could not load the private participant record\./);
+  assert.match(features, /Could not refresh the deal action plan\./);
+  assert.ok((features.match(/compact-record-error/g) ?? []).length >= 2);
+});
+
+test('agreement history failures remain visible and recoverable', () => {
+  const agreement = readText('src/AgreementRecordSummary.tsx');
+  assert.ok((agreement.match(/const \[loadError, setLoadError\] = useState\(''\)/g) ?? []).length >= 2);
+  assert.match(agreement, /Agreement fingerprint is temporarily unavailable\./);
+  assert.match(agreement, /Agreement history is temporarily unavailable\./);
+  assert.match(agreement, /role="alert"/);
+  assert.ok((agreement.match(/setLoadVersion\(version => version \+ 1\)/g) ?? []).length >= 2);
+});
+
+test('completed-deal dispute eligibility fails visibly and can be retried', () => {
+  const resolution = readText('src/DealResolutionWorkspace.tsx');
+  assert.match(resolution, /const \[paymentStateError, setPaymentStateError\] = useState\(''\)/);
+  assert.match(resolution, /Dispute eligibility is temporarily unavailable\./);
+  assert.match(resolution, /setPaymentStateVersion\(version => version \+ 1\)/);
+});
+
+test('public trust checks never turn provider failures into silent approval', () => {
+  const declarations = readText('src/SellerDeclarations.tsx');
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+  assert.match(declarations, /Seller declaration status is temporarily unavailable\./);
+  assert.match(declarations, /setLoadVersion\(version => version \+ 1\)/);
+  assert.match(features, /Safety check temporarily unavailable/);
+  assert.match(features, /Do not treat a missing risk result as approval\./);
+  assert.match(features, /setLoadVersion\(version => version \+ 1\)/);
 });

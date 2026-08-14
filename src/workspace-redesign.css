@@ -84,7 +84,7 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .preview-progress .active>span{border-color:#56a7ff;box-shadow:0 0 0 5px rgba(45,132,244,.1)}
 .preview-next{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 18px;padding:14px 15px;border:1px solid rgba(110,174,249,.18);border-radius:13px;background:rgba(42,115,212,.09)}
 .preview-next b{margin-top:3px;font-size:12px}
-.preview-next button{min-height:38px;display:flex;align-items:center;gap:6px;flex:none;border:1px solid rgba(120,187,255,.34);border-radius:9px;padding:0 11px;color:#fff;background:#2377e7;font-size:11px;font-weight:800}
+.preview-next button{min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;gap:6px;flex:none;border:1px solid rgba(120,187,255,.34);border-radius:9px;padding:0 11px;color:#fff;background:#2377e7;font-size:11px;font-weight:800}
 .preview-next button svg{width:14px}
 .home-product-preview>footer{width:100%;max-width:none;display:flex;flex-wrap:wrap;gap:8px 18px;margin:0;padding:15px 18px;border-top:0;color:#8ea3ba;font-size:10px;font-weight:700}
 .home-product-preview>footer span{display:flex;align-items:center;gap:6px}
@@ -137,12 +137,12 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   box-shadow:0 12px 30px rgba(25,53,86,.1);
   backdrop-filter:blur(16px);
 }
-.deal-workspace-bar .back{min-height:40px;margin:0;padding:0 10px;border-radius:9px;color:#53657b;font-weight:800}
+.deal-workspace-bar .back{min-height:44px;margin:0;padding:0 10px;border-radius:9px;color:#53657b;font-weight:800}
 .deal-workspace-bar .back:hover{color:#1765dd;background:#eef5ff}
 .deal-workspace-id{display:flex;align-items:center;gap:8px;padding-left:4px}
 .deal-workspace-id b{color:#52647a;font-size:12px;letter-spacing:.04em}
 .deal-workspace-bar nav{display:flex;align-items:center;gap:6px;margin-left:auto}
-.deal-workspace-bar nav button{min-height:40px;display:flex;align-items:center;gap:6px;border:0;border-radius:9px;padding:0 11px;color:#53657b;background:transparent;font-size:12px;font-weight:800}
+.deal-workspace-bar nav button{min-height:44px;display:flex;align-items:center;gap:6px;border:0;border-radius:9px;padding:0 11px;color:#53657b;background:transparent;font-size:12px;font-weight:800}
 .deal-workspace-bar nav button:hover{color:#1765dd;background:#eef5ff}
 .deal-workspace-bar nav .deal-nav-protection{color:#244f82;background:#f2f7fd}
 .deal-workspace-bar nav .deal-nav-protection:hover{color:#1257c2;background:#e6f0ff}
@@ -214,7 +214,7 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .demo-complete-next li b{color:#244260;font-size:12px}
 .demo-complete-next li small{color:#718298;font-size:10px;line-height:1.35}
 .demo-complete-actions{display:grid;gap:8px}
-.demo-complete-actions button{width:100%;min-height:43px;justify-content:center}
+.demo-complete-actions button{width:100%;min-height:44px;justify-content:center}
 .demo-complete-actions .secondary{color:#34516e;background:#f7f9fc}
 .view-deal .deal-grid{grid-template-columns:minmax(0,1fr) 380px;gap:26px;align-items:start}
 .view-deal .deal-grid>div{
@@ -570,7 +570,7 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .create-validation-summary p:not(.eyebrow){margin:0;color:#8b5650;font-size:11px}
 .create-validation-summary ul{display:grid;gap:6px;margin:12px 0 0;padding:0;list-style:none}
 .create-validation-summary li{margin:0}
-.create-validation-summary li button{width:100%;min-height:38px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 11px;border:1px solid #edccc6;border-radius:10px;color:#713932;background:rgba(255,255,255,.78);font:700 11px/1.4 Manrope,sans-serif;text-align:left}
+.create-validation-summary li button{width:100%;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 11px;border:1px solid #edccc6;border-radius:10px;color:#713932;background:rgba(255,255,255,.78);font:700 11px/1.4 Manrope,sans-serif;text-align:left}
 .create-validation-summary li button:hover{border-color:#dca096;background:#fff}
 .create-validation-summary li button:focus-visible{outline:3px solid rgba(190,70,52,.2);outline-offset:2px}
 .create-validation-summary li svg{width:15px;flex:none}
@@ -596,7 +596,7 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .create-draft-recovery strong{font:800 13px Manrope,sans-serif}
 .create-draft-recovery span{margin-top:2px;color:#54708d;font-size:11px}
 .create-draft-recovery small{margin-top:3px;color:#75889c;font-size:9px}
-.create-draft-recovery button{display:inline-flex;min-height:36px;align-items:center;gap:6px;padding:0 11px;border:1px solid #c7d4e4;border-radius:10px;color:#405a74;font:800 10px Manrope,sans-serif;background:#fff}
+.create-draft-recovery button{display:inline-flex;min-height:44px;align-items:center;gap:6px;padding:0 13px;border:1px solid #c7d4e4;border-radius:10px;color:#405a74;font:800 10px Manrope,sans-serif;background:#fff}
 .create-draft-recovery button:hover{border-color:#9fb6d1;color:#173f76}
 .create-step-layout{
   display:grid;
@@ -1103,7 +1103,7 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .demo-complete-heading>span{width:40px;height:40px}
   .demo-complete-heading h3{font-size:17px}
   .demo-complete-actions .primary{display:none}
-  .demo-complete-actions .secondary{min-height:40px}
+  .demo-complete-actions .secondary{min-height:44px}
   .demo-flow-complete .demo-deal-banner .primary{display:none}
   .copy-deal-link-action,.copy-deal-link-action .copy{width:100%}
 }

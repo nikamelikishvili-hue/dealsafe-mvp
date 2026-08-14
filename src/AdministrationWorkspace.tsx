@@ -19,6 +19,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { formatMoney } from './currency';
+import { useConfirmAction } from './ConfirmActionDialog';
 import type { Deal } from './domain';
 import { EvidenceLifecycleCenter } from './EvidenceLifecycleCenter';
 import { EvidenceViewer } from './EvidenceViewer';
@@ -785,7 +786,9 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState('');
+  const savingRef = useRef(false);
   const requestRef = useRef(0);
+  const { confirmAction, confirmDialog } = useConfirmAction();
 
   const load = useCallback(async () => {
     const request = ++requestRef.current;
@@ -819,14 +822,30 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
     decision: 'resolved_buyer' | 'resolved_seller' | 'cancelled',
   ) => {
     const note = (notes[dispute.dispute_id] || '').trim();
-    if (note.length < 3 || saving) return;
+    if (note.length < 3 || savingRef.current) return;
+    savingRef.current = true;
     const prompt =
       decision === 'resolved_buyer'
         ? 'Resolve for buyer and issue a full Stripe refund?'
         : decision === 'resolved_seller'
           ? 'Resolve for seller and release the protected Stripe funds?'
           : 'Close this dispute without moving funds?';
-    if (!confirm(t(prompt))) return;
+    const confirmed = await confirmAction({
+      title: t('Confirm dispute decision'),
+      description: t(prompt),
+      confirmLabel: t(
+        decision === 'resolved_buyer'
+          ? 'Resolve for buyer'
+          : decision === 'resolved_seller'
+            ? 'Resolve for seller'
+            : 'Close dispute',
+      ),
+      tone: decision === 'cancelled' ? 'default' : 'danger',
+    });
+    if (!confirmed) {
+      savingRef.current = false;
+      return;
+    }
     setSaving(dispute.dispute_id);
     setMessage('');
     try {
@@ -878,11 +897,13 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
         error instanceof Error ? error.message : 'Could not resolve dispute',
       );
     } finally {
+      savingRef.current = false;
       setSaving('');
     }
   };
 
   return (
+    <>
     <section className="admin-disputes">
       <div className="admin-disputes-heading">
         <Scale />
@@ -1071,6 +1092,8 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
         )}
       </p>
     </section>
+    {confirmDialog}
+    </>
   );
 }
 
@@ -1094,6 +1117,8 @@ function AdminReportCenter({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState('');
   const [openingDeal, setOpeningDeal] = useState('');
+  const savingRef = useRef(false);
+  const openingDealRef = useRef(false);
   const requestRef = useRef(0);
 
   const load = useCallback(async () => {
@@ -1124,7 +1149,8 @@ function AdminReportCenter({
   }, [load]);
 
   const openDeal = async (publicId: string) => {
-    if (openingDeal) return;
+    if (openingDealRef.current) return;
+    openingDealRef.current = true;
     setOpeningDeal(publicId);
     setMessage('');
     try {
@@ -1134,6 +1160,7 @@ function AdminReportCenter({
         error instanceof Error ? error.message : 'Deal Link unavailable',
       );
     } finally {
+      openingDealRef.current = false;
       setOpeningDeal('');
     }
   };
@@ -1143,7 +1170,8 @@ function AdminReportCenter({
     decision: 'reviewed' | 'dismissed',
   ) => {
     const note = (notes[report.report_id] || '').trim();
-    if (note.length < 3 || saving) return;
+    if (note.length < 3 || savingRef.current) return;
+    savingRef.current = true;
     setSaving(report.report_id);
     setMessage('');
     try {
@@ -1170,13 +1198,15 @@ function AdminReportCenter({
           : 'Could not save report decision',
       );
     } finally {
+      savingRef.current = false;
       setSaving('');
     }
   };
 
   const changeVisibility = async (report: AdminReport) => {
     const note = (notes[report.report_id] || '').trim();
-    if (note.length < 3 || saving) return;
+    if (note.length < 3 || savingRef.current) return;
+    savingRef.current = true;
     const status =
       report.moderation_status === 'hidden' ? 'visible' : 'hidden';
     setSaving(report.report_id);
@@ -1207,6 +1237,7 @@ function AdminReportCenter({
           : 'Could not update Deal Link visibility',
       );
     } finally {
+      savingRef.current = false;
       setSaving('');
     }
   };

@@ -1,6 +1,7 @@
 import { LoaderCircle, MapPin, Search, X } from 'lucide-react';
 import { type ChangeEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
 import { parseGoogleUsAddress, type UsAddressParts } from './usAddress';
+import { reportClientFailure } from './services/clientFailureReporter';
 
 type PlaceResult = {
   displayName?: string;
@@ -100,7 +101,7 @@ export type AddressParts = Pick<
   'streetAddress' | 'addressLine2' | 'city' | 'state' | 'postalCode' | 'country'
 >;
 
-type QueryState = 'idle' | 'loading' | 'ready' | 'empty' | 'failed';
+type QueryState = 'idle' | 'loading' | 'ready' | 'empty' | 'unavailable' | 'failed';
 
 export function AddressAutocomplete({
   value,
@@ -117,13 +118,16 @@ export function AddressAutocomplete({
 }) {
   const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
   const listboxId = useId();
+  const statusId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const requestSequence = useRef(0);
+  const selectionMutationRef = useRef(false);
   const sessionTokenRef = useRef<unknown>(null);
   const libraryRef = useRef<PlaceLibrary | null>(null);
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [suggestions, setSuggestions] = useState<PlacePrediction[]>([]);
-  const [queryState, setQueryState] = useState<QueryState>(apiKey ? 'idle' : 'failed');
+  const [queryState, setQueryState] = useState<QueryState>(apiKey ? 'idle' : 'unavailable');
   const [selectionMessage, setSelectionMessage] = useState('');
 
   useEffect(() => {
@@ -138,7 +142,14 @@ export function AddressAutocomplete({
         setQueryState('idle');
       })
       .catch(() => {
-        if (active) setQueryState('failed');
+        if (active) {
+          setQueryState('failed');
+          reportClientFailure({
+            schema: 'dealivra.client-failure.v1',
+            boundary: 'address_autocomplete',
+            issue: 'provider_load_failed',
+          });
+        }
       });
     return () => {
       active = false;
@@ -150,6 +161,7 @@ export function AddressAutocomplete({
     const query = value.trim();
     if (!library) return;
     if (query.length < 3 || !focused) {
+      requestSequence.current += 1;
       setSuggestions([]);
       setActiveIndex(-1);
       setQueryState('idle');
@@ -183,6 +195,11 @@ export function AddressAutocomplete({
         setSuggestions([]);
         setActiveIndex(-1);
         setQueryState('failed');
+        reportClientFailure({
+          schema: 'dealivra.client-failure.v1',
+          boundary: 'address_autocomplete',
+          issue: 'suggestion_request_failed',
+        });
       }
     }, 250);
 
@@ -191,13 +208,16 @@ export function AddressAutocomplete({
 
   const selectPrediction = async (prediction: PlacePrediction) => {
     const library = libraryRef.current;
-    if (!library) return;
+    if (!library || selectionMutationRef.current) return;
+    selectionMutationRef.current = true;
+    const selectionRequest = ++requestSequence.current;
     setQueryState('loading');
     try {
       const place = prediction.toPlace();
       await place.fetchFields({
         fields: ['displayName', 'formattedAddress', 'addressComponents'],
       });
+      if (selectionRequest !== requestSequence.current) return;
       const parsed = parseGoogleUsAddress(
         place.addressComponents || [],
         place.formattedAddress || place.displayName || '',
@@ -217,12 +237,21 @@ export function AddressAutocomplete({
       );
       sessionTokenRef.current = new library.AutocompleteSessionToken();
     } catch {
+      if (selectionRequest !== requestSequence.current) return;
       setQueryState('failed');
       setSelectionMessage('We could not read that suggestion. Enter the address manually.');
+      reportClientFailure({
+        schema: 'dealivra.client-failure.v1',
+        boundary: 'address_autocomplete',
+        issue: 'place_details_failed',
+      });
+    } finally {
+      selectionMutationRef.current = false;
     }
   };
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    requestSequence.current += 1;
     onChange(event.target.value);
     setSelectionMessage('');
   };
@@ -254,8 +283,10 @@ export function AddressAutocomplete({
       ? 'Searching U.S. addresses…'
       : queryState === 'empty'
         ? 'No exact match found. You can continue entering the address manually.'
+        : queryState === 'unavailable'
+          ? 'Automatic suggestions are not configured. Enter the complete address manually.'
         : queryState === 'failed'
-          ? 'Address suggestions are unavailable. Enter the address manually.'
+          ? 'Automatic suggestions are temporarily unavailable. Enter the complete address manually.'
           : selectionMessage;
 
   return (
@@ -263,10 +294,15 @@ export function AddressAutocomplete({
       <div className="address-autocomplete-control">
         <Search aria-hidden="true" size={19} />
         <input
+          ref={inputRef}
           required
           role="combobox"
+          aria-label={placeholder}
           aria-autocomplete="list"
+          aria-haspopup="listbox"
           aria-controls={listboxId}
+          aria-describedby={statusId}
+          aria-busy={queryState === 'loading'}
           aria-expanded={focused && suggestions.length > 0}
           aria-activedescendant={activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}
           autoComplete={streetAddressOnly ? 'address-line1' : 'street-address'}
@@ -286,10 +322,12 @@ export function AddressAutocomplete({
             aria-label="Clear street address"
             onMouseDown={event => event.preventDefault()}
             onClick={() => {
+              requestSequence.current += 1;
               onChange('');
               setSuggestions([]);
               setActiveIndex(-1);
               setSelectionMessage('');
+              window.requestAnimationFrame(() => inputRef.current?.focus());
             }}
           >
             <X aria-hidden="true" size={18} />
@@ -334,7 +372,12 @@ export function AddressAutocomplete({
       )}
 
       <small
-        className={queryState === 'failed' ? 'address-autocomplete-status warning' : 'address-autocomplete-status'}
+        id={statusId}
+        className={
+          queryState === 'failed' || queryState === 'unavailable'
+            ? 'address-autocomplete-status warning'
+            : 'address-autocomplete-status'
+        }
         role="status"
         aria-live="polite"
       >

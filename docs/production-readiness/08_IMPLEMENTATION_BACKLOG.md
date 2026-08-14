@@ -13,7 +13,7 @@ This backlog turns the production specification into controlled delivery work. P
 
 | ID | Priority | Work | Acceptance |
 |---|---|---|---|
-| FND-001 | P0 | Pin all direct dependencies; choose one package manager/lockfile | Clean reproducible install produces the same dependency graph |
+| FND-001 | P0 | **Complete:** npm is the single package manager, lockfile v3 is enforced, every direct dependency is pinned, and dependency-policy/SBOM/audit gates verify the resolved graph | Clean reproducible install produces the same dependency graph |
 | FND-002 | P0 | **Complete:** pinned Biome format/lint gates, strict type-checking, foundation/unit tests, SSR React component tests, and production build/smoke checks run through the protected `verify` job | CI fails on a deliberate violation and passes clean code |
 | FND-003 | P0 | **In progress:** protected CI runs the full gate and Preview smoke, binds a clean exact commit to deterministic release and served-asset manifests, and provides exact-host byte-for-byte deployment verification; GitHub `main` requires the current branch, `verify`, CodeQL analysis, and Vercel through a signed, linear, conversation-resolved pull request with administrator enforcement; hosted verifier activation, restricted long-term archive, and named promotion approval remain | Required checks block main on failure |
 | FND-004 | P0 | **In progress:** exact dependencies, license and install-script policy, high-severity audit, repository secret scan, deterministic CycloneDX SBOM, bounded provenance manifest, CodeQL SAST, scoped ownership, finding SLAs, CI retention, and enforced branch protection exist; independent security-approver assignment remains an external paid-beta gate | Findings are visible and have ownership/SLA |
@@ -37,8 +37,8 @@ This backlog turns the production specification into controlled delivery work. P
 | UX-001 | P0 | Consolidate semantic tokens and remove uncontrolled feature overrides | Governed screens use approved tokens and contrast tests pass |
 | UX-002 | P0 | Build accessible core component primitives | Component tests cover keyboard, focus, names, errors, loading, touch targets |
 | UX-003 | P0 | Rebuild Deal Workspace information hierarchy | One next action is visible and focusable at every state |
-| UX-004 | P0 | **In progress locally:** standardized native US address autocomplete and manual fallback now share one parser; meeting and shipping flows expose apartment/suite/unit, state, and ZIP/ZIP+4 fields | State and ZIP are required/validated; private fields never appear publicly; protected Preview keyboard/mobile acceptance remains |
-| UX-005 | P0 | Normalize responsive behavior across 320–1440 px | No overlap/horizontal page scroll; sticky UI does not obscure focus |
+| UX-004 | P0 | **Repository complete; hosted acceptance pending:** standardized native US address autocomplete and manual fallback share one parser; meeting and shipping flows expose apartment/suite/unit, state, and ZIP/ZIP+4 fields; combobox status, loading, and fallback are announced accessibly | State and ZIP are required/validated; private fields never appear publicly; exact-origin Google provider and protected Preview keyboard/mobile acceptance remain |
+| UX-005 | P0 | **In progress locally:** normalize responsive behavior across 320–1440 px; the private chat clears the mobile action dock, while media previews use dynamic viewport bounds, safe-area controls, trapped keyboard focus, scroll containment, and focus restoration | No overlap/horizontal page scroll; sticky or modal UI does not obscure focus; protected Preview viewport matrix remains |
 | UX-006 | P1 | Add visual-regression stories for public, auth, creation, deal, payment, delivery, dispute, admin | Approved snapshots run in CI |
 | UX-007 | P1 | Conduct moderated usability and accessibility sessions | Critical repeated confusion is resolved and documented |
 

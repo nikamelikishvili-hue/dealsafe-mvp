@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArchiveRestore,
@@ -47,22 +47,33 @@ export function EvidenceLifecycleCenter({session}:{session:StoredSession}){
   const [snapshot,setSnapshot]=useState<EvidenceLifecycleSnapshot|null>(null);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState('');
+  const busyRef=useRef(false);
+  const loadSequenceRef=useRef(0);
   const [message,setMessage]=useState('');
   const [reasons,setReasons]=useState<Record<string,string>>({});
 
   const load=async()=>{
+    const request=++loadSequenceRef.current;
     setLoading(true);
     setMessage('');
-    try{setSnapshot(await getEvidenceLifecycleSnapshot(session))}
-    catch(error){setMessage(error instanceof Error?error.message:'Could not load evidence lifecycle controls.')}
-    finally{setLoading(false)}
+    try{
+      const next=await getEvidenceLifecycleSnapshot(session);
+      if(request===loadSequenceRef.current)setSnapshot(next);
+    }
+    catch(error){if(request===loadSequenceRef.current)setMessage(error instanceof Error?error.message:'Could not load evidence lifecycle controls.')}
+    finally{if(request===loadSequenceRef.current)setLoading(false)}
   };
 
-  useEffect(()=>{void load()},[session.accessToken]);
+  useEffect(()=>{
+    void load();
+    return()=>{loadSequenceRef.current+=1};
+  },[session.accessToken]);
 
   const orderedJobs=useMemo(()=>snapshot?.jobs||[],[snapshot]);
 
   const refresh=async()=>{
+    if(busyRef.current)return;
+    busyRef.current=true;
     setBusy('refresh');
     setMessage('');
     try{
@@ -70,10 +81,12 @@ export function EvidenceLifecycleCenter({session}:{session:StoredSession}){
       await load();
       setMessage('Lifecycle inventory refreshed. No retained evidence was deleted by this review.')
     }catch(error){setMessage(error instanceof Error?error.message:'Inventory refresh failed.')}
-    finally{setBusy('')}
+    finally{busyRef.current=false;setBusy('')}
   };
 
   const runAction=async(key:string,action:()=>Promise<unknown>,success:string)=>{
+    if(busyRef.current)return;
+    busyRef.current=true;
     setBusy(key);
     setMessage('');
     try{
@@ -81,13 +94,13 @@ export function EvidenceLifecycleCenter({session}:{session:StoredSession}){
       await load();
       setMessage(success);
     }catch(error){setMessage(error instanceof Error?error.message:'Lifecycle action failed safely.')}
-    finally{setBusy('')}
+    finally{busyRef.current=false;setBusy('')}
   };
 
   const reasonFor=(job:EvidenceLifecycleJob)=>reasons[job.jobId]?.trim()||'';
   const changeReason=(jobId:string,value:string)=>setReasons(current=>({...current,[jobId]:value.slice(0,1000)}));
 
-  return <section className="evidence-lifecycle-center" aria-labelledby="evidence-lifecycle-title">
+  return <section className="evidence-lifecycle-center" aria-labelledby="evidence-lifecycle-title" aria-busy={Boolean(busy)}>
     <div className="evidence-lifecycle-heading">
       <div className="evidence-lifecycle-title">
         <ShieldCheck/>
@@ -97,7 +110,7 @@ export function EvidenceLifecycleCenter({session}:{session:StoredSession}){
           <span>Retention review, legal holds, verified deletion, quarantine cleanup, and integrity ownership.</span>
         </div>
       </div>
-      <button className="secondary" onClick={refresh} disabled={Boolean(busy)||loading}>
+      <button type="button" className="secondary" onClick={refresh} disabled={Boolean(busy)||loading}>
         <RefreshCw className={busy==='refresh'?'is-spinning':''}/>
         {busy==='refresh'?'Refreshing…':'Refresh inventory'}
       </button>
@@ -132,7 +145,7 @@ export function EvidenceLifecycleCenter({session}:{session:StoredSession}){
             <b>{alert.summary}</b>
             <span>{alert.ownerRole} owner · {displayTime(alert.createdAt)}</span>
           </div>
-          {alert.status==='open'&&<button className="secondary" disabled={Boolean(busy)} onClick={()=>void runAction(
+          {alert.status==='open'&&<button type="button" className="secondary" disabled={Boolean(busy)} onClick={()=>void runAction(
             `alert:${alert.alertId}`,
             ()=>acknowledgeEvidenceLifecycleAlert(session,alert.alertId),
             'Alert acknowledged and preserved in the audit history.',
@@ -170,16 +183,16 @@ export function EvidenceLifecycleCenter({session}:{session:StoredSession}){
               <small>{(reasons[job.jobId]||'').length}/1000</small>
             </label>
             <div>
-              {job.jobType==='evidence_delete'&&job.status==='pending_review'&&!job.activeHold&&<button className="danger" disabled={Boolean(busy)||reasonFor(job).length<10} onClick={()=>void runAction(
+              {job.jobType==='evidence_delete'&&job.status==='pending_review'&&!job.activeHold&&<button type="button" className="danger" disabled={Boolean(busy)||reasonFor(job).length<10} onClick={()=>void runAction(
                 `approve:${job.jobId}`,
                 ()=>approveEvidenceDeletion(session,job.evidenceId!,reasonFor(job)),
                 'Deletion approved. The scheduled worker will verify every guard again before acting.',
               )}><Trash2/>{busy===`approve:${job.jobId}`?'Approving…':'Approve verified deletion'}</button>}
-              {!job.activeHold?<button className="secondary" disabled={Boolean(busy)||reasonFor(job).length<10} onClick={()=>void runAction(
+              {!job.activeHold?<button type="button" className="secondary" disabled={Boolean(busy)||reasonFor(job).length<10} onClick={()=>void runAction(
                 `hold:${job.jobId}`,
                 ()=>placeEvidenceLegalHold(session,job.evidenceId!,reasonFor(job)),
                 'Legal hold placed. Deletion is blocked and the action is audited.',
-              )}><LockKeyhole/>{busy===`hold:${job.jobId}`?'Placing hold…':'Place legal hold'}</button>:job.holdKey&&<button className="secondary" disabled={Boolean(busy)||reasonFor(job).length<10} onClick={()=>void runAction(
+              )}><LockKeyhole/>{busy===`hold:${job.jobId}`?'Placing hold…':'Place legal hold'}</button>:job.holdKey&&<button type="button" className="secondary" disabled={Boolean(busy)||reasonFor(job).length<10} onClick={()=>void runAction(
                 `release:${job.jobId}`,
                 ()=>releaseEvidenceLegalHold(session,job.evidenceId!,job.holdKey!,reasonFor(job)),
                 'Legal hold released. Any elapsed retention deletion returned to fresh review.',

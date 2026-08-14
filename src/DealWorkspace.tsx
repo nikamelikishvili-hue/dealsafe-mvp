@@ -110,6 +110,7 @@ interface DealWorkspaceProps {
   onSignIn: () => void;
   onRefreshSavedDeals: () => void;
   onAccept: () => void;
+  accepting: boolean;
   onResetDemo: () => void;
   onAgreementCheckChange: (
     key: keyof AgreementChecks,
@@ -171,6 +172,7 @@ export function DealWorkspace({
   onSignIn,
   onRefreshSavedDeals,
   onAccept,
+  accepting,
   onResetDemo,
   onAgreementCheckChange,
   onBuyerChange,
@@ -788,10 +790,11 @@ export function DealWorkspace({
                         <button
                           type="button"
                           className="primary full"
-                          disabled={!agreementActionReady}
+                          disabled={!agreementActionReady || accepting}
+                          aria-busy={accepting}
                           onClick={onAccept}
                         >
-                          {t('Accept these terms')}
+                          {t(accepting ? 'Accepting…' : 'Accept these terms')}
                         </button>
                         <small>
                           {t(

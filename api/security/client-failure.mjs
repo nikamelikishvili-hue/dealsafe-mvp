@@ -7,6 +7,9 @@ const allowedPairs = new Set([
   'application_bootstrap:localization_initialization_failed',
   'browser_runtime:window_error',
   'browser_runtime:unhandled_promise_rejection',
+  'address_autocomplete:provider_load_failed',
+  'address_autocomplete:suggestion_request_failed',
+  'address_autocomplete:place_details_failed',
 ]);
 
 function header(request, name) {

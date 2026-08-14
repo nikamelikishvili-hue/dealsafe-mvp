@@ -65,7 +65,9 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
   const [feedback, setFeedback] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const requestRef = useRef(0);
+  const lifecycleRef = useRef(0);
 
   const loadCases = useCallback(async () => {
     const request = ++requestRef.current;
@@ -88,9 +90,11 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
   }, [session]);
 
   useEffect(() => {
+    const lifecycle = ++lifecycleRef.current;
     void loadCases();
     return () => {
       requestRef.current += 1;
+      if (lifecycle === lifecycleRef.current) lifecycleRef.current += 1;
     };
   }, [loadCases]);
 
@@ -123,7 +127,9 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
 
   const submitCase = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (saving) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
+    const lifecycle = lifecycleRef.current;
     setSaving(true);
     setFeedback('');
     try {
@@ -132,47 +138,58 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
         subject,
         message,
       });
+      if (lifecycle !== lifecycleRef.current) return;
       setCategory('deal_help');
       setSubject('');
       setMessage('');
       setCreating(false);
       const next = await getMySupportCases(session);
+      if (lifecycle !== lifecycleRef.current) return;
       setCases(next);
       await openCase(reference);
     } catch (error) {
+      if (lifecycle !== lifecycleRef.current) return;
       setFeedback(
         error instanceof Error
           ? error.message
           : 'Could not open a support case.',
       );
     } finally {
-      setSaving(false);
+      savingRef.current = false;
+      if (lifecycle === lifecycleRef.current) setSaving(false);
     }
   };
 
   const submitReply = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selected || saving) return;
+    if (!selected || savingRef.current) return;
+    savingRef.current = true;
+    const lifecycle = lifecycleRef.current;
     setSaving(true);
     setFeedback('');
     try {
       await replySupportCase(session, selected.public_reference, reply);
+      if (lifecycle !== lifecycleRef.current) return;
       setReply('');
       const detail = await getSupportCase(
         session,
         selected.public_reference,
       );
+      if (lifecycle !== lifecycleRef.current) return;
       setSelected(detail);
       const next = await getMySupportCases(session);
+      if (lifecycle !== lifecycleRef.current) return;
       setCases(next);
     } catch (error) {
+      if (lifecycle !== lifecycleRef.current) return;
       setFeedback(
         error instanceof Error
           ? error.message
           : 'Could not send your support reply.',
       );
     } finally {
-      setSaving(false);
+      savingRef.current = false;
+      if (lifecycle === lifecycleRef.current) setSaving(false);
     }
   };
 
@@ -313,6 +330,7 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
             <button
               className="primary"
               type="submit"
+              aria-busy={saving}
               disabled={
                 saving
                 || subject.trim().length < 5
@@ -402,6 +420,7 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
                   <button
                     className="primary"
                     type="submit"
+                    aria-busy={saving}
                     disabled={saving || reply.trim().length < 10}
                   >
                     <Send size={17} aria-hidden="true" />

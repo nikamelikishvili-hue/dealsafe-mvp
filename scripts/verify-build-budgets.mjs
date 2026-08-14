@@ -1,12 +1,16 @@
 import { readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const distRoot = fileURLToPath(new URL('../dist/', import.meta.url));
 const budgets = Object.freeze({
   maximumJavaScriptChunkBytes: 400_000,
+  maximumInitialApplicationBytes: 160_000,
   maximumCssChunkBytes: 200_000,
-  maximumTotalJavaScriptBytes: 825_000,
+  // Recoverable trust-state UI adds explicit retry and failure paths to the
+  // deferred workspaces. Keep a narrow ceiling above the verified output so
+  // future growth still fails closed instead of normalizing bundle drift.
+  maximumTotalJavaScriptBytes: 830_000,
   maximumTotalCssBytes: 290_000,
 });
 
@@ -21,6 +25,22 @@ const files = listFiles(distRoot);
 const javascript = files.filter(path => path.endsWith('.js'));
 const stylesheets = files.filter(path => path.endsWith('.css'));
 const violations = [];
+const initialApplicationChunks = javascript.filter(path =>
+  /^app-[A-Za-z0-9_-]+\.js$/.test(basename(path)),
+);
+
+if (initialApplicationChunks.length !== 1) {
+  violations.push(
+    `Expected exactly one initial application chunk, found ${initialApplicationChunks.length}.`,
+  );
+} else {
+  const initialApplicationBytes = statSync(initialApplicationChunks[0]).size;
+  if (initialApplicationBytes > budgets.maximumInitialApplicationBytes) {
+    violations.push(
+      `Initial application JavaScript is ${initialApplicationBytes} bytes; budget is ${budgets.maximumInitialApplicationBytes}.`,
+    );
+  }
+}
 
 for (const path of javascript) {
   const bytes = statSync(path).size;
@@ -66,6 +86,10 @@ console.log(JSON.stringify({
   status: 'within_budget',
   javascript_chunks: javascript.length,
   stylesheet_chunks: stylesheets.length,
+  initial_application_javascript_bytes:
+    initialApplicationChunks.length === 1
+      ? statSync(initialApplicationChunks[0]).size
+      : null,
   total_javascript_bytes: totalJavaScriptBytes,
   total_css_bytes: totalCssBytes,
 }));

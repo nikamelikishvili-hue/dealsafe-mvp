@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Clock3,
   Laptop,
@@ -52,34 +52,43 @@ export function AccountSessionSecurity({
   const [sessions,setSessions]=useState<AccountSession[]>([]);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState<'others'|'global'|''>('');
+  const busyRef=useRef(false);
+  const loadRequestRef=useRef(0);
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
   const [confirmEverywhere,setConfirmEverywhere]=useState(false);
 
   const loadSessions=async()=>{
+    const request=++loadRequestRef.current;
     setLoading(true);
     setError('');
     try{
-      setSessions(await getMyAccountSessions(session));
+      const items=await getMyAccountSessions(session);
+      if(request!==loadRequestRef.current)return;
+      setSessions(items);
     }catch(loadError){
+      if(request!==loadRequestRef.current)return;
       setError(loadError instanceof Error?loadError.message:'Could not load signed-in devices.');
     }finally{
-      setLoading(false);
+      if(request===loadRequestRef.current)setLoading(false);
     }
   };
 
   useEffect(()=>{
     let active=true;
+    const request=++loadRequestRef.current;
     setLoading(true);
     setError('');
     getMyAccountSessions(session)
-      .then(items=>{if(active)setSessions(items)})
-      .catch(loadError=>{if(active)setError(loadError instanceof Error?loadError.message:'Could not load signed-in devices.')})
-      .finally(()=>{if(active)setLoading(false)});
-    return()=>{active=false};
+      .then(items=>{if(active&&request===loadRequestRef.current)setSessions(items)})
+      .catch(loadError=>{if(active&&request===loadRequestRef.current)setError(loadError instanceof Error?loadError.message:'Could not load signed-in devices.')})
+      .finally(()=>{if(active&&request===loadRequestRef.current)setLoading(false)});
+    return()=>{active=false;loadRequestRef.current+=1};
   },[session.user.id,session.accessToken]);
 
   const signOutOthers=async()=>{
+    if(busyRef.current)return;
+    busyRef.current=true;
     setBusy('others');
     setMessage('');
     setError('');
@@ -90,11 +99,14 @@ export function AccountSessionSecurity({
     }catch(actionError){
       setError(actionError instanceof Error?actionError.message:'Could not sign out other devices.');
     }finally{
+      busyRef.current=false;
       setBusy('');
     }
   };
 
   const signOutAll=async()=>{
+    if(busyRef.current)return;
+    busyRef.current=true;
     setBusy('global');
     setMessage('');
     setError('');
@@ -103,8 +115,10 @@ export function AccountSessionSecurity({
       onSignedOut();
     }catch(actionError){
       setError(actionError instanceof Error?actionError.message:'Could not sign out all devices.');
-      setBusy('');
       setConfirmEverywhere(false);
+    }finally{
+      busyRef.current=false;
+      setBusy('');
     }
   };
 

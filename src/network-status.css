@@ -1,0 +1,54 @@
+.network-status {
+  position: relative;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+  padding: 0.6rem max(1rem, env(safe-area-inset-left));
+  color: #4b3300;
+  background: #fff4cf;
+  border-bottom: 1px solid #e8cc71;
+  box-shadow: 0 8px 24px rgb(20 35 58 / 10%);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.network-status svg {
+  flex: 0 0 auto;
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.network-status.reconnected {
+  color: #155948;
+  background: #e7f8f1;
+  border-bottom-color: #9bd8c2;
+}
+
+@media (max-width: 620px) {
+  .network-status {
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 0.65rem 0.85rem;
+    font-size: 0.84rem;
+  }
+
+  .network-status svg {
+    margin-top: 0.08rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .network-status {
+    animation: network-status-in 180ms ease-out;
+  }
+}
+
+@keyframes network-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.4rem);
+  }
+}

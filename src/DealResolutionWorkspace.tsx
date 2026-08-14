@@ -12,7 +12,9 @@ import {
   Send,
   ShieldCheck,
   Star,
+  X,
 } from 'lucide-react';
+import { useConfirmAction } from './ConfirmActionDialog';
 import type { Deal } from './domain';
 import { getAppLanguage, t } from './i18n';
 import {
@@ -41,10 +43,12 @@ export function RatingPanel({ deal, session }: RatingPanelProps) {
   const [comment, setComment] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (saving) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setMessage('');
     try {
@@ -53,6 +57,7 @@ export function RatingPanel({ deal, session }: RatingPanelProps) {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not save rating');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -115,26 +120,40 @@ export function DealSafetyActions({
   const [reason, setReason] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [paymentState, setPaymentState] =
     useState<ProtectedPaymentState | null>(null);
+  const [paymentStateError, setPaymentStateError] = useState('');
+  const [paymentStateVersion, setPaymentStateVersion] = useState(0);
+  const { confirmAction, confirmDialog } = useConfirmAction();
 
   useEffect(() => {
     if (deal.status !== 'completed') {
       setPaymentState(null);
+      setPaymentStateError('');
       return;
     }
     let current = true;
+    setPaymentStateError('');
     void getProtectedPaymentStatus(session, deal.id)
       .then((payment) => {
-        if (current) setPaymentState(payment.status);
+        if (current) {
+          setPaymentState(payment.status);
+          setPaymentStateError('');
+        }
       })
       .catch(() => {
-        if (current) setPaymentState(null);
+        if (current) {
+          setPaymentState(null);
+          setPaymentStateError(
+            'Payment status could not be checked. Dispute eligibility is temporarily unavailable.',
+          );
+        }
       });
     return () => {
       current = false;
     };
-  }, [deal.id, deal.status, session.accessToken]);
+  }, [deal.id, deal.status, session.accessToken, paymentStateVersion]);
 
   const closeForm = () => {
     if (saving) return;
@@ -144,13 +163,23 @@ export function DealSafetyActions({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!mode || saving) return;
+    if (!mode || savingRef.current) return;
+    savingRef.current = true;
 
-    const confirmed =
-      mode === 'cancel'
-        ? confirm(t('Cancel this deal? This action cannot be undone.'))
-        : confirm(t('Open a dispute and pause this deal?'));
-    if (!confirmed) return;
+    const confirmed = await confirmAction({
+      title: t(mode === 'cancel' ? 'Cancel this deal?' : 'Open a dispute?'),
+      description: t(
+        mode === 'cancel'
+          ? 'This action cannot be undone. The cancellation reason will remain in the private deal history.'
+          : 'The deal and handoff will be paused while the report is reviewed.',
+      ),
+      confirmLabel: t(mode === 'cancel' ? 'Cancel deal' : 'Open dispute'),
+      tone: 'danger',
+    });
+    if (!confirmed) {
+      savingRef.current = false;
+      return;
+    }
 
     setSaving(true);
     setMessage('');
@@ -169,6 +198,7 @@ export function DealSafetyActions({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Action failed');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -203,6 +233,7 @@ export function DealSafetyActions({
       ].includes(paymentState));
 
   return (
+    <>
     <section className="deal-safety-actions">
       <div>
         <p className="eyebrow">{t('Safety controls')}</p>
@@ -231,6 +262,18 @@ export function DealSafetyActions({
           </button>
         )}
       </div>
+      {paymentStateError && (
+        <div className="notice" role="alert">
+          <span>{t(paymentStateError)}</span>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setPaymentStateVersion(version => version + 1)}
+          >
+            {t('Try again')}
+          </button>
+        </div>
+      )}
       {mode && (
         <form onSubmit={submit}>
           <label>
@@ -275,6 +318,8 @@ export function DealSafetyActions({
         </div>
       )}
     </section>
+    {confirmDialog}
+    </>
   );
 }
 
@@ -294,11 +339,13 @@ export function ReportDealPanel({
   const [details, setDetails] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [submitted, setSubmitted] = useState(false);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!session || sending || details.trim().length < 10) return;
+    if (!session || sendingRef.current || details.trim().length < 10) return;
+    sendingRef.current = true;
     setSending(true);
     setMessage('');
     try {
@@ -308,6 +355,7 @@ export function ReportDealPanel({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not submit report');
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };
@@ -430,6 +478,8 @@ export function DealChat({ deal, session }: DealChatProps) {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  const launcherRef = useRef<HTMLButtonElement>(null);
   const openRef = useRef(false);
   const loadedRef = useRef(false);
   const lastSeenRef = useRef<string | undefined>(undefined);
@@ -444,6 +494,13 @@ export function DealChat({ deal, session }: DealChatProps) {
       setUnread(0);
       const latest = messages[messages.length - 1]?.created_at;
       if (latest) lastSeenRef.current = latest;
+    }
+  };
+
+  const closeChat = (restoreFocus = false) => {
+    setChatOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => launcherRef.current?.focus());
     }
   };
 
@@ -506,7 +563,8 @@ export function DealChat({ deal, session }: DealChatProps) {
 
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!body.trim() || sending) return;
+    if (!body.trim() || sendingRef.current) return;
+    sendingRef.current = true;
     const context = contextRef.current;
     setSending(true);
     setError('');
@@ -523,6 +581,7 @@ export function DealChat({ deal, session }: DealChatProps) {
           : 'Could not send message',
       );
     } finally {
+      sendingRef.current = false;
       if (context === contextRef.current) setSending(false);
     }
   };
@@ -534,6 +593,7 @@ export function DealChat({ deal, session }: DealChatProps) {
       onMouseLeave={() => setChatOpen(false)}
     >
       <button
+        ref={launcherRef}
         type="button"
         className="deal-chat-launcher"
         aria-expanded={open}
@@ -552,6 +612,12 @@ export function DealChat({ deal, session }: DealChatProps) {
           id="deal-chat-panel"
           className="deal-chat deal-chat-panel no-print"
           aria-label={t('Deal chat')}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              closeChat(true);
+            }
+          }}
         >
           <div className="chat-heading">
             <MessageCircle />
@@ -563,9 +629,9 @@ export function DealChat({ deal, session }: DealChatProps) {
               type="button"
               className="chat-close"
               aria-label={t('Close chat')}
-              onClick={() => setChatOpen(false)}
+              onClick={() => closeChat(true)}
             >
-              ×
+              <X aria-hidden="true" size={19} />
             </button>
           </div>
           <div className="chat-messages" aria-live="polite">
@@ -591,6 +657,7 @@ export function DealChat({ deal, session }: DealChatProps) {
           <form onSubmit={send}>
             <textarea
               required
+              aria-label={t('Deal chat message')}
               maxLength={1000}
               value={body}
               onChange={(event) => setBody(event.target.value)}
@@ -600,6 +667,7 @@ export function DealChat({ deal, session }: DealChatProps) {
               className="primary"
               type="submit"
               disabled={!body.trim() || sending}
+              aria-busy={sending}
             >
               <Send size={17} />
               {t(sending ? 'Sending…' : 'Send')}

@@ -1,1 +1,12 @@
 .deal-chat-float{position:fixed;right:24px;bottom:24px;z-index:40;display:flex;flex-direction:column;align-items:flex-end;gap:10px}.deal-chat-launcher{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;background:var(--green);color:#fff;padding:13px 16px;box-shadow:0 12px 30px #193d2f35;font-weight:700}.deal-chat-launcher:hover,.deal-chat-launcher:focus-visible{background:#0b5b3f}.deal-chat-launcher b{display:grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#fff;color:var(--green);font-size:11px}.deal-chat-panel{width:min(420px,calc(100vw - 32px));max-height:min(640px,calc(100vh - 110px));overflow:auto;margin:0;padding:20px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 50px #193d2f2b}.deal-chat-panel .chat-messages{height:250px}.chat-heading{position:relative}.chat-close{margin-left:auto;border:0;background:transparent;color:#718078;width:32px;height:32px;border-radius:50%;font-size:26px;line-height:1}.chat-close:hover,.chat-close:focus-visible{background:#edf5f0;color:var(--ink)}@media(max-width:760px){.deal-chat-float{right:12px;bottom:12px}.deal-chat-launcher{padding:13px}.deal-chat-launcher span{display:none}.deal-chat-panel{width:calc(100vw - 24px);max-height:calc(100vh - 92px);padding:16px}.deal-chat-panel .chat-messages{height:220px}.deal-chat-panel .deal-chat form{grid-template-columns:1fr}.deal-chat-panel .deal-chat form button{width:100%}}
+
+/* Keep chat reachable above the persistent primary-action dock on deal pages. */
+@media(max-width:760px){
+  .view-deal .deal-chat-float{
+    bottom:calc(92px + env(safe-area-inset-bottom));
+  }
+  .view-deal .deal-chat-panel{
+    max-height:calc(100dvh - 174px - env(safe-area-inset-bottom));
+    overscroll-behavior:contain;
+  }
+}

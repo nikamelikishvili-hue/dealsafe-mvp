@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import {
   BadgeCheck,
   Clock3,
@@ -24,6 +24,7 @@ function AgreementVerifier() {
   );
   const [message, setMessage] = useState('');
   const [checking, setChecking] = useState(false);
+  const checkingRef = useRef(false);
   const cleanId = dealId.replace(/^deal\s+/i, '').trim();
   const cleanCode = code.replace(/\s/g, '').trim();
   const validationVisible = message === 'Review the highlighted fields.';
@@ -33,12 +34,14 @@ function AgreementVerifier() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (checkingRef.current) return;
     setMessage('');
     setResult(null);
     if (cleanId.length < 4 || !/^[a-f0-9]{64}$/i.test(cleanCode)) {
       setMessage('Review the highlighted fields.');
       return;
     }
+    checkingRef.current = true;
     setChecking(true);
     try {
       const match = await verifyAgreementRecord(cleanId, cleanCode);
@@ -50,6 +53,7 @@ function AgreementVerifier() {
           : 'Agreement verification is unavailable',
       );
     } finally {
+      checkingRef.current = false;
       setChecking(false);
     }
   };

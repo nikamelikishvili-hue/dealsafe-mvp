@@ -206,8 +206,8 @@ export function DealLinkError({ message, onBack }: { message: string; onBack: ()
     <div className="safe pending"><ShieldAlert />{t('Deal Link unavailable')}</div>
     <h1>{t('Deal Link unavailable')}</h1>
     <p className="lede small">{t('The link may be incomplete, expired, or no longer public.')}</p>
-    {message && <div className="notice"><ShieldAlert size={18} /><span>{t(message)}</span></div>}
-    <button className="primary" onClick={onBack}>{t('Back')}</button>
+    {message && <div className="notice" role="alert"><ShieldAlert size={18} /><span>{t(message)}</span></div>}
+    <button type="button" className="primary" onClick={onBack}>{t('Back')}</button>
   </section>;
 }
 
@@ -227,7 +227,7 @@ export function NotFoundPage({ onBack }: { onBack: () => void }) {
     <p className="eyebrow">{t('Page not found')}</p>
     <h1>{t('This address does not lead to a Dealivra page.')}</h1>
     <p className="lede small">{t('Check the address, or return home to continue safely.')}</p>
-    <button className="primary" onClick={onBack}>{t('Return to home')}</button>
+    <button type="button" className="primary" onClick={onBack}>{t('Return to home')}</button>
   </section>;
 }
 
@@ -242,7 +242,7 @@ export function PublicInfoPage({
 }) {
   const content = publicInfoContent[view];
   return <section className="public-info-page">
-    <button className="back" onClick={onBack}>← {t('Back to home')}</button>
+    <button type="button" className="back" onClick={onBack}>← {t('Back to home')}</button>
     <p className="eyebrow">{t(content.eyebrow)}</p>
     <h1>{t(content.title)}</h1>
     <p className="lede small">{t(content.intro)}</p>
@@ -256,6 +256,6 @@ export function PublicInfoPage({
       <ShieldAlert />
       <p>{t('Important: production payment protection, fees, refunds, and dispute rights depend on licensed providers, applicable law, and final legal terms.')}</p>
     </div>
-    <button className="global-primary" onClick={onCreate}>{t('Start a deal')}<ArrowRight size={18} /></button>
+    <button type="button" className="global-primary" onClick={onCreate}>{t('Start a deal')}<ArrowRight size={18} /></button>
   </section>;
 }

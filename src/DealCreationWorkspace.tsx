@@ -606,7 +606,7 @@ export function DealCreationWorkspace({
 
       {!reviewingDraft && (
         <header className="create-flow-heading">
-          <button className="back" onClick={onBack}>
+          <button type="button" className="back" onClick={onBack}>
             ← {t(dashboardAvailable ? 'Dashboard' : 'Home')}
           </button>
           <p className="eyebrow">{t(createStepMeta[currentStep].eyebrow)}</p>
