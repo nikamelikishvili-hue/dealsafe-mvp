@@ -1051,14 +1051,16 @@ export function App() {
   const open=(d:Deal)=>{setActive(d);setView('deal')};
   const openPublicDeal=async(publicId:string)=>{
     const request=++publicDealRequestRef.current;
+    updateBrowserAddress(`/?deal=${encodeURIComponent(publicId)}`);
     setAuthMessage('');
+    setView('route-loading');
     try{
       const deal=await getPublicDeal(publicId);
       if(request!==publicDealRequestRef.current)return;
       setActive(deal);
       setView('deal');
     }catch(error){
-      if(request===publicDealRequestRef.current)setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable');
+      if(request===publicDealRequestRef.current){setAuthMessage(error instanceof Error?error.message:'Deal Link unavailable');setView('link-error')}
     }
   };
   const agreementConfirmed=Object.values(agreementChecks).every(Boolean);
@@ -1204,7 +1206,7 @@ export function App() {
       {view==='forgot'&&<ForgotPassword onBack={()=>openAuthRoute('signin','home')}/>}
       {view==='reset'&&recoveryToken&&<ResetPassword token={recoveryToken} onDone={()=>setView('auth')}/>}
       {view==='route-loading'&&<RouteLoading/>}
-      {view==='link-error'&&<DealLinkError message={authMessage} onBack={()=>goHomeSection()}/>}
+      {view==='link-error'&&<DealLinkError message={authMessage} onRetry={()=>setRouteRevision(revision=>revision+1)} onBack={()=>goHomeSection()}/>}
       {view==='not-found'&&<NotFoundPage onBack={()=>goHomeSection()}/>}
       {view==='verify'&&<AgreementVerificationPage onBack={()=>goHomeSection()}/>}
       {isPublicInfoView(view)&&<PublicInfoPage view={view} onBack={()=>goHomeSection()} onCreate={openCreate}/>}

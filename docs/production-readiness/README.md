@@ -95,6 +95,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [84_ENGLISH_LAUNCH_BUNDLE_OPTIMIZATION.md](84_ENGLISH_LAUNCH_BUNDLE_OPTIMIZATION.md) | AST-scoped English launch literal inlining and localization reactivation gate |
 | [85_NOTIFICATION_DATA_RECOVERY.md](85_NOTIFICATION_DATA_RECOVERY.md) | Recoverable activity loading, stale-data preservation, and optimistic mutation rollback |
 | [86_PROFILE_DATA_RECOVERY.md](86_PROFILE_DATA_RECOVERY.md) | Fail-closed profile loading before protected account controls and bounded retry |
+| [87_PUBLIC_DEAL_ROUTE_RECOVERY.md](87_PUBLIC_DEAL_ROUTE_RECOVERY.md) | Canonical public Deal deep-link loading, failure, retry, and mobile recovery actions |
 
 ## Authority and change control
 

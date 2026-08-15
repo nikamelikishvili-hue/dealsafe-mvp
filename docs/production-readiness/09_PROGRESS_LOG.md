@@ -4523,6 +4523,18 @@ Supabase resource, customer record, or real-money capability changed.
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
 
+## Public Deal route recovery
+
+- Unified direct-link and notification-originated public Deal loading.
+- Preserved the canonical Deal URL during loading and failure.
+- Added a retry of the same deep link plus a separate return-home action.
+- Added mobile wrapping and 44-pixel recovery action targets.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## Profile data recovery
 
 - Added explicit profile loading, failure, and retry behavior.

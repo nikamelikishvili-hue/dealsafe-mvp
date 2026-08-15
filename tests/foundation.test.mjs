@@ -12744,3 +12744,17 @@ test('profile loading fails closed before account security controls render', () 
   assert.match(workspace, /title=\{loading \? 'Loading profile…' : 'Profile unavailable'\}/);
   assert.match(workspace, /onAction=\{loading \? undefined : onRetry\}/);
 });
+
+test('public Deal Link failures preserve the route and expose a bounded retry', () => {
+  const app = readText('src/app.tsx');
+  const pages = readText('src/PublicRoutePages.tsx');
+  const styles = readText('src/styles.css');
+
+  assert.match(app, /updateBrowserAddress\(`\/\?deal=\$\{encodeURIComponent\(publicId\)\}`\)/);
+  assert.match(app, /setAuthMessage\(''\);\s*setView\('route-loading'\)/);
+  assert.match(app, /setAuthMessage\(error instanceof Error\?error\.message:'Deal Link unavailable'\);setView\('link-error'\)/);
+  assert.match(app, /onRetry=\{\(\)=>setRouteRevision\(revision=>revision\+1\)\}/);
+  assert.match(pages, /className="deal-link-error-actions"/);
+  assert.match(pages, /onClick=\{onRetry\}>\{t\('Try again'\)\}/);
+  assert.match(styles, /\.deal-link-error-actions button\{min-height:44px\}/);
+});

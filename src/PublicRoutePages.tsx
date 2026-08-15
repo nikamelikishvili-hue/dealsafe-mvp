@@ -201,13 +201,16 @@ export const applyPageMetadata = (metadata: PageMetadata) => {
   canonical.href = canonicalUrl;
 };
 
-export function DealLinkError({ message, onBack }: { message: string; onBack: () => void }) {
+export function DealLinkError({ message, onRetry, onBack }: { message: string; onRetry: () => void; onBack: () => void }) {
   return <section className="form-wrap deal-link-error">
     <div className="safe pending"><ShieldAlert />{t('Deal Link unavailable')}</div>
     <h1>{t('Deal Link unavailable')}</h1>
     <p className="lede small">{t('The link may be incomplete, expired, or no longer public.')}</p>
     {message && <div className="notice" role="alert"><ShieldAlert size={18} /><span>{t(message)}</span></div>}
-    <button type="button" className="primary" onClick={onBack}>{t('Back')}</button>
+    <div className="deal-link-error-actions">
+      <button type="button" className="primary" onClick={onRetry}>{t('Try again')}</button>
+      <button type="button" className="secondary" onClick={onBack}>{t('Return to home')}</button>
+    </div>
   </section>;
 }
 
