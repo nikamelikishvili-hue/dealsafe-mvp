@@ -12,6 +12,13 @@ import cspReportHandler from '../api/security/csp-report.mjs';
 import runtimeRejectionHandler from '../api/security/runtime-rejection.mjs';
 import webVitalHandler from '../api/security/web-vital.mjs';
 import healthHandler from '../api/health.mjs';
+import loginHandler from '../api/auth/login.mjs';
+import logoutHandler from '../api/auth/logout.mjs';
+import mfaHandler from '../api/auth/mfa.mjs';
+import passwordHandler from '../api/auth/password.mjs';
+import recoverHandler from '../api/auth/recover.mjs';
+import refreshHandler from '../api/auth/refresh.mjs';
+import signupHandler from '../api/auth/signup.mjs';
 import {
   readBoundedJson as readBoundedReportingJson,
   validateReportingRequest,
@@ -498,6 +505,26 @@ test('auth endpoints enforce same-origin POST requests and do not cache response
   assert.match(shared, /no-store, max-age=0/);
   assert.ok(spaRewrite);
   assert.match(spaRewrite.source, /api\//);
+});
+
+test('every authentication handler applies the runtime no-store response contract', async () => {
+  for (const handler of [
+    loginHandler,
+    logoutHandler,
+    mfaHandler,
+    passwordHandler,
+    recoverHandler,
+    refreshHandler,
+    signupHandler,
+  ]) {
+    const response = createResponse();
+    await handler({ method: 'GET', headers: {} }, response);
+    assert.equal(response.statusCode, 405);
+    assert.equal(response.headers.get('allow'), 'POST');
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    assert.equal(response.headers.get('pragma'), 'no-cache');
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  }
 });
 
 test('production database hardening is deny-by-default with narrow RPC allowlists', () => {
