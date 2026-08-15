@@ -306,6 +306,7 @@ export function AddressAutocomplete({
           aria-expanded={focused && suggestions.length > 0}
           aria-activedescendant={activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}
           autoComplete={streetAddressOnly ? 'address-line1' : 'street-address'}
+          maxLength={200}
           placeholder={placeholder}
           value={value}
           onChange={handleChange}

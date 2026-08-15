@@ -29,6 +29,7 @@ test('address entry always renders a usable manual line-one fallback', () => {
   );
 
   assert.match(markup, /autoComplete="address-line1"/);
+  assert.match(markup, /maxLength="200"/);
   assert.match(markup, /placeholder="Street address"/);
   assert.match(markup, /value="15900 N Bay"/);
   assert.match(markup, /role="combobox"/);
