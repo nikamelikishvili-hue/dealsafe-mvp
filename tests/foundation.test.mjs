@@ -13480,7 +13480,7 @@ test('credential fields enforce bounded input and explicit mobile keyboard actio
           .map(attribute => [attribute.name.getText(sourceFile), attribute]));
         const autocomplete = attributes.get('autoComplete')?.initializer?.getText(sourceFile) ?? '';
         if (/email|current-password|new-password/.test(autocomplete)
-          && (!attributes.has('maxLength') || !attributes.has('enterKeyHint'))) {
+          && (!attributes.has('name') || !attributes.has('maxLength') || !attributes.has('enterKeyHint'))) {
           const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
           violations.push(`${file}:${position.line + 1}`);
         }

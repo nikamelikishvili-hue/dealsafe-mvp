@@ -119,9 +119,11 @@ test('sign-in form preserves password-manager semantics and explicit button beha
 
   assert.match(markup, /autoComplete="email"/);
   assert.match(markup, /autoComplete="current-password"/);
-  assert.match(markup, /type="email" maxLength="254"/);
+  assert.match(markup, /type="email"[^>]*name="email"/);
+  assert.match(markup, /type="email"[^>]*maxLength="254"/);
   assert.match(markup, /autoCapitalize="none" spellCheck="false"/);
   assert.match(markup, /enterKeyHint="next"/);
+  assert.match(markup, /type="password"[^>]*name="password"/);
   assert.match(markup, /maxLength="256" type="password"/);
   assert.match(markup, /aria-label="Show password"/);
   assert.match(markup, /<button type="submit" class="primary full">Sign in<\/button>/);
@@ -149,9 +151,11 @@ test('sign-up form keeps consent and policy links visible before submission', ()
   );
 
   assert.match(markup, /autoComplete="new-password"/);
-  assert.match(markup, /type="email" maxLength="254"/);
+  assert.match(markup, /type="email"[^>]*name="email"/);
+  assert.match(markup, /type="email"[^>]*maxLength="254"/);
   assert.match(markup, /autoCapitalize="none" spellCheck="false"/);
   assert.match(markup, /enterKeyHint="next"/);
+  assert.match(markup, /type="password"[^>]*name="password"/);
   assert.match(markup, /maxLength="256" type="password"/);
   assert.match(markup, /type="checkbox"/);
   assert.match(markup, /href="\/terms"/);

@@ -205,6 +205,7 @@ function AccountSettings({
             {t('Current password')}
             <input
               required
+              name="current"
               maxLength={256}
               autoComplete="current-password"
               enterKeyHint="next"
@@ -218,6 +219,7 @@ function AccountSettings({
             {t('New password')}
             <input
               required
+              name="new"
               minLength={12}
               maxLength={256}
               autoComplete="new-password"
@@ -232,6 +234,7 @@ function AccountSettings({
             {t('Confirm password')}
             <input
               required
+              name="confirm"
               minLength={12}
               maxLength={256}
               autoComplete="new-password"
