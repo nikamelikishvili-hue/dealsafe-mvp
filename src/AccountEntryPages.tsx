@@ -75,6 +75,7 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
         <input
           required
           type="email"
+          maxLength={254}
           autoComplete="email"
           disabled={sending}
           value={email}
@@ -142,6 +143,7 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
           ref={passwordRef}
           required
           minLength={12}
+          maxLength={256}
           autoComplete="new-password"
           type="password"
           aria-invalid={Boolean(passwordError)}
@@ -161,6 +163,7 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
           ref={confirmPasswordRef}
           required
           minLength={12}
+          maxLength={256}
           autoComplete="new-password"
           type="password"
           aria-invalid={Boolean(confirmPasswordError)}
@@ -274,6 +277,7 @@ export function AccountEntryPage({
           required
           disabled={submitting}
           type="email"
+          maxLength={254}
           autoComplete="email"
           placeholder="you@example.com"
           value={form.email}
@@ -287,6 +291,7 @@ export function AccountEntryPage({
             required
             disabled={submitting}
             minLength={isSignup ? 12 : 1}
+            maxLength={256}
             type={passwordVisible ? 'text' : 'password'}
             autoComplete={isSignup ? 'new-password' : 'current-password'}
             placeholder={t(isSignup ? '12+ characters' : 'Your password')}
