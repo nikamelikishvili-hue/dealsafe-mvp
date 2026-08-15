@@ -45,6 +45,7 @@ import { decodeVehicleVin } from './services/catalogService';
 import { isPublicInfoView, publicInfoPaths, resolveBrowserRoute, verifyPath, type PublicInfoView } from './navigation';
 import { applyPageMetadata, DealLinkError, getPageMetadata, NotFoundPage, PublicInfoPage, RouteLoading } from './PublicRoutePages';
 import { AccountEntryPage, ForgotPassword, ForgotPasswordEntry, ResetPassword, type AuthFormState, type AuthMode } from './AccountEntryPages';
+import { AsyncStatePanel } from './AsyncStatePanel';
 import './styles.css';
 import './security.css';
 import './session-security.css';
@@ -137,8 +138,55 @@ const dealPrice=(deal:Pick<Deal,'priceCents'|'currency'>)=>formatMoney(deal.pric
 const groupedDealValue=(deals:Deal[])=>{const totals=new Map<Deal['currency'],number>();deals.forEach(deal=>{totals.set(deal.currency,(totals.get(deal.currency)||0)+deal.priceCents)});return [...totals].map(([currency,value])=>formatMoney(value,currency,getAppLanguage())).join(' · ')||formatMoney(0,'USD',getAppLanguage())};
 const isDealExpired=(deal:Deal,now=Date.now())=>deal.status==='published'&&Boolean(deal.expiresAt)&&new Date(deal.expiresAt!).getTime()<=now;
 
-function PublicTrustPassportPage({profile,message,onBack}:{profile:TrustPassport|null;message:string;onBack:()=>void}){
-  return <section className="trust-passport-page"><button className="back no-print" onClick={onBack}>← {t('Dashboard')}</button>{profile?<><div className="passport-hero"><p className="eyebrow">Dealivra · {t('Digital Trust Passport')}</p><div className="passport-identity"><span className="passport-avatar">{profile.display_name.slice(0,1)}</span><div><h1>{profile.display_name}</h1><div className={`passport-verification ${profile.verification_status==='verified'?'verified':''}`}><BadgeCheck size={20}/>{t(profile.verification_status==='verified'?'Identity verified':'Verification pending')}</div><p>{t('Member since')} {formatDate(profile.member_since)}</p></div></div></div><div className="passport-grid"><article><span>{t('Completed deals')}</span><strong>{profile.completed_deals}</strong><small>{t('Successful handoffs')}</small></article><article><span>{t('Completed sales')}</span><strong>{profile.completed_sales}</strong><small>{t('Seller activity')}</small></article><article><span>{t('Completed purchases')}</span><strong>{profile.completed_purchases}</strong><small>{t('Buyer activity')}</small></article><article><span>{t('Average rating')}</span><strong>{profile.average_rating??'—'} <Star size={21}/></strong><small>{profile.rating_count} {t('ratings')}</small></article></div><div className="passport-history"><h2>{t('Reputation history')}</h2>{profile.recent_ratings.length?<div className="passport-reviews">{profile.recent_ratings.map((rating,index)=><article className="passport-review" key={`${rating.created_at}-${index}`}><strong>{'★'.repeat(rating.stars)}{'☆'.repeat(5-rating.stars)}</strong><small>{formatDate(rating.created_at)}</small></article>)}</div>:<div className="empty-state"><Star/><b>{t('No ratings yet')}</b></div>}</div><p className="passport-disclaimer"><ShieldCheck size={18}/>{t('This profile shows recorded Dealivra activity and does not guarantee future behavior.')}</p></>:<div className="passport-loading"><div><ShieldCheck size={42}/><h1>{t(message?'Passport unavailable':'Loading passport…')}</h1>{message&&<p>{t(message)}</p>}</div></div>}</section>
+function PublicTrustPassportPage({
+  profile,
+  message,
+  onBack,
+  onRetry,
+}:{
+  profile:TrustPassport|null;
+  message:string;
+  onBack:()=>void;
+  onRetry:()=>void;
+}){
+  return <section className="trust-passport-page" aria-labelledby={profile?'trust-passport-title':undefined}>
+    <button className="back no-print" type="button" onClick={onBack}>← {t('Dashboard')}</button>
+    {profile?<>
+      <div className="passport-hero">
+        <p className="eyebrow">Dealivra · {t('Digital Trust Passport')}</p>
+        <div className="passport-identity">
+          <span className="passport-avatar" aria-hidden="true">{profile.display_name.slice(0,1)}</span>
+          <div>
+            <h1 id="trust-passport-title">{profile.display_name}</h1>
+            <div className={`passport-verification ${profile.verification_status==='verified'?'verified':''}`}>
+              <BadgeCheck size={20} aria-hidden="true"/>
+              {t(profile.verification_status==='verified'?'Identity verified':'Verification pending')}
+            </div>
+            <p>{t('Member since')} {formatDate(profile.member_since)}</p>
+          </div>
+        </div>
+      </div>
+      <div className="passport-grid" aria-label={t('Recorded Dealivra activity')}>
+        <article><span>{t('Completed deals')}</span><strong>{profile.completed_deals}</strong><small>{t('Successful handoffs')}</small></article>
+        <article><span>{t('Completed sales')}</span><strong>{profile.completed_sales}</strong><small>{t('Seller activity')}</small></article>
+        <article><span>{t('Completed purchases')}</span><strong>{profile.completed_purchases}</strong><small>{t('Buyer activity')}</small></article>
+        <article><span>{t('Average rating')}</span><strong>{profile.average_rating??'—'} <Star size={21} aria-hidden="true"/></strong><small>{profile.rating_count} {t('ratings')}</small></article>
+      </div>
+      <div className="passport-history">
+        <h2>{t('Reputation history')}</h2>
+        {profile.recent_ratings.length?<div className="passport-reviews">{profile.recent_ratings.map((rating,index)=><article className="passport-review" key={`${rating.created_at}-${index}`}><strong aria-label={`${rating.stars} out of 5 stars`}>{'★'.repeat(rating.stars)}<span aria-hidden="true">{'☆'.repeat(5-rating.stars)}</span></strong><small>{formatDate(rating.created_at)}</small></article>)}</div>:<div className="empty-state"><Star aria-hidden="true"/><b>{t('No ratings yet')}</b></div>}
+      </div>
+      <p className="passport-disclaimer"><ShieldCheck size={18} aria-hidden="true"/>{t('This profile shows recorded Dealivra activity and does not guarantee future behavior.')}</p>
+    </>:<div className="passport-loading">
+      <AsyncStatePanel
+        state={message?'error':'loading'}
+        title={message?'Passport unavailable':'Loading passport…'}
+        message={message||'Checking the latest public trust record.'}
+        actionLabel="Try again"
+        onAction={message?onRetry:undefined}
+      />
+    </div>}
+  </section>
 }
 
 function DealComparison({deals,onClose,onOpen}:{deals:Deal[];onClose:()=>void;onOpen:(deal:Deal)=>void}){
@@ -1173,7 +1221,7 @@ export function App() {
         onPasswordUpdated={()=>{setSession(null);setMfaLogin(null);setAuthMode('signin');setAuthMessage('Your password was updated. Sign in again with the new password.');setView('auth')}}
         onBack={()=>setView('home')}
       /></React.Suspense>}
-      {view==='passport'&&<PublicTrustPassportPage profile={publicPassport} message={passportMessage} onBack={()=>goHomeSection()}/>}
+      {view==='passport'&&<PublicTrustPassportPage profile={publicPassport} message={passportMessage} onBack={()=>goHomeSection()} onRetry={()=>setRouteRevision(revision=>revision+1)}/>}
       {view==='home'&&!user&&<GlobalHome onCreate={openCreate} onDemo={openDemo} onInfo={openInfo}/>}
       {view==='auth'&&mfaLogin&&<MfaLoginVerification challenge={mfaLogin} onVerified={finishAuthentication} onCancel={()=>{setMfaLogin(null);setAuthMessage('');setAuthMode('signin')}}/>}
       {view==='auth'&&!mfaLogin&&<AccountEntryPage

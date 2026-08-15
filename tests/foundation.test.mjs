@@ -12670,3 +12670,14 @@ test('account security reads fail closed with an explicit retry path', () => {
   assert.match(sessions, /\{!loadError&&<div className="session-security-actions">/);
   assert.match(mfa, /!loading&&!loadError&&!enrollment/);
 });
+
+test('public trust passport exposes recoverable routing and accessible reputation data', () => {
+  const source = readText('src/app.tsx');
+
+  assert.match(source, /function PublicTrustPassportPage\(\{/);
+  assert.match(source, /state=\{message\?'error':'loading'\}/);
+  assert.match(source, /onRetry=\{\(\)=>setRouteRevision\(revision=>revision\+1\)\}/);
+  assert.match(source, /aria-label=\{`\$\{rating\.stars\} out of 5 stars`\}/);
+  assert.match(source, /className="passport-avatar" aria-hidden="true"/);
+  assert.match(source, /type="button" onClick=\{onBack\}/);
+});

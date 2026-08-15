@@ -4639,3 +4639,17 @@ resource, customer record, or real-money capability changed during this pass.
 
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
+
+## Trust Passport route recovery
+
+- Replaced the public Trust Passport's ambiguous loading card with the shared
+  loading/error contract and a bounded route retry.
+- Kept provider failures distinct from valid empty reputation history.
+- Added an explicit page heading relationship, numeric rating names, hidden
+  decorative content, and a non-submitting back action.
+- Preserved the existing newest-request-wins route guard.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
