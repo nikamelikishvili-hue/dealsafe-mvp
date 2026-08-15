@@ -12946,6 +12946,55 @@ test('buttons rendered directly inside forms declare an explicit type', () => {
   assert.deepEqual(violations, []);
 });
 
+test('rendered media and new-tab links preserve accessible safe defaults', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const inspect = node => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (opening) {
+        const tag = opening.tagName.getText(sourceFile);
+        const attributes = new Map(opening.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => [attribute.name.getText(sourceFile), attribute]));
+        const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+        const location = `${file}:${position.line + 1}`;
+        if (tag === 'img' && !attributes.has('alt')) {
+          violations.push(`${location} image has no alt attribute`);
+        }
+        if (tag === 'video' && !attributes.has('controls')) {
+          violations.push(`${location} video has no controls`);
+        }
+        if (tag === 'a') {
+          const target = attributes.get('target')?.initializer?.getText(sourceFile);
+          const rel = attributes.get('rel')?.initializer?.getText(sourceFile) ?? '';
+          if (target === '"_blank"' && !/noopener|noreferrer/.test(rel)) {
+            violations.push(`${location} new-tab link has no opener isolation`);
+          }
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
 test('application-level deal and verification mutations are same-tick guarded', () => {
   const app = readText('src/app.tsx');
 
