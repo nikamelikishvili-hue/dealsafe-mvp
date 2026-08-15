@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { Check, Eye, EyeOff } from 'lucide-react';
 import { FeedbackMessage } from './FeedbackMessage';
+import { FieldError } from './FieldError';
 import { t } from './i18n';
 import { publicInfoPaths, type PublicInfoView } from './navigation';
 import { requestPasswordReset, updateRecoveredPassword } from './services/supabaseRest';
@@ -93,15 +94,27 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const [updating, setUpdating] = useState(false);
   const updatingRef = useRef(false);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordRef = useRef<HTMLInputElement>(null);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (updatingRef.current) return;
     setMessage('');
+    setPasswordError('');
+    setConfirmPasswordError('');
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/.test(password)) {
+      setPasswordError('Use 12+ characters with uppercase, lowercase, a number, and a symbol.');
+      requestAnimationFrame(() => passwordRef.current?.focus());
+      return;
+    }
     if (password !== confirmPassword) {
-      setMessage('Passwords do not match.');
+      setConfirmPasswordError('Passwords do not match.');
+      requestAnimationFrame(() => confirmPasswordRef.current?.focus());
       return;
     }
     updatingRef.current = true;
@@ -126,28 +139,40 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
       <label>
         {t('New password')}
         <input
+          ref={passwordRef}
           required
           minLength={12}
           autoComplete="new-password"
           type="password"
-          aria-describedby="recovery-password-requirements"
+          aria-invalid={Boolean(passwordError)}
+          aria-describedby={passwordError ? 'recovery-password-requirements recovery-password-error' : 'recovery-password-requirements'}
           disabled={updating}
           value={password}
-          onChange={event => setPassword(event.target.value)}
+          onChange={event => {
+            setPassword(event.target.value);
+            if (passwordError) setPasswordError('');
+          }}
         />
+        {passwordError && <FieldError id="recovery-password-error">{passwordError}</FieldError>}
       </label>
       <label>
         {t('Confirm password')}
         <input
+          ref={confirmPasswordRef}
           required
           minLength={12}
           autoComplete="new-password"
           type="password"
-          aria-describedby="recovery-password-requirements"
+          aria-invalid={Boolean(confirmPasswordError)}
+          aria-describedby={confirmPasswordError ? 'recovery-password-requirements recovery-confirm-password-error' : 'recovery-password-requirements'}
           disabled={updating}
           value={confirmPassword}
-          onChange={event => setConfirmPassword(event.target.value)}
+          onChange={event => {
+            setConfirmPassword(event.target.value);
+            if (confirmPasswordError) setConfirmPasswordError('');
+          }}
         />
+        {confirmPasswordError && <FieldError id="recovery-confirm-password-error">{confirmPasswordError}</FieldError>}
       </label>
       <small id="recovery-password-requirements">{t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}</small>
       {message && (

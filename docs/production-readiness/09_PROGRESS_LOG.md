@@ -4523,6 +4523,25 @@ Supabase resource, customer record, or real-money capability changed.
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
 
+## Accessible field validation foundation
+
+- Added one reusable field-error primitive with assertive semantics, semantic
+  error color tokens, and decorative-icon isolation.
+- Upgraded password recovery so password-policy and confirmation failures are
+  attached to the exact invalid field through `aria-invalid` and
+  `aria-describedby`.
+- Added deterministic focus recovery to the first field requiring correction
+  and cleared stale field errors as the customer edits.
+- Prevented invalid password-policy submissions from reaching the Auth
+  boundary, while keeping network/provider failures in the page-level shared
+  feedback component.
+- Passed TypeScript, 285 foundation tests, and eleven focused component tests.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## Semantic design and feedback foundation
 
 - Introduced one semantic token contract for brand, surface, border, status, focus, radius, shadow, and touch-target decisions while preserving temporary compatibility aliases for incremental migration.

@@ -16,6 +16,7 @@ const { AccountEntryPage, ForgotPasswordEntry } = await import('../../src/Accoun
 const { AddressAutocomplete } = await import('../../src/AddressAutocomplete');
 const { BrandLogo } = await import('../../src/BrandLogo');
 const { FeedbackMessage } = await import('../../src/FeedbackMessage');
+const { FieldError } = await import('../../src/FieldError');
 const { isUsPostalCode, normalizeUsState, parseGoogleUsAddress, parseStoredUsAddress, serializeUsAddress } =
   await import('../../src/usAddress');
 
@@ -182,4 +183,13 @@ test('shared feedback announces blocking errors assertively without exposing the
   assert.match(markup, /role="alert"/);
   assert.match(markup, /aria-live="assertive"/);
   assert.match(markup, /The request could not be completed\./);
+});
+
+test('field errors are linked, assertive, and keep decorative icons hidden', () => {
+  const markup = renderToStaticMarkup(<FieldError id="email-error">Enter a valid email.</FieldError>);
+  assert.match(markup, /id="email-error"/);
+  assert.match(markup, /class="field-error"/);
+  assert.match(markup, /role="alert"/);
+  assert.match(markup, /aria-hidden="true"/);
+  assert.match(markup, /Enter a valid email\./);
 });

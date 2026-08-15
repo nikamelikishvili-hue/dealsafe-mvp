@@ -87,6 +87,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [76_STAGING_HTTP_AUTHORIZATION_MATRIX.md](76_STAGING_HTTP_AUTHORIZATION_MATRIX.md) | Status-only hosted Data API and Storage authorization matrix using short-lived synthetic Staging sessions |
 | [77_DATABASE_OWNERSHIP_INVENTORY.md](77_DATABASE_OWNERSHIP_INVENTORY.md) | Machine-readable database owner, exposure, and steward inventory with exact Staging validation |
 | [78_SEMANTIC_UI_FOUNDATIONS.md](78_SEMANTIC_UI_FOUNDATIONS.md) | Semantic design tokens, accessible feedback states, contrast gates, focus behavior, and incremental migration boundary |
+| [79_ACCESSIBLE_FORM_VALIDATION.md](79_ACCESSIBLE_FORM_VALIDATION.md) | Field-level error semantics, descriptive relationships, focus recovery, and password-recovery validation |
 
 ## Authority and change control
 

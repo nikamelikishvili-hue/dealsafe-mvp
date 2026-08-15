@@ -4868,7 +4868,7 @@ test('account recovery progress and guidance are announced accessibly', () => {
   assert.ok((accountEntry.match(/<FeedbackMessage/g) || []).length >= 3);
   assert.match(feedback, /role=\{urgent \? 'alert' : 'status'\}/);
   assert.match(feedback, /aria-live=\{urgent \? 'assertive' : 'polite'\}/);
-  assert.ok((accountEntry.match(/aria-describedby="recovery-password-requirements"/g) || []).length >= 2);
+  assert.ok((accountEntry.match(/aria-describedby=\{[^\n]*recovery-password-requirements/g) || []).length >= 2);
   assert.match(accountEntry, /id="recovery-password-requirements"/);
 });
 
@@ -12628,4 +12628,19 @@ test('semantic feedback color pairs meet WCAG AA normal-text contrast', () => {
   for (const [foreground, background] of pairs) {
     assert.ok(contrast(foreground, background) >= 4.5, `${foreground} on ${background}`);
   }
+});
+
+test('password recovery exposes field-specific errors and deterministic focus recovery', () => {
+  const source = readText('src/AccountEntryPages.tsx');
+  const fieldError = readText('src/FieldError.tsx');
+  const fieldErrorStyles = readText('src/field-error.css');
+  assert.match(source, /aria-invalid=\{Boolean\(passwordError\)\}/);
+  assert.match(source, /recovery-password-error/);
+  assert.match(source, /aria-invalid=\{Boolean\(confirmPasswordError\)\}/);
+  assert.match(source, /recovery-confirm-password-error/);
+  assert.match(source, /passwordRef\.current\?\.focus\(\)/);
+  assert.match(source, /confirmPasswordRef\.current\?\.focus\(\)/);
+  assert.match(fieldError, /role="alert"/);
+  assert.match(fieldError, /aria-hidden="true"/);
+  assert.match(fieldErrorStyles, /\[aria-invalid='true'\]/);
 });
