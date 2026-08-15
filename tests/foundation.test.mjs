@@ -13241,6 +13241,43 @@ test('native form controls preserve a programmatic accessible name', () => {
   assert.deepEqual(violations, []);
 });
 
+test('invalid native controls expose linked validation guidance', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const inspect = node => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (opening && ['input', 'select', 'textarea'].includes(opening.tagName.getText(sourceFile))) {
+        const attributes = new Set(opening.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => attribute.name.getText(sourceFile)));
+        if (attributes.has('aria-invalid') && !attributes.has('aria-describedby')) {
+          const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+          violations.push(`${file}:${position.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
 test('credential fields expose password-manager autocomplete semantics', () => {
   const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
     .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))

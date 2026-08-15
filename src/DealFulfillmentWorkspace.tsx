@@ -327,6 +327,7 @@ export function MeetingPanel({
               inputMode="numeric"
               autoComplete="postal-code"
               pattern="[0-9]{5}(-[0-9]{4})?"
+              aria-describedby="meeting-zip-help"
               aria-invalid={
                 Boolean(form.postalCode) &&
                 !isUsPostalCode(form.postalCode)
@@ -338,6 +339,7 @@ export function MeetingPanel({
               }
             />
             <small
+              id="meeting-zip-help"
               className={
                 form.postalCode && !isUsPostalCode(form.postalCode)
                   ? 'field-help invalid'
@@ -1219,6 +1221,7 @@ export function ShippingPanel({
                 inputMode="numeric"
                 autoComplete="postal-code"
                 pattern="[0-9]{5}(-[0-9]{4})?"
+                aria-describedby="shipping-zip-help"
                 aria-invalid={
                   Boolean(address.postalCode) &&
                   !isUsPostalCode(address.postalCode)
@@ -1233,6 +1236,7 @@ export function ShippingPanel({
                 }
               />
               <small
+                id="shipping-zip-help"
                 className={
                   address.postalCode &&
                   !isUsPostalCode(address.postalCode)
