@@ -565,6 +565,50 @@ test('every authentication handler rejects cross-origin POSTs before provider ac
   assert.equal(providerCalls, 0);
 });
 
+test('authentication handlers reject missing or ambiguous origin metadata before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not be called for unverifiable origin metadata.');
+  };
+  const unsafeHeaders = [
+    { host: 'dealivra.test', 'content-type': 'application/json' },
+    { origin: 'https://dealivra.test', 'content-type': 'application/json' },
+    {
+      origin: 'https://dealivra.test',
+      host: 'dealivra.test',
+      'x-forwarded-host': 'dealivra.test, attacker.test',
+      'content-type': 'application/json',
+    },
+    { origin: 'null', host: 'dealivra.test', 'content-type': 'application/json' },
+    { origin: 'not a URL', host: 'dealivra.test', 'content-type': 'application/json' },
+  ];
+
+  try {
+    for (const handler of [
+      loginHandler,
+      logoutHandler,
+      mfaHandler,
+      passwordHandler,
+      recoverHandler,
+      refreshHandler,
+      signupHandler,
+    ]) {
+      for (const headers of unsafeHeaders) {
+        const response = createResponse();
+        await handler({ method: 'POST', headers, body: {} }, response);
+        assert.equal(response.statusCode, 403);
+        assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
 test('JSON authentication mutations reject unsupported media before provider access', async () => {
   const originalFetch = globalThis.fetch;
   let providerCalls = 0;
