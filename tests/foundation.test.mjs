@@ -13090,6 +13090,32 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(tokens, /@media \(forced-colors: active\)/);
 });
 
+test('every stylesheet custom-property reference has a governed definition', () => {
+  const cssFiles = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.css'))
+    .map(entry => `src/${entry.name}`);
+  const definitions = new Set();
+  const usages = new Map();
+
+  for (const file of cssFiles) {
+    const source = readText(file);
+    for (const match of source.matchAll(/(--[A-Za-z0-9_-]+)\s*:/g)) {
+      definitions.add(match[1]);
+    }
+    for (const match of source.matchAll(/var\((--[A-Za-z0-9_-]+)/g)) {
+      const files = usages.get(match[1]) ?? new Set();
+      files.add(file);
+      usages.set(match[1], files);
+    }
+  }
+
+  const undefinedReferences = [...usages]
+    .filter(([token]) => !definitions.has(token))
+    .map(([token, files]) => `${token}: ${[...files].join(', ')}`)
+    .sort();
+  assert.deepEqual(undefinedReferences, []);
+});
+
 test('semantic feedback color pairs meet WCAG AA normal-text contrast', () => {
   const luminance = hex => {
     const channels = hex.match(/[a-f\d]{2}/gi).map(value => Number.parseInt(value, 16) / 255);

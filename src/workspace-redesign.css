@@ -889,7 +889,7 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .agreement-verifier-page{width:min(980px,calc(100% - 44px));margin:32px auto 80px}
 .agreement-verifier-page>.back{margin-bottom:8px}
 .agreement-verifier-page>h1{max-width:720px;margin:8px 0 10px;font-size:clamp(2rem,4vw,3.2rem);letter-spacing:-.045em}
-.agreement-verifier-page>.lede{max-width:680px;margin:0 0 24px;color:var(--ink-muted)}
+.agreement-verifier-page>.lede{max-width:680px;margin:0 0 24px;color:var(--color-ink-600)}
 .agreement-verifier-page>.agreement-verifier{width:100%;margin:0}
 
 .auth-market-note{max-width:590px;margin:8px 0 18px;color:#60748b;font-size:14px;font-weight:600;line-height:1.55}
