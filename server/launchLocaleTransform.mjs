@@ -14,7 +14,7 @@ function importsLaunchTranslator(sourceFile) {
   });
 }
 
-export function inlineEnglishTranslationLiterals(source, fileName = 'module.tsx') {
+export function inlineEnglishTranslationCalls(source, fileName = 'module.tsx') {
   if (typeof source !== 'string') return source;
   const scriptKind = /x(?:$|\?)/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, scriptKind);
@@ -29,13 +29,13 @@ export function inlineEnglishTranslationLiterals(source, fileName = 'module.tsx'
       node.arguments.length === 1
     ) {
       const argument = node.arguments[0];
-      if (ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument)) {
-        edits.push({
-          start: node.getStart(sourceFile),
-          end: node.end,
-          replacement: source.slice(argument.getStart(sourceFile), argument.end),
-        });
-      }
+      const argumentSource = source.slice(argument.getStart(sourceFile), argument.end);
+      const isPrimaryLiteral = ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument);
+      edits.push({
+        start: node.getStart(sourceFile),
+        end: node.end,
+        replacement: isPrimaryLiteral ? argumentSource : `(${argumentSource})`,
+      });
     }
     ts.forEachChild(node, visit);
   };
@@ -56,7 +56,7 @@ export function launchLocaleInliningPlugin() {
     enforce: 'pre',
     transform(source, id) {
       if (!/\.[cm]?[jt]sx?$/.test(id) || id.includes('/node_modules/')) return null;
-      const code = inlineEnglishTranslationLiterals(source, id);
+      const code = inlineEnglishTranslationCalls(source, id);
       return code === source ? null : { code, map: null };
     },
   };

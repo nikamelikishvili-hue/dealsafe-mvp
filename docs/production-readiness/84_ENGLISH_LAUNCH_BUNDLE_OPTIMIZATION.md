@@ -11,9 +11,11 @@ for a later reviewed localization release.
 
 The pre-build transform uses the TypeScript parser rather than text matching.
 It activates only in modules that import the named `t` helper from `i18n`, and
-only replaces a bare `t()` call with exactly one string or no-substitution
-template literal. Dynamic keys, member calls, comments, quoted examples, and
-modules without the reviewed import remain unchanged.
+only replaces a bare, single-argument `t()` call. This is semantics-preserving
+for the reviewed English-only identity helper even when the string is selected
+or composed dynamically: the argument is still evaluated exactly once and is
+parenthesized when needed. Member calls, comments, quoted examples, and modules
+without the reviewed import remain unchanged.
 
 ## Verification
 

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { inlineEnglishTranslationLiterals } from '../server/launchLocaleTransform.mjs';
+import { inlineEnglishTranslationCalls } from '../server/launchLocaleTransform.mjs';
 import clientFailureHandler from '../api/security/client-failure.mjs';
 import cspReportHandler from '../api/security/csp-report.mjs';
 import runtimeRejectionHandler from '../api/security/runtime-rejection.mjs';
@@ -12701,21 +12701,25 @@ test('English launch locale inlining is AST-scoped and preserves dynamic behavio
     import { t } from './i18n';
     const staticCopy = t('Static copy');
     const templateCopy = t(\`Template copy\`);
+    const conditionalCopy = t(enabled ? 'Enabled copy' : 'Disabled copy');
+    const mixedConditional = t(enabled ? 'Safe copy' : dynamicKey);
     const dynamicCopy = t(dynamicKey);
     const memberCopy = translator.t('Member copy');
     const quotedExample = "t('Inside a string')";
     // t('Inside a comment')
   `;
-  const transformed = inlineEnglishTranslationLiterals(source, 'sample.ts');
+  const transformed = inlineEnglishTranslationCalls(source, 'sample.ts');
 
   assert.match(transformed, /const staticCopy = 'Static copy';/);
   assert.match(transformed, /const templateCopy = `Template copy`;/);
-  assert.match(transformed, /t\(dynamicKey\)/);
+  assert.match(transformed, /const conditionalCopy = \(enabled \? 'Enabled copy' : 'Disabled copy'\);/);
+  assert.match(transformed, /const mixedConditional = \(enabled \? 'Safe copy' : dynamicKey\);/);
+  assert.match(transformed, /const dynamicCopy = \(dynamicKey\);/);
   assert.match(transformed, /translator\.t\('Member copy'\)/);
   assert.match(transformed, /"t\('Inside a string'\)"/);
   assert.match(transformed, /\/\/ t\('Inside a comment'\)/);
   assert.equal(
-    inlineEnglishTranslationLiterals("const copy = t('No import');", 'sample.ts'),
+    inlineEnglishTranslationCalls("const copy = t('No import');", 'sample.ts'),
     "const copy = t('No import');",
   );
 });

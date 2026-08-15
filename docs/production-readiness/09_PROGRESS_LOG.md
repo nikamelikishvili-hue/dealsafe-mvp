@@ -1,5 +1,22 @@
 # Production-readiness progress log
 
+## 2026-08-15 — English launch identity-call headroom
+
+- Expanded the parser-scoped English launch transform from literal-only calls
+  to every bare, single-argument `t()` call imported from the reviewed identity
+  helper, preserving one evaluation of the original expression.
+- Kept member calls, comments, quoted examples, and modules without the named
+  `i18n` import outside the transform boundary.
+- Passed 294 foundation tests, twelve focused component tests, TypeScript,
+  lint, security gates, the production build, and Preview smoke verification.
+- Reduced total production JavaScript from 829,641 to 828,551 bytes, restoring
+  1,449 bytes of governed headroom below the 830,000-byte ceiling.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## 2026-08-11 — DAT-002 machine-readable ownership inventory
 
 - Added a read-only catalog inventory for every application table, view,
