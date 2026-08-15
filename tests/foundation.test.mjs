@@ -1400,6 +1400,41 @@ test('MFA challenge verification promotes the session and keeps its refresh toke
   assert.equal(JSON.stringify(response.payload).includes('verified-refresh-secret'), false);
 });
 
+test('MFA challenge verification treats a malformed successful provider session as unavailable', async () => {
+  const { default: mfa } = await import('../api/auth/mfa.mjs');
+  const response = createResponse();
+  const factorId = '11111111-1111-4111-8111-111111111111';
+
+  await withAuthProvider(async (url) => {
+    if (String(url).endsWith('/auth/v1/user')) {
+      return new Response(JSON.stringify({
+        id: '00000000-0000-0000-0000-000000000001',
+        factors: [{ id: factorId, factor_type: 'totp', status: 'verified' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (String(url).endsWith(`/factors/${factorId}/challenge`)) {
+      return new Response(JSON.stringify({ id: '22222222-2222-4222-8222-222222222222' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({
+      ...authProviderSession('must-not-be-issued', { aal: 'aal2' }),
+      access_token: 'malformed token',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }, () => mfa(authRequest({
+    action: 'challenge_and_verify',
+    purpose: 'login',
+    factorId,
+    code: '123456',
+  }, { authorization: 'Bearer pending-aal1-token' }), response));
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.payload.error, 'Authenticator security is temporarily unavailable.');
+  assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(JSON.stringify(response.payload).includes('must-not-be-issued'), false);
+});
+
 test('MFA endpoint validates action inputs before contacting the provider', async () => {
   const { default: mfa } = await import('../api/auth/mfa.mjs');
   const response = createResponse();
@@ -2356,6 +2391,31 @@ test('signup keeps email-confirmation accounts signed out without creating a ref
   assert.equal(response.headers.has('set-cookie'), false);
   assert.equal(submittedBody.email, 'user@example.com');
   assert.equal(submittedBody.data.display_name, 'Test User');
+});
+
+test('signup rejects partial successful provider session material instead of misclassifying confirmation', async () => {
+  const { default: signup } = await import('../api/auth/signup.mjs');
+  const malformedSessions = [
+    { access_token: 'malformed token' },
+    { refresh_token: 'must-not-be-issued' },
+  ];
+
+  for (const providerPayload of malformedSessions) {
+    const response = createResponse();
+    await withAuthProvider(async () => new Response(JSON.stringify(providerPayload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }), () => signup(authRequest({
+      displayName: 'Test User',
+      email: 'user@example.com',
+      password: 'ExamplePass123!',
+    }), response));
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.payload.error, 'Account creation is temporarily unavailable.');
+    assert.equal(response.headers.has('set-cookie'), false);
+    assert.equal(JSON.stringify(response.payload).includes('must-not-be-issued'), false);
+  }
 });
 
 test('refresh rotates the HttpOnly cookie without exposing its secret', async () => {

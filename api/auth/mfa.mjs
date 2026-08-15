@@ -68,6 +68,9 @@ async function refreshAfterFactorChange(request, response) {
   }, request);
   const data = await authPayload(upstream);
   const session = publicSession(data);
+  if (upstream.ok && (!session || !data.refresh_token)) {
+    throw new Error('Authentication provider response was rejected.');
+  }
   if (!upstream.ok || !session || !data.refresh_token) {
     if (respondMfaRateLimited(response, upstream, data, 'refresh')) return;
     response.status(401).json({ error: 'Sign in again to finish updating account security.' });
@@ -219,6 +222,9 @@ export default async function handler(request, response) {
       }, request);
       const verified = await authPayload(verifyUpstream);
       const session = publicSession(verified);
+      if (verifyUpstream.ok && (!session || !verified.refresh_token)) {
+        throw new Error('Authentication provider response was rejected.');
+      }
       if (!verifyUpstream.ok || !session || !verified.refresh_token) {
         if (respondMfaRateLimited(response, verifyUpstream, verified, 'verify')) return;
         response.status(400).json({

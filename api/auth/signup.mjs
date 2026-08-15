@@ -81,6 +81,10 @@ export default async function handler(request, response) {
     }
 
     const session = publicSession(data);
+    const hasSessionMaterial = data.access_token !== undefined || data.refresh_token !== undefined;
+    if (hasSessionMaterial && (!session || !data.refresh_token)) {
+      throw new Error('Authentication provider response was rejected.');
+    }
     if (session && data.refresh_token) {
       setRefreshCookie(response, data.refresh_token);
       response.status(200).json({ session, needsEmailConfirmation: false });
