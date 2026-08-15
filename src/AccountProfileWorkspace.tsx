@@ -207,6 +207,7 @@ function AccountSettings({
               required
               maxLength={256}
               autoComplete="current-password"
+              enterKeyHint="next"
               type="password"
               disabled={savingPassword}
               value={currentPassword}
@@ -220,6 +221,7 @@ function AccountSettings({
               minLength={12}
               maxLength={256}
               autoComplete="new-password"
+              enterKeyHint="next"
               type="password"
               disabled={savingPassword}
               value={password}
@@ -233,6 +235,7 @@ function AccountSettings({
               minLength={12}
               maxLength={256}
               autoComplete="new-password"
+              enterKeyHint="done"
               type="password"
               disabled={savingPassword}
               value={confirmPassword}

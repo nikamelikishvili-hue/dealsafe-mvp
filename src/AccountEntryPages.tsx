@@ -79,6 +79,7 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
           autoComplete="email"
           autoCapitalize="none"
           spellCheck={false}
+          enterKeyHint="send"
           disabled={sending}
           value={email}
           onChange={event => setEmail(event.target.value)}
@@ -148,6 +149,7 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
           maxLength={256}
           autoComplete="new-password"
           type="password"
+          enterKeyHint="next"
           aria-invalid={Boolean(passwordError)}
           aria-describedby={passwordError ? 'recovery-password-requirements recovery-password-error' : 'recovery-password-requirements'}
           disabled={updating}
@@ -168,6 +170,7 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
           maxLength={256}
           autoComplete="new-password"
           type="password"
+          enterKeyHint="done"
           aria-invalid={Boolean(confirmPasswordError)}
           aria-describedby={confirmPasswordError ? 'recovery-password-requirements recovery-confirm-password-error' : 'recovery-password-requirements'}
           disabled={updating}
@@ -283,6 +286,7 @@ export function AccountEntryPage({
           autoComplete="email"
           autoCapitalize="none"
           spellCheck={false}
+          enterKeyHint="next"
           placeholder="you@example.com"
           value={form.email}
           onChange={event => onFormChange({ ...form, email: event.target.value })}
@@ -298,6 +302,7 @@ export function AccountEntryPage({
             maxLength={256}
             type={passwordVisible ? 'text' : 'password'}
             autoComplete={isSignup ? 'new-password' : 'current-password'}
+            enterKeyHint="done"
             placeholder={t(isSignup ? '12+ characters' : 'Your password')}
             value={form.password}
             onChange={event => onFormChange({ ...form, password: event.target.value })}

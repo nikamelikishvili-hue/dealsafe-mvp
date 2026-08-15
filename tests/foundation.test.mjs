@@ -13407,7 +13407,7 @@ test('email fields preserve mobile-safe text entry semantics', () => {
   assert.deepEqual(violations, []);
 });
 
-test('credential autocomplete fields enforce bounded browser input lengths', () => {
+test('credential fields enforce bounded input and explicit mobile keyboard actions', () => {
   const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
     .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
     .map(entry => `src/${entry.name}`);
@@ -13432,7 +13432,8 @@ test('credential autocomplete fields enforce bounded browser input lengths', () 
           .filter(ts.isJsxAttribute)
           .map(attribute => [attribute.name.getText(sourceFile), attribute]));
         const autocomplete = attributes.get('autoComplete')?.initializer?.getText(sourceFile) ?? '';
-        if (/email|current-password|new-password/.test(autocomplete) && !attributes.has('maxLength')) {
+        if (/email|current-password|new-password/.test(autocomplete)
+          && (!attributes.has('maxLength') || !attributes.has('enterKeyHint'))) {
           const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
           violations.push(`${file}:${position.line + 1}`);
         }
