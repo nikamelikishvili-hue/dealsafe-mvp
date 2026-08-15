@@ -840,6 +840,33 @@ test('session refresh rejects oversized cookie credentials before provider acces
   assert.equal(providerCalls, 0);
 });
 
+test('session refresh rejects ambiguous duplicate cookie credentials before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive ambiguous refresh credentials.');
+  };
+
+  try {
+    const response = createResponse();
+    await refreshHandler({
+      method: 'POST',
+      headers: {
+        origin: 'https://dealivra.test',
+        host: 'dealivra.test',
+        cookie: '__Host-dealivra-refresh=first; theme=light; __Host-dealivra-refresh=second',
+      },
+    }, response);
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
 test('production database hardening is deny-by-default with narrow RPC allowlists', () => {
   const migration = readText('supabase/production_auth_rbac_hardening.sql');
   const schema = readText('supabase/schema.sql');
