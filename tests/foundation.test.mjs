@@ -995,6 +995,35 @@ test('session refresh rejects oversized cookie credentials before provider acces
   assert.equal(providerCalls, 0);
 });
 
+test('session refresh rejects non-ASCII or control characters before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive a malformed refresh credential.');
+  };
+
+  try {
+    for (const token of ['token%0D%0Ainjected', 'token%09fragment', 't%C3%B6ken']) {
+      const response = createResponse();
+      await refreshHandler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          cookie: `__Host-dealivra-refresh=${token}`,
+        },
+      }, response);
+      assert.equal(response.statusCode, 401);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
 test('session refresh rejects ambiguous duplicate cookie credentials before provider access', async () => {
   const originalFetch = globalThis.fetch;
   let providerCalls = 0;
@@ -1181,8 +1210,8 @@ test('auth handlers never return a refresh token to browser JavaScript', async (
   assert.equal(response.payload.access_token.startsWith('header.'), true);
 });
 
-test('password login never writes a provider credential beyond the browser cookie budget', async () => {
-  for (const refreshToken of ['x'.repeat(3_801), 'é'.repeat(1_000)]) {
+test('password login never writes a malformed provider credential or exceeds the cookie budget', async () => {
+  for (const refreshToken of ['x'.repeat(3_801), 'é', 'token\r\ninjected']) {
     const response = createResponse();
     await withAuthProvider(async () => new Response(JSON.stringify(
       authProviderSession(refreshToken),

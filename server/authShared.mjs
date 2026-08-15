@@ -17,6 +17,7 @@ const refreshMaxAgeSeconds = 8 * 60 * 60;
 const maxRefreshCookieValueLength = 3800;
 const maxJsonBodyBytes = 16_384;
 const authProviderTimeoutMs = 10_000;
+const visibleAsciiCredentialPattern = /^[\x21-\x7e]+$/;
 
 function header(request, name) {
   const value = request.headers?.[name] ?? request.headers?.[name.toLowerCase()];
@@ -241,7 +242,11 @@ export function readRefreshToken(request) {
   if (!encodedToken || encodedToken.length > maxRefreshCookieValueLength) return null;
   try {
     const token = decodeURIComponent(encodedToken);
-    return token && token.length <= maxRefreshCookieValueLength ? token : null;
+    return token
+      && token.length <= maxRefreshCookieValueLength
+      && visibleAsciiCredentialPattern.test(token)
+      ? token
+      : null;
   } catch {
     return null;
   }
@@ -255,7 +260,7 @@ export function readBearerToken(request) {
     || !authorization.startsWith('Bearer ')
   ) return null;
   const token = authorization.slice(7);
-  return token && /^[\x21-\x7e]+$/.test(token) ? token : null;
+  return token && visibleAsciiCredentialPattern.test(token) ? token : null;
 }
 
 export function isStrongPassword(password) {
@@ -310,7 +315,10 @@ export function hasVerifiedMfaFactor(user) {
 }
 
 export function setRefreshCookie(response, refreshToken) {
-  if (typeof refreshToken !== 'string' || !refreshToken) {
+  if (
+    typeof refreshToken !== 'string'
+    || !visibleAsciiCredentialPattern.test(refreshToken)
+  ) {
     throw new Error('Authentication provider returned an invalid refresh credential.');
   }
   const encodedToken = encodeURIComponent(refreshToken);
