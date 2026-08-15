@@ -305,6 +305,9 @@ export function hasVerifiedMfaFactor(user) {
 }
 
 export function setRefreshCookie(response, refreshToken) {
+  if (typeof refreshToken !== 'string' || !refreshToken || refreshToken.length > 8192) {
+    throw new Error('Authentication provider returned an invalid refresh credential.');
+  }
   response.setHeader(
     'Set-Cookie',
     `${refreshCookieName}=${encodeURIComponent(refreshToken)}; Path=${refreshCookiePath}; Max-Age=${refreshMaxAgeSeconds}; HttpOnly; Secure; SameSite=Strict; Priority=High`,

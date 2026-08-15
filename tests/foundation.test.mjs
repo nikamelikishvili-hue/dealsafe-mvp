@@ -1103,6 +1103,23 @@ test('auth handlers never return a refresh token to browser JavaScript', async (
   assert.equal(response.payload.access_token.startsWith('header.'), true);
 });
 
+test('password login never writes an oversized provider refresh credential', async () => {
+  const response = createResponse();
+  await withAuthProvider(async () => new Response(JSON.stringify(
+    authProviderSession('x'.repeat(8_193)),
+  ), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  }), () => loginHandler(authRequest({
+    email: 'user@example.com',
+    password: 'ExamplePass123!',
+  }), response));
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+});
+
 test('password login with a verified TOTP factor stays pending until AAL2 verification', async () => {
   const { default: login } = await import('../api/auth/login.mjs');
   const response = createResponse();
