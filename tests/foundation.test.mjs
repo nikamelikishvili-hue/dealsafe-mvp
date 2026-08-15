@@ -12545,7 +12545,7 @@ test('meeting and watchlist reads fail visibly without exposing false state', ()
   assert.match(fulfillment, /setLoaded\(false\);[\s\S]*getDealMeeting\(session, deal\.id\)/);
   assert.match(fulfillment, /Could not load meeting details/);
   assert.match(fulfillment, /!loaded \? \([\s\S]*Loading meeting details/);
-  assert.match(fulfillment, /loadFailed \? \([\s\S]*meeting-load-failure/);
+  assert.match(fulfillment, /loadFailed \? \([\s\S]*<AsyncStatePanel[\s\S]*state="error"/);
   assert.match(fulfillment, /setLoadVersion\(\(version\) => version \+ 1\)/);
   assert.match(fulfillment, /Could not load handoff status/);
   assert.match(fulfillment, /if \(loadError\) \{[\s\S]*role="alert"[\s\S]*Try again/);
@@ -12643,4 +12643,17 @@ test('password recovery exposes field-specific errors and deterministic focus re
   assert.match(fieldError, /role="alert"/);
   assert.match(fieldError, /aria-hidden="true"/);
   assert.match(fieldErrorStyles, /\[aria-invalid='true'\]/);
+});
+
+test('shared async state exposes accurate loading and retry semantics', () => {
+  const panel = readText('src/AsyncStatePanel.tsx');
+  const styles = readText('src/async-state-panel.css');
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+  assert.match(panel, /role=\{urgent \? 'alert' : 'status'\}/);
+  assert.match(panel, /aria-busy=\{state === 'loading'/);
+  assert.match(panel, /type="button"/);
+  assert.match(styles, /min-height: var\(--touch-target\)/);
+  assert.match(styles, /prefers-reduced-motion: reduce/);
+  assert.ok((fulfillment.match(/<AsyncStatePanel/g) || []).length >= 2);
+  assert.match(fulfillment, /setLoadVersion\(\(version\) => version \+ 1\)/);
 });

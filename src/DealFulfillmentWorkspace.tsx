@@ -13,6 +13,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { AddressAutocomplete } from './AddressAutocomplete';
+import { AsyncStatePanel } from './AsyncStatePanel';
 import { copyTextToClipboard } from './clipboard';
 import { useConfirmAction } from './ConfirmActionDialog';
 import type { Deal } from './domain';
@@ -176,20 +177,18 @@ export function MeetingPanel({
         </div>
       </div>
       {!loaded ? (
-        <div className="notice" role="status" aria-live="polite">
-          {t('Loading meeting details...')}
-        </div>
+        <AsyncStatePanel
+          state="loading"
+          title="Loading meeting details…"
+          message="Checking the latest handoff plan."
+        />
       ) : loadFailed ? (
-        <div className="notice meeting-load-failure" role="alert">
-          <p>{t(message || 'Could not load meeting details')}</p>
-          <button
-            type="button"
-            className="secondary"
-            onClick={() => setLoadVersion((version) => version + 1)}
-          >
-            {t('Try again')}
-          </button>
-        </div>
+        <AsyncStatePanel
+          state="error"
+          title="Meeting details are temporarily unavailable"
+          message={message || 'Could not load meeting details'}
+          onAction={() => setLoadVersion((version) => version + 1)}
+        />
       ) : meeting ? (
         <div className="meeting-summary">
           <div>

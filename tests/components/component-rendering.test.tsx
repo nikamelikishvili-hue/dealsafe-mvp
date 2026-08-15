@@ -17,6 +17,7 @@ const { AddressAutocomplete } = await import('../../src/AddressAutocomplete');
 const { BrandLogo } = await import('../../src/BrandLogo');
 const { FeedbackMessage } = await import('../../src/FeedbackMessage');
 const { FieldError } = await import('../../src/FieldError');
+const { AsyncStatePanel } = await import('../../src/AsyncStatePanel');
 const { isUsPostalCode, normalizeUsState, parseGoogleUsAddress, parseStoredUsAddress, serializeUsAddress } =
   await import('../../src/usAddress');
 
@@ -192,4 +193,18 @@ test('field errors are linked, assertive, and keep decorative icons hidden', () 
   assert.match(markup, /role="alert"/);
   assert.match(markup, /aria-hidden="true"/);
   assert.match(markup, /Enter a valid email\./);
+});
+
+test('loading and retry states expose accurate live-region and button semantics', () => {
+  const loading = renderToStaticMarkup(<AsyncStatePanel state="loading" title="Loading meeting details…" />);
+  assert.match(loading, /role="status"/);
+  assert.match(loading, /aria-live="polite"/);
+  assert.match(loading, /aria-busy="true"/);
+  assert.doesNotMatch(loading, /<button/);
+
+  const error = renderToStaticMarkup(<AsyncStatePanel state="error" title="Meeting unavailable" onAction={noop} />);
+  assert.match(error, /role="alert"/);
+  assert.match(error, /aria-live="assertive"/);
+  assert.match(error, /<button type="button"/);
+  assert.match(error, />Try again</);
 });

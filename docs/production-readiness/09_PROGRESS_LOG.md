@@ -4606,3 +4606,22 @@ resource, customer record, or real-money capability changed during this pass.
 
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
+
+## Shared async state and meeting recovery
+
+- Added one reusable loading, error, and empty-state presentation contract with
+  accurate live regions, `aria-busy`, atomic announcements, and real retry
+  actions.
+- Added responsive error actions with a 44-pixel minimum target and a
+  reduced-motion fallback for loading indicators.
+- Migrated meeting-detail loading and failure states while preserving the
+  existing request lifecycle and explicit retry version.
+- Kept the meeting form fail-closed until the latest provider read succeeds,
+  preventing an unavailable read from appearing as an empty safe state.
+- Passed TypeScript, lint, 286 foundation tests, and twelve focused component
+  tests.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
