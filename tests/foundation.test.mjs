@@ -12905,6 +12905,47 @@ test('TypeScript UI sources do not contain common UTF-8 mojibake sequences', () 
   }
 });
 
+test('buttons rendered directly inside forms declare an explicit type', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const source = readText(file);
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const tagName = node => node.tagName?.getText(sourceFile);
+    const inspect = (node, insideForm = false) => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      const currentTag = opening ? tagName(opening) : null;
+      if (insideForm && currentTag === 'button') {
+        const hasType = opening.attributes.properties.some(property => (
+          ts.isJsxAttribute(property) && property.name.getText(sourceFile) === 'type'
+        ));
+        if (!hasType) {
+          const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+          violations.push(`${file}:${position.line + 1}`);
+        }
+      }
+      const childInsideForm = insideForm || currentTag === 'form';
+      ts.forEachChild(node, child => inspect(child, childInsideForm));
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
 test('application-level deal and verification mutations are same-tick guarded', () => {
   const app = readText('src/app.tsx');
 
