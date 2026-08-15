@@ -1435,6 +1435,41 @@ test('MFA challenge verification treats a malformed successful provider session 
   assert.equal(JSON.stringify(response.payload).includes('must-not-be-issued'), false);
 });
 
+test('MFA rejects malformed successful provider identifiers before request chaining', async () => {
+  const { default: mfa } = await import('../api/auth/mfa.mjs');
+  const factorId = '11111111-1111-4111-8111-111111111111';
+
+  for (const malformedStage of ['account', 'challenge']) {
+    const response = createResponse();
+    const requested = [];
+    await withAuthProvider(async (url) => {
+      requested.push(String(url));
+      if (String(url).endsWith('/auth/v1/user')) {
+        return new Response(JSON.stringify({
+          id: malformedStage === 'account'
+            ? 'malformed-account-id'
+            : '00000000-0000-4000-8000-000000000001',
+          factors: [{ id: factorId, factor_type: 'totp', status: 'verified' }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ id: 'malformed-challenge-id' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }, () => mfa(authRequest({
+      action: 'challenge_and_verify',
+      purpose: 'login',
+      factorId,
+      code: '123456',
+    }, { authorization: 'Bearer pending-aal1-token' }), response));
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.payload.error, 'Authenticator security is temporarily unavailable.');
+    assert.equal(requested.length, malformedStage === 'account' ? 1 : 2);
+    assert.equal(requested.some(url => url.endsWith(`/factors/${factorId}/verify`)), false);
+  }
+});
+
 test('MFA endpoint validates action inputs before contacting the provider', async () => {
   const { default: mfa } = await import('../api/auth/mfa.mjs');
   const response = createResponse();

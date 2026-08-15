@@ -26,6 +26,7 @@ import {
 } from '../../server/sensitiveChangeProtection.mjs';
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const accountIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const totpPattern = /^\d{6}$/;
 const privilegedRoles = new Set(['support', 'compliance', 'admin']);
 const challengePurposes = new Set(['login', 'enrollment', 'step_up']);
@@ -78,6 +79,9 @@ async function loadAccount(accessToken, request) {
     headers: { Authorization: `Bearer ${accessToken}` },
   }, request);
   const account = await authPayload(upstream);
+  if (upstream.ok && !accountIdPattern.test(typeof account.id === 'string' ? account.id : '')) {
+    throw new Error('Authentication provider response was rejected.');
+  }
   return { upstream, account };
 }
 
@@ -235,7 +239,10 @@ export default async function handler(request, response) {
         body: '{}',
       }, request);
       const challenge = await authPayload(challengeUpstream);
-      if (!challengeUpstream.ok || typeof challenge.id !== 'string') {
+      if (challengeUpstream.ok && !uuidPattern.test(typeof challenge.id === 'string' ? challenge.id : '')) {
+        throw new Error('Authentication provider response was rejected.');
+      }
+      if (!challengeUpstream.ok || !uuidPattern.test(typeof challenge.id === 'string' ? challenge.id : '')) {
         if (respondMfaRateLimited(response, challengeUpstream, challenge, 'challenge')) return;
         response.status(400).json({ error: 'A new authenticator challenge could not be created. Try again.' });
         return;
