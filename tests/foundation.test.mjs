@@ -261,6 +261,73 @@ test('CSP report endpoint fails safely for invalid request shapes', async () => 
   assert.equal(oversizedResponse.headers.get('cache-control'), 'no-store, max-age=0');
 });
 
+test('CSP report streams stop at the byte boundary before full allocation', async () => {
+  let declaredPulls = 0;
+  const declaredResponse = createResponse();
+  await cspReportHandler({
+    method: 'POST',
+    headers: {
+      'content-type': 'application/csp-report',
+      'content-length': '16385',
+    },
+    async *[Symbol.asyncIterator]() {
+      declaredPulls += 1;
+      yield '{}';
+    },
+  }, declaredResponse);
+  assert.equal(declaredResponse.statusCode, 413);
+  assert.equal(declaredPulls, 0);
+
+  let streamedPulls = 0;
+  const streamedResponse = createResponse();
+  await cspReportHandler({
+    method: 'POST',
+    headers: { 'content-type': 'application/reports+json' },
+    async *[Symbol.asyncIterator]() {
+      streamedPulls += 1;
+      yield Buffer.alloc(16_384, 0x20);
+      streamedPulls += 1;
+      yield 'x';
+      streamedPulls += 1;
+      yield 'must-not-be-read';
+    },
+  }, streamedResponse);
+  assert.equal(streamedResponse.statusCode, 413);
+  assert.equal(streamedPulls, 2);
+
+  const exactPayload = {
+    'csp-report': {
+      'effective-directive': 'script-src',
+      padding: '',
+    },
+  };
+  const emptyLength = Buffer.byteLength(JSON.stringify(exactPayload));
+  exactPayload['csp-report'].padding = 'a'.repeat(16_384 - emptyLength);
+  const exactBody = JSON.stringify(exactPayload);
+  assert.equal(Buffer.byteLength(exactBody), 16_384);
+
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = value => warnings.push(String(value));
+  try {
+    const exactResponse = createResponse();
+    await cspReportHandler({
+      method: 'POST',
+      headers: { 'content-type': 'application/csp-report' },
+      async *[Symbol.asyncIterator]() {
+        yield Buffer.from(exactBody.slice(0, 8_192));
+        yield Buffer.from(exactBody.slice(8_192));
+      },
+    }, exactResponse);
+    assert.equal(exactResponse.statusCode, 204);
+    assert.equal(exactResponse.ended, true);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.length, 1);
+  assert.doesNotMatch(warnings[0], /padding|a{20}/);
+});
+
 test('CSP report endpoint records only bounded privacy-safe diagnostics', async () => {
   const warnings = [];
   const originalWarn = console.warn;
