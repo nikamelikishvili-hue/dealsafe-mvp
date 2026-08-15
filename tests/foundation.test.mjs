@@ -13358,6 +13358,63 @@ test('one-time-code fields preserve six-digit mobile input semantics', () => {
   assert.deepEqual(violations, []);
 });
 
+test('rendered buttons preserve a programmatic accessible name', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const hasTextAlternative = node => {
+      if (ts.isJsxText(node)) return Boolean(node.getText(sourceFile).trim());
+      if (ts.isJsxExpression(node)) {
+        const expression = node.expression;
+        return Boolean(expression)
+          && !ts.isJsxElement(expression)
+          && !ts.isJsxSelfClosingElement(expression);
+      }
+      if (ts.isJsxElement(node)) return node.children.some(hasTextAlternative);
+      return false;
+    };
+    const inspect = node => {
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(sourceFile) === 'button') {
+        const attributes = new Set(node.openingElement.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => attribute.name.getText(sourceFile)));
+        const named = attributes.has('aria-label')
+          || attributes.has('aria-labelledby')
+          || node.children.some(hasTextAlternative);
+        if (!named) {
+          const position = sourceFile.getLineAndCharacterOfPosition(
+            node.openingElement.getStart(sourceFile),
+          );
+          violations.push(`${file}:${position.line + 1}`);
+        }
+      }
+      if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(sourceFile) === 'button') {
+        const attributes = new Set(node.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => attribute.name.getText(sourceFile)));
+        if (!attributes.has('aria-label') && !attributes.has('aria-labelledby')) {
+          const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+          violations.push(`${file}:${position.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
 test('application-level deal and verification mutations are same-tick guarded', () => {
   const app = readText('src/app.tsx');
 
