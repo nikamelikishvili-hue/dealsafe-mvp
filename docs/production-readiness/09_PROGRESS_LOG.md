@@ -1,5 +1,18 @@
 # Production-readiness progress log
 
+## 2026-08-15 — Deal action-plan recovery
+
+- Replaced the blank initial Deal progress state with an accessible loading
+  contract and a direct retry when the first read fails.
+- Preserved prior milestones after a polling failure while explicitly warning
+  that they are stale and should not drive the next action until refreshed.
+- Reused request-generation guards for polling and manual retries.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## 2026-08-15 — Shipping readiness recovery
 
 - Stopped converting a failed seller evidence-readiness read into a valid

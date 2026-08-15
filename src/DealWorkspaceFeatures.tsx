@@ -42,6 +42,7 @@ import {
   ZoomIn,
 } from 'lucide-react';
 import { copyTextToClipboard } from './clipboard';
+import { AsyncStatePanel } from './AsyncStatePanel';
 import { useConfirmAction } from './ConfirmActionDialog';
 import { DEMO_DEAL_PUBLIC_ID } from './services/demoRepository';
 import type { Deal, DealDraft } from './domain';
@@ -1444,11 +1445,14 @@ export function DealActionPlanCard({
   const [plan, setPlan] = useState<DealActionPlan | null>(null);
   const loadRequestRef = useRef(0);
   const [loadError, setLoadError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadRevision, setLoadRevision] = useState(0);
 
   useEffect(() => {
     let current = true;
     const load = () => {
       const request = ++loadRequestRef.current;
+      setLoading(true);
       return (
       getDealActionPlan(session, deal.id)
         .then((record) => {
@@ -1462,6 +1466,9 @@ export function DealActionPlanCard({
             setLoadError('Could not refresh the deal action plan.');
           }
         })
+        .finally(() => {
+          if (current && request === loadRequestRef.current) setLoading(false);
+        })
       );
     };
     void load();
@@ -1471,15 +1478,20 @@ export function DealActionPlanCard({
       loadRequestRef.current += 1;
       window.clearInterval(timer);
     };
-  }, [deal.id, deal.status, deal.viewerRole, session.accessToken]);
+  }, [deal.id, deal.status, deal.viewerRole, session.accessToken, loadRevision]);
 
   if (!plan) {
-    return loadError ? (
-      <section className="deal-action-plan-card compact-record-error notice" role="alert">
-        <ShieldAlert aria-hidden="true" />
-        <span>{t(loadError)}</span>
+    return (
+      <section className="deal-action-plan-card compact-record-error no-print">
+        <AsyncStatePanel
+          state={loadError ? 'error' : 'loading'}
+          title={loadError ? 'Deal progress unavailable' : 'Loading deal progress'}
+          message={loadError || 'Checking the latest shared milestones.'}
+          actionLabel="Retry progress"
+          onAction={loadError ? () => setLoadRevision((revision) => revision + 1) : undefined}
+        />
       </section>
-    ) : null;
+    );
   }
   const completed = plan.deal_status === 'completed';
   const handoffReady =
@@ -1514,6 +1526,20 @@ export function DealActionPlanCard({
 
   return (
     <section id="deal-action-plan" className="deal-action-plan no-print">
+      {loadError && (
+        <AsyncStatePanel
+          state="error"
+          title="Deal progress could not refresh"
+          message="Showing the previously loaded milestones. Retry before relying on the next step."
+          actionLabel="Retry progress"
+          onAction={() => setLoadRevision((revision) => revision + 1)}
+        />
+      )}
+      {loading && !loadError && (
+        <div className="sr-only" role="status" aria-live="polite">
+          {t('Refreshing deal progress')}
+        </div>
+      )}
       <div className="action-plan-heading">
         <div className="action-plan-title">
           <span className="workflow-icon">

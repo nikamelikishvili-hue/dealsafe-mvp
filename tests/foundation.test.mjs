@@ -12738,6 +12738,19 @@ test('shipping navigation readiness exposes loading, failure, and bounded retry 
   assert.doesNotMatch(app, /catch\(\(\)=>\{if\(current\)setShippingReadinessByDeal\(items=>\(\{\.\.\.items,\[dealId\]:\{loaded:true,ready:false\}\}\)\)\}\)/);
 });
 
+test('deal action plan exposes initial loading, stale failure, and manual retry states', () => {
+  const source = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(source, /import \{ AsyncStatePanel \} from '\.\/AsyncStatePanel'/);
+  assert.match(source, /const \[loading, setLoading\] = useState\(true\)/);
+  assert.match(source, /const \[loadRevision, setLoadRevision\] = useState\(0\)/);
+  assert.match(source, /title=\{loadError \? 'Deal progress unavailable' : 'Loading deal progress'\}/);
+  assert.match(source, /Showing the previously loaded milestones\. Retry before relying on the next step\./);
+  assert.match(source, /setLoadRevision\(\(revision\) => revision \+ 1\)/);
+  assert.match(source, /role="status" aria-live="polite"/);
+  assert.doesNotMatch(source, /if \(!plan\) \{[\s\S]{0,400}return loadError \?/);
+});
+
 test('notification reads preserve stale activity and expose retryable failures', () => {
   const source = readText('src/app.tsx');
 
