@@ -14,6 +14,7 @@ const refreshCookieName = '__Host-dealivra-refresh';
 // and no Domain attribute is present.
 const refreshCookiePath = '/';
 const refreshMaxAgeSeconds = 8 * 60 * 60;
+const maxRefreshCookieValueLength = 3800;
 const maxJsonBodyBytes = 16_384;
 const authProviderTimeoutMs = 10_000;
 
@@ -237,10 +238,10 @@ export function readRefreshToken(request) {
       encodedToken = value.join('=');
     }
   }
-  if (!encodedToken || encodedToken.length > 8192) return null;
+  if (!encodedToken || encodedToken.length > maxRefreshCookieValueLength) return null;
   try {
     const token = decodeURIComponent(encodedToken);
-    return token && token.length <= 8192 ? token : null;
+    return token && token.length <= maxRefreshCookieValueLength ? token : null;
   } catch {
     return null;
   }
@@ -305,12 +306,16 @@ export function hasVerifiedMfaFactor(user) {
 }
 
 export function setRefreshCookie(response, refreshToken) {
-  if (typeof refreshToken !== 'string' || !refreshToken || refreshToken.length > 8192) {
+  if (typeof refreshToken !== 'string' || !refreshToken) {
+    throw new Error('Authentication provider returned an invalid refresh credential.');
+  }
+  const encodedToken = encodeURIComponent(refreshToken);
+  if (encodedToken.length > maxRefreshCookieValueLength) {
     throw new Error('Authentication provider returned an invalid refresh credential.');
   }
   response.setHeader(
     'Set-Cookie',
-    `${refreshCookieName}=${encodeURIComponent(refreshToken)}; Path=${refreshCookiePath}; Max-Age=${refreshMaxAgeSeconds}; HttpOnly; Secure; SameSite=Strict; Priority=High`,
+    `${refreshCookieName}=${encodedToken}; Path=${refreshCookiePath}; Max-Age=${refreshMaxAgeSeconds}; HttpOnly; Secure; SameSite=Strict; Priority=High`,
   );
 }
 

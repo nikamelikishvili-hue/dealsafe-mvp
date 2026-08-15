@@ -1103,10 +1103,29 @@ test('auth handlers never return a refresh token to browser JavaScript', async (
   assert.equal(response.payload.access_token.startsWith('header.'), true);
 });
 
-test('password login never writes an oversized provider refresh credential', async () => {
+test('password login never writes a provider credential beyond the browser cookie budget', async () => {
+  for (const refreshToken of ['x'.repeat(3_801), 'é'.repeat(1_000)]) {
+    const response = createResponse();
+    await withAuthProvider(async () => new Response(JSON.stringify(
+      authProviderSession(refreshToken),
+    ), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }), () => loginHandler(authRequest({
+      email: 'user@example.com',
+      password: 'ExamplePass123!',
+    }), response));
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.headers.has('set-cookie'), false);
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+  }
+});
+
+test('password login accepts the reviewed refresh cookie boundary without exceeding 4096 bytes', async () => {
   const response = createResponse();
   await withAuthProvider(async () => new Response(JSON.stringify(
-    authProviderSession('x'.repeat(8_193)),
+    authProviderSession('x'.repeat(3_800)),
   ), {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
@@ -1115,9 +1134,10 @@ test('password login never writes an oversized provider refresh credential', asy
     password: 'ExamplePass123!',
   }), response));
 
-  assert.equal(response.statusCode, 503);
-  assert.equal(response.headers.has('set-cookie'), false);
-  assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+  const cookie = response.headers.get('set-cookie');
+  assert.equal(response.statusCode, 200);
+  assert.ok(cookie);
+  assert.ok(Buffer.byteLength(cookie, 'utf8') <= 4096);
 });
 
 test('password login with a verified TOTP factor stays pending until AAL2 verification', async () => {
