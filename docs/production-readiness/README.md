@@ -94,6 +94,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [83_DASHBOARD_DATA_RECOVERY.md](83_DASHBOARD_DATA_RECOVERY.md) | Distinct Deal/Watchlist loading, stale-data, failure, empty, and retry behavior |
 | [84_ENGLISH_LAUNCH_BUNDLE_OPTIMIZATION.md](84_ENGLISH_LAUNCH_BUNDLE_OPTIMIZATION.md) | AST-scoped English launch literal inlining and localization reactivation gate |
 | [85_NOTIFICATION_DATA_RECOVERY.md](85_NOTIFICATION_DATA_RECOVERY.md) | Recoverable activity loading, stale-data preservation, and optimistic mutation rollback |
+| [86_PROFILE_DATA_RECOVERY.md](86_PROFILE_DATA_RECOVERY.md) | Fail-closed profile loading before protected account controls and bounded retry |
 
 ## Authority and change control
 

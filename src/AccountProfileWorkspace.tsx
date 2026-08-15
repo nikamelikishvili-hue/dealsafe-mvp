@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { AccountMfaSecurity } from './AccountMfaSecurity';
 import { AccountSessionSecurity } from './AccountSessionSecurity';
+import { AsyncStatePanel } from './AsyncStatePanel';
 import { copyTextToClipboard } from './clipboard';
 import { supportCasesEnabled } from './featureFlags';
 import { getAppLanguage, t } from './i18n';
@@ -380,11 +381,15 @@ function ProfileOverview({
   profile,
   displayName,
   message,
+  loading,
+  onRetry,
   onBack,
 }: {
   profile: ProfileSummary | null;
   displayName: string;
   message: string;
+  loading: boolean;
+  onRetry: () => void;
   onBack: () => void;
 }) {
   return (
@@ -394,7 +399,7 @@ function ProfileOverview({
       </button>
       <p className="eyebrow">{t('Trust profile')}</p>
       <h1>{profile?.display_name || displayName}</h1>
-      {message ? <div className="notice" role="status" aria-live="polite">{t(message)}</div> : null}
+      {!profile ? <AsyncStatePanel state={loading ? 'loading' : 'error'} title={loading ? 'Loading profile…' : 'Profile unavailable'} message={loading ? 'Checking your latest account and trust information.' : message || 'Your profile could not be loaded.'} actionLabel="Retry" onAction={loading ? undefined : onRetry} /> : null}
       {profile ? (
         <>
           <div className="profile-stats">
@@ -469,6 +474,8 @@ export function AccountProfileWorkspace({
   onSignedOut,
   onNameUpdated,
   onPasswordUpdated,
+  profileLoading,
+  onRetryProfile,
   onBack,
 }: {
   session: StoredSession;
@@ -483,8 +490,13 @@ export function AccountProfileWorkspace({
   onSignedOut: () => void;
   onNameUpdated: (name: string) => void;
   onPasswordUpdated: () => void;
+  profileLoading: boolean;
+  onRetryProfile: () => void;
   onBack: () => void;
 }) {
+  if (!profile) {
+    return <ProfileOverview profile={null} displayName={displayName} message={message} loading={profileLoading} onRetry={onRetryProfile} onBack={onBack} />;
+  }
   return (
     <>
       {profile ? (
@@ -512,6 +524,8 @@ export function AccountProfileWorkspace({
         profile={profile}
         displayName={displayName}
         message={message}
+        loading={profileLoading}
+        onRetry={onRetryProfile}
         onBack={onBack}
       />
     </>

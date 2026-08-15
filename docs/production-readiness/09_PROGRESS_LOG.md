@@ -4523,6 +4523,18 @@ Supabase resource, customer record, or real-money capability changed.
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
 
+## Profile data recovery
+
+- Added explicit profile loading, failure, and retry behavior.
+- Prevented partially initialized security and trust controls from rendering
+  before the owner-bound profile read succeeds.
+- Preserved the existing newest-request-wins guard through retry and finalization.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## Notification data recovery
 
 - Stopped turning notification provider failures into a false empty activity

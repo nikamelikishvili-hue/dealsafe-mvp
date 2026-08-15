@@ -800,6 +800,7 @@ export function App() {
   };
   const createErrors=createValidationAttempted?getCreateStepErrors(createStep):[];
   const [profile,setProfile]=useState<ProfileSummary|null>(null);
+  const [profileLoading,setProfileLoading]=useState(false);
   const [publicPassport,setPublicPassport]=useState<TrustPassport|null>(null);
   const [passportMessage,setPassportMessage]=useState('');
   const [savedDeals,setSavedDeals]=useState<Deal[]>([]);
@@ -1081,7 +1082,7 @@ export function App() {
   const submitAuth=async(e:React.FormEvent)=>{e.preventDefault();if(authSubmittingRef.current)return;authSubmittingRef.current=true;setAuthSubmitting(true);setAuthMessage('');try{if(authMode==='signup'){const result=await signUp(authForm.email,authForm.password,authForm.displayName);if(result.session)await finishAuthentication(result.session);else setAuthMessage('Check your email to confirm your account, then return to this tab and sign in. Your completed draft will stay here.')}else{const result=await signIn(authForm.email,authForm.password);if('mfaRequired' in result){setMfaLogin(result);setAuthForm(current=>({...current,password:''}));return}await finishAuthentication(result)}}catch(error){setAuthMessage(error instanceof Error?error.message:'Something went wrong')}finally{authSubmittingRef.current=false;setAuthSubmitting(false)}};
   const finishSignedOutSession=()=>{publicDealRequestRef.current+=1;profileRequestRef.current+=1;updateBrowserAddress('/',true);setSession(null);setMfaLogin(null);setIsAdmin(false);setView('home')};
   const logout=()=>{void signOut(session);finishSignedOutSession()};
-  const openProfile=async()=>{if(!session)return;const request=++profileRequestRef.current;setAuthMessage('');setView('profile');try{const next=await getMyProfileSummary(session);if(request===profileRequestRef.current)setProfile(next)}catch(error){if(request===profileRequestRef.current)setAuthMessage(error instanceof Error?error.message:'Could not load profile')}};
+  const openProfile=async()=>{if(!session)return;const request=++profileRequestRef.current;setProfileLoading(true);setAuthMessage('');setView('profile');try{const next=await getMyProfileSummary(session);if(request===profileRequestRef.current)setProfile(next)}catch(error){if(request===profileRequestRef.current)setAuthMessage(error instanceof Error?error.message:'Could not load profile')}finally{if(request===profileRequestRef.current)setProfileLoading(false)}};
   const requestVerification=async()=>{if(!session||!profile||verificationMutationRef.current)return;verificationMutationRef.current=true;setVerificationRequesting(true);setVerificationMessage('');try{const status=await requestIdentityVerification(session);setProfile({...profile,verification_status:status});setVerificationMessage('Request recorded. A verification provider must be connected before identity can be approved.')}catch(error){setVerificationMessage(error instanceof Error?error.message:'Could not request verification')}finally{verificationMutationRef.current=false;setVerificationRequesting(false)}};
   const refreshSavedDeals=()=>{if(!session)return;const request=++savedDealsRequestRef.current;setDashboardError('');getMySavedDeals(session).then(items=>{if(request===savedDealsRequestRef.current)setSavedDeals(items)}).catch(error=>{if(request===savedDealsRequestRef.current)setDashboardError(error instanceof Error?error.message:'Could not refresh your Watchlist.')})};
   const markAllActivityRead=()=>{if(!session)return;const request=++notificationRequestRef.current;const previous=notifications;setNotifications(items=>items.map(item=>({...item,is_read:true})));setNotificationsError('');void markAllNotificationsRead(session).catch(error=>{if(request===notificationRequestRef.current){setNotifications(previous);setNotificationsError(error instanceof Error?error.message:'Could not mark activity as read.')}})};
@@ -1227,6 +1228,8 @@ export function App() {
         onSignedOut={finishSignedOutSession}
         onNameUpdated={name=>setProfile(current=>current?{...current,display_name:name}:current)}
         onPasswordUpdated={()=>{setSession(null);setMfaLogin(null);setAuthMode('signin');setAuthMessage('Your password was updated. Sign in again with the new password.');setView('auth')}}
+        profileLoading={profileLoading}
+        onRetryProfile={()=>void openProfile()}
         onBack={()=>setView('home')}
       /></React.Suspense>}
       {view==='passport'&&<PublicTrustPassportPage profile={publicPassport} message={passportMessage} onBack={()=>goHomeSection()} onRetry={()=>setRouteRevision(revision=>revision+1)}/>}

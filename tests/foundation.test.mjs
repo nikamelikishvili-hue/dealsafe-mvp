@@ -12731,3 +12731,16 @@ test('notification reads preserve stale activity and expose retryable failures',
   assert.doesNotMatch(source, /getMyNotifications\(session\)[\s\S]{0,240}catch\(\(\)=>\{if\(current&&request===notificationRequestRef\.current\)setNotifications\(\[\]\)\}\)/);
   assert.match(source, /aria-expanded=\{expanded\} aria-controls="notification-menu"/);
 });
+
+test('profile loading fails closed before account security controls render', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/AccountProfileWorkspace.tsx');
+
+  assert.match(app, /const \[profileLoading,setProfileLoading\]=useState\(false\)/);
+  assert.match(app, /setProfileLoading\(true\);setAuthMessage\(''\);setView\('profile'\)/);
+  assert.match(app, /finally\{if\(request===profileRequestRef\.current\)setProfileLoading\(false\)\}/);
+  assert.match(app, /onRetryProfile=\{\(\)=>void openProfile\(\)\}/);
+  assert.match(workspace, /if \(!profile\) \{/);
+  assert.match(workspace, /title=\{loading \? 'Loading profile…' : 'Profile unavailable'\}/);
+  assert.match(workspace, /onAction=\{loading \? undefined : onRetry\}/);
+});
