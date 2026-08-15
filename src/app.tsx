@@ -960,10 +960,10 @@ export function App() {
     if(!active||!session||active.viewerRole!=='seller'||active.status!=='accepted'||active.deliveryMethod!=='Ship to buyer')return;
     let current=true;
     const dealId=active.id;
-    setShippingReadinessByDeal(items=>({...items,[dealId]:{loaded:false,ready:false}}));
+    setShippingReadinessByDeal(items=>({...items,[dealId]:{status:'loading',ready:items[dealId]?.ready??false}}));
     getSellerShippingEvidenceReadiness(session,dealId)
-      .then(readiness=>{if(current)setShippingReadinessByDeal(items=>({...items,[dealId]:{loaded:true,ready:Boolean(readiness?.ready)}}))})
-      .catch(()=>{if(current)setShippingReadinessByDeal(items=>({...items,[dealId]:{loaded:true,ready:false}}))});
+      .then(readiness=>{if(current)setShippingReadinessByDeal(items=>({...items,[dealId]:{status:'ready',ready:Boolean(readiness?.ready)}}))})
+      .catch(()=>{if(current)setShippingReadinessByDeal(items=>({...items,[dealId]:{status:'error',ready:items[dealId]?.ready??false}}))});
     return()=>{current=false};
   },[active?.id,active?.viewerRole,active?.status,active?.deliveryMethod,session?.accessToken,evidenceRevision]);
   const focusCreateField=(fieldId:string)=>{const field=document.getElementById(fieldId);field?.focus({preventScroll:true});field?.scrollIntoView({behavior:'smooth',block:'center'})};
@@ -1159,6 +1159,11 @@ export function App() {
     if(dealPrimaryAction.kind==='create'){openCreate();return}
     if(dealPrimaryAction.kind==='accept'){void accept();return}
     if(dealPrimaryAction.kind==='signin'){openAuthRoute('signin','deal');return}
+    if(dealPrimaryAction.kind==='retry-shipping'){
+      setEvidenceRevision(revision=>revision+1);
+      scrollToDealSection(dealPrimaryAction.targetId);
+      return;
+    }
     if(dealPrimaryAction.targetId==='deal-agreement'){scrollToAgreement();return}
     scrollToDealSection(dealPrimaryAction.targetId);
   };

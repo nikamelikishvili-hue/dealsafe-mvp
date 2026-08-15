@@ -13,11 +13,11 @@ export type DealPrimaryAction = {
   label: string;
   detail: string;
   targetId: string;
-  kind: 'scroll' | 'create' | 'accept' | 'signin';
+  kind: 'scroll' | 'create' | 'accept' | 'signin' | 'retry-shipping';
 };
 
 export type ShippingNavigationReadiness = {
-  loaded: boolean;
+  status: 'loading' | 'ready' | 'error';
   ready: boolean;
 };
 
@@ -35,7 +35,15 @@ function getShippingPrimaryAction(
         kind: 'scroll',
       };
     }
-    if (!readiness?.loaded) {
+    if (readiness?.status === 'error') {
+      return {
+        label: 'Retry shipping check',
+        detail: 'Shipping readiness is unavailable. Retry before continuing.',
+        targetId: 'shipping-panel',
+        kind: 'retry-shipping',
+      };
+    }
+    if (!readiness || readiness.status === 'loading') {
       return {
         label: 'Check package evidence',
         detail: 'Checking the required evidence before shipping.',

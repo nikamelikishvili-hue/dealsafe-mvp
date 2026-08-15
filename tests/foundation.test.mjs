@@ -12724,6 +12724,20 @@ test('English launch locale inlining is AST-scoped and preserves dynamic behavio
   );
 });
 
+test('shipping navigation readiness exposes loading, failure, and bounded retry states', () => {
+  const app = readText('src/app.tsx');
+  const shell = readText('src/DealWorkspaceShell.tsx');
+
+  assert.match(shell, /status: 'loading' \| 'ready' \| 'error'/);
+  assert.match(shell, /label: 'Retry shipping check'/);
+  assert.match(shell, /kind: 'retry-shipping'/);
+  assert.match(app, /\{status:'loading',ready:items\[dealId\]\?\.ready\?\?false\}/);
+  assert.match(app, /\{status:'error',ready:items\[dealId\]\?\.ready\?\?false\}/);
+  assert.match(app, /dealPrimaryAction\.kind==='retry-shipping'/);
+  assert.match(app, /setEvidenceRevision\(revision=>revision\+1\)/);
+  assert.doesNotMatch(app, /catch\(\(\)=>\{if\(current\)setShippingReadinessByDeal\(items=>\(\{\.\.\.items,\[dealId\]:\{loaded:true,ready:false\}\}\)\)\}\)/);
+});
+
 test('notification reads preserve stale activity and expose retryable failures', () => {
   const source = readText('src/app.tsx');
 

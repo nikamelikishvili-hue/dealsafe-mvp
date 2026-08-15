@@ -1,5 +1,19 @@
 # Production-readiness progress log
 
+## 2026-08-15 — Shipping readiness recovery
+
+- Stopped converting a failed seller evidence-readiness read into a valid
+  incomplete checklist.
+- Added distinct loading, ready, and error states while retaining a prior
+  successful value only as stale continuity data.
+- Added a direct primary-action retry that remains fail-closed until the
+  provider confirms current readiness.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## 2026-08-15 — English launch identity-call headroom
 
 - Expanded the parser-scoped English launch transform from literal-only calls

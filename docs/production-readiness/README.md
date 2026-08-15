@@ -98,6 +98,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [87_PUBLIC_DEAL_ROUTE_RECOVERY.md](87_PUBLIC_DEAL_ROUTE_RECOVERY.md) | Canonical public Deal deep-link loading, failure, retry, and mobile recovery actions |
 | [88_ACCEPTANCE_PROTECTION_RECOVERY.md](88_ACCEPTANCE_PROTECTION_RECOVERY.md) | Fail-closed buyer-code status reads across seller sharing and buyer acceptance |
 | [89_ENGLISH_IDENTITY_TRANSFORM_HEADROOM.md](89_ENGLISH_IDENTITY_TRANSFORM_HEADROOM.md) | AST-scoped identity-call inlining, bundle headroom evidence, and localization activation gate |
+| [90_SHIPPING_READINESS_RECOVERY.md](90_SHIPPING_READINESS_RECOVERY.md) | Fail-closed seller shipping readiness with distinct loading, failure, stale-value, and retry behavior |
 
 ## Authority and change control
 
