@@ -218,7 +218,7 @@ function EnhancedDashboard({deals,allDeals,onOpen,onCreate}:{deals:Deal[];allDea
   return <section className="enhanced-dashboard"><div className="dashboard-heading"><div><p className="eyebrow">{t('Your workspace')}</p><h2>{t('Deal dashboard')}</h2><p>{t('Track every sale from published link to completed handoff.')}</p></div><button className="primary" onClick={onCreate}><Plus size={17}/>{t('New deal')}</button></div><div className="dashboard-stats"><article><span>{t('All deals')}</span><strong>{allDeals.length}</strong></article><article><span>{t('Active')}</span><strong>{activeCount}</strong></article><article><span>{t('Completed')}</span><strong>{completedCount}</strong></article><article><span>{t('Total value')}</span><strong>{groupedDealValue(allDeals)}</strong></article></div>{deals.length?<div className="dashboard-list">{deals.map(deal=>{const expired=isDealExpired(deal);return <button key={deal.id} onClick={()=>onOpen(deal)}><span className="deal-icon">{deal.title.slice(0,1).toUpperCase()}</span><span className="deal-main"><b>{deal.title}</b><small>{deal.publicId} · {t(deal.viewerRole==='buyer'?'Buying':'Selling')}</small></span><strong>{dealPrice(deal)}</strong><span className={`status ${expired?'expired':deal.status}`}>{t(expired?'expired':deal.status)}</span><ArrowRight size={18}/></button>})}</div>:<div className="dashboard-empty"><Search/><b>{t('No matching deals')}</b><span>{t('Change or clear the filters above, or create a new Deal Link.')}</span><button className="secondary" onClick={onCreate}><Plus size={16}/>{t('Create deal')}</button></div>}</section>
 }
 
-function WorkspaceDealExplorer({deals,savedDeals,onOpen,onCreate}:{deals:Deal[];savedDeals:Deal[];onOpen:(deal:Deal)=>void;onCreate:()=>void}){
+function WorkspaceDealExplorer({deals,savedDeals,loading,error,onRetry,onOpen,onCreate}:{deals:Deal[];savedDeals:Deal[];loading:boolean;error:string;onRetry:()=>void;onOpen:(deal:Deal)=>void;onCreate:()=>void}){
   const [filters,setFilters]=useState(()=>readCatalogSearchState(location.search));
   const availableDeals=useMemo(()=>{
     const unique=new Map<string,Deal>();
@@ -234,9 +234,12 @@ function WorkspaceDealExplorer({deals,savedDeals,onOpen,onCreate}:{deals:Deal[];
     if(`${location.pathname}${location.search}${location.hash}`!==destination)history.replaceState({},'',destination);
   },[filters]);
   return <>
+    <div className="dashboard-data-states">
+      {loading&&!deals.length&&!savedDeals.length&&<AsyncStatePanel state="loading" title="Loading workspace…"/>}
+      {error&&<AsyncStatePanel state="error" title="Refresh failed" message={deals.length||savedDeals.length?`${error} Showing saved data.`:error} onAction={onRetry}/>}
+    </div>
     <CatalogSearchPanel deals={availableDeals} filteredCount={matchingUniqueCount} value={filters} onChange={setFilters}/>
-    <SavedDealsPanel items={filteredSavedDeals} totalCount={savedDeals.length} onOpen={onOpen}/>
-    <EnhancedDashboard deals={filteredDeals} allDeals={deals} onOpen={onOpen} onCreate={onCreate}/>
+    {(deals.length>0||savedDeals.length>0||(!loading&&!error))&&<><SavedDealsPanel items={filteredSavedDeals} totalCount={savedDeals.length} onOpen={onOpen}/><EnhancedDashboard deals={filteredDeals} allDeals={deals} onOpen={onOpen} onCreate={onCreate}/></>}
   </>;
 }
 
@@ -726,6 +729,9 @@ export function App() {
   const entryView:View=initialRoute.view==='deal'?'route-loading':initialRoute.view;
   const [view,setView]=useState<View>(entryView); const [deals,setDeals]=useState<Deal[]>([]); const [active,setActive]=useState<Deal>(); const [draft,setDraft]=useState<DealDraft>(()=>recoveredCreateDraft?.draft||{...initial}); const [buyer,setBuyer]=useState('');
   const dealListRequestRef=useRef(0);
+  const [dashboardRevision,setDashboardRevision]=useState(0);
+  const [dashboardLoading,setDashboardLoading]=useState(true);
+  const [dashboardError,setDashboardError]=useState('');
   const [session,setSession]=useState<StoredSession|null>(initialSession);
   const user=session?.user??null;
   const [authMode,setAuthMode]=useState<AuthMode>(initialRoute.authMode||'signup');
@@ -898,8 +904,7 @@ export function App() {
   useEffect(()=>{if(view==='auth'&&!isSupabaseConfigured)setAuthMessage('Account service is temporarily unavailable. Please try again later.')},[view,authMode]);
   useEffect(()=>{const updated=(event:Event)=>setSession((event as CustomEvent<StoredSession>).detail);const expired=()=>{setSession(null);setMfaLogin(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')};const requiresMfa=()=>{setAuthMessage('Verify or enroll an authenticator before continuing with this protected account.');setView('profile')};window.addEventListener(sessionUpdatedEvent,updated);window.addEventListener(sessionExpiredEvent,expired);window.addEventListener(mfaRequiredEvent,requiresMfa);return()=>{window.removeEventListener(sessionUpdatedEvent,updated);window.removeEventListener(sessionExpiredEvent,expired);window.removeEventListener(mfaRequiredEvent,requiresMfa)}},[]);
   useEffect(()=>{if(!session)return;const recordActivity=()=>markSessionActivity();const events=['pointerdown','keydown','touchstart'] as const;events.forEach(event=>{window.addEventListener(event,recordActivity,{passive:true})});window.addEventListener('focus',recordActivity);return()=>{events.forEach(event=>{window.removeEventListener(event,recordActivity)});window.removeEventListener('focus',recordActivity)}},[session?.user.id]);
-  useEffect(()=>{const request=++dealListRequestRef.current;if(session){listUserDeals(session).then(items=>{if(request===dealListRequestRef.current)setDeals(items)}).catch(()=>{if(request===dealListRequestRef.current)setDeals([])})}else{demoRepository.list().then(items=>{if(request===dealListRequestRef.current)setDeals(items)})}return()=>{dealListRequestRef.current+=1}},[session]);
-  useEffect(()=>{const request=++savedDealsRequestRef.current;if(session)getMySavedDeals(session).then(items=>{if(request===savedDealsRequestRef.current)setSavedDeals(items)}).catch(()=>{if(request===savedDealsRequestRef.current)setSavedDeals([])});else setSavedDeals([]);return()=>{savedDealsRequestRef.current+=1}},[session]);
+  useEffect(()=>{const request=++dealListRequestRef.current;const savedRequest=++savedDealsRequestRef.current;setDashboardLoading(true);setDashboardError('');const sources=session?Promise.all([listUserDeals(session),getMySavedDeals(session)]):Promise.all([demoRepository.list(),Promise.resolve([] as Deal[])]);sources.then(([nextDeals,nextSaved])=>{if(request===dealListRequestRef.current&&savedRequest===savedDealsRequestRef.current){setDeals(nextDeals);setSavedDeals(nextSaved)}}).catch(error=>{if(request===dealListRequestRef.current&&savedRequest===savedDealsRequestRef.current)setDashboardError(error instanceof Error?error.message:'Could not load your workspace.')}).finally(()=>{if(request===dealListRequestRef.current&&savedRequest===savedDealsRequestRef.current)setDashboardLoading(false)});return()=>{dealListRequestRef.current+=1;savedDealsRequestRef.current+=1}},[session,dashboardRevision]);
   useEffect(()=>{
     if(session){
       clearGuestCreateDraft();
@@ -1075,7 +1080,7 @@ export function App() {
   const logout=()=>{void signOut(session);finishSignedOutSession()};
   const openProfile=async()=>{if(!session)return;const request=++profileRequestRef.current;setAuthMessage('');setView('profile');try{const next=await getMyProfileSummary(session);if(request===profileRequestRef.current)setProfile(next)}catch(error){if(request===profileRequestRef.current)setAuthMessage(error instanceof Error?error.message:'Could not load profile')}};
   const requestVerification=async()=>{if(!session||!profile||verificationMutationRef.current)return;verificationMutationRef.current=true;setVerificationRequesting(true);setVerificationMessage('');try{const status=await requestIdentityVerification(session);setProfile({...profile,verification_status:status});setVerificationMessage('Request recorded. A verification provider must be connected before identity can be approved.')}catch(error){setVerificationMessage(error instanceof Error?error.message:'Could not request verification')}finally{verificationMutationRef.current=false;setVerificationRequesting(false)}};
-  const refreshSavedDeals=()=>{if(!session)return;const request=++savedDealsRequestRef.current;getMySavedDeals(session).then(items=>{if(request===savedDealsRequestRef.current)setSavedDeals(items)}).catch(()=>{if(request===savedDealsRequestRef.current)setSavedDeals([])})};
+  const refreshSavedDeals=()=>{if(!session)return;const request=++savedDealsRequestRef.current;setDashboardError('');getMySavedDeals(session).then(items=>{if(request===savedDealsRequestRef.current)setSavedDeals(items)}).catch(error=>{if(request===savedDealsRequestRef.current)setDashboardError(error instanceof Error?error.message:'Could not refresh your Watchlist.')})};
   const markAllActivityRead=()=>{if(!session)return;const request=++notificationRequestRef.current;setNotifications(items=>items.map(item=>({...item,is_read:true})));void markAllNotificationsRead(session).catch(()=>getMyNotifications(session).then(items=>{if(request===notificationRequestRef.current)setNotifications(items)}).catch(()=>{}))};
   const applyDealParticipants=(dealId:string,participants:DealParticipants)=>{const merge=(deal:Deal):Deal=>({...deal,sellerName:participants.seller_name,sellerVerification:participants.seller_verification,buyerName:participants.buyer_name,buyerVerification:participants.buyer_verification,viewerRole:participants.viewer_role});setActive(current=>current?.id===dealId?merge(current):current);setDeals(items=>items.map(item=>item.id===dealId?merge(item):item))};
   const applyDealActionPlan=(dealId:string,plan:DealActionPlan)=>{
@@ -1205,7 +1210,7 @@ export function App() {
       {view==='create'&&authMessage&&<div className="creation-error notice">{t(authMessage)}</div>}
       {view==='create'&&creating&&<div className="creation-progress notice">{t('Creating your Deal Link…')}</div>}
       {view==='home'&&user&&<NotificationCenter items={notifications} deals={deals} onOpen={open} onOpenPublic={publicId=>void openPublicDeal(publicId)} onMarkAll={markAllActivityRead}/>}
-      {view==='home'&&user&&<WorkspaceDealExplorer deals={deals} savedDeals={savedDeals} onOpen={open} onCreate={openCreate}/>}
+      {view==='home'&&user&&<WorkspaceDealExplorer deals={deals} savedDeals={savedDeals} loading={dashboardLoading} error={dashboardError} onRetry={()=>setDashboardRevision(revision=>revision+1)} onOpen={open} onCreate={openCreate}/>}
       {view==='profile'&&session&&<React.Suspense fallback={<RouteLoading/>}><AccountProfileWorkspace
         session={session}
         profile={profile}

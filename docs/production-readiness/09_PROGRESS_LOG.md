@@ -4653,3 +4653,19 @@ resource, customer record, or real-money capability changed during this pass.
 
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
+
+## Dashboard data-source recovery
+
+- Stopped converting authenticated Deal and Watchlist provider failures into
+  valid empty arrays.
+- Added atomic loading, error, stale-data, and retry presentation for both
+  dashboard sources.
+- Preserved previously loaded records after a refresh failure and labels them
+  as previously loaded rather than current.
+- Kept every completion and loading transition behind the existing
+  request-generation guards, including Watchlist refreshes after mutations.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.

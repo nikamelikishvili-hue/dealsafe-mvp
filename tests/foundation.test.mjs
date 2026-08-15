@@ -12479,7 +12479,7 @@ test('session-scoped background responses cannot repopulate signed-out state', (
   assert.match(app, /const dealListRequestRef=useRef\(0\)/);
   assert.match(app, /const savedDealsRequestRef=useRef\(0\)/);
   assert.ok((app.match(/request===dealListRequestRef\.current/g) ?? []).length >= 3);
-  assert.ok((app.match(/request===savedDealsRequestRef\.current/g) ?? []).length >= 4);
+  assert.ok((app.match(/(?:request|savedRequest)===savedDealsRequestRef\.current/g) ?? []).length >= 4);
 });
 
 test('offer loading ignores responses from a previous deal or session', () => {
@@ -12680,4 +12680,17 @@ test('public trust passport exposes recoverable routing and accessible reputatio
   assert.match(source, /aria-label=\{`\$\{rating\.stars\} out of 5 stars`\}/);
   assert.match(source, /className="passport-avatar" aria-hidden="true"/);
   assert.match(source, /type="button" onClick=\{onBack\}/);
+});
+
+test('dashboard data failures stay distinct from valid empty states', () => {
+  const source = readText('src/app.tsx');
+  const styles = readText('src/dashboard.css');
+
+  assert.match(source, /const \[dashboardError,setDashboardError\]=useState\(''\)/);
+  assert.match(source, /title="Refresh failed"/);
+  assert.match(source, /Showing saved data\./);
+  assert.match(source, /setDashboardRevision\(revision=>revision\+1\)/);
+  assert.match(source, /Promise\.all\(\[listUserDeals\(session\),getMySavedDeals\(session\)\]\)/);
+  assert.doesNotMatch(source, /listUserDeals\(session\)[\s\S]{0,240}catch\(\(\)=>\{if\(request===dealListRequestRef\.current\)setDeals\(\[\]\)\}\)/);
+  assert.match(styles, /\.dashboard-data-states/);
 });

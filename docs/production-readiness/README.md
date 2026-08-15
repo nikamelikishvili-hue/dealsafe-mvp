@@ -91,6 +91,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [80_ASYNC_STATE_RECOVERY.md](80_ASYNC_STATE_RECOVERY.md) | Shared loading, error, empty, retry, reduced-motion, and mobile action behavior |
 | [81_ACCOUNT_SECURITY_RECOVERY.md](81_ACCOUNT_SECURITY_RECOVERY.md) | Fail-closed signed-in device and authenticator read recovery |
 | [82_TRUST_PASSPORT_ROUTE_RECOVERY.md](82_TRUST_PASSPORT_ROUTE_RECOVERY.md) | Recoverable public trust route and accessible reputation semantics |
+| [83_DASHBOARD_DATA_RECOVERY.md](83_DASHBOARD_DATA_RECOVERY.md) | Distinct Deal/Watchlist loading, stale-data, failure, empty, and retry behavior |
 
 ## Authority and change control
 
