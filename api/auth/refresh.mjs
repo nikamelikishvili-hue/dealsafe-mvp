@@ -23,6 +23,7 @@ export default async function handler(request, response) {
 
   const refreshToken = readRefreshToken(request);
   if (!refreshToken) {
+    clearRefreshCookie(response);
     response.status(401).json({ error: 'Your session expired. Please sign in again.' });
     return;
   }

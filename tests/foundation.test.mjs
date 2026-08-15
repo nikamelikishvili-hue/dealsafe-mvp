@@ -987,6 +987,8 @@ test('session refresh rejects oversized cookie credentials before provider acces
       }, response);
       assert.equal(response.statusCode, 401);
       assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+      assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+      assert.match(response.headers.get('set-cookie'), /HttpOnly; Secure; SameSite=Strict/);
     }
   } finally {
     globalThis.fetch = originalFetch;
