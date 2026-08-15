@@ -13159,8 +13159,13 @@ test('rendered media and new-tab links preserve accessible safe defaults', () =>
         if (tag === 'img' && !attributes.has('alt')) {
           violations.push(`${location} image has no alt attribute`);
         }
-        if (tag === 'video' && !attributes.has('controls')) {
-          violations.push(`${location} video has no controls`);
+        if (tag === 'video') {
+          if (!attributes.has('controls')) {
+            violations.push(`${location} video has no controls`);
+          }
+          if (!attributes.has('aria-label') && !attributes.has('aria-labelledby')) {
+            violations.push(`${location} video has no accessible name`);
+          }
         }
         if (tag === 'a') {
           const target = attributes.get('target')?.initializer?.getText(sourceFile);
