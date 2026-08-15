@@ -4162,6 +4162,34 @@ test('API mutation origin inventory fails closed for new and weakened routes', (
     'api/auth/login.mjs': repositorySources['api/auth/login.mjs'].replaceAll('requireSameOrigin', 'removedOriginGuard'),
   });
   assert.ok(weakened.findings.some((finding) => finding.route === 'api/auth/login.mjs'));
+
+  const decoy = evaluateApiMutationOriginPolicy({
+    ...repositorySources,
+    'api/auth/login.mjs': repositorySources['api/auth/login.mjs']
+      .replace('requireSameOrigin(request, response)', 'removedOriginGuard(request, response)')
+      .replace(
+        'export default async function handler',
+        "// requireSameOrigin(request, response)\nconst decoy = 'requireSameOrigin';\nexport default async function handler",
+      ),
+  });
+  assert.ok(
+    decoy.findings.some((finding) => finding.route === 'api/auth/login.mjs'),
+    'comments and string literals must not satisfy a request-boundary control',
+  );
+
+  const topLevelDecoy = evaluateApiMutationOriginPolicy({
+    ...repositorySources,
+    'api/auth/login.mjs': repositorySources['api/auth/login.mjs']
+      .replace('requireSameOrigin(request, response)', 'removedOriginGuard(request, response)')
+      .replace(
+        'export default async function handler',
+        'requireSameOrigin({}, {});\nexport default async function handler',
+      ),
+  });
+  assert.ok(
+    topLevelDecoy.findings.some((finding) => finding.route === 'api/auth/login.mjs'),
+    'a control outside the exported handler must not satisfy the route policy',
+  );
 });
 
 test('public and authenticated mobile navigation can close without pointer input', () => {

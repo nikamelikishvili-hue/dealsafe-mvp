@@ -16,18 +16,55 @@ export const apiRoutePolicy = Object.freeze({
   'api/security/csp-report.mjs': 'browser-reporting',
 });
 
-const requiredTokens = Object.freeze({
-  'read-only': ['request.method', "'GET'"],
+const requiredHandlerCalls = Object.freeze({
   'shared-same-origin': ['requirePost', 'requireSameOrigin'],
   'shared-json-mutation': ['requirePost', 'requireSameOrigin', 'requireJsonContentType'],
   'shared-reporting-boundary': ['validateReportingRequest', 'readBoundedJson'],
-  'browser-reporting': [
-    "request.method !== 'POST'",
-    'maxBodyBytes',
-    'allowedContentTypes',
-    'reportsFromPayload',
-  ],
+  'browser-reporting': ['readBody', 'reportsFromPayload'],
 });
+
+function inspectRouteSource(route, source) {
+  const file = ts.createSourceFile(route, source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS);
+  const syntaxDiagnostics = file.parseDiagnostics ?? [];
+  if (syntaxDiagnostics.length) return null;
+
+  let handler;
+  for (const statement of file.statements) {
+    if (
+      ts.isFunctionDeclaration(statement)
+      && statement.name?.text === 'handler'
+      && statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.DefaultKeyword)
+      && statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)
+    ) {
+      handler = statement;
+      break;
+    }
+  }
+  if (!handler?.body) return null;
+
+  const inspect = root => {
+    const calls = new Set();
+    const identifiers = new Set();
+    const strings = new Set();
+    const properties = new Set();
+    const visit = node => {
+      if (ts.isIdentifier(node)) identifiers.add(node.text);
+      if (ts.isStringLiteralLike(node)) strings.add(node.text);
+      if (ts.isPropertyAccessExpression(node)) {
+        properties.add(`${node.expression.getText(file)}.${node.name.text}`);
+      }
+      if (ts.isCallExpression(node)) {
+        if (ts.isIdentifier(node.expression)) calls.add(node.expression.text);
+        if (ts.isPropertyAccessExpression(node.expression)) calls.add(node.expression.name.text);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(root);
+    return { calls, identifiers, strings, properties };
+  };
+
+  return { program: inspect(file), handler: inspect(handler.body) };
+}
 
 export function evaluateApiMutationOriginPolicy(routeSources) {
   const findings = [];
@@ -44,8 +81,34 @@ export function evaluateApiMutationOriginPolicy(routeSources) {
       continue;
     }
     const mode = apiRoutePolicy[route];
-    for (const token of requiredTokens[mode]) {
-      if (!source.includes(token)) findings.push({ route, issue: `missing_${mode}_control` });
+    const semantics = inspectRouteSource(route, source);
+    if (!semantics) {
+      findings.push({ route, issue: 'invalid_handler_structure' });
+      continue;
+    }
+    if (mode === 'read-only') {
+      if (
+        !semantics.handler.properties.has('request.method')
+        || !semantics.handler.strings.has('GET')
+      ) {
+        findings.push({ route, issue: 'missing_read-only_control' });
+      }
+      continue;
+    }
+    for (const call of requiredHandlerCalls[mode]) {
+      if (!semantics.handler.calls.has(call)) {
+        findings.push({ route, issue: `missing_${mode}_control` });
+      }
+    }
+    if (mode === 'browser-reporting') {
+      if (
+        !semantics.handler.properties.has('request.method')
+        || !semantics.handler.strings.has('POST')
+        || !semantics.handler.identifiers.has('allowedContentTypes')
+        || !semantics.program.identifiers.has('maxBodyBytes')
+      ) {
+        findings.push({ route, issue: 'missing_browser-reporting_control' });
+      }
     }
   }
 
@@ -56,3 +119,4 @@ export function evaluateApiMutationOriginPolicy(routeSources) {
     findings,
   };
 }
+import ts from 'typescript';
