@@ -4523,6 +4523,18 @@ Supabase resource, customer record, or real-money capability changed.
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
 
+## Acceptance protection recovery
+
+- Replaced the false unprotected fallback with explicit buyer-code status states.
+- Blocked real Deal acceptance until the protection read succeeds.
+- Added retryable seller and buyer status presentation.
+- Preserved the authoritative pre-acceptance server check and demo isolation.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## Public Deal route recovery
 
 - Unified direct-link and notification-originated public Deal loading.

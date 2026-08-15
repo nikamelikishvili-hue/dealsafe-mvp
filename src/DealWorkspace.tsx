@@ -14,6 +14,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import type { Deal } from './domain';
+import { AsyncStatePanel } from './AsyncStatePanel';
 import { t } from './i18n';
 import type {
   DealActionPlan,
@@ -99,6 +100,8 @@ interface DealWorkspaceProps {
   paymentReady: boolean;
   evidenceRevision: number;
   acceptanceProtected: boolean;
+  acceptanceProtectionState: 'idle' | 'loading' | 'ready' | 'error';
+  acceptanceProtectionError: string;
   agreementDocumentMode: boolean;
   primaryAction: DealPrimaryAction;
   nextStep: string;
@@ -125,6 +128,7 @@ interface DealWorkspaceProps {
   onRefreshActionPlan: () => void;
   onDealChanged: (deal: Deal) => void;
   onAcceptanceProtectedChanged: (enabled: boolean) => void;
+  onRetryAcceptanceProtection: () => void;
   onOpenActions: () => void;
   onOpenProtection: () => void;
   onOpenRecords: () => void;
@@ -161,6 +165,8 @@ export function DealWorkspace({
   paymentReady,
   evidenceRevision,
   acceptanceProtected,
+  acceptanceProtectionState,
+  acceptanceProtectionError,
   agreementDocumentMode,
   primaryAction,
   nextStep,
@@ -184,6 +190,7 @@ export function DealWorkspace({
   onRefreshActionPlan,
   onDealChanged,
   onAcceptanceProtectedChanged,
+  onRetryAcceptanceProtection,
   onOpenActions,
   onOpenProtection,
   onOpenRecords,
@@ -263,6 +270,19 @@ export function DealWorkspace({
             {deal.viewerRole !== 'seller' &&
               deal.status === 'published' &&
               !expired &&
+              acceptanceProtectionState !== 'ready' && (
+                <AsyncStatePanel
+                  state={acceptanceProtectionState === 'error' ? 'error' : 'loading'}
+                  title={acceptanceProtectionState === 'error' ? 'Acceptance protection unavailable' : 'Checking acceptance protection…'}
+                  message={acceptanceProtectionState === 'error' ? acceptanceProtectionError : 'Verifying whether this Deal requires a private buyer code.'}
+                  actionLabel="Retry"
+                  onAction={acceptanceProtectionState === 'error' ? onRetryAcceptanceProtection : undefined}
+                />
+              )}
+            {deal.viewerRole !== 'seller' &&
+              deal.status === 'published' &&
+              !expired &&
+              acceptanceProtectionState === 'ready' &&
               acceptanceProtected && (
                 <BuyerAccessCodeEntry
                   value={buyerAccessCode}

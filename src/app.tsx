@@ -248,7 +248,7 @@ function friendlyEvent(type:string){return t(eventLabels[type]||type.replaceAll(
 
 function NotificationCenter({items,deals,loading,error,onRetry,onOpen,onOpenPublic,onMarkAll}:{items:DealNotification[];deals:Deal[];loading:boolean;error:string;onRetry:()=>void;onOpen:(deal:Deal)=>void;onOpenPublic:(publicId:string)=>void;onMarkAll:()=>void}){const [expanded,setExpanded]=useState(false);const unread=items.filter(item=>!item.is_read).length;return <section className="notification-center"><button className="notification-toggle" aria-expanded={expanded} aria-controls="notification-menu" onClick={()=>setExpanded(!expanded)}><Bell size={19} aria-hidden="true"/><span>{t('Activity')}</span>{unread>0&&<em aria-label={`${unread} ${t('Unread')}`}>{unread}</em>}</button>{expanded&&<div className="notification-menu" id="notification-menu"><div className="notification-menu-header"><h3>{t('Recent activity')}</h3>{unread>0&&<button type="button" onClick={onMarkAll}>{t('Mark all as read')}</button>}</div>{loading&&!items.length?<AsyncStatePanel state="loading" title="Loading recent activity…"/>:<>{error&&<AsyncStatePanel state="error" title="Activity unavailable" message={items.length?`${error} Showing previously loaded activity.`:error} actionLabel="Retry" onAction={onRetry}/>} {items.length?items.slice(0,8).map(item=><button type="button" className={`notification-item ${item.is_read?'read':'unread'}`} key={item.id} onClick={()=>{const deal=deals.find(d=>d.id===item.deal_id);if(deal)onOpen(deal);else onOpenPublic(item.public_id)}}><span className="notification-dot" aria-hidden="true"></span><span><b>{friendlyEvent(item.event_type)}</b><small>{item.title} · {formatDateTime(item.created_at)}</small></span></button>):!error&&<p>{t('No deal activity yet.')}</p>}</>}</div>}</section>}
 
-function PublishedDealSuccess({deal,warning,session,acceptanceProtected,onProtectionChanged,onOpen,onDashboard,onCreateAnother}:{deal:Deal;warning:string;session:StoredSession|null;acceptanceProtected:boolean;onProtectionChanged:(enabled:boolean)=>void;onOpen:()=>void;onDashboard:()=>void;onCreateAnother:()=>void}){
+function PublishedDealSuccess({deal,warning,session,acceptanceProtected,acceptanceProtectionState,acceptanceProtectionError,onRetryProtection,onProtectionChanged,onOpen,onDashboard,onCreateAnother}:{deal:Deal;warning:string;session:StoredSession|null;acceptanceProtected:boolean;acceptanceProtectionState:'idle'|'loading'|'ready'|'error';acceptanceProtectionError:string;onRetryProtection:()=>void;onProtectionChanged:(enabled:boolean)=>void;onOpen:()=>void;onDashboard:()=>void;onCreateAnother:()=>void}){
   const [notice,setNotice]=useState('');
   const [accessCode,setAccessCode]=useState('');
   const [accessMessage,setAccessMessage]=useState('');
@@ -311,9 +311,10 @@ function PublishedDealSuccess({deal,warning,session,acceptanceProtected,onProtec
         <div className="published-link-block">
           <label id="published-share-title" htmlFor="published-deal-link">{t('Deal Link')}</label>
           <div><input id="published-deal-link" value={link} readOnly onFocus={event=>event.currentTarget.select()}/><button type="button" className="primary" onClick={()=>void copy()}><Copy size={18}/>{t('Copy link')}</button></div>
-          <small><LockKeyhole/>{t(acceptanceProtected?'Acceptance requires the private buyer code.':'Anyone with this link can view the deal. Share it only with the intended buyer.')}</small>
+          <small><LockKeyhole/>{t(acceptanceProtectionState==='ready'?(acceptanceProtected?'Acceptance requires the private buyer code.':'Anyone with this link can view the deal. Share it only with the intended buyer.'):'Checking acceptance security before you share this link.')}</small>
         </div>
         <section className={`published-access-panel ${acceptanceProtected?'is-protected':''}`} aria-labelledby="published-access-title">
+          {acceptanceProtectionState!=='ready'?<AsyncStatePanel state={acceptanceProtectionState==='error'?'error':'loading'} title={acceptanceProtectionState==='error'?'Acceptance protection unavailable':'Checking acceptance protection…'} message={acceptanceProtectionState==='error'?acceptanceProtectionError:'Loading the current buyer-code requirement.'} actionLabel="Retry" onAction={acceptanceProtectionState==='error'?onRetryProtection:undefined}/>:<>
           <div className="published-access-heading">
             <span><LockKeyhole/></span>
             <div><small>{t('ACCEPTANCE SECURITY')}</small><h3 id="published-access-title">{t(acceptanceProtected?'Buyer code required':'Link-only acceptance')}</h3></div>
@@ -327,6 +328,7 @@ function PublishedDealSuccess({deal,warning,session,acceptanceProtected,onProtec
             <button type="button" className="secondary" disabled={accessBusy} onClick={()=>void protectAcceptance()}><LockKeyhole size={16}/>{t(accessBusy?'Creating code…':acceptanceProtected?'Generate new code':'Require buyer code')}</button>
           </div>}
           {accessMessage&&<div className="published-access-message notice" role="status">{t(accessMessage)}</div>}
+          </>}
         </section>
         <div className="published-share-actions" aria-label={t('Share Deal Link')}>
           <a href={`mailto:?subject=${encodeURIComponent(`Dealivra · ${deal.title}`)}&body=${encodeURIComponent(message)}`}><Send size={17}/>{t('Email')}</a>
@@ -758,6 +760,9 @@ export function App() {
   const [agreementChecks,setAgreementChecks]=useState({item:false,price:false,handoff:false});
   const [demoCompleted,setDemoCompleted]=useState(false);
   const [acceptanceProtected,setAcceptanceProtected]=useState(false);
+  const [acceptanceProtectionState,setAcceptanceProtectionState]=useState<'idle'|'loading'|'ready'|'error'>('idle');
+  const [acceptanceProtectionError,setAcceptanceProtectionError]=useState('');
+  const [acceptanceProtectionRevision,setAcceptanceProtectionRevision]=useState(0);
   const [buyerAccessCode,setBuyerAccessCode]=useState('');
   const [paymentReadyByDeal,setPaymentReadyByDeal]=useState<Record<string,boolean>>({});
   const [actionPlanByDeal,setActionPlanByDeal]=useState<Record<string,DealActionPlan>>({});
@@ -950,7 +955,7 @@ export function App() {
   useEffect(()=>{if(view!=='deal'||!active||!session)return;setNotifications(items=>items.map(item=>item.deal_id===active.id?{...item,is_read:true}:item));void markDealNotificationsRead(session,active.id).catch(()=>{})},[view,active?.id,session?.accessToken]);
   useEffect(()=>{if(!session){setIsAdmin(false);return}let current=true;getAdminAccess(session).then(access=>{if(current)setIsAdmin(access)}).catch(()=>{if(current)setIsAdmin(false)});return()=>{current=false}},[session]);
   useEffect(()=>{setBuyer('');setBuyerAccessCode('');setAgreementChecks({item:false,price:false,handoff:false});setDemoCompleted(false)},[active?.publicId,active?.agreementVersion]);
-  useEffect(()=>{let current=true;setAcceptanceProtected(false);if(!active||active.status!=='published')return;getDealAcceptanceProtection(active.publicId).then(enabled=>{if(current)setAcceptanceProtected(enabled)}).catch(()=>{});return()=>{current=false}},[active?.publicId,active?.status]);
+  useEffect(()=>{let current=true;setAcceptanceProtected(false);setAcceptanceProtectionError('');if(!active||active.status!=='published'){setAcceptanceProtectionState('idle');return}setAcceptanceProtectionState('loading');getDealAcceptanceProtection(active.publicId).then(enabled=>{if(current){setAcceptanceProtected(enabled);setAcceptanceProtectionState('ready')}}).catch(error=>{if(current){setAcceptanceProtectionError(error instanceof Error?error.message:'Could not verify buyer-code protection.');setAcceptanceProtectionState('error')}});return()=>{current=false}},[active?.publicId,active?.status,acceptanceProtectionRevision]);
   useEffect(()=>{
     if(!active||!session||active.viewerRole!=='seller'||active.status!=='accepted'||active.deliveryMethod!=='Ship to buyer')return;
     let current=true;
@@ -1105,7 +1110,7 @@ export function App() {
   const activeExpired=active?isDealExpired(active,clock):false;
   const isDemoActive=Boolean(active?.publicId===DEMO_DEAL_PUBLIC_ID&&!user);
   const demoFlowCompleted=isDemoActive&&demoCompleted;
-  const agreementActionReady=agreementConfirmed&&Boolean(buyer.trim())&&!demoFlowCompleted;
+  const agreementActionReady=agreementConfirmed&&Boolean(buyer.trim())&&!demoFlowCompleted&&(isDemoActive||acceptanceProtectionState==='ready');
   const scrollToAgreement=()=>{
     const agreement=document.querySelector<HTMLElement>('.deal-grid aside');
     agreement?.scrollIntoView({behavior:'smooth',block:'start'});
@@ -1212,7 +1217,7 @@ export function App() {
       {isPublicInfoView(view)&&<PublicInfoPage view={view} onBack={()=>goHomeSection()} onCreate={openCreate}/>}
       {view==='home'&&<InstallApp/>}
       {view==='admin'&&session&&isAdmin&&<React.Suspense fallback={<RouteLoading/>}><AdministrationWorkspace session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/></React.Suspense>}
-      {view==='published'&&active&&<PublishedDealSuccess deal={active} warning={authMessage} session={session} acceptanceProtected={acceptanceProtected} onProtectionChanged={setAcceptanceProtected} onOpen={()=>{setAuthMessage('');setView('deal')}} onDashboard={()=>goHomeSection()} onCreateAnother={openCreate}/>}
+      {view==='published'&&active&&<PublishedDealSuccess deal={active} warning={authMessage} session={session} acceptanceProtected={acceptanceProtected} acceptanceProtectionState={acceptanceProtectionState} acceptanceProtectionError={acceptanceProtectionError} onRetryProtection={()=>setAcceptanceProtectionRevision(revision=>revision+1)} onProtectionChanged={enabled=>{setAcceptanceProtected(enabled);setAcceptanceProtectionState('ready')}} onOpen={()=>{setAuthMessage('');setView('deal')}} onDashboard={()=>goHomeSection()} onCreateAnother={openCreate}/>}
       {view==='create'&&authMessage&&<div className="creation-error notice">{t(authMessage)}</div>}
       {view==='create'&&creating&&<div className="creation-progress notice">{t('Creating your Deal Link…')}</div>}
       {view==='home'&&user&&<NotificationCenter items={notifications} deals={deals} loading={notificationsLoading} error={notificationsError} onRetry={()=>setNotificationsRevision(revision=>revision+1)} onOpen={open} onOpenPublic={publicId=>void openPublicDeal(publicId)} onMarkAll={markAllActivityRead}/>}
@@ -1312,6 +1317,8 @@ export function App() {
         paymentReady={activePaymentReady}
         evidenceRevision={evidenceRevision}
         acceptanceProtected={acceptanceProtected}
+        acceptanceProtectionState={acceptanceProtectionState}
+        acceptanceProtectionError={acceptanceProtectionError}
         agreementDocumentMode={agreementDocumentMode}
         primaryAction={dealPrimaryAction}
         nextStep={dealNextStep}
@@ -1335,6 +1342,7 @@ export function App() {
         onRefreshActionPlan={()=>void refreshDealActionPlan(active.id)}
         onDealChanged={updated=>{setActive(updated);setDeals(items=>items.map(item=>item.id===updated.id?updated:item))}}
         onAcceptanceProtectedChanged={setAcceptanceProtected}
+        onRetryAcceptanceProtection={()=>setAcceptanceProtectionRevision(revision=>revision+1)}
         onOpenActions={()=>scrollToDealSection('deal-actions')}
         onOpenProtection={()=>scrollToDealSection('deal-safety')}
         onOpenRecords={()=>scrollToDealSection('deal-records')}

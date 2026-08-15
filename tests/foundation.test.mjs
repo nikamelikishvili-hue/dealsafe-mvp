@@ -12758,3 +12758,17 @@ test('public Deal Link failures preserve the route and expose a bounded retry', 
   assert.match(pages, /onClick=\{onRetry\}>\{t\('Try again'\)\}/);
   assert.match(styles, /\.deal-link-error-actions button\{min-height:44px\}/);
 });
+
+test('buyer-code protection reads fail closed across seller and buyer flows', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+
+  assert.match(app, /const \[acceptanceProtectionState,setAcceptanceProtectionState\]=useState<'idle'\|'loading'\|'ready'\|'error'>\('idle'\)/);
+  assert.match(app, /setAcceptanceProtectionState\('loading'\);getDealAcceptanceProtection/);
+  assert.match(app, /setAcceptanceProtectionState\('error'\)/);
+  assert.match(app, /isDemoActive\|\|acceptanceProtectionState==='ready'/);
+  assert.match(app, /Checking acceptance security before you share this link\./);
+  assert.match(app, /onRetryProtection=\{\(\)=>setAcceptanceProtectionRevision\(revision=>revision\+1\)\}/);
+  assert.match(workspace, /title=\{acceptanceProtectionState === 'error' \? 'Acceptance protection unavailable'/);
+  assert.match(workspace, /acceptanceProtectionState === 'ready' &&\s+acceptanceProtected/);
+});
