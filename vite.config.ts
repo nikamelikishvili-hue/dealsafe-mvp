@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
+import { launchLocaleInliningPlugin } from './server/launchLocaleTransform.mjs';
 
 export default defineConfig({
+  plugins: [launchLocaleInliningPlugin()],
   build: {
     rolldownOptions: {
       output: {

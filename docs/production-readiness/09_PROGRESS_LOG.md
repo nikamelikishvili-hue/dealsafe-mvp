@@ -4523,6 +4523,20 @@ Supabase resource, customer record, or real-money capability changed.
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
 
+## English launch bundle headroom
+
+- Added a TypeScript-AST build transform for identity-only static English
+  translation calls.
+- Scoped the transform to modules importing the reviewed `i18n` helper and
+  preserved dynamic keys, member calls, comments, and quoted examples.
+- Kept source translation boundaries intact for a later governed localization
+  release while reclaiming initial bundle headroom.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## Account security read recovery
 
 - Migrated signed-in device and authenticator loading failures to the shared
