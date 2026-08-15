@@ -774,6 +774,43 @@ test('JSON authentication mutations reject malformed bodies before provider acce
   assert.equal(providerCalls, 0);
 });
 
+test('authenticated security mutations reject oversized bearer credentials before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive an oversized bearer credential.');
+  };
+  const authorization = `Bearer ${'x'.repeat(8_193)}`;
+  const requests = [
+    [logoutHandler, { scope: 'global' }],
+    [mfaHandler, { action: 'list' }],
+    [passwordHandler, { action: 'recovery', newPassword: 'Valid-password-123!' }],
+  ];
+
+  try {
+    for (const [handler, body] of requests) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          'content-type': 'application/json',
+          authorization,
+        },
+        body,
+      }, response);
+      assert.ok(response.statusCode >= 400 && response.statusCode < 500);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
 test('production database hardening is deny-by-default with narrow RPC allowlists', () => {
   const migration = readText('supabase/production_auth_rbac_hardening.sql');
   const schema = readText('supabase/schema.sql');
