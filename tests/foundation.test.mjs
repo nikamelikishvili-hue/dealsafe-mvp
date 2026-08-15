@@ -527,6 +527,44 @@ test('every authentication handler applies the runtime no-store response contrac
   }
 });
 
+test('every authentication handler rejects cross-origin POSTs before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not be called for a rejected origin.');
+  };
+
+  try {
+    for (const handler of [
+      loginHandler,
+      logoutHandler,
+      mfaHandler,
+      passwordHandler,
+      recoverHandler,
+      refreshHandler,
+      signupHandler,
+    ]) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://attacker.test',
+          host: 'dealivra.test',
+          'content-type': 'application/json',
+        },
+        body: {},
+      }, response);
+      assert.equal(response.statusCode, 403);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
 test('production database hardening is deny-by-default with narrow RPC allowlists', () => {
   const migration = readText('supabase/production_auth_rbac_hardening.sql');
   const schema = readText('supabase/schema.sql');
