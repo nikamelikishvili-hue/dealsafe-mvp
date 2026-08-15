@@ -925,6 +925,47 @@ test('authenticated security mutations reject control characters inside bearer c
   assert.equal(providerCalls, 0);
 });
 
+test('authenticated security mutations reject padded or non-ASCII bearer credentials', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive a non-canonical bearer credential.');
+  };
+
+  try {
+    for (const authorization of [
+      `Bearer ${' '.repeat(8_200)}token`,
+      `Bearer token${' '.repeat(8_200)}`,
+      'Bearer töken',
+    ]) {
+      for (const [handler, body] of [
+        [logoutHandler, { scope: 'global' }],
+        [mfaHandler, { action: 'list' }],
+        [passwordHandler, { action: 'recovery', newPassword: 'Valid-password-123!' }],
+      ]) {
+        const response = createResponse();
+        await handler({
+          method: 'POST',
+          headers: {
+            origin: 'https://dealivra.test',
+            host: 'dealivra.test',
+            'content-type': 'application/json',
+            authorization,
+          },
+          body,
+        }, response);
+        assert.ok(response.statusCode >= 400 && response.statusCode < 500);
+        assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
 test('session refresh rejects oversized cookie credentials before provider access', async () => {
   const originalFetch = globalThis.fetch;
   let providerCalls = 0;

@@ -249,9 +249,13 @@ export function readRefreshToken(request) {
 
 export function readBearerToken(request) {
   const authorization = header(request, 'authorization');
-  if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) return null;
-  const token = authorization.slice(7).trim();
-  return token && token.length <= 8192 && !/[\u0000-\u0020\u007f]/.test(token) ? token : null;
+  if (
+    typeof authorization !== 'string'
+    || authorization.length > 8199
+    || !authorization.startsWith('Bearer ')
+  ) return null;
+  const token = authorization.slice(7);
+  return token && /^[\x21-\x7e]+$/.test(token) ? token : null;
 }
 
 export function isStrongPassword(password) {
