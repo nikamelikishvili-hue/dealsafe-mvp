@@ -12947,6 +12947,8 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   const tokens = readText('src/design-tokens.css');
   const feedback = readText('src/FeedbackMessage.tsx');
   const feedbackStyles = readText('src/feedback-message.css');
+  const fieldErrorStyles = readText('src/field-error.css');
+  const asyncStateStyles = readText('src/async-state-panel.css');
   const entry = readText('src/main.tsx');
 
   for (const token of [
@@ -12966,6 +12968,11 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(feedback, /aria-atomic="true"/);
   assert.match(feedbackStyles, /var\(--color-danger-800\)/);
   assert.match(feedbackStyles, /var\(--color-success-700\)/);
+  assert.match(fieldErrorStyles, /var\(--color-danger-800\)/);
+  assert.match(fieldErrorStyles, /var\(--color-danger-border\)/);
+  assert.match(asyncStateStyles, /var\(--color-info-800\)/);
+  assert.match(asyncStateStyles, /var\(--color-danger-100\)/);
+  assert.doesNotMatch(`${fieldErrorStyles}\n${asyncStateStyles}`, /var\(--ds-(?:error|info|border|ink-muted|surface-subtle)/);
   assert.match(tokens, /:focus-visible/);
   assert.match(tokens, /@media \(forced-colors: active\)/);
 });
