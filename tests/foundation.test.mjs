@@ -4,6 +4,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 import ts from 'typescript';
 import { inlineEnglishTranslationCalls } from '../server/launchLocaleTransform.mjs';
 import clientFailureHandler from '../api/security/client-failure.mjs';
@@ -12458,6 +12459,117 @@ test('deal comparison is keyboard-contained and uses the dynamic viewport', () =
   assert.match(styles, /max-height:calc\(100dvh - 48px\)/);
   assert.match(styles, /overscroll-behavior:contain/);
   assert.match(styles, /env\(safe-area-inset-bottom\)/);
+});
+
+test('service worker runtime never intercepts private or mutable requests', async () => {
+  const listeners = new Map();
+  const cacheEntries = new Map();
+  const openedCaches = [];
+  const deletedCaches = [];
+  const fetchedRequests = [];
+  const workerOrigin = 'https://dealivra.example';
+  const cache = {
+    async match(request) {
+      return cacheEntries.get(request.url);
+    },
+    async put(request, response) {
+      cacheEntries.set(request.url, response);
+    },
+  };
+  const context = {
+    URL,
+    Set,
+    Promise,
+    caches: {
+      async open(name) {
+        openedCaches.push(name);
+        return cache;
+      },
+      async keys() {
+        return ['dealivra-static-assets-v3', 'dealivra-shell-v2', 'unrelated-cache'];
+      },
+      async delete(name) {
+        deletedCaches.push(name);
+        return true;
+      },
+    },
+    async fetch(request) {
+      fetchedRequests.push(request.url);
+      return {
+        ok: true,
+        status: 200,
+        type: 'basic',
+        headers: new Headers({ 'content-type': 'text/javascript' }),
+        clone() {
+          return this;
+        },
+      };
+    },
+    self: {
+      location: { origin: workerOrigin },
+      clients: { async claim() {} },
+      async skipWaiting() {},
+      addEventListener(type, handler) {
+        listeners.set(type, handler);
+      },
+    },
+  };
+  vm.runInNewContext(readText('public/sw.js'), context, { filename: 'public/sw.js' });
+
+  assert.deepEqual([...listeners.keys()].sort(), ['activate', 'fetch', 'install']);
+
+  const privateRequests = [
+    { method: 'GET', url: `${workerOrigin}/` },
+    { method: 'GET', url: `${workerOrigin}/?deal=DV7K4M2Q` },
+    { method: 'GET', url: `${workerOrigin}/api/auth/session` },
+    { method: 'GET', url: `${workerOrigin}/assets/app.js?private=1` },
+    { method: 'POST', url: `${workerOrigin}/assets/app.js` },
+    { method: 'GET', url: 'https://cdn.example/assets/app.js' },
+    { method: 'GET', url: `${workerOrigin}/uploads/evidence.jpg` },
+  ];
+  for (const request of privateRequests) {
+    let responsePromise;
+    listeners.get('fetch')({
+      request,
+      respondWith(value) {
+        responsePromise = value;
+      },
+    });
+    assert.equal(responsePromise, undefined, `unexpected interception: ${request.url}`);
+  }
+  assert.deepEqual(openedCaches, []);
+  assert.deepEqual(fetchedRequests, []);
+
+  const assetRequest = { method: 'GET', url: `${workerOrigin}/assets/app.A1b2.js` };
+  let firstAssetResponse;
+  listeners.get('fetch')({
+    request: assetRequest,
+    respondWith(value) {
+      firstAssetResponse = value;
+    },
+  });
+  await firstAssetResponse;
+  assert.deepEqual(fetchedRequests, [assetRequest.url]);
+  assert.equal(cacheEntries.has(assetRequest.url), true);
+
+  let secondAssetResponse;
+  listeners.get('fetch')({
+    request: assetRequest,
+    respondWith(value) {
+      secondAssetResponse = value;
+    },
+  });
+  await secondAssetResponse;
+  assert.deepEqual(fetchedRequests, [assetRequest.url]);
+
+  let activatePromise;
+  listeners.get('activate')({
+    waitUntil(value) {
+      activatePromise = value;
+    },
+  });
+  await activatePromise;
+  assert.deepEqual(deletedCaches, ['dealivra-shell-v2']);
 });
 
 test('global motion preferences suppress nonessential animation and smooth scrolling', () => {
