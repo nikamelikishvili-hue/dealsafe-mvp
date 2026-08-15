@@ -157,6 +157,16 @@ export function requirePost(request, response) {
   return false;
 }
 
+export function requireJsonContentType(request, response) {
+  const contentType = String(header(request, 'content-type') || '')
+    .split(';', 1)[0]
+    .trim()
+    .toLowerCase();
+  if (contentType === 'application/json') return true;
+  response.status(415).json({ error: 'Content-Type must be application/json.' });
+  return false;
+}
+
 export function requireSameOrigin(
   request,
   response,

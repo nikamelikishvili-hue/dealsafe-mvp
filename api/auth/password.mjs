@@ -9,6 +9,7 @@ import {
   prepareResponse,
   readBearerToken,
   readJsonBody,
+  requireJsonContentType,
   requirePost,
   requireSameOrigin,
   respondAuthRateLimited,
@@ -27,7 +28,7 @@ function currentPasswordMode() {
 
 export default async function handler(request, response) {
   prepareResponse(response);
-  if (!requirePost(request, response) || !requireSameOrigin(request, response)) return;
+  if (!requirePost(request, response) || !requireSameOrigin(request, response) || !requireJsonContentType(request, response)) return;
 
   const body = readJsonBody(request);
   const action = typeof body?.action === 'string' ? body.action : '';

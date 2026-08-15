@@ -12,6 +12,7 @@ import {
   readBearerToken,
   readJsonBody,
   readRefreshToken,
+  requireJsonContentType,
   requirePost,
   requireSameOrigin,
   respondAuthRateLimited,
@@ -99,7 +100,7 @@ function hasFreshAal2(accessToken) {
 
 export default async function handler(request, response) {
   prepareResponse(response);
-  if (!requirePost(request, response) || !requireSameOrigin(request, response)) return;
+  if (!requirePost(request, response) || !requireSameOrigin(request, response) || !requireJsonContentType(request, response)) return;
 
   const body = readJsonBody(request);
   const action = typeof body?.action === 'string' ? body.action : '';

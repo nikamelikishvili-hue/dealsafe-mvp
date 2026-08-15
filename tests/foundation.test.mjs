@@ -54,6 +54,7 @@ const authRequest = (body = {}, headers = {}) => ({
   headers: {
     origin: 'https://dealivra.test',
     host: 'dealivra.test',
+    'content-type': 'application/json',
     ...headers,
   },
   body,
@@ -4029,6 +4030,26 @@ test('authentication origin checks reject malformed and insecure public origins'
     assert.equal(response.statusCode, 403);
   }
 
+  assert.equal(providerCalled, false);
+});
+
+test('JSON mutation endpoints reject unsupported media before provider contact', async () => {
+  const { default: login } = await import('../api/auth/login.mjs');
+  const response = createResponse();
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, () => login(authRequest({
+    email: 'user@example.com',
+    password: 'ExamplePass123!',
+  }, {
+    'content-type': 'text/plain',
+  }), response));
+
+  assert.equal(response.statusCode, 415);
+  assert.equal(response.payload.error, 'Content-Type must be application/json.');
   assert.equal(providerCalled, false);
 });
 

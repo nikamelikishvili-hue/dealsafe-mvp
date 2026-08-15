@@ -1,5 +1,18 @@
 # Production-readiness progress log
 
+## 2026-08-15 — JSON mutation media boundary
+
+- Added one shared normalized `application/json` requirement for every
+  same-origin endpoint that accepts a request body.
+- Rejected unsupported media with a bounded 415 response before body parsing,
+  provider contact, credential work, or database access.
+- Extended the API inventory gate so removing the media guard fails verify.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## 2026-08-15 — API mutation-origin inventory
 
 - Added a fail-closed inventory for every application API route and wired it

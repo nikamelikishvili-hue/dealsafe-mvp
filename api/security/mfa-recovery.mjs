@@ -5,6 +5,7 @@ import {
   prepareResponse,
   readBearerToken,
   readJsonBody,
+  requireJsonContentType,
   requirePost,
   requireSameOrigin,
   supabaseRestRpcRequest,
@@ -65,6 +66,7 @@ export default async function handler(request, response) {
   if (
     !requirePost(request, response)
     || !requireSameOrigin(request, response, 'Cross-origin recovery requests are not allowed.')
+    || !requireJsonContentType(request, response)
   ) {
     return;
   }

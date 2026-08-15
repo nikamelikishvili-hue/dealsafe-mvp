@@ -1,6 +1,7 @@
 import {
   prepareResponse,
   readJsonBody,
+  requireJsonContentType,
   requirePost,
   requireSameOrigin,
 } from '../../server/authShared.mjs';
@@ -12,6 +13,7 @@ export default async function handler(request, response) {
   if (
     !requirePost(request, response)
     || !requireSameOrigin(request, response, 'Cross-origin VIN checks are not allowed.')
+    || !requireJsonContentType(request, response)
   ) return;
 
   const body = readJsonBody(request);
