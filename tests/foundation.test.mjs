@@ -565,6 +565,43 @@ test('every authentication handler rejects cross-origin POSTs before provider ac
   assert.equal(providerCalls, 0);
 });
 
+test('JSON authentication mutations reject unsupported media before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not be called for an unsupported media type.');
+  };
+
+  try {
+    for (const handler of [
+      loginHandler,
+      logoutHandler,
+      mfaHandler,
+      passwordHandler,
+      recoverHandler,
+      signupHandler,
+    ]) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          'content-type': 'text/plain',
+        },
+        body: '{}',
+      }, response);
+      assert.equal(response.statusCode, 415);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
 test('production database hardening is deny-by-default with narrow RPC allowlists', () => {
   const migration = readText('supabase/production_auth_rbac_hardening.sql');
   const schema = readText('supabase/schema.sql');
