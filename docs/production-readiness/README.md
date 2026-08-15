@@ -93,6 +93,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [82_TRUST_PASSPORT_ROUTE_RECOVERY.md](82_TRUST_PASSPORT_ROUTE_RECOVERY.md) | Recoverable public trust route and accessible reputation semantics |
 | [83_DASHBOARD_DATA_RECOVERY.md](83_DASHBOARD_DATA_RECOVERY.md) | Distinct Deal/Watchlist loading, stale-data, failure, empty, and retry behavior |
 | [84_ENGLISH_LAUNCH_BUNDLE_OPTIMIZATION.md](84_ENGLISH_LAUNCH_BUNDLE_OPTIMIZATION.md) | AST-scoped English launch literal inlining and localization reactivation gate |
+| [85_NOTIFICATION_DATA_RECOVERY.md](85_NOTIFICATION_DATA_RECOVERY.md) | Recoverable activity loading, stale-data preservation, and optimistic mutation rollback |
 
 ## Authority and change control
 

@@ -4523,6 +4523,19 @@ Supabase resource, customer record, or real-money capability changed.
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
 
+## Notification data recovery
+
+- Stopped turning notification provider failures into a false empty activity
+  state.
+- Added explicit initial loading, stale-data error, and retry behavior.
+- Restored unread state when an optimistic mark-all mutation fails.
+- Added disclosure semantics and minimum-size notification actions.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## English launch bundle headroom
 
 - Added a TypeScript-AST build transform for identity-only static English

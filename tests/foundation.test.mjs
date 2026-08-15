@@ -12474,7 +12474,7 @@ test('session-scoped background responses cannot repopulate signed-out state', (
   assert.match(app, /refreshSession\(session\)\.then\(next=>\{if\(current\)setSession\(next\)\}\)/);
   assert.match(app, /const notificationRequestRef=useRef\(0\)/);
   assert.match(app, /getMyNotifications\(session\)\.then\(items=>\{if\(current&&request===notificationRequestRef\.current\)setNotifications\(items\)\}\)/);
-  assert.match(app, /markAllNotificationsRead\(session\)\.catch\(\(\)=>getMyNotifications\(session\)\.then\(items=>\{if\(request===notificationRequestRef\.current\)setNotifications\(items\)\}\)/);
+  assert.match(app, /markAllNotificationsRead\(session\)\.catch\(error=>\{if\(request===notificationRequestRef\.current\)\{setNotifications\(previous\)/);
   assert.match(app, /getAdminAccess\(session\)\.then\(access=>\{if\(current\)setIsAdmin\(access\)\}\)/);
   assert.ok((app.match(/return\(\)=>\{current=false/g) ?? []).length >= 3);
   assert.match(app, /const dealListRequestRef=useRef\(0\)/);
@@ -12718,4 +12718,16 @@ test('English launch locale inlining is AST-scoped and preserves dynamic behavio
     inlineEnglishTranslationLiterals("const copy = t('No import');", 'sample.ts'),
     "const copy = t('No import');",
   );
+});
+
+test('notification reads preserve stale activity and expose retryable failures', () => {
+  const source = readText('src/app.tsx');
+
+  assert.match(source, /const \[notificationsError,setNotificationsError\]=useState\(''\)/);
+  assert.match(source, /title="Activity unavailable"/);
+  assert.match(source, /Showing previously loaded activity\./);
+  assert.match(source, /onRetry=\{\(\)=>setNotificationsRevision\(revision=>revision\+1\)\}/);
+  assert.match(source, /setNotifications\(previous\)/);
+  assert.doesNotMatch(source, /getMyNotifications\(session\)[\s\S]{0,240}catch\(\(\)=>\{if\(current&&request===notificationRequestRef\.current\)setNotifications\(\[\]\)\}\)/);
+  assert.match(source, /aria-expanded=\{expanded\} aria-controls="notification-menu"/);
 });
