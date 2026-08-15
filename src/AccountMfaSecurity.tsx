@@ -6,7 +6,6 @@ import {
   Copy,
   KeyRound,
   Plus,
-  RefreshCw,
   ShieldCheck,
   Trash2,
   X,
@@ -22,6 +21,7 @@ import {
   type MfaStatus,
   type StoredSession,
 } from './services/supabaseRest';
+import { AsyncStatePanel } from './AsyncStatePanel';
 
 function formatFactorDate(value:string|null){
   if(!value)return 'Enrollment date unavailable';
@@ -47,6 +47,7 @@ export function AccountMfaSecurity({
   const loadRequestRef=useRef(0);
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
+  const [loadError,setLoadError]=useState('');
   const [confirmRemove,setConfirmRemove]=useState<string|null>(null);
   const [removeVerificationFactorId,setRemoveVerificationFactorId]=useState('');
   const [removeCode,setRemoveCode]=useState('');
@@ -54,14 +55,14 @@ export function AccountMfaSecurity({
   const loadStatus=async(activeSession=session)=>{
     const request=++loadRequestRef.current;
     setLoading(true);
-    setError('');
+    setLoadError('');
     try{
       const result=await getMfaStatus(activeSession);
       if(request!==loadRequestRef.current)return;
       setStatus(result);
     }catch(loadError){
       if(request!==loadRequestRef.current)return;
-      setError(loadError instanceof Error?loadError.message:'Could not load authenticator security.');
+      setLoadError(loadError instanceof Error?loadError.message:'Could not load authenticator security.');
     }finally{
       if(request===loadRequestRef.current)setLoading(false);
     }
@@ -71,9 +72,10 @@ export function AccountMfaSecurity({
     let active=true;
     const request=++loadRequestRef.current;
     setLoading(true);
+    setLoadError('');
     getMfaStatus(session)
       .then(result=>{if(active&&request===loadRequestRef.current)setStatus(result)})
-      .catch(loadError=>{if(active&&request===loadRequestRef.current)setError(loadError instanceof Error?loadError.message:'Could not load authenticator security.')})
+      .catch(loadError=>{if(active&&request===loadRequestRef.current)setLoadError(loadError instanceof Error?loadError.message:'Could not load authenticator security.')})
       .finally(()=>{if(active&&request===loadRequestRef.current)setLoading(false)});
     return()=>{active=false;loadRequestRef.current+=1};
   },[session.user.id,session.accessToken]);
@@ -224,13 +226,15 @@ export function AccountMfaSecurity({
       </span>
     </header>
 
-    {loading?<div className="mfa-loading" role="status"><RefreshCw className="is-spinning" aria-hidden="true"/>Checking authenticator protection…</div>:null}
+    {loading?<AsyncStatePanel state="loading" title="Checking authenticator protection…" message="Verifying your enrolled methods securely."/>:null}
 
-    {!loading&&status?.unsupportedVerifiedFactor?<div className="mfa-feedback error" role="alert">
+    {!loading&&loadError?<AsyncStatePanel state="error" title="Authenticator status unavailable" message={loadError} actionLabel="Retry securely" onAction={()=>loadStatus()}/>:null}
+
+    {!loading&&!loadError&&status?.unsupportedVerifiedFactor?<div className="mfa-feedback error" role="alert">
       This account has a verified sign-in method that Dealivra cannot manage here. Contact support without sharing any verification code or setup key.
     </div>:null}
 
-    {!loading&&status?.factors.length?<ul className="mfa-factor-list">
+    {!loading&&!loadError&&status?.factors.length?<ul className="mfa-factor-list">
       {status.factors.map(factor=><li key={factor.id}>
         <span className="mfa-factor-icon"><KeyRound aria-hidden="true"/></span>
         <span><strong>{factor.friendlyName}</strong><small>Authenticator app · Added {formatFactorDate(factor.createdAt)}</small></span>
@@ -247,11 +251,11 @@ export function AccountMfaSecurity({
       </li>)}
     </ul>:null}
 
-    {!loading&&factorFloorReached?<div className="mfa-feedback protected" role="status">
+    {!loading&&!loadError&&factorFloorReached?<div className="mfa-feedback protected" role="status">
       This privileged account must keep at least {status?.minimumVerifiedFactors} verified authenticators. Add a replacement before removing one.
     </div>:null}
 
-    {!loading&&!enrollment&&!status?.unsupportedVerifiedFactor?<div className="mfa-enroll-start">
+    {!loading&&!loadError&&!enrollment&&!status?.unsupportedVerifiedFactor?<div className="mfa-enroll-start">
       <div>
         <strong>{protectedByMfa?'Add a backup authenticator':'Protect this account'}</strong>
         <span>{protectedByMfa?'A second enrolled device reduces account-recovery risk.':'Use any standards-based TOTP authenticator app.'}</span>

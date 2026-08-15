@@ -12657,3 +12657,16 @@ test('shared async state exposes accurate loading and retry semantics', () => {
   assert.ok((fulfillment.match(/<AsyncStatePanel/g) || []).length >= 2);
   assert.match(fulfillment, /setLoadVersion\(\(version\) => version \+ 1\)/);
 });
+
+test('account security reads fail closed with an explicit retry path', () => {
+  const sessions = readText('src/AccountSessionSecurity.tsx');
+  const mfa = readText('src/AccountMfaSecurity.tsx');
+
+  for (const source of [sessions, mfa]) {
+    assert.match(source, /const \[loadError,setLoadError\]=useState\(''\)/);
+    assert.match(source, /<AsyncStatePanel state="error"/);
+    assert.match(source, /actionLabel="Retry securely"/);
+  }
+  assert.match(sessions, /\{!loadError&&<div className="session-security-actions">/);
+  assert.match(mfa, /!loading&&!loadError&&!enrollment/);
+});

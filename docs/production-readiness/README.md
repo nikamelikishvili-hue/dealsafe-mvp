@@ -89,6 +89,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [78_SEMANTIC_UI_FOUNDATIONS.md](78_SEMANTIC_UI_FOUNDATIONS.md) | Semantic design tokens, accessible feedback states, contrast gates, focus behavior, and incremental migration boundary |
 | [79_ACCESSIBLE_FORM_VALIDATION.md](79_ACCESSIBLE_FORM_VALIDATION.md) | Field-level error semantics, descriptive relationships, focus recovery, and password-recovery validation |
 | [80_ASYNC_STATE_RECOVERY.md](80_ASYNC_STATE_RECOVERY.md) | Shared loading, error, empty, retry, reduced-motion, and mobile action behavior |
+| [81_ACCOUNT_SECURITY_RECOVERY.md](81_ACCOUNT_SECURITY_RECOVERY.md) | Fail-closed signed-in device and authenticator read recovery |
 
 ## Authority and change control
 

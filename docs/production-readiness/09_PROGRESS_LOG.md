@@ -4523,6 +4523,20 @@ Supabase resource, customer record, or real-money capability changed.
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
 
+## Account security read recovery
+
+- Migrated signed-in device and authenticator loading failures to the shared
+  accessible async-state contract with a bounded secure retry.
+- Kept session revocation, authenticator enrollment, and authenticator removal
+  fail-closed until the newest provider read succeeds.
+- Preserved request-generation guards so delayed responses cannot replace the
+  latest account security state.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## Accessible field validation foundation
 
 - Added one reusable field-error primitive with assertive semantics, semantic

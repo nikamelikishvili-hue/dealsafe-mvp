@@ -15,6 +15,7 @@ import {
   type AccountSession,
   type StoredSession,
 } from './services/supabaseRest';
+import { AsyncStatePanel } from './AsyncStatePanel';
 
 function describeDevice(userAgent:string){
   const ua=userAgent.toLowerCase();
@@ -56,19 +57,20 @@ export function AccountSessionSecurity({
   const loadRequestRef=useRef(0);
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
+  const [loadError,setLoadError]=useState('');
   const [confirmEverywhere,setConfirmEverywhere]=useState(false);
 
   const loadSessions=async()=>{
     const request=++loadRequestRef.current;
     setLoading(true);
-    setError('');
+    setLoadError('');
     try{
       const items=await getMyAccountSessions(session);
       if(request!==loadRequestRef.current)return;
       setSessions(items);
     }catch(loadError){
       if(request!==loadRequestRef.current)return;
-      setError(loadError instanceof Error?loadError.message:'Could not load signed-in devices.');
+      setLoadError(loadError instanceof Error?loadError.message:'Could not load signed-in devices.');
     }finally{
       if(request===loadRequestRef.current)setLoading(false);
     }
@@ -78,10 +80,10 @@ export function AccountSessionSecurity({
     let active=true;
     const request=++loadRequestRef.current;
     setLoading(true);
-    setError('');
+    setLoadError('');
     getMyAccountSessions(session)
       .then(items=>{if(active&&request===loadRequestRef.current)setSessions(items)})
-      .catch(loadError=>{if(active&&request===loadRequestRef.current)setError(loadError instanceof Error?loadError.message:'Could not load signed-in devices.')})
+      .catch(loadError=>{if(active&&request===loadRequestRef.current)setLoadError(loadError instanceof Error?loadError.message:'Could not load signed-in devices.')})
       .finally(()=>{if(active&&request===loadRequestRef.current)setLoading(false)});
     return()=>{active=false;loadRequestRef.current+=1};
   },[session.user.id,session.accessToken]);
@@ -138,7 +140,8 @@ export function AccountSessionSecurity({
       </button>
     </header>
 
-    {loading?<div className="session-loading" role="status"><RefreshCw className="is-spinning" aria-hidden="true"/>Checking signed-in devices…</div>:
+    {loading?<AsyncStatePanel state="loading" title="Checking signed-in devices…" message="This may take a moment."/>:
+      loadError?<AsyncStatePanel state="error" title="Signed-in devices unavailable" message={loadError} actionLabel="Retry securely" onAction={loadSessions}/>:
       sessions.length>0?<ul className="session-device-list">
         {sessions.map(item=>{
           const description=describeDevice(item.user_agent);
@@ -157,7 +160,7 @@ export function AccountSessionSecurity({
     {message?<div className="session-feedback success" role="status">{message}</div>:null}
     {error?<div className="session-feedback error" role="alert">{error}</div>:null}
 
-    <div className="session-security-actions">
+    {!loadError&&<div className="session-security-actions">
       <button type="button" className="session-signout-others" onClick={signOutOthers} disabled={loading||Boolean(busy)||otherSessionCount===0}>
         <LogOut aria-hidden="true"/>
         <span><strong>{busy==='others'?'Signing out…':'Sign out other devices'}</strong><small>Keep this device signed in</small></span>
@@ -166,7 +169,7 @@ export function AccountSessionSecurity({
         <LogOut aria-hidden="true"/>
         <span><strong>Sign out everywhere</strong><small>Includes this device</small></span>
       </button>
-    </div>
+    </div>}
 
     {confirmEverywhere?<div className="session-confirmation" role="alert" aria-labelledby="session-confirmation-title">
       <div>
