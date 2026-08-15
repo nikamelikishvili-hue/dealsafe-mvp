@@ -583,6 +583,11 @@ test('authentication handlers reject missing or ambiguous origin metadata before
     },
     { origin: 'null', host: 'dealivra.test', 'content-type': 'application/json' },
     { origin: 'not a URL', host: 'dealivra.test', 'content-type': 'application/json' },
+    {
+      origin: ['https://dealivra.test', 'https://attacker.test'],
+      host: 'dealivra.test',
+      'content-type': 'application/json',
+    },
   ];
 
   try {
@@ -798,6 +803,41 @@ test('authenticated security mutations reject oversized bearer credentials befor
           host: 'dealivra.test',
           'content-type': 'application/json',
           authorization,
+        },
+        body,
+      }, response);
+      assert.ok(response.statusCode >= 400 && response.statusCode < 500);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('authenticated security mutations reject ambiguous authorization arrays before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive an ambiguous authorization header.');
+  };
+
+  try {
+    for (const [handler, body] of [
+      [logoutHandler, { scope: 'global' }],
+      [mfaHandler, { action: 'list' }],
+      [passwordHandler, { action: 'recovery', newPassword: 'Valid-password-123!' }],
+    ]) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          'content-type': 'application/json',
+          authorization: ['Bearer first', 'Bearer second'],
         },
         body,
       }, response);

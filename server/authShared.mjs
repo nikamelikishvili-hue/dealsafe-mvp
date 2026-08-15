@@ -19,7 +19,7 @@ const authProviderTimeoutMs = 10_000;
 
 function header(request, name) {
   const value = request.headers?.[name] ?? request.headers?.[name.toLowerCase()];
-  return Array.isArray(value) ? value[0] : value;
+  return Array.isArray(value) ? (value.length === 1 ? value[0] : undefined) : value;
 }
 
 export function requestOrigin(request) {
