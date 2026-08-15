@@ -228,6 +228,7 @@ export function readJsonBody(request) {
 
 export function readRefreshToken(request) {
   const cookie = header(request, 'cookie') || '';
+  if (typeof cookie !== 'string' || cookie.length > 16_384) return null;
   let encodedToken = null;
   for (const part of cookie.split(';')) {
     const [name, ...value] = part.trim().split('=');
