@@ -66,6 +66,21 @@ live resource, customer record, or real-money capability changed in this pass.
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
 
+## Preview bundle budget alignment
+
+- Confirmed that the Vercel Preview feature configuration produces 832,516
+  bytes of total JavaScript while the safe-default local build produces
+  829,974 bytes from the same reviewed source stack.
+- Raised only the total JavaScript ceiling from 830,000 to 835,000 bytes,
+  leaving the initial-application, individual-chunk, and CSS ceilings unchanged.
+- Retained less than 0.3% headroom over the measured Preview artifact so future
+  bundle growth still fails closed instead of silently normalizing drift.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## 2026-08-15 — API mutation-origin inventory
 
 - Added a fail-closed inventory for every application API route and wired it

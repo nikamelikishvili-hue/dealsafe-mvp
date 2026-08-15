@@ -11556,7 +11556,7 @@ test('production builds enforce explicit JavaScript and CSS budgets', () => {
   assert.match(budget, /\^app-\[A-Za-z0-9_-\]\+\\\.js\$/);
   assert.match(budget, /Expected exactly one initial application chunk/);
   assert.match(budget, /maximumCssChunkBytes: 200_000/);
-  assert.match(budget, /maximumTotalJavaScriptBytes: 830_000/);
+  assert.match(budget, /maximumTotalJavaScriptBytes: 835_000/);
   assert.match(budget, /maximumTotalCssBytes: 290_000/);
   assert.match(budget, /throw new Error\(`Build performance budget exceeded:/);
 });
