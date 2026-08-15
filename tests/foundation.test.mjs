@@ -13315,6 +13315,49 @@ test('credential autocomplete fields enforce bounded browser input lengths', () 
   assert.deepEqual(violations, []);
 });
 
+test('one-time-code fields preserve six-digit mobile input semantics', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const inspect = node => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (opening?.tagName.getText(sourceFile) === 'input') {
+        const attributes = new Map(opening.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => [attribute.name.getText(sourceFile), attribute]));
+        const attributeText = name => attributes.get(name)?.initializer?.getText(sourceFile) ?? '';
+        if (attributeText('autoComplete') === '"one-time-code"') {
+          const valid = attributeText('inputMode') === '"numeric"'
+            && attributeText('pattern') === '"[0-9]{6}"'
+            && attributeText('maxLength') === '{6}';
+          if (!valid) {
+            const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+            violations.push(`${file}:${position.line + 1}`);
+          }
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
 test('application-level deal and verification mutations are same-tick guarded', () => {
   const app = readText('src/app.tsx');
 
