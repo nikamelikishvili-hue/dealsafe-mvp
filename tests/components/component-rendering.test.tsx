@@ -15,6 +15,7 @@ Object.defineProperty(globalThis, 'document', {
 const { AccountEntryPage, ForgotPasswordEntry } = await import('../../src/AccountEntryPages');
 const { AddressAutocomplete } = await import('../../src/AddressAutocomplete');
 const { BrandLogo } = await import('../../src/BrandLogo');
+const { FeedbackMessage } = await import('../../src/FeedbackMessage');
 const { isUsPostalCode, normalizeUsState, parseGoogleUsAddress, parseStoredUsAddress, serializeUsAddress } =
   await import('../../src/usAddress');
 
@@ -160,4 +161,25 @@ test('brand lockup exposes one stable accessible name', () => {
   assert.match(markup, /aria-label="Dealivra"/);
   assert.match(markup, /aria-hidden="true"/);
   assert.match(markup, />Dealivra<\/span>/);
+});
+
+test('shared feedback uses polite status semantics for non-destructive outcomes', () => {
+  const markup = renderToStaticMarkup(<FeedbackMessage tone="success">Password updated.</FeedbackMessage>);
+
+  assert.match(markup, /class="feedback-message success"/);
+  assert.match(markup, /role="status"/);
+  assert.match(markup, /aria-live="polite"/);
+  assert.match(markup, /aria-atomic="true"/);
+  assert.match(markup, /aria-hidden="true"/);
+});
+
+test('shared feedback announces blocking errors assertively without exposing the icon', () => {
+  const markup = renderToStaticMarkup(
+    <FeedbackMessage tone="error">The request could not be completed.</FeedbackMessage>,
+  );
+
+  assert.match(markup, /class="feedback-message error"/);
+  assert.match(markup, /role="alert"/);
+  assert.match(markup, /aria-live="assertive"/);
+  assert.match(markup, /The request could not be completed\./);
 });

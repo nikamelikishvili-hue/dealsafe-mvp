@@ -4862,9 +4862,12 @@ test('dense workspace controls retain full touch targets', () => {
 
 test('account recovery progress and guidance are announced accessibly', () => {
   const accountEntry = readText('src/AccountEntryPages.tsx');
+  const feedback = readText('src/FeedbackMessage.tsx');
 
   assert.match(accountEntry, /autoComplete="email"/);
-  assert.ok((accountEntry.match(/role="status" aria-live="polite"/g) || []).length >= 2);
+  assert.ok((accountEntry.match(/<FeedbackMessage/g) || []).length >= 3);
+  assert.match(feedback, /role=\{urgent \? 'alert' : 'status'\}/);
+  assert.match(feedback, /aria-live=\{urgent \? 'assertive' : 'polite'\}/);
   assert.ok((accountEntry.match(/aria-describedby="recovery-password-requirements"/g) || []).length >= 2);
   assert.match(accountEntry, /id="recovery-password-requirements"/);
 });
@@ -12576,4 +12579,53 @@ test('public trust checks never turn provider failures into silent approval', ()
   assert.match(features, /Safety check temporarily unavailable/);
   assert.match(features, /Do not treat a missing risk result as approval\./);
   assert.match(features, /setLoadVersion\(version => version \+ 1\)/);
+});
+
+test('shared UI foundations expose semantic tokens and accessible feedback states', () => {
+  const tokens = readText('src/design-tokens.css');
+  const feedback = readText('src/FeedbackMessage.tsx');
+  const feedbackStyles = readText('src/feedback-message.css');
+  const entry = readText('src/main.tsx');
+
+  for (const token of [
+    '--color-brand-700',
+    '--color-success-700',
+    '--color-warning-800',
+    '--color-danger-800',
+    '--color-info-800',
+    '--focus-ring',
+    '--touch-target',
+  ]) {
+    assert.match(tokens, new RegExp(`${token}:`));
+  }
+  assert.match(entry, /import '\.\/design-tokens\.css';[\s\S]*import '\.\/styles\.css';/);
+  assert.match(feedback, /role=\{urgent \? 'alert' : 'status'\}/);
+  assert.match(feedback, /aria-live=\{urgent \? 'assertive' : 'polite'\}/);
+  assert.match(feedback, /aria-atomic="true"/);
+  assert.match(feedbackStyles, /var\(--color-danger-800\)/);
+  assert.match(feedbackStyles, /var\(--color-success-700\)/);
+  assert.match(tokens, /:focus-visible/);
+  assert.match(tokens, /@media \(forced-colors: active\)/);
+});
+
+test('semantic feedback color pairs meet WCAG AA normal-text contrast', () => {
+  const luminance = hex => {
+    const channels = hex.match(/[a-f\d]{2}/gi).map(value => Number.parseInt(value, 16) / 255);
+    const linear = channels.map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+  };
+  const contrast = (foreground, background) => {
+    const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+    return (values[0] + 0.05) / (values[1] + 0.05);
+  };
+  const pairs = [
+    ['2855a5', 'eef5ff'],
+    ['155948', 'e7f8f1'],
+    ['6c4700', 'fff4cf'],
+    ['8f2430', 'fff0f1'],
+  ];
+
+  for (const [foreground, background] of pairs) {
+    assert.ok(contrast(foreground, background) >= 4.5, `${foreground} on ${background}`);
+  }
 });

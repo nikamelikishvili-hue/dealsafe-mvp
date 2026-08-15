@@ -1,0 +1,18 @@
+.feedback-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  margin: 0.4rem 0 1.25rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--feedback-border);
+  border-radius: var(--radius-control);
+  color: var(--feedback-ink);
+  background: var(--feedback-surface);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+.feedback-message > svg { flex: 0 0 auto; width: 1.15rem; height: 1.15rem; margin-top: 0.08rem; }
+.feedback-message.info { --feedback-ink: var(--color-info-800); --feedback-surface: var(--color-info-100); --feedback-border: var(--color-info-border); }
+.feedback-message.success { --feedback-ink: var(--color-success-700); --feedback-surface: var(--color-success-100); --feedback-border: var(--color-success-border); }
+.feedback-message.warning { --feedback-ink: var(--color-warning-800); --feedback-surface: var(--color-warning-100); --feedback-border: var(--color-warning-border); }
+.feedback-message.error { --feedback-ink: var(--color-danger-800); --feedback-surface: var(--color-danger-100); --feedback-border: var(--color-danger-border); }

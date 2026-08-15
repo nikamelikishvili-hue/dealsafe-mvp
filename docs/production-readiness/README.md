@@ -86,6 +86,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [75_DATABASE_BASELINE_MIGRATION_PLAN.md](75_DATABASE_BASELINE_MIGRATION_PLAN.md) | CLI-generated baseline inventory, local rebuild proof, target isolation, and migration activation gates |
 | [76_STAGING_HTTP_AUTHORIZATION_MATRIX.md](76_STAGING_HTTP_AUTHORIZATION_MATRIX.md) | Status-only hosted Data API and Storage authorization matrix using short-lived synthetic Staging sessions |
 | [77_DATABASE_OWNERSHIP_INVENTORY.md](77_DATABASE_OWNERSHIP_INVENTORY.md) | Machine-readable database owner, exposure, and steward inventory with exact Staging validation |
+| [78_SEMANTIC_UI_FOUNDATIONS.md](78_SEMANTIC_UI_FOUNDATIONS.md) | Semantic design tokens, accessible feedback states, contrast gates, focus behavior, and incremental migration boundary |
 
 ## Authority and change control
 

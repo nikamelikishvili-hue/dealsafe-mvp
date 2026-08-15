@@ -4523,6 +4523,20 @@ Supabase resource, customer record, or real-money capability changed.
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
 
+## Semantic design and feedback foundation
+
+- Introduced one semantic token contract for brand, surface, border, status, focus, radius, shadow, and touch-target decisions while preserving temporary compatibility aliases for incremental migration.
+- Added one accessible feedback primitive with distinct information, success, warning, and error behavior; urgent errors announce assertively, while non-destructive outcomes remain polite.
+- Migrated sign-in, sign-up, password recovery, password reset, and connectivity feedback to the shared contract, including accurate success-versus-error presentation.
+- Added a forced-colors focus fallback and automated WCAG AA contrast checks for every shared status pair.
+- Verified the account and recovery routes at 390 by 844 pixels with no horizontal overflow, intact password-manager semantics, and 44-pixel primary interaction targets.
+- Passed TypeScript, lint, 284 foundation tests, and ten focused component tests. The production bundle compiled successfully; commit-bound served-manifest generation remains delegated to the exact-commit release run.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## Async transaction integrity and recoverable read failures
 
 - Serialized automatic session renewal so a delayed refresh cannot overlap a

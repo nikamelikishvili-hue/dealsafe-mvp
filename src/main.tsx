@@ -6,6 +6,7 @@ import { publicInfoPaths, verifyPath } from './navigation';
 import { AppErrorBoundary, ApplicationFailurePage } from './AppErrorBoundary';
 import { reportClientFailure } from './services/clientFailureReporter.ts';
 import { startWebVitalMonitoring } from './services/webVitalReporter.ts';
+import './design-tokens.css';
 import './styles.css';
 import './home.css';
 import './global-redesign.css';

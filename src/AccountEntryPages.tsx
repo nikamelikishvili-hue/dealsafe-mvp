@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { Check, Eye, EyeOff } from 'lucide-react';
+import { FeedbackMessage } from './FeedbackMessage';
 import { t } from './i18n';
 import { publicInfoPaths, type PublicInfoView } from './navigation';
 import { requestPasswordReset, updateRecoveredPassword } from './services/supabaseRest';
@@ -39,6 +40,7 @@ export function ForgotPasswordEntry({ onOpen }: { onOpen: () => void }) {
 export function ForgotPassword({ onBack }: { onBack: () => void }) {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+  const [failed, setFailed] = useState(false);
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
 
@@ -48,10 +50,12 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
     sendingRef.current = true;
     setSending(true);
     setMessage('');
+    setFailed(false);
     try {
       await requestPasswordReset(email);
       setMessage('If an account exists for this email, a password reset link has been sent.');
     } catch (error) {
+      setFailed(true);
       setMessage(error instanceof Error ? error.message : 'Could not send reset email');
     } finally {
       sendingRef.current = false;
@@ -77,7 +81,7 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
           placeholder="you@example.com"
         />
       </label>
-      {message && <div className="notice" role="status" aria-live="polite">{t(message)}</div>}
+      {message && <FeedbackMessage tone={failed ? 'error' : 'info'}>{t(message)}</FeedbackMessage>}
       <button type="submit" className="primary full" disabled={sending}>
         {t(sending ? 'Sending…' : 'Send reset link')}
       </button>
@@ -146,7 +150,11 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
         />
       </label>
       <small id="recovery-password-requirements">{t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}</small>
-      {message && <div className="notice" role="status" aria-live="polite">{t(message)}</div>}
+      {message && (
+        <FeedbackMessage tone={message === 'Password updated. You can now sign in.' ? 'success' : 'error'}>
+          {t(message)}
+        </FeedbackMessage>
+      )}
       <button type="submit" className="primary full" disabled={updating}>
         {t(updating ? 'Updating password…' : 'Update password')}
       </button>
@@ -286,7 +294,7 @@ export function AccountEntryPage({
           <a href={publicInfoPaths.privacy} onClick={event => openInfo(event, 'privacy')}>Privacy notice</a>.
         </span>
       </label>}
-      {message && <div className="notice" role="status">{t(message)}</div>}
+      {message && <FeedbackMessage tone="error">{t(message)}</FeedbackMessage>}
       <button type="submit" className="primary full" disabled={submitting || (isSignup && !acceptedPolicies)}>
         {t(
           submitting
