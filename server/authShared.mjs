@@ -251,7 +251,7 @@ export function readBearerToken(request) {
   const authorization = header(request, 'authorization');
   if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) return null;
   const token = authorization.slice(7).trim();
-  return token && token.length <= 8192 ? token : null;
+  return token && token.length <= 8192 && !/[\u0000-\u0020\u007f]/.test(token) ? token : null;
 }
 
 export function isStrongPassword(password) {
