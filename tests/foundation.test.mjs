@@ -12995,6 +12995,64 @@ test('rendered media and new-tab links preserve accessible safe defaults', () =>
   assert.deepEqual(violations, []);
 });
 
+test('native form controls preserve a programmatic accessible name', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const labelTargets = new Set();
+    const controls = [];
+    const attributeMap = opening => new Map(opening.attributes.properties
+      .filter(ts.isJsxAttribute)
+      .map(attribute => [attribute.name.getText(sourceFile), attribute]));
+    const attributeValue = attribute => attribute?.initializer?.getText(sourceFile) ?? '';
+
+    const inspect = (node, insideLabel = false) => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      const tag = opening?.tagName.getText(sourceFile);
+      const attributes = opening ? attributeMap(opening) : new Map();
+      if (tag === 'label' && attributes.has('htmlFor')) {
+        labelTargets.add(attributeValue(attributes.get('htmlFor')));
+      }
+      if (['input', 'select', 'textarea'].includes(tag)) {
+        controls.push({ opening, attributes, insideLabel });
+      }
+      const childInsideLabel = insideLabel || tag === 'label';
+      ts.forEachChild(node, child => inspect(child, childInsideLabel));
+    };
+    inspect(sourceFile);
+
+    for (const { opening, attributes, insideLabel } of controls) {
+      const type = attributeValue(attributes.get('type'));
+      const id = attributeValue(attributes.get('id'));
+      const named = insideLabel
+        || type === '"hidden"'
+        || attributes.has('aria-label')
+        || attributes.has('aria-labelledby')
+        || (id && labelTargets.has(id));
+      if (!named) {
+        const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+        violations.push(`${file}:${position.line + 1}`);
+      }
+    }
+  }
+
+  assert.deepEqual(violations, []);
+});
+
 test('application-level deal and verification mutations are same-tick guarded', () => {
   const app = readText('src/app.tsx');
 
