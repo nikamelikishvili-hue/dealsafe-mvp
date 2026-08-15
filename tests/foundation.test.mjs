@@ -651,6 +651,43 @@ test('JSON authentication mutations reject unsupported media before provider acc
   assert.equal(providerCalls, 0);
 });
 
+test('JSON authentication mutations reject ambiguous Content-Type arrays before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive an ambiguous media type.');
+  };
+
+  try {
+    for (const handler of [
+      loginHandler,
+      logoutHandler,
+      mfaHandler,
+      passwordHandler,
+      recoverHandler,
+      signupHandler,
+    ]) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          'content-type': ['application/json', 'text/plain'],
+        },
+        body: {},
+      }, response);
+      assert.equal(response.statusCode, 415);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
 test('JSON authentication mutations reject oversized bodies before provider access', async () => {
   const originalFetch = globalThis.fetch;
   let providerCalls = 0;
@@ -923,6 +960,36 @@ test('session refresh rejects oversized cookie headers before parsing or provide
         origin: 'https://dealivra.test',
         host: 'dealivra.test',
         cookie: `noise=${'x'.repeat(16_384)}; __Host-dealivra-refresh=otherwise-valid`,
+      },
+    }, response);
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('session refresh rejects ambiguous Cookie header arrays before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive a credential from ambiguous Cookie headers.');
+  };
+
+  try {
+    const response = createResponse();
+    await refreshHandler({
+      method: 'POST',
+      headers: {
+        origin: 'https://dealivra.test',
+        host: 'dealivra.test',
+        cookie: [
+          '__Host-dealivra-refresh=first',
+          '__Host-dealivra-refresh=second',
+        ],
       },
     }, response);
     assert.equal(response.statusCode, 401);
