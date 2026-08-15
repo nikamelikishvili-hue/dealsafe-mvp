@@ -18,6 +18,17 @@ const maxRefreshCookieValueLength = 3800;
 const maxJsonBodyBytes = 16_384;
 const authProviderTimeoutMs = 10_000;
 const visibleAsciiCredentialPattern = /^[\x21-\x7e]+$/;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const safeDisplayTextPattern = /^[^\u0000-\u001f\u007f]{1,80}$/;
+
+function providerTimestamp(value) {
+  return typeof value === 'string'
+    && value.length >= 20
+    && value.length <= 40
+    && Number.isFinite(Date.parse(value))
+    ? value
+    : null;
+}
 
 function header(request, name) {
   const value = request.headers?.[name] ?? request.headers?.[name.toLowerCase()];
@@ -297,15 +308,18 @@ export function safeMfaFactors(user) {
       && factor.status === 'verified'
       && factor.factor_type === 'totp'
       && typeof factor.id === 'string'
+      && uuidPattern.test(factor.id)
     ))
+    .slice(0, 16)
     .map((factor) => ({
       id: factor.id,
       factorType: 'totp',
-      friendlyName: typeof factor.friendly_name === 'string' && factor.friendly_name.trim()
-        ? factor.friendly_name.trim().slice(0, 80)
+      friendlyName: typeof factor.friendly_name === 'string'
+        && safeDisplayTextPattern.test(factor.friendly_name.trim())
+        ? factor.friendly_name.trim()
         : 'Authenticator app',
-      createdAt: typeof factor.created_at === 'string' ? factor.created_at : null,
-      updatedAt: typeof factor.updated_at === 'string' ? factor.updated_at : null,
+      createdAt: providerTimestamp(factor.created_at),
+      updatedAt: providerTimestamp(factor.updated_at),
     }));
 }
 

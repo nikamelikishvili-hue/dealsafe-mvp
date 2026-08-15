@@ -1456,6 +1456,62 @@ test('MFA endpoint validates action inputs before contacting the provider', asyn
   assert.equal(response.payload.error, 'The authenticator request is invalid.');
 });
 
+test('MFA factor metadata is bounded before it reaches a browser response', async () => {
+  const { safeMfaFactors } = await import('../server/authShared.mjs');
+  const validId = '11111111-1111-4111-8111-111111111111';
+  const validTimestamp = '2026-08-15T12:00:00.000Z';
+  const factors = safeMfaFactors({
+    factors: [
+      {
+        id: validId,
+        factor_type: 'totp',
+        status: 'verified',
+        friendly_name: '  Primary authenticator  ',
+        created_at: validTimestamp,
+        updated_at: 'not-a-timestamp',
+      },
+      {
+        id: 'not-a-provider-uuid',
+        factor_type: 'totp',
+        status: 'verified',
+        friendly_name: 'Must not reach the browser',
+      },
+      {
+        id: '22222222-2222-4222-8222-222222222222',
+        factor_type: 'totp',
+        status: 'verified',
+        friendly_name: 'Injected\nlabel',
+        created_at: 'x'.repeat(1_000),
+      },
+    ],
+  });
+
+  assert.deepEqual(factors, [
+    {
+      id: validId,
+      factorType: 'totp',
+      friendlyName: 'Primary authenticator',
+      createdAt: validTimestamp,
+      updatedAt: null,
+    },
+    {
+      id: '22222222-2222-4222-8222-222222222222',
+      factorType: 'totp',
+      friendlyName: 'Authenticator app',
+      createdAt: null,
+      updatedAt: null,
+    },
+  ]);
+
+  assert.equal(safeMfaFactors({
+    factors: Array.from({ length: 32 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+      factor_type: 'totp',
+      status: 'verified',
+    })),
+  }).length, 16);
+});
+
 test('privileged MFA removal preserves the two-authenticator floor', async () => {
   const { default: mfa } = await import('../api/auth/mfa.mjs');
   const response = createResponse();
