@@ -486,16 +486,37 @@ export function logAuthRejection(operation, status, code) {
 }
 
 export function publicSession(data) {
-  if (!data.access_token || !data.user?.id || !data.user?.email) return null;
+  const accessToken = data?.access_token;
+  const expiresIn = data?.expires_in;
+  const userId = data?.user?.id;
+  const email = data?.user?.email;
+  const emailConfirmedAt = data?.user?.email_confirmed_at;
+  const displayName = data?.user?.user_metadata?.display_name;
+  if (
+    typeof accessToken !== 'string'
+    || accessToken.length > 8192
+    || !visibleAsciiCredentialPattern.test(accessToken)
+    || !Number.isInteger(expiresIn)
+    || expiresIn < 1
+    || expiresIn > 604_800
+    || typeof userId !== 'string'
+    || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(userId)
+    || typeof email !== 'string'
+    || email.length > 320
+    || !/^[\x21-\x7e]+$/.test(email)
+    || !email.includes('@')
+    || (emailConfirmedAt != null && (typeof emailConfirmedAt !== 'string' || emailConfirmedAt.length > 64))
+    || (displayName != null && (typeof displayName !== 'string' || displayName.length > 100))
+  ) return null;
   return {
-    access_token: data.access_token,
-    expires_in: data.expires_in,
+    access_token: accessToken,
+    expires_in: expiresIn,
     user: {
-      id: data.user.id,
-      email: data.user.email,
-      email_confirmed_at: data.user.email_confirmed_at || null,
+      id: userId,
+      email,
+      email_confirmed_at: emailConfirmedAt || null,
       user_metadata: {
-        display_name: data.user.user_metadata?.display_name || null,
+        display_name: displayName || null,
       },
     },
   };

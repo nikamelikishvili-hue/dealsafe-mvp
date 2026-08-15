@@ -1249,6 +1249,39 @@ test('password login accepts the reviewed refresh cookie boundary without exceed
   assert.ok(Buffer.byteLength(cookie, 'utf8') <= 4096);
 });
 
+test('password login rejects malformed public session fields from the provider', async () => {
+  const malformedSessions = [
+    { access_token: `token${' '.repeat(2)}fragment` },
+    { access_token: 'töken' },
+    { expires_in: 0 },
+    { expires_in: 604_801 },
+    { user: { id: 'not-a-uuid' } },
+    { user: { email: 'not-an-email' } },
+    { user: { user_metadata: { display_name: 'x'.repeat(101) } } },
+  ];
+
+  for (const override of malformedSessions) {
+    const base = authProviderSession('valid-refresh-token');
+    const response = createResponse();
+    const session = {
+      ...base,
+      ...override,
+      user: override.user ? { ...base.user, ...override.user } : base.user,
+    };
+    await withAuthProvider(async () => new Response(JSON.stringify(session), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }), () => loginHandler(authRequest({
+      email: 'user@example.com',
+      password: 'ExamplePass123!',
+    }), response));
+
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.headers.has('set-cookie'), false);
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+  }
+});
+
 test('password login with a verified TOTP factor stays pending until AAL2 verification', async () => {
   const { default: login } = await import('../api/auth/login.mjs');
   const response = createResponse();
