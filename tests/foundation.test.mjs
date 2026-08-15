@@ -43,6 +43,7 @@ import {
 } from '../server/legacyIdentifierPolicy.mjs';
 import { evaluateDatabaseBaseline } from '../scripts/verify-database-baseline.mjs';
 import { validateDatabaseOwnershipInventory } from '../scripts/validate-database-ownership-inventory.mjs';
+import { apiRoutePolicy, evaluateApiMutationOriginPolicy } from '../server/apiMutationOriginPolicy.mjs';
 
 const root = new URL('../', import.meta.url);
 const rootPath = fileURLToPath(root);
@@ -4029,6 +4030,25 @@ test('authentication origin checks reject malformed and insecure public origins'
   }
 
   assert.equal(providerCalled, false);
+});
+
+test('API mutation origin inventory fails closed for new and weakened routes', () => {
+  const repositorySources = {};
+  for (const route of Object.keys(apiRoutePolicy)) repositorySources[route] = readText(route);
+
+  assert.equal(evaluateApiMutationOriginPolicy(repositorySources).status, 'passed');
+  const unreviewed = evaluateApiMutationOriginPolicy({
+    ...repositorySources,
+    'api/new-mutation.mjs': "request.method !== 'POST'",
+  });
+  assert.deepEqual(unreviewed.findings, [
+    { route: 'api/new-mutation.mjs', issue: 'unreviewed_route' },
+  ]);
+  const weakened = evaluateApiMutationOriginPolicy({
+    ...repositorySources,
+    'api/auth/login.mjs': repositorySources['api/auth/login.mjs'].replaceAll('requireSameOrigin', 'removedOriginGuard'),
+  });
+  assert.ok(weakened.findings.some((finding) => finding.route === 'api/auth/login.mjs'));
 });
 
 test('public and authenticated mobile navigation can close without pointer input', () => {
@@ -11216,7 +11236,7 @@ test('locked dependencies follow the reviewed offline supply-chain policy', () =
   );
   assert.match(
     packageJson.scripts.verify,
-    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run brand:verify && npm run config:verify && npm run format:check && npm run lint && npm run typecheck/,
+    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run security:mutation-origins && npm run brand:verify && npm run config:verify && npm run format:check && npm run lint && npm run typecheck/,
   );
   assert.match(policy, /lockfile\.lockfileVersion !== 3/);
   assert.match(policy, /url\.protocol === 'https:'/);

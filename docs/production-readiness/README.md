@@ -101,6 +101,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [90_SHIPPING_READINESS_RECOVERY.md](90_SHIPPING_READINESS_RECOVERY.md) | Fail-closed seller shipping readiness with distinct loading, failure, stale-value, and retry behavior |
 | [91_DEAL_ACTION_PLAN_RECOVERY.md](91_DEAL_ACTION_PLAN_RECOVERY.md) | Accessible live Deal progress loading, stale-data failure, polling, and retry behavior |
 | [92_AUTH_ORIGIN_CANONICALIZATION.md](92_AUTH_ORIGIN_CANONICALIZATION.md) | Canonical HTTPS Origin and single-host validation before same-origin Auth provider calls |
+| [93_API_MUTATION_ORIGIN_INVENTORY.md](93_API_MUTATION_ORIGIN_INVENTORY.md) | Fail-closed method/origin classification for every application API route |
 
 ## Authority and change control
 

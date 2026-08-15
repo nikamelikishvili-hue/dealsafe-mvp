@@ -1,5 +1,18 @@
 # Production-readiness progress log
 
+## 2026-08-15 — API mutation-origin inventory
+
+- Added a fail-closed inventory for every application API route and wired it
+  into the complete repository verification gate.
+- Classified shared same-origin, local telemetry, read-only, and intentionally
+  cross-origin CSP reporting boundaries with mode-specific required controls.
+- New, missing, or weakened route files now fail verification.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## 2026-08-15 — Authentication origin canonicalization
 
 - Replaced host-only Auth origin comparison with the existing strict canonical
