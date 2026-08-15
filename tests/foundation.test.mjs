@@ -307,14 +307,37 @@ test('CSP report endpoint records only bounded privacy-safe diagnostics', async 
 
   const legacyLog = JSON.parse(warnings[0]);
   assert.equal(legacyLog.schema, 'dealivra.csp-violation.v1');
-  assert.equal(legacyLog.document_url, 'https://dealivra.com/deals/:id');
-  assert.equal(legacyLog.blocked_url, 'https://evil.example/payload.js');
-  assert.equal(legacyLog.source_url, 'https://dealivra.com/assets/app.js');
+  assert.equal(legacyLog.document_url, 'https://dealivra.com/:page');
+  assert.equal(legacyLog.blocked_url, 'https://evil.example/:page');
+  assert.equal(legacyLog.source_url, 'https://dealivra.com/assets/:asset');
   assert.equal(legacyLog.effective_directive, 'script-src-elem');
 
   const modernLog = JSON.parse(warnings[1]);
-  assert.equal(modernLog.document_url, 'https://dealivra.com/account/:id');
+  assert.equal(modernLog.document_url, 'https://dealivra.com/:page');
   assert.equal(modernLog.blocked_url, 'inline');
+
+  const shortSecretWarnings = [];
+  console.warn = value => shortSecretWarnings.push(String(value));
+  try {
+    const response = createResponse();
+    await cspReportHandler(cspRequest({
+      'csp-report': {
+        'document-uri': 'https://dealivra.com/recover/abc123?token=private',
+        'blocked-uri': 'https://cdn.example/customer/nika/photo.png',
+        'source-file': 'https://dealivra.com/api/private-case-id',
+        'effective-directive': 'script-src',
+      },
+    }), response);
+    assert.equal(response.statusCode, 204);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(shortSecretWarnings.length, 1);
+  const shortSecretLog = JSON.parse(shortSecretWarnings[0]);
+  assert.equal(shortSecretLog.document_url, 'https://dealivra.com/:page');
+  assert.equal(shortSecretLog.blocked_url, 'https://cdn.example/:page');
+  assert.equal(shortSecretLog.source_url, 'https://dealivra.com/api/:endpoint');
+  assert.doesNotMatch(shortSecretWarnings[0], /recover|abc123|customer|nika|private-case-id|photo/);
 });
 
 test('private analytics removes query strings before collection', () => {

@@ -95,16 +95,6 @@ function safeNumber(value, maximum = Number.MAX_SAFE_INTEGER) {
   return number;
 }
 
-function isSensitivePathSegment(segment) {
-  return (
-    segment.includes('@')
-    || /^\d{6,}$/.test(segment)
-    || /^[0-9a-f]{8,}$/i.test(segment)
-    || /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(segment)
-    || /^[A-Za-z0-9_-]{16,}$/.test(segment)
-  );
-}
-
 function safeUrl(value) {
   const text = safeText(value, 2_048);
   if (!text) return undefined;
@@ -117,21 +107,19 @@ function safeUrl(value) {
     const url = new URL(text);
     if (!['http:', 'https:'].includes(url.protocol)) return url.protocol;
 
-    const segments = url.pathname
-      .split('/')
-      .filter(Boolean)
-      .slice(0, 8)
-      .map((segment) => {
-        let decoded = segment;
-        try {
-          decoded = decodeURIComponent(segment);
-        } catch {
-          // Keep the encoded form and apply the same conservative redaction rules.
-        }
-        if (isSensitivePathSegment(decoded)) return ':id';
-        return encodeURIComponent(safeText(decoded, 48) || ':segment');
-      });
-    const pathname = segments.length ? `/${segments.join('/')}` : '/';
+    // Report URLs are attacker-controlled and paths can contain recovery
+    // tokens, access codes, email addresses, or customer-generated slugs.
+    // Keep only the origin and a fixed operational route class. This is
+    // sufficient to distinguish asset/API/page violations without retaining
+    // any raw path, query, or fragment material.
+    const firstSegment = url.pathname.split('/').filter(Boolean)[0]?.toLowerCase();
+    const pathname = firstSegment === 'assets'
+      ? '/assets/:asset'
+      : firstSegment === 'api'
+        ? '/api/:endpoint'
+        : firstSegment
+          ? '/:page'
+          : '/';
     return `${url.origin}${pathname}`.slice(0, 512);
   } catch {
     return 'invalid-url';
