@@ -13363,6 +13363,50 @@ test('credential fields expose password-manager autocomplete semantics', () => {
   assert.deepEqual(violations, []);
 });
 
+test('email fields preserve mobile-safe text entry semantics', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const inspect = node => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (opening?.tagName.getText(sourceFile) === 'input') {
+        const attributes = new Map(opening.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => [attribute.name.getText(sourceFile), attribute]));
+        const value = name => attributes.get(name)?.initializer?.getText(sourceFile) ?? '';
+        if (value('type') === '"email"') {
+          const valid = value('autoComplete') === '"email"'
+            && value('autoCapitalize') === '"none"'
+            && value('spellCheck') === '{false}'
+            && value('maxLength') === '{254}';
+          if (!valid) {
+            const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+            violations.push(`${file}:${position.line + 1}`);
+          }
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
 test('credential autocomplete fields enforce bounded browser input lengths', () => {
   const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
     .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))

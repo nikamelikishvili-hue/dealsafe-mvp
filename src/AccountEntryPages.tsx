@@ -77,6 +77,8 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
           type="email"
           maxLength={254}
           autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
           disabled={sending}
           value={email}
           onChange={event => setEmail(event.target.value)}
@@ -279,6 +281,8 @@ export function AccountEntryPage({
           type="email"
           maxLength={254}
           autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
           placeholder="you@example.com"
           value={form.email}
           onChange={event => onFormChange({ ...form, email: event.target.value })}
