@@ -12,7 +12,10 @@ import cspReportHandler from '../api/security/csp-report.mjs';
 import runtimeRejectionHandler from '../api/security/runtime-rejection.mjs';
 import webVitalHandler from '../api/security/web-vital.mjs';
 import healthHandler from '../api/health.mjs';
-import { validateReportingRequest } from '../server/reportingRequestBoundary.mjs';
+import {
+  readBoundedJson as readBoundedReportingJson,
+  validateReportingRequest,
+} from '../server/reportingRequestBoundary.mjs';
 import {
   buildOperationalSnapshot,
   classifyOperationalRecord,
@@ -4142,6 +4145,57 @@ test('diagnostic request boundary rejects noncanonical origins and media consist
     const response = createResponse();
     assert.equal(validateReportingRequest({ method: 'POST', headers }, response), false);
     assert.equal(response.statusCode, expectedStatus);
+  }
+});
+
+test('diagnostic request body reader enforces byte limits before and during streaming', async () => {
+  let consumedChunks = 0;
+  const declaredOversize = {
+    headers: { 'content-length': '9' },
+    async *[Symbol.asyncIterator]() {
+      consumedChunks += 1;
+      yield Buffer.from('{}');
+    },
+  };
+  assert.equal(await readBoundedReportingJson(declaredOversize, 8), null);
+  assert.equal(consumedChunks, 0);
+
+  const streamedOversize = {
+    headers: {},
+    async *[Symbol.asyncIterator]() {
+      for (const chunk of ['{"a":', '"1234"', ',"ignored":true}']) {
+        consumedChunks += 1;
+        yield Buffer.from(chunk);
+      }
+    },
+  };
+  consumedChunks = 0;
+  assert.equal(await readBoundedReportingJson(streamedOversize, 8), null);
+  assert.equal(consumedChunks, 2);
+
+  const exactJson = '{"ok":1}';
+  assert.deepEqual(
+    await readBoundedReportingJson({ body: exactJson, headers: {} }, Buffer.byteLength(exactJson)),
+    { ok: 1 },
+  );
+  assert.deepEqual(
+    await readBoundedReportingJson({ body: Buffer.from(exactJson), headers: {} }, Buffer.byteLength(exactJson)),
+    { ok: 1 },
+  );
+});
+
+test('diagnostic request body reader rejects malformed, empty, cyclic, and multibyte overflow payloads', async () => {
+  const cyclic = {};
+  cyclic.self = cyclic;
+
+  for (const request of [
+    { headers: {} },
+    { body: '', headers: {} },
+    { body: '{', headers: {} },
+    { body: cyclic, headers: {} },
+    { body: { value: '😀' }, headers: {} },
+  ]) {
+    assert.equal(await readBoundedReportingJson(request, 8), null);
   }
 });
 
