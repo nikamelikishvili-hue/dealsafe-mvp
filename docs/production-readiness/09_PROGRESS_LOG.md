@@ -1,5 +1,19 @@
 # Production-readiness progress log
 
+## 2026-08-15 — Browser resource and process isolation
+
+- Added same-origin resource isolation and origin agent clustering to every
+  application response.
+- Preserved popup-compatible opener isolation for approved provider journeys.
+- Added exact-value regression gates and a protected-Preview compatibility and
+  rollback requirement.
+
+### Activation boundary
+
+Only review-branch repository configuration changed. No live Vercel alias,
+Production deployment, public access, provider setting, customer data, or
+real-money capability changed during this pass.
+
 ## 2026-08-15 — Logout JSON boundary correction
 
 - Corrected logout from a bodyless mutation classification to a bounded JSON

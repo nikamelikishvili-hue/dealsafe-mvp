@@ -180,6 +180,9 @@ test('Vercel configuration includes the minimum browser security headers', () =>
     'referrer-policy',
     'permissions-policy',
     'reporting-endpoints',
+    'cross-origin-opener-policy',
+    'cross-origin-resource-policy',
+    'origin-agent-cluster',
     'x-permitted-cross-domain-policies',
   ]) {
     assert.ok(values.has(required), `Missing ${required}`);
@@ -202,6 +205,9 @@ test('Vercel configuration includes the minimum browser security headers', () =>
   const scriptPolicy = csp.match(/script-src[^;]*/)?.[0] ?? '';
   assert.equal(scriptPolicy.includes("'unsafe-inline'"), false);
   assert.equal(values.get('reporting-endpoints'), 'csp-endpoint="/api/security/csp-report"');
+  assert.equal(values.get('cross-origin-opener-policy'), 'same-origin-allow-popups');
+  assert.equal(values.get('cross-origin-resource-policy'), 'same-origin');
+  assert.equal(values.get('origin-agent-cluster'), '?1');
   assert.equal(values.get('x-permitted-cross-domain-policies'), 'none');
 
   const html = readText('index.html');
