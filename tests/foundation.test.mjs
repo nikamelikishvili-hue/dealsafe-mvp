@@ -10749,6 +10749,52 @@ test('privacy-safe Web Vitals use fixed quality buckets only', async () => {
   assert.match(main, /startWebVitalMonitoring\(\)/);
 });
 
+test('health and browser reporting responses always carry the no-store security contract', async () => {
+  const assertHardened = response => {
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    assert.equal(response.headers.get('pragma'), 'no-cache');
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  };
+  const reportingRequest = {
+    method: 'GET',
+    headers: {
+      origin: 'https://dealivra.test',
+      host: 'dealivra.test',
+      'content-type': 'application/json',
+    },
+    body: {},
+  };
+
+  for (const handler of [
+    runtimeRejectionHandler,
+    clientFailureHandler,
+    webVitalHandler,
+  ]) {
+    const response = createResponse();
+    await handler(reportingRequest, response);
+    assert.equal(response.statusCode, 405);
+    assert.equal(response.headers.get('allow'), 'POST');
+    assertHardened(response);
+  }
+
+  const cspResponse = createResponse();
+  await cspReportHandler({
+    method: 'GET',
+    headers: { 'content-type': 'application/csp-report' },
+    body: {},
+  }, cspResponse);
+  assert.equal(cspResponse.statusCode, 405);
+  assert.equal(cspResponse.headers.get('allow'), 'POST');
+  assertHardened(cspResponse);
+
+  for (const method of ['GET', 'HEAD', 'POST']) {
+    const response = createResponse();
+    healthHandler({ method, headers: {} }, response);
+    assert.equal(response.statusCode, method === 'POST' ? 405 : 200);
+    assertHardened(response);
+  }
+});
+
 test('production builds enforce explicit JavaScript and CSS budgets', () => {
   const packageJson = readJson('package.json');
   const budget = readText('scripts/verify-build-budgets.mjs');
