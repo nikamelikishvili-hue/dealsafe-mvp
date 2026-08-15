@@ -2,7 +2,7 @@ export const apiRoutePolicy = Object.freeze({
   'api/catalog.mjs': 'read-only',
   'api/health.mjs': 'read-only',
   'api/auth/login.mjs': 'shared-json-mutation',
-  'api/auth/logout.mjs': 'shared-same-origin',
+  'api/auth/logout.mjs': 'shared-json-mutation',
   'api/auth/mfa.mjs': 'shared-json-mutation',
   'api/auth/password.mjs': 'shared-json-mutation',
   'api/auth/recover.mjs': 'shared-json-mutation',

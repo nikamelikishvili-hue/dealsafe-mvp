@@ -8,8 +8,9 @@ provider. Parameters such as `charset=utf-8` remain accepted after normalized
 media-type parsing.
 
 The control covers signup, password login, recovery, password mutation, MFA,
-privileged MFA recovery, and VIN decoding. Cookie-only refresh and logout do
-not require a body and remain under the canonical POST and Origin controls.
+logout scope selection, privileged MFA recovery, and VIN decoding. Cookie-only
+refresh does not require a body and remains under the canonical POST and Origin
+controls.
 
 ## Failure behavior
 

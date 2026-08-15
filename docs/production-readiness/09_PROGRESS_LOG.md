@@ -1,5 +1,18 @@
 # Production-readiness progress log
 
+## 2026-08-15 — Logout JSON boundary correction
+
+- Corrected logout from a bodyless mutation classification to a bounded JSON
+  scope mutation.
+- Required canonical JSON media before parsing, provider contact, or session
+  revocation and added a negative provider-isolation test.
+- Kept refresh as the only bodyless Auth mutation.
+
+### Activation boundary
+
+No live session was revoked and no Production, public access, hosted resource,
+customer data, or real-money capability changed during this pass.
+
 ## 2026-08-15 — Shared reporting request boundary
 
 - Consolidated method, canonical Origin, JSON media, bounded body, response

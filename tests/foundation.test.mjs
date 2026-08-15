@@ -4054,6 +4054,24 @@ test('JSON mutation endpoints reject unsupported media before provider contact',
   assert.equal(providerCalled, false);
 });
 
+test('logout requires JSON media before session revocation', async () => {
+  const { default: logout } = await import('../api/auth/logout.mjs');
+  const response = createResponse();
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, () => logout(authRequest({ scope: 'global' }, {
+    authorization: 'Bearer access-token',
+    'content-type': 'text/plain',
+  }), response));
+
+  assert.equal(response.statusCode, 415);
+  assert.equal(response.payload.error, 'Content-Type must be application/json.');
+  assert.equal(providerCalled, false);
+});
+
 test('diagnostic request boundary rejects noncanonical origins and media consistently', () => {
   const validHeaders = {
     origin: 'https://dealivra.test',

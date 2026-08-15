@@ -7,6 +7,7 @@ import {
   logAuthRejection,
   prepareResponse,
   readJsonBody,
+  requireJsonContentType,
   requirePost,
   requireSameOrigin,
   respondAuthRateLimited,
@@ -15,7 +16,7 @@ import {
 
 export default async function handler(request, response) {
   prepareResponse(response);
-  if (!requirePost(request, response) || !requireSameOrigin(request, response)) return;
+  if (!requirePost(request, response) || !requireSameOrigin(request, response) || !requireJsonContentType(request, response)) return;
 
   const body = readJsonBody(request);
   const scope = body?.scope ?? 'local';

@@ -104,6 +104,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [93_API_MUTATION_ORIGIN_INVENTORY.md](93_API_MUTATION_ORIGIN_INVENTORY.md) | Fail-closed method/origin classification for every application API route |
 | [94_JSON_MUTATION_MEDIA_BOUNDARY.md](94_JSON_MUTATION_MEDIA_BOUNDARY.md) | Shared application/json enforcement before body parsing or provider contact |
 | [95_REPORTING_REQUEST_BOUNDARY.md](95_REPORTING_REQUEST_BOUNDARY.md) | One canonical request, origin, media, size, response, and metadata boundary for diagnostic intake |
+| [96_LOGOUT_JSON_BOUNDARY.md](96_LOGOUT_JSON_BOUNDARY.md) | Correct logout scope classification and reject unsupported media before session revocation |
 
 ## Authority and change control
 
