@@ -327,6 +327,7 @@ export function MeetingPanel({
               inputMode="numeric"
               autoComplete="postal-code"
               pattern="[0-9]{5}(-[0-9]{4})?"
+              maxLength={10}
               aria-describedby="meeting-zip-help"
               aria-invalid={
                 Boolean(form.postalCode) &&
@@ -1221,6 +1222,7 @@ export function ShippingPanel({
                 inputMode="numeric"
                 autoComplete="postal-code"
                 pattern="[0-9]{5}(-[0-9]{4})?"
+                maxLength={10}
                 aria-describedby="shipping-zip-help"
                 aria-invalid={
                   Boolean(address.postalCode) &&
