@@ -231,8 +231,11 @@ export function readRefreshToken(request) {
   for (const part of cookie.split(';')) {
     const [name, ...value] = part.trim().split('=');
     if (name === refreshCookieName) {
+      const encodedToken = value.join('=');
+      if (!encodedToken || encodedToken.length > 8192) return null;
       try {
-        return decodeURIComponent(value.join('='));
+        const token = decodeURIComponent(encodedToken);
+        return token && token.length <= 8192 ? token : null;
       } catch {
         return null;
       }

@@ -811,6 +811,35 @@ test('authenticated security mutations reject oversized bearer credentials befor
   assert.equal(providerCalls, 0);
 });
 
+test('session refresh rejects oversized cookie credentials before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive an oversized refresh credential.');
+  };
+
+  try {
+    for (const token of ['x'.repeat(8_193), `%41`.repeat(8_193)]) {
+      const response = createResponse();
+      await refreshHandler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          cookie: `__Host-dealivra-refresh=${token}`,
+        },
+      }, response);
+      assert.equal(response.statusCode, 401);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
 test('production database hardening is deny-by-default with narrow RPC allowlists', () => {
   const migration = readText('supabase/production_auth_rbac_hardening.sql');
   const schema = readText('supabase/schema.sql');
