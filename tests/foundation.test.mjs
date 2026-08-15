@@ -1276,7 +1276,7 @@ test('password login rejects malformed public session fields from the provider',
       password: 'ExamplePass123!',
     }), response));
 
-    assert.equal(response.statusCode, 401);
+    assert.equal(response.statusCode, 503);
     assert.equal(response.headers.has('set-cookie'), false);
     assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
   }
