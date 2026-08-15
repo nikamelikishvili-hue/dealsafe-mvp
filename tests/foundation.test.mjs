@@ -687,6 +687,53 @@ test('JSON authentication mutations reject oversized bodies before provider acce
   assert.equal(providerCalls, 0);
 });
 
+test('JSON authentication body limits cannot be bypassed with a false Content-Length', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not be called for a falsely declared oversized body.');
+  };
+  const oversizedBodies = [
+    JSON.stringify({ padding: 'x'.repeat(16_385) }),
+    { padding: 'x'.repeat(16_385) },
+  ];
+
+  try {
+    for (const [route, handler] of [
+      ['login', loginHandler],
+      ['logout', logoutHandler],
+      ['mfa', mfaHandler],
+      ['password', passwordHandler],
+      ['recover', recoverHandler],
+      ['signup', signupHandler],
+    ]) {
+      for (const body of oversizedBodies) {
+        const response = createResponse();
+        await handler({
+          method: 'POST',
+          headers: {
+            origin: 'https://dealivra.test',
+            host: 'dealivra.test',
+            'content-type': 'application/json',
+            'content-length': '1',
+          },
+          body,
+        }, response);
+        assert.ok(
+          response.statusCode >= 400 && response.statusCode < 500,
+          `${route} must measure the actual request body instead of trusting Content-Length`,
+        );
+        assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
 test('JSON authentication mutations reject malformed bodies before provider access', async () => {
   const originalFetch = globalThis.fetch;
   let providerCalls = 0;
