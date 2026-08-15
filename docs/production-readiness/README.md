@@ -103,6 +103,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [92_AUTH_ORIGIN_CANONICALIZATION.md](92_AUTH_ORIGIN_CANONICALIZATION.md) | Canonical HTTPS Origin and single-host validation before same-origin Auth provider calls |
 | [93_API_MUTATION_ORIGIN_INVENTORY.md](93_API_MUTATION_ORIGIN_INVENTORY.md) | Fail-closed method/origin classification for every application API route |
 | [94_JSON_MUTATION_MEDIA_BOUNDARY.md](94_JSON_MUTATION_MEDIA_BOUNDARY.md) | Shared application/json enforcement before body parsing or provider contact |
+| [95_REPORTING_REQUEST_BOUNDARY.md](95_REPORTING_REQUEST_BOUNDARY.md) | One canonical request, origin, media, size, response, and metadata boundary for diagnostic intake |
 
 ## Authority and change control
 

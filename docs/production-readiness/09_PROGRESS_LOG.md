@@ -1,5 +1,18 @@
 # Production-readiness progress log
 
+## 2026-08-15 — Shared reporting request boundary
+
+- Consolidated method, canonical Origin, JSON media, bounded body, response
+  header, and runtime metadata controls for three diagnostic intake endpoints.
+- Kept endpoint schema allowlists, byte ceilings, modes, and privacy-safe log
+  contracts isolated while removing duplicated security logic.
+- Extended the API inventory and negative matrix to prevent boundary drift.
+
+### Activation boundary
+
+No monitoring mode, Production deployment, public alias, hosted configuration,
+live resource, customer record, or real-money capability changed in this pass.
+
 ## 2026-08-15 — JSON mutation media boundary
 
 - Added one shared normalized `application/json` requirement for every

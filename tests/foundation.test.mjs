@@ -11,6 +11,7 @@ import cspReportHandler from '../api/security/csp-report.mjs';
 import runtimeRejectionHandler from '../api/security/runtime-rejection.mjs';
 import webVitalHandler from '../api/security/web-vital.mjs';
 import healthHandler from '../api/health.mjs';
+import { validateReportingRequest } from '../server/reportingRequestBoundary.mjs';
 import {
   buildOperationalSnapshot,
   classifyOperationalRecord,
@@ -4051,6 +4052,28 @@ test('JSON mutation endpoints reject unsupported media before provider contact',
   assert.equal(response.statusCode, 415);
   assert.equal(response.payload.error, 'Content-Type must be application/json.');
   assert.equal(providerCalled, false);
+});
+
+test('diagnostic request boundary rejects noncanonical origins and media consistently', () => {
+  const validHeaders = {
+    origin: 'https://dealivra.test',
+    host: 'dealivra.test',
+    'content-type': 'application/json; charset=utf-8',
+  };
+  const valid = createResponse();
+  assert.equal(validateReportingRequest({ method: 'POST', headers: validHeaders }, valid), true);
+
+  for (const [headers, expectedStatus] of [
+    [{ ...validHeaders, origin: 'http://dealivra.test' }, 403],
+    [{ ...validHeaders, origin: 'https://user@dealivra.test' }, 403],
+    [{ ...validHeaders, origin: 'https://dealivra.test/path' }, 403],
+    [{ ...validHeaders, host: 'dealivra.test, attacker.test' }, 403],
+    [{ ...validHeaders, 'content-type': 'text/plain' }, 415],
+  ]) {
+    const response = createResponse();
+    assert.equal(validateReportingRequest({ method: 'POST', headers }, response), false);
+    assert.equal(response.statusCode, expectedStatus);
+  }
 });
 
 test('API mutation origin inventory fails closed for new and weakened routes', () => {
@@ -10043,6 +10066,7 @@ test('runtime rejection intake is same-origin, staged, and privacy safe', async 
 test('every runtime schema uses the governed rejection transport', () => {
   const reporter = readText('src/services/runtimeRejectionReporter.ts');
   const endpoint = readText('api/security/runtime-rejection.mjs');
+  const requestBoundary = readText('server/reportingRequestBoundary.mjs');
   const schemaFiles = [
     'accountActivityBoundarySchemas.ts',
     'accountActivityRuntimeSchemas.ts',
@@ -10093,6 +10117,8 @@ test('every runtime schema uses the governed rejection transport', () => {
   assert.match(endpoint, /mode === 'staged'/);
   assert.match(endpoint, /mode !== 'enforced'/);
   assert.match(endpoint, /maximumBodyBytes = 1_024/);
+  assert.match(endpoint, /validateReportingRequest/);
+  assert.match(requestBoundary, /readBoundedJson/);
   assert.match(endpoint, /Object\.keys\(value\)\.length !== 4/);
   assert.match(endpoint, /dealivra\.runtime-rejection-monitor\.v1/);
   assert.doesNotMatch(endpoint, /x-forwarded-for/i);
@@ -10291,6 +10317,7 @@ test('render and bootstrap failures use the governed recovery boundary', () => {
   const main = readText('src/main.tsx');
   const reporter = readText('src/services/clientFailureReporter.ts');
   const endpoint = readText('api/security/client-failure.mjs');
+  const requestBoundary = readText('server/reportingRequestBoundary.mjs');
 
   assert.match(boundary, /reportClientFailure\(\{/);
   assert.match(boundary, /boundary: 'application_render'/);
@@ -10314,6 +10341,8 @@ test('render and bootstrap failures use the governed recovery boundary', () => {
   assert.doesNotMatch(reporter, /location\.(?:href|pathname|search|hash)/);
   assert.match(endpoint, /DEALIVRA_CLIENT_FAILURE_MODE/);
   assert.match(endpoint, /maximumBodyBytes = 512/);
+  assert.match(endpoint, /validateReportingRequest/);
+  assert.match(requestBoundary, /hasCanonicalSameOrigin/);
   assert.match(endpoint, /Object\.keys\(value\)\.length !== 4/);
   assert.match(endpoint, /dealivra\.client-failure-monitor\.v1/);
   assert.doesNotMatch(endpoint, /x-forwarded-for|user-agent|\breferer\b/i);
@@ -10442,6 +10471,7 @@ test('current Vercel service failures use the governed server reporter', () => {
 test('privacy-safe Web Vitals use fixed quality buckets only', async () => {
   const reporter = readText('src/services/webVitalReporter.ts');
   const endpoint = readText('api/security/web-vital.mjs');
+  const requestBoundary = readText('server/reportingRequestBoundary.mjs');
   const main = readText('src/main.tsx');
   const warnings = [];
   const originalInfo = console.info;
@@ -10561,6 +10591,8 @@ test('privacy-safe Web Vitals use fixed quality buckets only', async () => {
   );
   assert.match(endpoint, /DEALIVRA_WEB_VITAL_MODE/);
   assert.match(endpoint, /maximumBodyBytes = 512/);
+  assert.match(endpoint, /readBoundedJson/);
+  assert.match(requestBoundary, /contentType !== 'application\/json'/);
   assert.match(endpoint, /Object\.keys\(value\)\.length !== 5/);
   assert.doesNotMatch(endpoint, /x-forwarded-for|user-agent|\breferer\b/i);
   assert.match(main, /startWebVitalMonitoring\(\)/);

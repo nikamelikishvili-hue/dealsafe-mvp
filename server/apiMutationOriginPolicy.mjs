@@ -10,9 +10,9 @@ export const apiRoutePolicy = Object.freeze({
   'api/auth/signup.mjs': 'shared-json-mutation',
   'api/security/mfa-recovery.mjs': 'shared-json-mutation',
   'api/vehicles/vin.mjs': 'shared-json-mutation',
-  'api/security/client-failure.mjs': 'local-same-origin',
-  'api/security/runtime-rejection.mjs': 'local-same-origin',
-  'api/security/web-vital.mjs': 'local-same-origin',
+  'api/security/client-failure.mjs': 'shared-reporting-boundary',
+  'api/security/runtime-rejection.mjs': 'shared-reporting-boundary',
+  'api/security/web-vital.mjs': 'shared-reporting-boundary',
   'api/security/csp-report.mjs': 'browser-reporting',
 });
 
@@ -20,7 +20,7 @@ const requiredTokens = Object.freeze({
   'read-only': ['request.method', "'GET'"],
   'shared-same-origin': ['requirePost', 'requireSameOrigin'],
   'shared-json-mutation': ['requirePost', 'requireSameOrigin', 'requireJsonContentType'],
-  'local-same-origin': ["request.method !== 'POST'", 'sameOrigin(request)'],
+  'shared-reporting-boundary': ['validateReportingRequest', 'readBoundedJson'],
   'browser-reporting': [
     "request.method !== 'POST'",
     'maxBodyBytes',
