@@ -106,6 +106,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [95_REPORTING_REQUEST_BOUNDARY.md](95_REPORTING_REQUEST_BOUNDARY.md) | One canonical request, origin, media, size, response, and metadata boundary for diagnostic intake |
 | [96_LOGOUT_JSON_BOUNDARY.md](96_LOGOUT_JSON_BOUNDARY.md) | Correct logout scope classification and reject unsupported media before session revocation |
 | [97_BROWSER_ISOLATION_HEADERS.md](97_BROWSER_ISOLATION_HEADERS.md) | Same-origin resource isolation, origin agent clustering, popup compatibility, and rollback gate |
+| [98_GLOBAL_LOGOUT_BROWSER_CLEAR.md](98_GLOBAL_LOGOUT_BROWSER_CLEAR.md) | Provider-confirmed global logout clears residual browser cache, cookies, and origin storage |
 
 ## Authority and change control
 

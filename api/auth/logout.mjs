@@ -77,6 +77,9 @@ export default async function handler(request, response) {
   if (scope === 'local' || scope === 'global') {
     clearRefreshCookie(response);
   }
+  if (scope === 'global') {
+    response.setHeader('Clear-Site-Data', '"cache", "cookies", "storage"');
+  }
 
   response.status(204).end();
 }

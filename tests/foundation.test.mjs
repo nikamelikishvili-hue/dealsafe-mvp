@@ -2305,6 +2305,7 @@ test('ordinary logout revokes only the current session', async () => {
   assert.equal(response.statusCode, 204);
   assert.match(requestedUrl, /\/auth\/v1\/logout\?scope=local$/);
   assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+  assert.equal(response.headers.has('clear-site-data'), false);
 });
 
 test('other-session logout keeps the current refresh cookie', async () => {
@@ -2322,6 +2323,7 @@ test('other-session logout keeps the current refresh cookie', async () => {
   assert.equal(response.statusCode, 204);
   assert.match(requestedUrl, /\/auth\/v1\/logout\?scope=others$/);
   assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(response.headers.has('clear-site-data'), false);
 });
 
 test('global logout clears the current cookie only after provider success', async () => {
@@ -2337,6 +2339,7 @@ test('global logout clears the current cookie only after provider success', asyn
 
   assert.equal(response.statusCode, 204);
   assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+  assert.equal(response.headers.get('clear-site-data'), '"cache", "cookies", "storage"');
 });
 
 test('invalid logout scopes fail without contacting the provider', async () => {
@@ -2355,6 +2358,7 @@ test('invalid logout scopes fail without contacting the provider', async () => {
   assert.equal(response.payload.error, 'Sign-out scope is invalid.');
   assert.equal(providerCalled, false);
   assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(response.headers.has('clear-site-data'), false);
 });
 
 test('failed other-session revocation never reports success or clears the current cookie', async () => {
@@ -2376,6 +2380,23 @@ test('failed other-session revocation never reports success or clears the curren
   assert.equal(response.statusCode, 503);
   assert.match(response.payload.error, /Could not reach the account service/);
   assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(response.headers.has('clear-site-data'), false);
+});
+
+test('failed global revocation preserves browser data and the current cookie', async () => {
+  const { default: logout } = await import('../api/auth/logout.mjs');
+  const response = createResponse();
+
+  await withAuthProvider(async () => new Response(
+    JSON.stringify({ error_code: 'provider_failure' }),
+    { status: 503, headers: { 'Content-Type': 'application/json' } },
+  ), () => logout(authRequest({ scope: 'global' }, {
+    authorization: 'Bearer current-session-token',
+  }), response));
+
+  assert.equal(response.statusCode, 502);
+  assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(response.headers.has('clear-site-data'), false);
 });
 
 test('server auth rejects privileged keys before contacting the provider', async () => {

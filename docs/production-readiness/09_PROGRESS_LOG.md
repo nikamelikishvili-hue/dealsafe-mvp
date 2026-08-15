@@ -1,5 +1,18 @@
 # Production-readiness progress log
 
+## 2026-08-15 — Global logout browser clearing
+
+- Added browser cache, cookie, and origin-storage clearing only after the Auth
+  provider confirms global session revocation.
+- Kept local, other-session, invalid, and failed revocation paths free of the
+  destructive browser-clear signal.
+- Added exact header-presence and absence regression checks across scopes.
+
+### Activation boundary
+
+No live session was revoked. Production, public aliases, hosted configuration,
+customer data, and real-money capabilities remain unchanged.
+
 ## 2026-08-15 — Browser resource and process isolation
 
 - Added same-origin resource isolation and origin agent clustering to every
