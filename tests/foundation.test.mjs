@@ -1456,6 +1456,55 @@ test('MFA endpoint validates action inputs before contacting the provider', asyn
   assert.equal(response.payload.error, 'The authenticator request is invalid.');
 });
 
+test('MFA enrollment rejects unsafe successful provider payloads at the server boundary', async () => {
+  const { default: mfa } = await import('../api/auth/mfa.mjs');
+  const safeQrCode = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>';
+  const unsafePayloads = [
+    {
+      id: 'not-a-provider-uuid',
+      type: 'totp',
+      totp: { qr_code: safeQrCode, secret: 'JBSWY3DPEHPK3PXP' },
+    },
+    {
+      id: '11111111-1111-4111-8111-111111111111',
+      type: 'totp',
+      totp: {
+        qr_code: '<svg xmlns="http://www.w3.org/2000/svg"><script>steal()</script></svg>',
+        secret: 'JBSWY3DPEHPK3PXP',
+      },
+    },
+    {
+      id: '11111111-1111-4111-8111-111111111111',
+      type: 'totp',
+      totp: { qr_code: safeQrCode, secret: 'provider-secret-with-invalid-symbol!' },
+    },
+    {
+      id: '11111111-1111-4111-8111-111111111111',
+      type: 'totp',
+      totp: {
+        qr_code: safeQrCode,
+        secret: 'JBSWY3DPEHPK3PXP',
+        uri: 'https://attacker.invalid/totp',
+      },
+    },
+  ];
+
+  for (const providerPayload of unsafePayloads) {
+    const response = createResponse();
+    await withAuthProvider(async () => new Response(JSON.stringify(providerPayload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }), () => mfa(authRequest({
+      action: 'enroll',
+      friendlyName: 'Primary authenticator',
+    }, { authorization: 'Bearer current-session-token' }), response));
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.payload.error, 'Authenticator security is temporarily unavailable.');
+    assert.equal(JSON.stringify(response.payload).includes('JBSWY3DPEHPK3PXP'), false);
+  }
+});
+
 test('MFA factor metadata is bounded before it reaches a browser response', async () => {
   const { safeMfaFactors } = await import('../server/authShared.mjs');
   const validId = '11111111-1111-4111-8111-111111111111';

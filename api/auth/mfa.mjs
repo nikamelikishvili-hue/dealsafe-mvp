@@ -30,6 +30,31 @@ const totpPattern = /^\d{6}$/;
 const privilegedRoles = new Set(['support', 'compliance', 'admin']);
 const challengePurposes = new Set(['login', 'enrollment', 'step_up']);
 const sensitiveChangeFreshnessSeconds = 10 * 60;
+const safeSvgPattern = /^\s*<svg(?:\s|>)/i;
+const unsafeSvgPattern = /<(?:script|foreignObject)\b|\son[a-z]+\s*=|<!DOCTYPE|<!ENTITY|\s(?:href|xlink:href)\s*=\s*["'](?!#)/i;
+
+function validTotpEnrollment(data) {
+  const qrCode = data?.totp?.qr_code;
+  const secret = data?.totp?.secret;
+  const uri = data?.totp?.uri;
+  return uuidPattern.test(typeof data?.id === 'string' ? data.id : '')
+    && data.type === 'totp'
+    && typeof qrCode === 'string'
+    && qrCode.length >= 32
+    && qrCode.length <= 65_536
+    && safeSvgPattern.test(qrCode)
+    && !unsafeSvgPattern.test(qrCode)
+    && typeof secret === 'string'
+    && secret.length >= 16
+    && secret.length <= 256
+    && /^[A-Z2-7]+=*$/i.test(secret)
+    && (uri === undefined || (
+      typeof uri === 'string'
+      && uri.length >= 16
+      && uri.length <= 2_048
+      && uri.startsWith('otpauth://totp/')
+    ));
+}
 
 function invalidRequest(response) {
   response.status(400).json({ error: 'The authenticator request is invalid.' });
@@ -152,12 +177,12 @@ export default async function handler(request, response) {
         }),
       }, request);
       const data = await authPayload(upstream);
+      if (upstream.ok && !validTotpEnrollment(data)) {
+        throw new Error('Authentication provider response was rejected.');
+      }
       if (
         !upstream.ok
-        || typeof data.id !== 'string'
-        || data.type !== 'totp'
-        || typeof data.totp?.qr_code !== 'string'
-        || typeof data.totp?.secret !== 'string'
+        || !validTotpEnrollment(data)
       ) {
         if (respondMfaRateLimited(response, upstream, data, 'enroll')) return;
         response.status(400).json({
