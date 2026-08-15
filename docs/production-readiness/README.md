@@ -100,6 +100,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [89_ENGLISH_IDENTITY_TRANSFORM_HEADROOM.md](89_ENGLISH_IDENTITY_TRANSFORM_HEADROOM.md) | AST-scoped identity-call inlining, bundle headroom evidence, and localization activation gate |
 | [90_SHIPPING_READINESS_RECOVERY.md](90_SHIPPING_READINESS_RECOVERY.md) | Fail-closed seller shipping readiness with distinct loading, failure, stale-value, and retry behavior |
 | [91_DEAL_ACTION_PLAN_RECOVERY.md](91_DEAL_ACTION_PLAN_RECOVERY.md) | Accessible live Deal progress loading, stale-data failure, polling, and retry behavior |
+| [92_AUTH_ORIGIN_CANONICALIZATION.md](92_AUTH_ORIGIN_CANONICALIZATION.md) | Canonical HTTPS Origin and single-host validation before same-origin Auth provider calls |
 
 ## Authority and change control
 

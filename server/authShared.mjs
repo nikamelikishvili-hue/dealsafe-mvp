@@ -162,7 +162,7 @@ export function requireSameOrigin(
   response,
   crossOriginMessage = 'Cross-origin authentication is not allowed.',
 ) {
-  const origin = header(request, 'origin');
+  const origin = requestOrigin(request);
   const forwardedHost = header(request, 'x-forwarded-host');
   const host = forwardedHost || header(request, 'host');
   if (!origin || !host) {
@@ -171,7 +171,16 @@ export function requireSameOrigin(
   }
 
   try {
-    if (new URL(origin).host !== host) {
+    if (
+      typeof host !== 'string'
+      || host.length > 255
+      || host !== host.trim()
+      || host.includes(',')
+      || host.includes('/')
+      || host.includes('\\')
+      || new URL(`https://${host}`).host !== host
+      || new URL(origin).host !== host
+    ) {
       response.status(403).json({ error: crossOriginMessage });
       return false;
     }

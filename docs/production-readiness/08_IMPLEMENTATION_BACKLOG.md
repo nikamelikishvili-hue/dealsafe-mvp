@@ -62,7 +62,7 @@ This backlog turns the production specification into controlled delivery work. P
 | SEC-002 | P0 | Add session inventory, revocation, expiry, and logout-all | Revoked sessions lose access immediately |
 | SEC-003 | P0 | Add user MFA and require phishing-resistant MFA for privileged roles where supported | Enrollment/recovery/step-up tests pass |
 | SEC-004 | P0 | Add strict CSP, HSTS plan, frame, MIME, referrer, and permissions headers | Automated header tests pass per environment |
-| SEC-005 | P0 | Restrict CORS and add CSRF/origin protection | Cross-origin abuse tests fail safely |
+| SEC-005 | P0 | **In progress locally:** same-origin Auth mutations require a canonical HTTPS Origin and one validated exact host; remaining non-Auth mutation inventory and hosted enforcement proof remain | Cross-origin abuse tests fail safely |
 | SEC-006 | P0 | Add route/action rate limits, CAPTCHA, and abuse telemetry | Defined burst/velocity tests create alerts/blocks |
 | SEC-007 | P1 | Add security notifications and sensitive-change cooldowns | Email/payout/MFA changes are recorded and alerted |
 

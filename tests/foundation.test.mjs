@@ -4005,6 +4005,32 @@ test('browser route resolver preserves deep links and rejects unknown paths', as
   assert.doesNotMatch(errorBoundary, /\{error\.message\}/);
 });
 
+test('authentication origin checks reject malformed and insecure public origins', async () => {
+  const { default: login } = await import('../api/auth/login.mjs');
+  let providerCalled = false;
+
+  for (const headers of [
+    { origin: 'https://dealivra.test/embedded-path' },
+    { origin: 'http://dealivra.test' },
+    { origin: 'https://dealivra.test', 'x-forwarded-host': 'dealivra.test,attacker.example' },
+    { origin: 'https://dealivra.test', 'x-forwarded-host': 'dealivra.test/path' },
+    { origin: 'https://dealivra.test', 'x-forwarded-host': ' user@dealivra.test' },
+  ]) {
+    const response = createResponse();
+    await withAuthProvider(async () => {
+      providerCalled = true;
+      throw new Error('The provider must not be called.');
+    }, () => login(authRequest({
+      email: 'user@example.com',
+      password: 'ExamplePass123!',
+    }, headers), response));
+
+    assert.equal(response.statusCode, 403);
+  }
+
+  assert.equal(providerCalled, false);
+});
+
 test('public and authenticated mobile navigation can close without pointer input', () => {
   const app = readText('src/app.tsx');
   const landing = readText('src/PublicLanding.tsx');

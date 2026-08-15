@@ -1,5 +1,18 @@
 # Production-readiness progress log
 
+## 2026-08-15 — Authentication origin canonicalization
+
+- Replaced host-only Auth origin comparison with the existing strict canonical
+  Origin parser and a bounded single-host validation boundary.
+- Rejected insecure public HTTP, same-host paths, host lists, host path
+  injection, and credential-like host input before any provider request.
+- Preserved explicit local HTTP support only for localhost development.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
 ## 2026-08-15 — Deal action-plan recovery
 
 - Replaced the blank initial Deal progress state with an accessible loading
