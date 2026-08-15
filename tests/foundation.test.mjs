@@ -602,6 +602,47 @@ test('JSON authentication mutations reject unsupported media before provider acc
   assert.equal(providerCalls, 0);
 });
 
+test('JSON authentication mutations reject oversized bodies before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not be called for an oversized request body.');
+  };
+
+  try {
+    for (const [route, handler] of [
+      ['login', loginHandler],
+      ['logout', logoutHandler],
+      ['mfa', mfaHandler],
+      ['password', passwordHandler],
+      ['recover', recoverHandler],
+      ['signup', signupHandler],
+    ]) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          'content-type': 'application/json',
+          'content-length': '16385',
+        },
+        body: JSON.stringify({ padding: 'x'.repeat(16_385) }),
+      }, response);
+      assert.ok(
+        response.statusCode >= 400 && response.statusCode < 500,
+        `${route} must reject an oversized request before provider access`,
+      );
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
 test('production database hardening is deny-by-default with narrow RPC allowlists', () => {
   const migration = readText('supabase/production_auth_rbac_hardening.sql');
   const schema = readText('supabase/schema.sql');
