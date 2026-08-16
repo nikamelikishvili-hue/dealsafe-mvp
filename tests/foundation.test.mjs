@@ -12368,6 +12368,18 @@ test('support messages reject whitespace and recover focus at the exact invalid 
   assert.match(supportCenter, /replySupportCase\(session, selected\.public_reference, normalizedReply\)/);
 });
 
+test('agreement verification restores focus to the first invalid field', () => {
+  const verifier = readText('src/AgreementVerificationPage.tsx');
+
+  assert.match(verifier, /ref=\{dealIdRef\}/);
+  assert.match(verifier, /ref=\{codeRef\}/);
+  assert.match(verifier, /if \(cleanId\.length < 4\) dealIdRef\.current\?\.focus\(\)/);
+  assert.match(verifier, /else codeRef\.current\?\.focus\(\)/);
+  assert.match(verifier, /<FieldError id="deal-id-error">/);
+  assert.match(verifier, /<FieldError id="agreement-code-error">/);
+  assert.match(verifier, /if \(validationVisible\) setMessage\(''\)/);
+});
+
 test('sample deals remain inside the local data boundary', () => {
   const app = readText('src/app.tsx');
   const agreement = readText('src/AgreementRecordSummary.tsx');
