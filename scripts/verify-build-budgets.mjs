@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,6 +10,7 @@ const budgets = Object.freeze({
   // QR rendering stays behind the same-origin server boundary so the reviewed
   // launch graph retains meaningful headroom as critical UI evolves.
   maximumTotalJavaScriptBytes: 820_000,
+  maximumPublicConfigurationBytes: 3_000,
   maximumTotalCssBytes: 290_000,
 });
 
@@ -62,13 +63,31 @@ const totalJavaScriptBytes = javascript.reduce(
   (total, path) => total + statSync(path).size,
   0,
 );
+const publicConfigurationValues = [
+  process.env.VITE_SUPABASE_URL,
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  process.env.VITE_GOOGLE_MAPS_API_KEY,
+].filter(value => typeof value === 'string' && value.length >= 8);
+const publicConfigurationBytes = javascript.reduce((total, path) => {
+  const source = readFileSync(path, 'utf8');
+  return total + publicConfigurationValues.reduce((bytes, value) => {
+    const occurrences = source.split(value).length - 1;
+    return bytes + occurrences * Buffer.byteLength(value);
+  }, 0);
+}, 0);
+if (publicConfigurationBytes > budgets.maximumPublicConfigurationBytes) {
+  violations.push(
+    `Public build configuration is ${publicConfigurationBytes} bytes; allowance is ${budgets.maximumPublicConfigurationBytes}.`,
+  );
+}
+const applicationJavaScriptBytes = totalJavaScriptBytes - publicConfigurationBytes;
 const totalCssBytes = stylesheets.reduce(
   (total, path) => total + statSync(path).size,
   0,
 );
-if (totalJavaScriptBytes > budgets.maximumTotalJavaScriptBytes) {
+if (applicationJavaScriptBytes > budgets.maximumTotalJavaScriptBytes) {
   violations.push(
-    `Total JavaScript is ${totalJavaScriptBytes} bytes; budget is ${budgets.maximumTotalJavaScriptBytes}.`,
+    `Application JavaScript is ${applicationJavaScriptBytes} bytes; budget is ${budgets.maximumTotalJavaScriptBytes}.`,
   );
 }
 if (totalCssBytes > budgets.maximumTotalCssBytes) {
@@ -90,5 +109,7 @@ console.log(JSON.stringify({
       ? statSync(initialApplicationChunks[0]).size
       : null,
   total_javascript_bytes: totalJavaScriptBytes,
+  public_configuration_bytes: publicConfigurationBytes,
+  application_javascript_bytes: applicationJavaScriptBytes,
   total_css_bytes: totalCssBytes,
 }));

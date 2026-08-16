@@ -11942,6 +11942,20 @@ test('production builds enforce explicit JavaScript and CSS budgets', () => {
   assert.match(budget, /Expected exactly one initial application chunk/);
   assert.match(budget, /maximumCssChunkBytes: 200_000/);
   assert.match(budget, /maximumTotalJavaScriptBytes: 820_000/);
+  assert.match(budget, /maximumPublicConfigurationBytes: 3_000/);
+  assert.match(budget, /VITE_SUPABASE_URL/);
+  assert.match(budget, /VITE_SUPABASE_PUBLISHABLE_KEY/);
+  assert.match(budget, /VITE_GOOGLE_MAPS_API_KEY/);
+  assert.match(
+    budget,
+    /applicationJavaScriptBytes = totalJavaScriptBytes - publicConfigurationBytes/,
+  );
+  assert.match(
+    budget,
+    /applicationJavaScriptBytes > budgets\.maximumTotalJavaScriptBytes/,
+  );
+  assert.match(budget, /public_configuration_bytes: publicConfigurationBytes/);
+  assert.match(budget, /application_javascript_bytes: applicationJavaScriptBytes/);
   assert.match(budget, /maximumTotalCssBytes: 290_000/);
   assert.match(budget, /throw new Error\(`Build performance budget exceeded:/);
 });
