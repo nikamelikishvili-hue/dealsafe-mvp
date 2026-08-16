@@ -9,10 +9,26 @@ import type { Deal } from './domain';
 import { t } from './i18n';
 import type { DealActionPlan } from './services/supabaseRest';
 
+export const DEAL_ACTION_TARGET_IDS = [
+  'deal-actions',
+  'deal-agreement',
+  'deal-evidence-vault',
+  'deal-manage',
+  'deal-overview',
+  'deal-records',
+  'deal-safety',
+  'meeting-panel',
+  'payment-status-panel',
+  'rating-panel',
+  'shipping-panel',
+] as const;
+
+export type DealActionTargetId = (typeof DEAL_ACTION_TARGET_IDS)[number];
+
 export type DealPrimaryAction = {
   label: string;
   detail: string;
-  targetId: string;
+  targetId: DealActionTargetId;
   kind: 'scroll' | 'create' | 'accept' | 'signin' | 'retry-shipping';
 };
 

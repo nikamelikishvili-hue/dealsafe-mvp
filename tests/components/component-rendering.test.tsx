@@ -19,10 +19,64 @@ const { FeedbackMessage } = await import('../../src/FeedbackMessage');
 const { FieldError } = await import('../../src/FieldError');
 const { AsyncStatePanel } = await import('../../src/AsyncStatePanel');
 const { MfaLoginVerification } = await import('../../src/MfaLoginVerification');
+const { DEAL_ACTION_TARGET_IDS, resolveDealPrimaryAction } = await import('../../src/DealWorkspaceShell');
 const { isUsPostalCode, normalizeUsState, parseGoogleUsAddress, parseStoredUsAddress, serializeUsAddress } =
   await import('../../src/usAddress');
 
 const noop = () => {};
+
+const baseDeal = {
+  id: 'deal-1',
+  publicId: 'PUBLIC01',
+  title: 'Test item',
+  description: 'Test description',
+  priceCents: 10000,
+  currency: 'USD' as const,
+  condition: 'Good' as const,
+  deliveryMethod: 'Ship to buyer' as const,
+  status: 'accepted' as const,
+  sellerName: 'Seller',
+  sellerVerification: 'verified' as const,
+  agreementVersion: 1,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  viewerRole: 'buyer' as const,
+};
+
+test('every primary deal action resolves to a governed workspace target', () => {
+  const scenarios = [
+    { deal: { ...baseDeal, status: 'draft' as const, viewerRole: 'seller' as const } },
+    { deal: { ...baseDeal, status: 'published' as const, viewerRole: 'buyer' as const } },
+    { deal: { ...baseDeal, status: 'published' as const, viewerRole: 'seller' as const } },
+    { deal: { ...baseDeal, deliveryMethod: 'Meet in person' as const } },
+    { deal: { ...baseDeal, status: 'completed' as const } },
+    { deal: { ...baseDeal, status: 'disputed' as const } },
+    { deal: { ...baseDeal, status: 'cancelled' as const } },
+    { deal: { ...baseDeal, viewerRole: 'seller' as const }, paymentReady: false },
+    {
+      deal: { ...baseDeal, viewerRole: 'seller' as const },
+      actionPlan: { delivery_address_ready: true, shipment_status: null, inspection_recorded: false },
+      shippingReadiness: { status: 'ready' as const, ready: true },
+    },
+    {
+      deal: { ...baseDeal, viewerRole: 'seller' as const },
+      shippingReadiness: { status: 'error' as const, ready: false },
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const action = resolveDealPrimaryAction({
+      deal: scenario.deal,
+      demoCompleted: false,
+      expired: false,
+      agreementActionReady: false,
+      signedIn: true,
+      paymentReady: scenario.paymentReady ?? true,
+      actionPlan: scenario.actionPlan,
+      shippingReadiness: scenario.shippingReadiness,
+    });
+    assert.ok(DEAL_ACTION_TARGET_IDS.includes(action.targetId));
+  }
+});
 
 test('address entry always renders a usable manual line-one fallback', () => {
   const markup = renderToStaticMarkup(

@@ -1143,12 +1143,6 @@ export function App() {
   const isDemoActive=Boolean(active?.publicId===DEMO_DEAL_PUBLIC_ID&&!user);
   const demoFlowCompleted=isDemoActive&&demoCompleted;
   const agreementActionReady=agreementConfirmed&&Boolean(buyer.trim())&&!demoFlowCompleted&&(isDemoActive||acceptanceProtectionState==='ready');
-  const scrollToAgreement=()=>{
-    const agreement=document.querySelector<HTMLElement>('.deal-grid aside');
-    agreement?.scrollIntoView({behavior:motionSafeScrollBehavior('smooth'),block:'start'});
-    agreement?.setAttribute('tabindex','-1');
-    agreement?.focus({preventScroll:true});
-  };
   const scrollToDealSection=(id:string)=>{
     const section=document.getElementById(id)||document.getElementById('deal-actions');
     if(!section)return;
@@ -1163,6 +1157,7 @@ export function App() {
       window.setTimeout(()=>section.classList.remove('deal-target-highlight'),1400);
     }));
   };
+  const scrollToAgreement=()=>scrollToDealSection('deal-agreement');
   const resetDemoFlow=()=>{
     setAgreementChecks({item:false,price:false,handoff:false});
     setBuyer('');
@@ -1196,7 +1191,6 @@ export function App() {
       scrollToDealSection(dealPrimaryAction.targetId);
       return;
     }
-    if(dealPrimaryAction.targetId==='deal-agreement'){scrollToAgreement();return}
     scrollToDealSection(dealPrimaryAction.targetId);
   };
   const goHomeSection=(id?:string)=>{
