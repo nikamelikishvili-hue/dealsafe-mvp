@@ -7,10 +7,9 @@ const budgets = Object.freeze({
   maximumJavaScriptChunkBytes: 400_000,
   maximumInitialApplicationBytes: 160_000,
   maximumCssChunkBytes: 200_000,
-  // Preview feature configuration produces a slightly larger deferred bundle
-  // graph than the safe-default local build. This reviewed ceiling covers the
-  // measured 832,516-byte Vercel output while retaining less than 0.3% headroom.
-  maximumTotalJavaScriptBytes: 835_000,
+  // QR rendering stays behind the same-origin server boundary so the reviewed
+  // launch graph retains meaningful headroom as critical UI evolves.
+  maximumTotalJavaScriptBytes: 820_000,
   maximumTotalCssBytes: 290_000,
 });
 

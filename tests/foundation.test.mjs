@@ -12,6 +12,7 @@ import cspReportHandler from '../api/security/csp-report.mjs';
 import runtimeRejectionHandler from '../api/security/runtime-rejection.mjs';
 import webVitalHandler from '../api/security/web-vital.mjs';
 import healthHandler from '../api/health.mjs';
+import dealQrHandler from '../api/deal-qr.mjs';
 import loginHandler from '../api/auth/login.mjs';
 import logoutHandler from '../api/auth/logout.mjs';
 import mfaHandler from '../api/auth/mfa.mjs';
@@ -91,6 +92,10 @@ const createResponse = () => ({
     return this;
   },
   json(value) {
+    this.payload = value;
+    return this;
+  },
+  send(value) {
     this.payload = value;
     return this;
   },
@@ -3664,6 +3669,48 @@ test('public health remains liveness-only and never exposes configuration readin
     schema: 'dealivra.health.v1',
     status: 'alive',
   });
+});
+
+test('deal QR endpoint creates only same-host public Deal Links', async () => {
+  const response = createResponse();
+  await dealQrHandler({
+    method: 'GET',
+    headers: { host: 'dealsafe-mvp-nika13.vercel.app' },
+    query: { deal: 'fc84ca7d' },
+  }, response);
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers.get('content-type'), /^image\/svg\+xml/);
+  assert.match(response.headers.get('content-security-policy'), /sandbox/);
+  assert.match(response.payload, /^<svg/);
+  assert.doesNotMatch(response.payload, /<script/i);
+
+  for (const request of [
+    { method: 'GET', headers: { host: 'dealsafe-mvp-nika13.vercel.app' }, query: { deal: '<script>' } },
+    { method: 'GET', headers: { host: 'attacker.example' }, query: { deal: 'FC84CA7D' } },
+  ]) {
+    const rejected = createResponse();
+    await dealQrHandler(request, rejected);
+    assert.equal(rejected.statusCode, 400);
+    assert.equal(rejected.headers.get('cache-control'), 'no-store, max-age=0');
+  }
+
+  const localPreview = createResponse();
+  await dealQrHandler({
+    method: 'GET',
+    headers: { host: '127.0.0.1:4173' },
+    query: { deal: 'FC84CA7D' },
+  }, localPreview);
+  assert.equal(localPreview.statusCode, 200);
+  assert.match(localPreview.payload, /^<svg/);
+
+  const wrongMethod = createResponse();
+  await dealQrHandler({
+    method: 'POST',
+    headers: { host: 'dealivra.com' },
+    query: { deal: 'FC84CA7D' },
+  }, wrongMethod);
+  assert.equal(wrongMethod.statusCode, 405);
+  assert.equal(wrongMethod.headers.get('allow'), 'GET, HEAD');
 });
 
 test('legacy runtime identifiers are machine-governed migration aliases', async () => {
@@ -11885,7 +11932,7 @@ test('production builds enforce explicit JavaScript and CSS budgets', () => {
   assert.match(budget, /\^app-\[A-Za-z0-9_-\]\+\\\.js\$/);
   assert.match(budget, /Expected exactly one initial application chunk/);
   assert.match(budget, /maximumCssChunkBytes: 200_000/);
-  assert.match(budget, /maximumTotalJavaScriptBytes: 835_000/);
+  assert.match(budget, /maximumTotalJavaScriptBytes: 820_000/);
   assert.match(budget, /maximumTotalCssBytes: 290_000/);
   assert.match(budget, /throw new Error\(`Build performance budget exceeded:/);
 });

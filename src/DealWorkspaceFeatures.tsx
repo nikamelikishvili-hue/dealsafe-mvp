@@ -1769,31 +1769,8 @@ export function DealCopyLinkButton({ deal }: { deal: Deal }) {
 
 export function DealQrCode({ deal }: { deal: Deal }) {
   const [open, setOpen] = useState(false);
-  const [image, setImage] = useState('');
-  const url = `${location.origin}/?deal=${deal.publicId}`;
-
-  useEffect(() => {
-    if (!open || image) return;
-    let current = true;
-    void import('qrcode')
-      .then(({ default: QRCode }) =>
-        QRCode.toDataURL(url, {
-          width: 360,
-          margin: 2,
-          errorCorrectionLevel: 'M',
-          color: { dark: '#15221d', light: '#ffffff' },
-        }),
-      )
-      .then((result) => {
-        if (current) setImage(result);
-      })
-      .catch(() => {
-        if (current) setImage('');
-      });
-    return () => {
-      current = false;
-    };
-  }, [open, image, url]);
+  const [imageState, setImageState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const image = `/api/deal-qr?deal=${encodeURIComponent(deal.publicId)}`;
 
   return (
     <div className="deal-qr">
@@ -1807,12 +1784,15 @@ export function DealQrCode({ deal }: { deal: Deal }) {
       </button>
       {open && (
         <div className="qr-panel no-print">
-          {image ? (
+          <img
+            src={image}
+            alt={`${t('QR code for deal')} ${deal.publicId}`}
+            hidden={imageState !== 'ready'}
+            onLoad={() => setImageState('ready')}
+            onError={() => setImageState('error')}
+          />
+          {imageState === 'ready' ? (
             <>
-              <img
-                src={image}
-                alt={`${t('QR code for deal')} ${deal.publicId}`}
-              />
               <p>{t('Scan to open this Deal Link on another phone.')}</p>
               <a
                 className="secondary"
@@ -1822,21 +1802,21 @@ export function DealQrCode({ deal }: { deal: Deal }) {
                 {t('Download QR')}
               </a>
             </>
+          ) : imageState === 'error' ? (
+            <p role="alert">{t('QR code could not be prepared. Try again.')}</p>
           ) : (
-            <p>{t('Preparing QR Code…')}</p>
+            <p role="status">{t('Preparing QR Code…')}</p>
           )}
         </div>
       )}
-      {image && (
-        <div className="print-qr">
-          <img src={image} alt={t('Deal Link QR code')} />
-          <div>
-            <b>{t('Live Deal Link')}</b>
-            <small>{t('Scan to open the current Dealivra record.')}</small>
-            <span>{deal.publicId}</span>
-          </div>
+      <div className="print-qr">
+        <img src={image} alt={t('Deal Link QR code')} />
+        <div>
+          <b>{t('Live Deal Link')}</b>
+          <small>{t('Scan to open the current Dealivra record.')}</small>
+          <span>{deal.publicId}</span>
         </div>
-      )}
+      </div>
     </div>
   );
 }
