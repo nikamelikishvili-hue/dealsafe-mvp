@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
+import { focusPageDestination } from './accessibleNavigation';
 
 export type LandingDestination =
   | 'create'
@@ -42,11 +43,7 @@ type PublicLandingProps = {
 };
 
 const scrollToSection = (id?: string) => {
-  if (!id) {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    return;
-  }
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  focusPageDestination(id);
 };
 
 const isPlainNavigation = (event: MouseEvent<HTMLAnchorElement>) =>

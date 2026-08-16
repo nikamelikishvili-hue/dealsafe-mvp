@@ -111,6 +111,10 @@ import './deal-sections-compact.css';
 import './published-success.css';
 import './dealivra-brand.css';
 import './catalog-search.css';
+import {
+  focusPageDestination,
+  motionSafeScrollBehavior,
+} from './accessibleNavigation';
 
 type View = 'home' | 'create' | 'published' | 'deal' | 'auth' | 'profile' | 'passport' | 'admin' | 'forgot' | 'reset' | 'link-error' | 'route-loading' | 'not-found' | 'verify' | PublicInfoView;
 
@@ -571,7 +575,7 @@ function CreateDealReview({
     <div className="create-review-dock" role="region" aria-live="polite" aria-label={t('Publish deal actions')}>
       <div><small>{t('Final step')}</small><strong>{t(declarationsComplete?(requiresAccount?'Ready to create your account':'Ready to publish'):'Seller confirmation required')}</strong><span>{t(declarationsComplete?(requiresAccount?'Your completed draft will stay here while you sign up.':'Your deal details are ready.'):'Complete the 3 seller declarations to continue.')}</span></div>
       <button type="button" className="secondary" disabled={creating} onClick={onEdit}>{t('Edit')}</button>
-      <button type="button" className="primary" aria-label={t(creating?'Publishing…':declarationsComplete?(requiresAccount?'Create account to publish':'Confirm and publish'):'Complete declarations')} disabled={creating} onClick={()=>{if(declarationsComplete){onPublish();return}const checklist=document.getElementById('seller-declarations');checklist?.scrollIntoView({behavior:'smooth',block:'center'});checklist?.setAttribute('tabindex','-1');checklist?.focus({preventScroll:true})}}>{t(creating?'Publishing…':declarationsComplete?(requiresAccount?'Create account':'Confirm and publish'):'Complete declarations')}<ArrowRight size={18}/></button>
+      <button type="button" className="primary" aria-label={t(creating?'Publishing…':declarationsComplete?(requiresAccount?'Create account to publish':'Confirm and publish'):'Complete declarations')} disabled={creating} onClick={()=>{if(declarationsComplete){onPublish();return}const checklist=document.getElementById('seller-declarations');checklist?.scrollIntoView({behavior:motionSafeScrollBehavior('smooth'),block:'center'});checklist?.setAttribute('tabindex','-1');checklist?.focus({preventScroll:true})}}>{t(creating?'Publishing…':declarationsComplete?(requiresAccount?'Create account':'Confirm and publish'):'Complete declarations')}<ArrowRight size={18}/></button>
     </div>
   </section>
 }
@@ -850,9 +854,7 @@ export function App() {
   useEffect(()=>{
     const scrollToLocation=()=>{
       const id=location.hash.slice(1);
-      window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>id
-        ?document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'})
-        :window.scrollTo({top:0,behavior:'smooth'})));
+      window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>focusPageDestination(id||undefined)));
     };
     const onPopState=()=>setRouteRevision(revision=>revision+1);
     if(entryView==='home'&&location.hash)scrollToLocation();
@@ -866,9 +868,7 @@ export function App() {
     const isCurrent=()=>current&&requestId===routeRequestRef.current;
     const scrollToLocation=()=>{
       const id=location.hash.slice(1);
-      window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>id
-        ?document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'})
-        :window.scrollTo({top:0,behavior:'auto'})));
+      window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>focusPageDestination(id||undefined,id?'smooth':'auto')));
     };
 
     setMobileMenuOpen(false);
@@ -976,7 +976,7 @@ export function App() {
       .catch(()=>{if(current)setShippingReadinessByDeal(items=>({...items,[dealId]:{status:'error',ready:items[dealId]?.ready??false}}))});
     return()=>{current=false};
   },[active?.id,active?.viewerRole,active?.status,active?.deliveryMethod,session?.accessToken,evidenceRevision]);
-  const focusCreateField=(fieldId:string)=>{const field=document.getElementById(fieldId);field?.focus({preventScroll:true});field?.scrollIntoView({behavior:'smooth',block:'center'})};
+  const focusCreateField=(fieldId:string)=>{const field=document.getElementById(fieldId);field?.focus({preventScroll:true});field?.scrollIntoView({behavior:motionSafeScrollBehavior('smooth'),block:'center'})};
   const chooseDealTemplate=(template:DealTemplateId)=>{
     if(template===dealTemplate)return;
     const emptySelection=emptySmartCatalogSelection();
@@ -1040,8 +1040,8 @@ export function App() {
     if(step===1)goToCreateStep(2);
     else if(step===2)goToCreateStep(3);
   };
-  const goToCreateStep=(step:CreateFlowStep)=>{if(step>createAvailableStep)return;setAuthMessage('');setCreateValidationAttempted(false);setReviewingDraft(step===4);if(step<4)setCreateStep(step);window.requestAnimationFrame(()=>document.getElementById('create-deal-flow')?.scrollIntoView({behavior:'smooth',block:'start'}))};
-  const reviewDraft=(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');if(!createItemReady){setCreateStep(1);return}if(!createTermsReady){setCreateStep(2);return}setReviewingDraft(true);window.scrollTo({top:0,behavior:'smooth'})};
+  const goToCreateStep=(step:CreateFlowStep)=>{if(step>createAvailableStep)return;setAuthMessage('');setCreateValidationAttempted(false);setReviewingDraft(step===4);if(step<4)setCreateStep(step);window.requestAnimationFrame(()=>document.getElementById('create-deal-flow')?.scrollIntoView({behavior:motionSafeScrollBehavior('smooth'),block:'start'}))};
+  const reviewDraft=(e:React.FormEvent)=>{e.preventDefault();setAuthMessage('');if(!createItemReady){setCreateStep(1);return}if(!createTermsReady){setCreateStep(2);return}setReviewingDraft(true);window.scrollTo({top:0,behavior:motionSafeScrollBehavior('smooth')})};
   const resetCreateFlow=()=>{const emptySelection=emptySmartCatalogSelection();clearGuestCreateDraft();vehicleVinRequestRef.current+=1;vehicleVinActiveRef.current=false;setDraft({...initial});setPhotos([]);setDealTemplate('phone');setVehicleVinLookup({status:'idle',message:''});catalogSelectionRef.current=emptySelection;setCatalogSelection(emptySelection);setCreateStep(1);setReviewingDraft(false);setCreateValidationAttempted(false);setSellerDeclarations(emptySellerDeclarations);setPendingCreateAction(null);setDraftRecovered(false);setDraftSavedAt(null)};
   const draftForPersistence=():DealDraft=>({...draft,catalog:buildDealCatalogIdentity(dealTemplate,catalogSelectionRef.current)});
   const updateBrowserAddress=(destination:string,replace=false)=>{
@@ -1081,7 +1081,7 @@ export function App() {
   const agreementConfirmed=Object.values(agreementChecks).every(Boolean);
   const accept=async()=>{if(!active||!buyer.trim()||!agreementConfirmed||acceptMutationRef.current)return;if(active.publicId===DEMO_DEAL_PUBLIC_ID&&!session){setDemoCompleted(true);setAuthMessage('');window.requestAnimationFrame(()=>window.requestAnimationFrame(scrollToAgreement));return}if(isDealExpired(active)){setAuthMessage('This Deal Link can no longer be accepted.');return}if(!session){openAuthRoute('signin','deal');setAuthMessage('Sign in or create an account to accept this deal.');return}acceptMutationRef.current=true;setAccepting(true);try{const protectionRequired=await getDealAcceptanceProtection(active.publicId);setAcceptanceProtected(protectionRequired);if(protectionRequired&&!/^[0-9]{6}$/.test(buyerAccessCode)){setAuthMessage('Enter the 6-digit buyer code.');return}await acceptPublicDeal(session,active.publicId,buyer.trim(),buyerAccessCode);const deal={...active,status:'accepted' as const,buyerName:buyer.trim(),buyerVerification:'not_started' as const,viewerRole:'buyer' as const};setActive(deal);setAcceptanceProtected(false);setDeals(x=>x.map(d=>d.id===deal.id?deal:d))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not accept this deal')}finally{acceptMutationRef.current=false;setAccepting(false)}};
   const openCreate=()=>{updateBrowserAddress('/?start=create');setAuthMessage('');if(session||!isCreateDraftMeaningful(draft,dealTemplate))resetCreateFlow();setView('create')};
-  const openDemo=async()=>{const sample=deals.find(deal=>deal.publicId===DEMO_DEAL_PUBLIC_ID)||(await demoRepository.list())[0];if(!sample)return;updateBrowserAddress(`/?deal=${encodeURIComponent(sample.publicId)}`);setAuthMessage('');setBuyer('');setAgreementChecks({item:false,price:false,handoff:false});setDemoCompleted(false);setActive({...sample,viewerRole:'visitor'});setView('deal');window.scrollTo({top:0,behavior:'smooth'})};
+  const openDemo=async()=>{const sample=deals.find(deal=>deal.publicId===DEMO_DEAL_PUBLIC_ID)||(await demoRepository.list())[0];if(!sample)return;updateBrowserAddress(`/?deal=${encodeURIComponent(sample.publicId)}`);setAuthMessage('');setBuyer('');setAgreementChecks({item:false,price:false,handoff:false});setDemoCompleted(false);setActive({...sample,viewerRole:'visitor'});setView('deal');window.scrollTo({top:0,behavior:motionSafeScrollBehavior('smooth')})};
   const finishAuthentication=async(nextSession:StoredSession)=>{
     setMfaLogin(null);
     setSession(nextSession);
@@ -1123,7 +1123,7 @@ export function App() {
   const agreementActionReady=agreementConfirmed&&Boolean(buyer.trim())&&!demoFlowCompleted&&(isDemoActive||acceptanceProtectionState==='ready');
   const scrollToAgreement=()=>{
     const agreement=document.querySelector<HTMLElement>('.deal-grid aside');
-    agreement?.scrollIntoView({behavior:'smooth',block:'start'});
+    agreement?.scrollIntoView({behavior:motionSafeScrollBehavior('smooth'),block:'start'});
     agreement?.setAttribute('tabindex','-1');
     agreement?.focus({preventScroll:true});
   };
@@ -1134,7 +1134,7 @@ export function App() {
     if(expandable instanceof HTMLDetailsElement)expandable.open=true;
     section.classList.remove('deal-target-highlight');
     window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>{
-      section.scrollIntoView({behavior:'smooth',block:'center'});
+      section.scrollIntoView({behavior:motionSafeScrollBehavior('smooth'),block:'center'});
       section.setAttribute('tabindex','-1');
       section.focus({preventScroll:true});
       section.classList.add('deal-target-highlight');
@@ -1183,9 +1183,7 @@ export function App() {
     setView('home');
     setMobileMenuOpen(false);
     setAuthMessage('');
-    window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>id
-      ?document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'})
-      :window.scrollTo({top:0,behavior:'smooth'})));
+    window.requestAnimationFrame(()=>window.requestAnimationFrame(()=>focusPageDestination(id)));
   };
   const followHomeLink=(event:React.MouseEvent<HTMLAnchorElement>,id?:string)=>{
     if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
@@ -1197,8 +1195,8 @@ export function App() {
     event.preventDefault();
     openInfo(next);
   };
-  const openInfo=(next:PublicInfoView)=>{history.pushState({},'',publicInfoPaths[next]);setView(next);setMobileMenuOpen(false);window.scrollTo({top:0,behavior:'smooth'})};
-  const openVerify=()=>{history.pushState({},'',verifyPath);setView('verify');setMobileMenuOpen(false);window.scrollTo({top:0,behavior:'smooth'})};
+  const openInfo=(next:PublicInfoView)=>{history.pushState({},'',publicInfoPaths[next]);setView(next);setMobileMenuOpen(false);window.scrollTo({top:0,behavior:motionSafeScrollBehavior('smooth')})};
+  const openVerify=()=>{history.pushState({},'',verifyPath);setView('verify');setMobileMenuOpen(false);window.scrollTo({top:0,behavior:motionSafeScrollBehavior('smooth')})};
   const currentPageLabel=getPageMetadata(view,active?.title,Boolean(user)).label;
   const agreementDocumentMode=view==='deal'&&resolveBrowserRoute(location.href).documentMode===true;
   const createDraftRecoveryVisible=!session&&isCreateDraftMeaningful(draft,dealTemplate);

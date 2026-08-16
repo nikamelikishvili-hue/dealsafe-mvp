@@ -13880,12 +13880,32 @@ test('service worker runtime never intercepts private or mutable requests', asyn
 
 test('global motion preferences suppress nonessential animation and smooth scrolling', () => {
   const styles = readText('src/global-redesign.css');
+  const navigation = readText('src/accessibleNavigation.ts');
+  const app = readText('src/app.tsx');
+  const landing = readText('src/PublicLanding.tsx');
 
   assert.match(styles, /@media\(prefers-reduced-motion:reduce\)/);
   assert.match(styles, /\*,\*::before,\*::after\{[^}]*animation-duration:\.01ms!important/);
   assert.match(styles, /\*,\*::before,\*::after\{[^}]*animation-iteration-count:1!important/);
   assert.match(styles, /\*,\*::before,\*::after\{[^}]*transition-duration:\.01ms!important/);
   assert.match(styles, /html\{scroll-behavior:auto\}/);
+  assert.match(navigation, /prefers-reduced-motion: reduce/);
+  assert.match(navigation, /requested === 'smooth'[\s\S]*return 'auto'/);
+  assert.doesNotMatch(app, /behavior:'smooth'/);
+  assert.doesNotMatch(landing, /behavior: 'smooth'/);
+});
+
+test('home and section navigation moves keyboard focus with the visual viewport', () => {
+  const navigation = readText('src/accessibleNavigation.ts');
+  const app = readText('src/app.tsx');
+  const landing = readText('src/PublicLanding.tsx');
+
+  assert.match(navigation, /document\.getElementById\(id \|\| 'main-content'\)/);
+  assert.match(navigation, /setAttribute\('tabindex', '-1'\)/);
+  assert.match(navigation, /focus\(\{ preventScroll: true \}\)/);
+  assert.match(navigation, /scrollIntoView\(\{ behavior, block: 'start' \}\)/);
+  assert.ok((app.match(/focusPageDestination\(/g) ?? []).length >= 3);
+  assert.match(landing, /focusPageDestination\(id\)/);
 });
 
 test('resolution mutations use same-tick single-flight guards', () => {
