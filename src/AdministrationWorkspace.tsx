@@ -295,20 +295,26 @@ function AdminEvidenceReview({
   const [items, setItems] = useState<DealEvidence[]>([]);
   const [selected, setSelected] = useState<DealEvidence | null>(null);
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let current = true;
+    setLoading(true);
     setMessage('');
     setSelected(null);
     void listDealEvidence(session, dispute.deal_id)
       .then((next) => {
-        if (current) setItems(next);
+        if (current) {
+          setItems(next);
+          setLoading(false);
+        }
       })
       .catch((error) => {
         if (current) {
           setMessage(
             error instanceof Error ? error.message : 'Could not load evidence',
           );
+          setLoading(false);
         }
       });
     return () => {
@@ -342,7 +348,9 @@ function AdminEvidenceReview({
           {t(message)}
         </div>
       )}
-      {items.length ? (
+      {loading ? (
+        <p role="status" aria-live="polite">{t('Loading evidence…')}</p>
+      ) : items.length ? (
         items.map((item) => (
           <article key={item.id}>
             <div className="admin-evidence-preview">

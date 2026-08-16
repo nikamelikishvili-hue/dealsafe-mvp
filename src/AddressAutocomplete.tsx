@@ -60,12 +60,33 @@ function loadGoogleMaps(apiKey: string) {
 
   mapsLoader = new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>('script[data-dealivra-google-maps]');
-    const finish = () =>
-      window.google?.maps?.importLibrary ? resolve() : reject(new Error('Google Maps did not load'));
+    let settled = false;
+    const timeout = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('Google Maps did not load'));
+    }, 12_000);
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      window.google?.maps?.importLibrary
+        ? resolve()
+        : reject(new Error('Google Maps did not load'));
+    };
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      reject(new Error('Google Maps did not load'));
+    };
 
     if (existing) {
       existing.addEventListener('load', finish, { once: true });
-      existing.addEventListener('error', () => reject(new Error('Google Maps did not load')), { once: true });
+      existing.addEventListener('error', fail, { once: true });
+      window.setTimeout(() => {
+        if (window.google?.maps?.importLibrary) finish();
+      }, 0);
       return;
     }
 
@@ -86,11 +107,11 @@ function loadGoogleMaps(apiKey: string) {
       region: 'US',
       callback: '__dealivraGoogleMapsReady',
     })}`;
-    script.onerror = () => {
-      mapsLoader = null;
-      reject(new Error('Google Maps did not load'));
-    };
+    script.onerror = fail;
     document.head.appendChild(script);
+  }).catch((error) => {
+    mapsLoader = null;
+    throw error;
   });
 
   return mapsLoader;
@@ -387,8 +408,8 @@ export function AddressAutocomplete({
             ? 'address-autocomplete-status warning'
             : 'address-autocomplete-status'
         }
-        role="status"
-        aria-live="polite"
+        role={queryState === 'failed' ? 'alert' : 'status'}
+        aria-live={queryState === 'failed' ? 'assertive' : 'polite'}
       >
         {statusMessage}
       </small>
