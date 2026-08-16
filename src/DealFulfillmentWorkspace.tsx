@@ -493,6 +493,7 @@ export function InspectionRecorder({
     reference: false,
   });
   const [message, setMessage] = useState('');
+  const [saveFailed, setSaveFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const saveInFlight = useRef(false);
 
@@ -524,6 +525,7 @@ export function InspectionRecorder({
   ];
   const save = async () => {
     if (!complete) {
+      setSaveFailed(true);
       setMessage('Complete every inspection check before saving the receipt.');
       const firstIncomplete = items.find((item) => !checks[item.key]);
       window.requestAnimationFrame(() =>
@@ -533,6 +535,7 @@ export function InspectionRecorder({
     }
     if (saveInFlight.current) return;
     setMessage('');
+    setSaveFailed(false);
     saveInFlight.current = true;
     setSaving(true);
     setMessage('');
@@ -543,6 +546,7 @@ export function InspectionRecorder({
       onRecorded(true);
       setMessage('Inspection receipt saved.');
     } catch (error) {
+      setSaveFailed(true);
       setMessage(
         error instanceof Error
           ? error.message
@@ -597,6 +601,7 @@ export function InspectionRecorder({
                     [item.key]: event.target.checked,
                   }));
                   setMessage('');
+                  setSaveFailed(false);
                 }
               }
             />
@@ -616,8 +621,8 @@ export function InspectionRecorder({
       {message && (
         <div
           className="notice"
-          role="status"
-          aria-live="polite"
+          role={saveFailed ? 'alert' : 'status'}
+          aria-live={saveFailed ? 'assertive' : 'polite'}
         >
           {t(message)}
         </div>
@@ -644,6 +649,7 @@ export function HandoffPanel({
   const [pin, setPin] = useState('');
   const [sellerPin, setSellerPin] = useState('');
   const [message, setMessage] = useState('');
+  const [actionFailed, setActionFailed] = useState(false);
   const [inspectionRecorded, setInspectionRecorded] = useState(false);
   const [busy, setBusy] = useState<'arrive' | 'pin' | 'finish' | ''>('');
   const [loadError, setLoadError] = useState('');
@@ -697,11 +703,14 @@ export function HandoffPanel({
     if (actionInFlight.current) return;
     actionInFlight.current = true;
     setBusy('arrive');
+    setMessage('');
+    setActionFailed(false);
     try {
       await markArrived(session, deal.id);
       await reload();
       setMessage('Arrival recorded.');
     } catch (error) {
+      setActionFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not record arrival',
       );
@@ -714,10 +723,13 @@ export function HandoffPanel({
     if (actionInFlight.current) return;
     actionInFlight.current = true;
     setBusy('pin');
+    setMessage('');
+    setActionFailed(false);
     try {
       setSellerPin(await generateHandoffPin(session, deal.id));
       setMessage('Show this PIN only after the buyer inspects the item.');
     } catch (error) {
+      setActionFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not generate PIN',
       );
@@ -730,11 +742,14 @@ export function HandoffPanel({
     if (actionInFlight.current) return;
     actionInFlight.current = true;
     setBusy('finish');
+    setMessage('');
+    setActionFailed(false);
     try {
       await completeHandoff(session, deal.id, pin);
       setMessage('Item receipt confirmed. Deal completed.');
       onComplete();
     } catch (error) {
+      setActionFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not complete deal',
       );
@@ -847,8 +862,8 @@ export function HandoffPanel({
       {message && (
         <div
           className="notice"
-          role="status"
-          aria-live="polite"
+          role={actionFailed ? 'alert' : 'status'}
+          aria-live={actionFailed ? 'assertive' : 'polite'}
         >
           {t(message)}
         </div>

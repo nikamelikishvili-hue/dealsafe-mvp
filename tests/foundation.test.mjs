@@ -15217,3 +15217,15 @@ test('meeting action failures use urgent accessible feedback', () => {
   assert.match(source, /role=\{actionFailed \? 'alert' : 'status'\}/);
   assert.match(source, /aria-live=\{actionFailed \? 'assertive' : 'polite'\}/);
 });
+
+test('inspection and handoff failures use urgent accessible feedback', () => {
+  const source = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(source, /const \[saveFailed, setSaveFailed\] = useState\(false\)/);
+  assert.match(source, /setSaveFailed\(true\);\s+setMessage\('Complete every inspection check/);
+  assert.match(source, /role=\{saveFailed \? 'alert' : 'status'\}/);
+  assert.match(source, /setBusy\('arrive'\);\s+setMessage\(''\);\s+setActionFailed\(false\)/);
+  assert.match(source, /setBusy\('pin'\);\s+setMessage\(''\);\s+setActionFailed\(false\)/);
+  assert.match(source, /setBusy\('finish'\);\s+setMessage\(''\);\s+setActionFailed\(false\)/);
+  assert.match(source, /role=\{actionFailed \? 'alert' : 'status'\}[\s\S]{0,120}aria-live=\{actionFailed \? 'assertive' : 'polite'\}/);
+});
