@@ -15198,3 +15198,12 @@ test('buyer-code protection reads fail closed across seller and buyer flows', ()
   assert.match(workspace, /title=\{acceptanceProtectionState === 'error' \? 'Acceptance protection unavailable'/);
   assert.match(workspace, /acceptanceProtectionState === 'ready' &&\s+acceptanceProtected/);
 });
+
+test('deal safety action failures use urgent accessible feedback', () => {
+  const source = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(source, /const \[messageFailed, setMessageFailed\] = useState\(false\)/);
+  assert.match(source, /catch \(error\) \{\s+setMessageFailed\(true\)/);
+  assert.match(source, /role=\{messageFailed \? 'alert' : 'status'\}/);
+  assert.match(source, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
+});

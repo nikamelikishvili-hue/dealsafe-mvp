@@ -124,6 +124,7 @@ export function DealSafetyActions({
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState('');
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [paymentState, setPaymentState] =
@@ -176,6 +177,8 @@ export function DealSafetyActions({
   ) => {
     safetyTriggerRef.current = trigger;
     setReasonError('');
+    setMessage('');
+    setMessageFailed(false);
     setMode(nextMode);
     window.requestAnimationFrame(() => reasonRef.current?.focus());
   };
@@ -214,6 +217,7 @@ export function DealSafetyActions({
 
     setSaving(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       if (mode === 'cancel') {
         await cancelDeal(session, deal.id, normalizedReason);
@@ -227,6 +231,7 @@ export function DealSafetyActions({
       setMode(null);
       setReason('');
     } catch (error) {
+      setMessageFailed(true);
       setMessage(error instanceof Error ? error.message : 'Action failed');
     } finally {
       savingRef.current = false;
@@ -351,7 +356,11 @@ export function DealSafetyActions({
         </form>
       )}
       {message && (
-        <div className="notice" role="status" aria-live="polite">
+        <div
+          className="notice"
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
           {t(message)}
         </div>
       )}
