@@ -1910,6 +1910,24 @@ test('password recovery and sign-in preserve bounded provider retry guidance', a
   }
 });
 
+test('provider failure diagnostics are fixed-field, control-free, and strictly bounded', async () => {
+  const { authProviderDiagnostic } = await import('../server/authShared.mjs');
+  const diagnostic = authProviderDiagnostic({
+    code: `SENSITIVE_CHANGE_COOLDOWN\u0000${'x'.repeat(400)}`,
+    message: `provider\nmessage ${'y'.repeat(400)}`,
+    details: 'bounded details',
+    hint: 'bounded hint',
+    secret: 'must-not-be-consumed',
+  });
+
+  assert.ok(diagnostic.length <= 1024);
+  assert.match(diagnostic, /^SENSITIVE_CHANGE_COOLDOWN/);
+  assert.doesNotMatch(diagnostic, /[\u0000-\u001f\u007f]/);
+  assert.equal(diagnostic.includes('must-not-be-consumed'), false);
+  assert.equal(authProviderDiagnostic(null), '');
+  assert.equal(authProviderDiagnostic(['message']), '');
+});
+
 test('Auth provider responses are byte-bounded JSON values with a controlled empty exception', async () => {
   const {
     AuthProviderResponseBoundaryError,

@@ -1,4 +1,5 @@
 import {
+  authProviderDiagnostic,
   authProviderPayload,
   supabaseRestRpcRequest,
 } from './authShared.mjs';
@@ -73,12 +74,7 @@ export async function assertSensitiveChangeAllowed(
       503,
     );
   }
-  const providerCode = [
-    data?.code,
-    data?.message,
-    data?.hint,
-    data?.details,
-  ].filter((value) => typeof value === 'string').join(' ');
+  const providerCode = authProviderDiagnostic(data);
 
   if (/DEALIVRA_SENSITIVE_CHANGE_COOLDOWN/.test(providerCode)) {
     throw new SensitiveChangeProtectionError(

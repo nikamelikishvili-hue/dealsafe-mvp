@@ -458,6 +458,16 @@ export function authProviderCode(data) {
   return /^[a-z0-9_]{1,64}$/.test(value) ? value : 'unknown';
 }
 
+export function authProviderDiagnostic(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return '';
+  return [data.code, data.message, data.details, data.hint]
+    .filter((value) => typeof value === 'string')
+    .map((value) => value.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 256))
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 1024);
+}
+
 export function isAuthProviderRateLimited(upstream, data) {
   const code = authProviderCode(data);
   return upstream?.status === 429

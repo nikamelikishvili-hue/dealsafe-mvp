@@ -1,4 +1,5 @@
 import {
+  authProviderDiagnostic,
   authProviderPayload,
   currentUserAppRole,
   logAuthFailure,
@@ -21,12 +22,7 @@ const privilegedRoles = new Set(['support', 'compliance', 'admin']);
 const memberActions = new Set(['my_hold', 'assert_change_allowed']);
 
 function recoveryFailure(response, providerBody, providerStatus) {
-  const diagnostic = [
-    providerBody?.code,
-    providerBody?.message,
-    providerBody?.details,
-    providerBody?.hint,
-  ].filter(value => typeof value === 'string').join(' ');
+  const diagnostic = authProviderDiagnostic(providerBody);
 
   if (/SECOND_REVIEWER_REQUIRED|reviewer must be different/i.test(diagnostic)) {
     response.status(409).json({
