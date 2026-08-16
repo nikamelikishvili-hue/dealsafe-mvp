@@ -5730,7 +5730,10 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   assert.match(addressAutocomplete, /AutocompleteSessionToken/);
   assert.match(addressAutocomplete, /role="combobox"/);
   assert.match(addressAutocomplete, /role="listbox"/);
-  assert.match(addressAutocomplete, /aria-describedby=\{statusId\}/);
+  assert.match(
+    addressAutocomplete,
+    /aria-describedby=\{\[describedBy, statusId\]\.filter\(Boolean\)\.join\(' '\)\}/,
+  );
   assert.match(addressAutocomplete, /aria-busy=\{queryState === 'loading'\}/);
   assert.match(addressAutocomplete, /const selectionMutationRef = useRef\(false\)/);
   assert.match(addressAutocomplete, /if \(!library \|\| selectionMutationRef\.current\) return/);
@@ -5738,6 +5741,10 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   assert.ok((addressAutocomplete.match(/selectionRequest !== requestSequence\.current/g) ?? []).length >= 2);
   assert.ok((addressAutocomplete.match(/requestSequence\.current \+= 1/g) ?? []).length >= 3);
   assert.match(addressAutocomplete, /Google Maps/);
+  assert.match(fulfillment, /className="workflow-validation-summary"/);
+  assert.match(fulfillment, /disabled=\{savingAddress\}/);
+  assert.match(fulfillment, /disabled=\{busy\}/);
+  assert.doesNotMatch(fulfillment, /disabled=\{savingAddress \|\| addressIncomplete\}/);
   assert.match(
     addressAutocomplete,
     /Automatic suggestions are temporarily unavailable\. Enter the complete address manually\./,

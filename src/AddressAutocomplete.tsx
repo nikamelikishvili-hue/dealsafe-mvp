@@ -109,12 +109,18 @@ export function AddressAutocomplete({
   placeholder,
   onAddressParts,
   streetAddressOnly = false,
+  inputId,
+  invalid = false,
+  describedBy,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   onAddressParts?: (parts: AddressParts) => void;
   streetAddressOnly?: boolean;
+  inputId?: string;
+  invalid?: boolean;
+  describedBy?: string;
 }) {
   const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
   const listboxId = useId();
@@ -294,6 +300,7 @@ export function AddressAutocomplete({
       <div className="address-autocomplete-control">
         <Search aria-hidden="true" size={19} />
         <input
+          id={inputId}
           ref={inputRef}
           required
           role="combobox"
@@ -301,7 +308,8 @@ export function AddressAutocomplete({
           aria-autocomplete="list"
           aria-haspopup="listbox"
           aria-controls={listboxId}
-          aria-describedby={statusId}
+          aria-describedby={[describedBy, statusId].filter(Boolean).join(' ')}
+          aria-invalid={invalid || undefined}
           aria-busy={queryState === 'loading'}
           aria-expanded={focused && suggestions.length > 0}
           aria-activedescendant={activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}

@@ -4,6 +4,7 @@ import {
   CalendarClock,
   Check,
   ChevronDown,
+  CircleAlert,
   Clock3,
   Copy,
   LockKeyhole,
@@ -17,6 +18,7 @@ import { AsyncStatePanel } from './AsyncStatePanel';
 import { copyTextToClipboard } from './clipboard';
 import { useConfirmAction } from './ConfirmActionDialog';
 import type { Deal } from './domain';
+import { FieldError } from './FieldError';
 import { getAppLanguage, t } from './i18n';
 import {
   isUsPostalCode,
@@ -72,6 +74,8 @@ export function MeetingPanel({
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [loadVersion, setLoadVersion] = useState(0);
+  const [validationVisible, setValidationVisible] = useState(false);
+  const validationSummaryRef = useRef<HTMLDivElement>(null);
   const actionInFlight = useRef(false);
 
   useEffect(() => {
@@ -113,10 +117,42 @@ export function MeetingPanel({
     Boolean(form.state) &&
     isUsPostalCode(form.postalCode) &&
     Boolean(form.scheduledAt);
+  const meetingErrors = [
+    form.locationName.trim().length < 2 && {
+      fieldId: 'meeting-location-name',
+      message: 'Enter the name of a public meeting place.',
+    },
+    form.streetAddress.trim().length < 3 && {
+      fieldId: 'meeting-street-address',
+      message: 'Enter the street address.',
+    },
+    form.city.trim().length < 2 && {
+      fieldId: 'meeting-city',
+      message: 'Enter the city.',
+    },
+    !form.state && {
+      fieldId: 'meeting-state',
+      message: 'Select the state.',
+    },
+    !isUsPostalCode(form.postalCode) && {
+      fieldId: 'meeting-postal-code',
+      message: 'Enter a valid 5-digit ZIP code or ZIP+4.',
+    },
+    !form.scheduledAt && {
+      fieldId: 'meeting-scheduled-at',
+      message: 'Choose the meeting date and time.',
+    },
+  ].filter((error): error is { fieldId: string; message: string } => Boolean(error));
 
   const propose = async (event: FormEvent) => {
     event.preventDefault();
-    if (!formComplete || actionInFlight.current) return;
+    if (!formComplete) {
+      setValidationVisible(true);
+      window.requestAnimationFrame(() => validationSummaryRef.current?.focus());
+      return;
+    }
+    if (actionInFlight.current) return;
+    setValidationVisible(false);
     actionInFlight.current = true;
     setBusy(true);
     setMessage('');
@@ -228,23 +264,70 @@ export function MeetingPanel({
         <form
           className="meeting-form"
           onSubmit={propose}
+          noValidate
         >
+          {validationVisible && meetingErrors.length > 0 && (
+            <div
+              ref={validationSummaryRef}
+              className="workflow-validation-summary"
+              role="alert"
+              tabIndex={-1}
+              aria-labelledby="meeting-validation-title"
+            >
+              <CircleAlert aria-hidden="true" />
+              <div>
+                <h3 id="meeting-validation-title">{t('Complete the meeting details')}</h3>
+                <p>{t('Review the highlighted fields before proposing the meeting.')}</p>
+                <ul>
+                  {meetingErrors.map((error) => (
+                    <li key={error.fieldId}>
+                      <button
+                        type="button"
+                        onClick={() => document.getElementById(error.fieldId)?.focus()}
+                      >
+                        {t(error.message)}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
           <label className="meeting-field meeting-field-place">
             {t('Public meeting place')}
             <input
+              id="meeting-location-name"
               required
               minLength={2}
               maxLength={120}
               placeholder={t('Police safe exchange zone or busy café')}
               value={form.locationName}
+              aria-invalid={validationVisible && form.locationName.trim().length < 2}
+              aria-describedby={
+                validationVisible && form.locationName.trim().length < 2
+                  ? 'meeting-location-name-error'
+                  : undefined
+              }
               onChange={(event) =>
                 setForm({ ...form, locationName: event.target.value })
               }
             />
+            {validationVisible && form.locationName.trim().length < 2 && (
+              <FieldError id="meeting-location-name-error">
+                Enter the name of a public meeting place.
+              </FieldError>
+            )}
           </label>
           <label className="meeting-field meeting-field-street">
             {t('Street address')}
             <AddressAutocomplete
+              inputId="meeting-street-address"
+              invalid={validationVisible && form.streetAddress.trim().length < 3}
+              describedBy={
+                validationVisible && form.streetAddress.trim().length < 3
+                  ? 'meeting-street-address-error'
+                  : undefined
+              }
               streetAddressOnly
               placeholder={t('123 Main St')}
               value={form.streetAddress}
@@ -264,6 +347,11 @@ export function MeetingPanel({
                 }))
               }
             />
+            {validationVisible && form.streetAddress.trim().length < 3 && (
+              <FieldError id="meeting-street-address-error">
+                Enter the street address.
+              </FieldError>
+            )}
             <small className="field-help">
               {t(
                 'If needed, add an apartment, suite, unit, building, or floor.',
@@ -273,6 +361,7 @@ export function MeetingPanel({
           <label className="meeting-field meeting-field-line-two">
             {t('Address line 2 (optional)')}
             <input
+              id="meeting-city"
               maxLength={100}
               autoComplete="address-line2"
               placeholder={t('Apartment, suite, unit, building, or floor')}
@@ -294,17 +383,31 @@ export function MeetingPanel({
               autoComplete="address-level2"
               placeholder={t('New York')}
               value={form.city}
+              aria-invalid={validationVisible && form.city.trim().length < 2}
+              aria-describedby={
+                validationVisible && form.city.trim().length < 2
+                  ? 'meeting-city-error'
+                  : undefined
+              }
               onChange={(event) =>
                 setForm({ ...form, city: event.target.value })
               }
             />
+            {validationVisible && form.city.trim().length < 2 && (
+              <FieldError id="meeting-city-error">Enter the city.</FieldError>
+            )}
           </label>
           <label className="meeting-field meeting-field-state">
             {t('State')}
             <select
+              id="meeting-state"
               required
               autoComplete="address-level1"
               value={form.state}
+              aria-invalid={validationVisible && !form.state}
+              aria-describedby={
+                validationVisible && !form.state ? 'meeting-state-error' : undefined
+              }
               onChange={(event) =>
                 setForm({ ...form, state: event.target.value })
               }
@@ -319,20 +422,21 @@ export function MeetingPanel({
                 </option>
               ))}
             </select>
+            {validationVisible && !form.state && (
+              <FieldError id="meeting-state-error">Select the state.</FieldError>
+            )}
           </label>
           <label className="meeting-field meeting-field-zip">
             {t('ZIP code')}
             <input
+              id="meeting-postal-code"
               required
               inputMode="numeric"
               autoComplete="postal-code"
               pattern="[0-9]{5}(-[0-9]{4})?"
               maxLength={10}
               aria-describedby="meeting-zip-help"
-              aria-invalid={
-                Boolean(form.postalCode) &&
-                !isUsPostalCode(form.postalCode)
-              }
+              aria-invalid={validationVisible && !isUsPostalCode(form.postalCode)}
               placeholder="10001"
               value={form.postalCode}
               onChange={(event) =>
@@ -357,18 +461,30 @@ export function MeetingPanel({
           <label className="meeting-field meeting-field-date">
             {t('Date and time')}
             <input
+              id="meeting-scheduled-at"
               required
               type="datetime-local"
               value={form.scheduledAt}
+              aria-invalid={validationVisible && !form.scheduledAt}
+              aria-describedby={
+                validationVisible && !form.scheduledAt
+                  ? 'meeting-scheduled-at-error'
+                  : undefined
+              }
               onChange={(event) =>
                 setForm({ ...form, scheduledAt: event.target.value })
               }
             />
+            {validationVisible && !form.scheduledAt && (
+              <FieldError id="meeting-scheduled-at-error">
+                Choose the meeting date and time.
+              </FieldError>
+            )}
           </label>
           <button
             type="submit"
             className="primary meeting-submit"
-            disabled={!formComplete || busy}
+            disabled={busy}
             aria-busy={busy}
           >
             <CalendarClock size={18} />
@@ -880,12 +996,13 @@ export function ShippingPanel({
 
   const saveAddress = async (event: FormEvent) => {
     event.preventDefault();
-    if (
-      !address.state ||
-      !isUsPostalCode(address.postalCode) ||
-      mutationInFlight.current
-    )
+    if (addressIncomplete) {
+      setAddressValidationVisible(true);
+      window.requestAnimationFrame(() => addressValidationSummaryRef.current?.focus());
       return;
+    }
+    if (mutationInFlight.current) return;
+    setAddressValidationVisible(false);
     mutationInFlight.current = true;
     setSavingAddress(true);
     setMessage('');
@@ -1022,6 +1139,32 @@ export function ShippingPanel({
     address.city.trim().length < 2 ||
     !address.state ||
     !isUsPostalCode(address.postalCode);
+  const [addressValidationVisible, setAddressValidationVisible] = useState(false);
+  const addressValidationSummaryRef = useRef<HTMLDivElement>(null);
+  const addressErrors = [
+    address.recipientName.trim().length < 2 && {
+      fieldId: 'shipping-recipient-name',
+      message: 'Enter the recipient name.',
+    },
+    (address.streetAddress.trim().length < 3 || streetNumberMissing) && {
+      fieldId: 'shipping-street-address',
+      message: streetNumberMissing
+        ? 'Enter a specific address that includes a street number.'
+        : 'Enter the street address.',
+    },
+    address.city.trim().length < 2 && {
+      fieldId: 'shipping-city',
+      message: 'Enter the city.',
+    },
+    !address.state && {
+      fieldId: 'shipping-state',
+      message: 'Select the state.',
+    },
+    !isUsPostalCode(address.postalCode) && {
+      fieldId: 'shipping-postal-code',
+      message: 'Enter a valid 5-digit ZIP code or ZIP+4.',
+    },
+  ].filter((error): error is { fieldId: string; message: string } => Boolean(error));
   const shippingState =
     shipment?.status === 'delivered'
       ? 'Delivered'
@@ -1113,15 +1256,50 @@ export function ShippingPanel({
           <form
             className="delivery-address-form"
             onSubmit={saveAddress}
+            noValidate
           >
+            {addressValidationVisible && addressErrors.length > 0 && (
+              <div
+                ref={addressValidationSummaryRef}
+                className="workflow-validation-summary"
+                role="alert"
+                tabIndex={-1}
+                aria-labelledby="shipping-validation-title"
+              >
+                <CircleAlert aria-hidden="true" />
+                <div>
+                  <h3 id="shipping-validation-title">{t('Complete the delivery address')}</h3>
+                  <p>{t('Review the highlighted fields before saving this address.')}</p>
+                  <ul>
+                    {addressErrors.map((error) => (
+                      <li key={error.fieldId}>
+                        <button
+                          type="button"
+                          onClick={() => document.getElementById(error.fieldId)?.focus()}
+                        >
+                          {t(error.message)}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
             <label>
               {t('Recipient name')}
               <input
+                id="shipping-recipient-name"
                 required
                 minLength={2}
                 maxLength={100}
                 autoComplete="name"
                 value={address.recipientName}
+                aria-invalid={addressValidationVisible && address.recipientName.trim().length < 2}
+                aria-describedby={
+                  addressValidationVisible && address.recipientName.trim().length < 2
+                    ? 'shipping-recipient-name-error'
+                    : undefined
+                }
                 onChange={(event) =>
                   setAddress({
                     ...address,
@@ -1129,10 +1307,26 @@ export function ShippingPanel({
                   })
                 }
               />
+              {addressValidationVisible && address.recipientName.trim().length < 2 && (
+                <FieldError id="shipping-recipient-name-error">
+                  Enter the recipient name.
+                </FieldError>
+              )}
             </label>
             <label className="address-field-wide">
               {t('Street address (number and name)')}
               <AddressAutocomplete
+                inputId="shipping-street-address"
+                invalid={
+                  addressValidationVisible &&
+                  (address.streetAddress.trim().length < 3 || streetNumberMissing)
+                }
+                describedBy={
+                  addressValidationVisible &&
+                  (address.streetAddress.trim().length < 3 || streetNumberMissing)
+                    ? 'shipping-street-address-error'
+                    : undefined
+                }
                 streetAddressOnly
                 placeholder={t('123 Main St')}
                 value={address.streetAddress}
@@ -1153,17 +1347,19 @@ export function ShippingPanel({
                   }))
                 }
               />
-              {streetNumberMissing && (
-                <small className="address-validation">
-                  {t(
-                    'Choose a specific address that includes a street number.',
-                  )}
-                </small>
+              {addressValidationVisible &&
+                (address.streetAddress.trim().length < 3 || streetNumberMissing) && (
+                <FieldError id="shipping-street-address-error">
+                  {streetNumberMissing
+                    ? 'Enter a specific address that includes a street number.'
+                    : 'Enter the street address.'}
+                </FieldError>
               )}
             </label>
             <label className="address-field-wide address-field-line-two">
               {t('Address line 2 (optional)')}
               <input
+                id="shipping-city"
                 maxLength={100}
                 autoComplete="address-line2"
                 value={address.addressLine2}
@@ -1188,18 +1384,34 @@ export function ShippingPanel({
                 maxLength={100}
                 autoComplete="address-level2"
                 value={address.city}
+                aria-invalid={addressValidationVisible && address.city.trim().length < 2}
+                aria-describedby={
+                  addressValidationVisible && address.city.trim().length < 2
+                    ? 'shipping-city-error'
+                    : undefined
+                }
                 onChange={(event) =>
                   setAddress({ ...address, city: event.target.value })
                 }
                 placeholder={t('New York')}
               />
+              {addressValidationVisible && address.city.trim().length < 2 && (
+                <FieldError id="shipping-city-error">Enter the city.</FieldError>
+              )}
             </label>
             <label>
               {t('State')}
               <select
+                id="shipping-state"
                 required
                 autoComplete="address-level1"
                 value={address.state}
+                aria-invalid={addressValidationVisible && !address.state}
+                aria-describedby={
+                  addressValidationVisible && !address.state
+                    ? 'shipping-state-error'
+                    : undefined
+                }
                 onChange={(event) =>
                   setAddress({ ...address, state: event.target.value })
                 }
@@ -1214,20 +1426,21 @@ export function ShippingPanel({
                   </option>
                 ))}
               </select>
+              {addressValidationVisible && !address.state && (
+                <FieldError id="shipping-state-error">Select the state.</FieldError>
+              )}
             </label>
             <label>
               {t('ZIP code')}
               <input
+                id="shipping-postal-code"
                 required
                 inputMode="numeric"
                 autoComplete="postal-code"
                 pattern="[0-9]{5}(-[0-9]{4})?"
                 maxLength={10}
                 aria-describedby="shipping-zip-help"
-                aria-invalid={
-                  Boolean(address.postalCode) &&
-                  !isUsPostalCode(address.postalCode)
-                }
+                aria-invalid={addressValidationVisible && !isUsPostalCode(address.postalCode)}
                 placeholder="10001"
                 value={address.postalCode}
                 onChange={(event) =>
@@ -1289,7 +1502,7 @@ export function ShippingPanel({
               <button
                 type="submit"
                 className="primary"
-                disabled={savingAddress || addressIncomplete}
+                disabled={savingAddress}
                 aria-busy={savingAddress}
               >
                 {t(savingAddress ? 'Saving…' : 'Save delivery address')}

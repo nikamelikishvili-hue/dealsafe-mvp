@@ -40,6 +40,7 @@
   align-items:end;
   margin-top:24px;
 }
+.view-deal .meeting-form>.workflow-validation-summary{grid-column:1/-1;align-self:stretch}
 
 .view-deal .meeting-field{display:flex;min-width:0;flex-direction:column;gap:7px;margin:0}
 .view-deal .meeting-field-place{grid-column:span 4}

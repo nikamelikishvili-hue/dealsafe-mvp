@@ -10,6 +10,7 @@
 .delivery-address-actions{display:flex;align-items:flex-end;justify-content:flex-start;flex-direction:column;gap:9px}
 .delivery-address-actions em{display:inline-flex;align-items:center;gap:5px;color:#276fd0;font-size:.78rem;font-style:normal;font-weight:800}
 .delivery-address-form{display:grid!important;grid-template-columns:1fr 1fr;gap:15px!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important}
+.delivery-address-form>.workflow-validation-summary{grid-column:1/-1}
 .delivery-address-form label{display:flex;min-width:0;flex-direction:column;gap:7px}
 .delivery-address-form :is(input,select,textarea){width:100%;min-height:50px;border-color:#cbd9e8;background:#fff}
 .delivery-address-form :is(input,select,textarea):focus{border-color:#4b8ce8;box-shadow:0 0 0 4px rgba(55,126,225,.12);outline:0}
@@ -22,6 +23,16 @@
 .delivery-form-actions{display:flex;justify-content:flex-end;gap:10px}
 .delivery-privacy{display:flex;align-items:flex-start;gap:7px;margin:17px 0 0;padding-top:15px;border-top:1px solid #dfe8f2;color:#63758b;font-size:.83rem;line-height:1.45}
 .delivery-privacy svg{flex:0 0 auto;margin-top:2px;color:#3478d5}
+.workflow-validation-summary{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;padding:15px 16px;border:1px solid #e7b4aa;border-radius:14px;background:#fff7f5;color:#6f3028}
+.workflow-validation-summary:focus{outline:3px solid rgba(190,70,52,.2);outline-offset:3px}
+.workflow-validation-summary>svg{margin-top:2px;color:#b64d3c}
+.workflow-validation-summary h3{margin:0;font-size:.98rem;letter-spacing:-.01em}
+.workflow-validation-summary p{margin:3px 0 9px;color:#87524b;font-size:.8rem;line-height:1.4}
+.workflow-validation-summary ul{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.workflow-validation-summary li{margin:0}
+.workflow-validation-summary button{min-height:36px;padding:7px 10px;border:1px solid #e9c5be;border-radius:9px;background:#fff;color:#75362e;font-size:.78rem;font-weight:750;text-align:left}
+.workflow-validation-summary button:hover{border-color:#d8998e;background:#fffaf9}
+.workflow-validation-summary button:focus-visible{outline:3px solid rgba(190,70,52,.2);outline-offset:2px}
 @media(max-width:680px){
   .delivery-address-section{padding:18px 14px}
   .delivery-address-card{flex-direction:column}
