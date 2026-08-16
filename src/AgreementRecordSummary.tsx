@@ -67,10 +67,13 @@ export function useStoredAgreementDocument(deal: Deal) {
 
 export function AgreementExport({ deal }: { deal: Deal }) {
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const { record, loading, error } = useStoredAgreementDocument(deal);
   const url = `${location.origin}/?deal=${deal.publicId}`;
 
   const share = async () => {
+    setMessage('');
+    setMessageFailed(false);
     try {
       if (navigator.share) {
         await navigator.share({
@@ -78,6 +81,7 @@ export function AgreementExport({ deal }: { deal: Deal }) {
           text: `Review Dealivra agreement ${deal.publicId}`,
           url,
         });
+        setMessage('Agreement shared.');
       } else {
         await copyTextToClipboard(url);
         setMessage('Deal Link copied.');
@@ -85,7 +89,23 @@ export function AgreementExport({ deal }: { deal: Deal }) {
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
         setMessage('Could not share this link.');
+        setMessageFailed(true);
       }
+    }
+  };
+
+  const preview = () => {
+    setMessage('');
+    setMessageFailed(false);
+    const popup = window.open(
+      `${url}&document=1`,
+      '_blank',
+    );
+    if (!popup) {
+      setMessage('Allow pop-ups to preview the agreement document.');
+      setMessageFailed(true);
+    } else {
+      popup.opener = null;
     }
   };
 
@@ -135,13 +155,7 @@ export function AgreementExport({ deal }: { deal: Deal }) {
           type="button"
           className="secondary"
           disabled={!record}
-          onClick={() =>
-            window.open(
-              `${url}&document=1`,
-              '_blank',
-              'noopener,noreferrer',
-            )
-          }
+          onClick={preview}
         >
           <Eye size={17} aria-hidden="true" />
           {t('Preview document')}
@@ -153,9 +167,9 @@ export function AgreementExport({ deal }: { deal: Deal }) {
       </div>
       {(message || error) && (
         <div
-          className={`notice ${error ? 'agreement-record-error' : ''}`}
-          role="status"
-          aria-live="polite"
+          className={`notice ${error || messageFailed ? 'agreement-record-error' : ''}`}
+          role={error || messageFailed ? 'alert' : 'status'}
+          aria-live={error || messageFailed ? 'assertive' : 'polite'}
         >
           {t(message || error)}
         </div>

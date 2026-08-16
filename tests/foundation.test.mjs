@@ -5603,8 +5603,8 @@ test('agreement record summary, history, and PDF rendering are isolated', () => 
   assert.match(records, /getPublicAgreementHistory\(deal\.publicId\)/);
   assert.match(records, /if \(current\) setRecord\(value\)/);
   assert.match(records, /\[deal\.publicId, deal\.agreementVersion\]/);
-  assert.match(records, /role="status"/);
-  assert.match(records, /aria-live="polite"/);
+  assert.match(records, /role=\{error \|\| messageFailed \? 'alert' : 'status'\}/);
+  assert.match(records, /aria-live=\{error \|\| messageFailed \? 'assertive' : 'polite'\}/);
   assert.match(printDocument, /export function AgreementPrintDocument/);
   assert.match(printDocument, /useStoredAgreementDocument\(deal\)/);
   assert.match(printDocument, /record\.content_hash\.toUpperCase\(\)/);
@@ -14210,6 +14210,9 @@ test('restricted evidence lifecycle actions are mutually single-flight', () => {
   assert.match(workspace, /aria-busy=\{Boolean\(busy\)\}/);
   assert.match(workspace, /const loadSequenceRef=useRef\(0\)/);
   assert.ok((workspace.match(/request===loadSequenceRef\.current/g) ?? []).length >= 3);
+  assert.match(workspace, /const \[messageFailed,setMessageFailed\]=useState\(false\)/);
+  assert.match(workspace, /role=\{messageFailed\?'alert':'status'\}/);
+  assert.match(workspace, /aria-live=\{messageFailed\?'assertive':'polite'\}/);
 });
 
 test('deal evidence list ignores stale deal and session responses', () => {
@@ -14918,6 +14921,10 @@ test('agreement history failures remain visible and recoverable', () => {
   assert.match(agreement, /Agreement history is temporarily unavailable\./);
   assert.match(agreement, /role="alert"/);
   assert.ok((agreement.match(/setLoadVersion\(version => version \+ 1\)/g) ?? []).length >= 2);
+  assert.match(agreement, /const \[messageFailed, setMessageFailed\] = useState\(false\)/);
+  assert.match(agreement, /Allow pop-ups to preview the agreement document\./);
+  assert.match(agreement, /role=\{error \|\| messageFailed \? 'alert' : 'status'\}/);
+  assert.match(agreement, /aria-live=\{error \|\| messageFailed \? 'assertive' : 'polite'\}/);
 });
 
 test('completed-deal dispute eligibility fails visibly and can be retried', () => {

@@ -50,17 +50,19 @@ export function EvidenceLifecycleCenter({session}:{session:StoredSession}){
   const busyRef=useRef(false);
   const loadSequenceRef=useRef(0);
   const [message,setMessage]=useState('');
+  const [messageFailed,setMessageFailed]=useState(false);
   const [reasons,setReasons]=useState<Record<string,string>>({});
 
   const load=async()=>{
     const request=++loadSequenceRef.current;
     setLoading(true);
     setMessage('');
+    setMessageFailed(false);
     try{
       const next=await getEvidenceLifecycleSnapshot(session);
       if(request===loadSequenceRef.current)setSnapshot(next);
     }
-    catch(error){if(request===loadSequenceRef.current)setMessage(error instanceof Error?error.message:'Could not load evidence lifecycle controls.')}
+    catch(error){if(request===loadSequenceRef.current){setMessage(error instanceof Error?error.message:'Could not load evidence lifecycle controls.');setMessageFailed(true)}}
     finally{if(request===loadSequenceRef.current)setLoading(false)}
   };
 
@@ -76,11 +78,12 @@ export function EvidenceLifecycleCenter({session}:{session:StoredSession}){
     busyRef.current=true;
     setBusy('refresh');
     setMessage('');
+    setMessageFailed(false);
     try{
       await refreshEvidenceLifecycleInventory(session);
       await load();
       setMessage('Lifecycle inventory refreshed. No retained evidence was deleted by this review.')
-    }catch(error){setMessage(error instanceof Error?error.message:'Inventory refresh failed.')}
+    }catch(error){setMessage(error instanceof Error?error.message:'Inventory refresh failed.');setMessageFailed(true)}
     finally{busyRef.current=false;setBusy('')}
   };
 
@@ -89,11 +92,12 @@ export function EvidenceLifecycleCenter({session}:{session:StoredSession}){
     busyRef.current=true;
     setBusy(key);
     setMessage('');
+    setMessageFailed(false);
     try{
       await action();
       await load();
       setMessage(success);
-    }catch(error){setMessage(error instanceof Error?error.message:'Lifecycle action failed safely.')}
+    }catch(error){setMessage(error instanceof Error?error.message:'Lifecycle action failed safely.');setMessageFailed(true)}
     finally{busyRef.current=false;setBusy('')}
   };
 
@@ -116,7 +120,7 @@ export function EvidenceLifecycleCenter({session}:{session:StoredSession}){
       </button>
     </div>
 
-    {message&&<div className="notice" role="status">{message}</div>}
+    {message&&<div className={`notice ${messageFailed?'error':''}`} role={messageFailed?'alert':'status'} aria-live={messageFailed?'assertive':'polite'}>{message}</div>}
 
     <div className="evidence-lifecycle-metrics" aria-label="Evidence lifecycle summary">
       <article><ShieldAlert/><span>Open alerts</span><strong>{snapshot?.counts.openAlerts??'—'}</strong></article>
