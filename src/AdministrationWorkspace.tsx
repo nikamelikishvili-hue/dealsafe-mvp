@@ -50,6 +50,12 @@ import { smartCatalogVersion } from './smartCatalog';
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString(getAppLanguage());
 
+export const formatCsvCell = (value: unknown) => {
+  const text = String(value ?? '');
+  const safe = /^[\t\r\n ]*[=+\-@]/.test(text) ? `'${text}` : text;
+  return `"${safe.replaceAll('"', '""')}"`;
+};
+
 interface AdministrationWorkspaceProps {
   session: StoredSession;
   onBack: () => void;
@@ -419,6 +425,8 @@ function AdminRevenueCenter({
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [transactionsMessage, setTransactionsMessage] = useState('');
+  const [exportMessage, setExportMessage] = useState('');
+  const [exportFailed, setExportFailed] = useState(false);
   const [transactionQuery, setTransactionQuery] = useState('');
   const [transactionStatus, setTransactionStatus] = useState('all');
   const [openingDeal, setOpeningDeal] = useState('');
@@ -553,43 +561,53 @@ function AdminRevenueCenter({
 
   const exportCsv = () => {
     if (!filteredTransactions.length) return;
-    const cell = (value: unknown) =>
-      `"${String(value ?? '').replaceAll('"', '""')}"`;
-    const rows = [
-      [
-        'Dealivra ID',
-        'Title',
-        'Status',
-        'Gross USD',
-        'Dealivra fee allocation USD',
-        'Seller amount USD',
-        'Seller',
-        'Buyer',
-        'Created',
-      ],
-      ...filteredTransactions.map((item) => [
-        item.public_id,
-        item.title,
-        item.status,
-        (Number(item.item_amount_cents) / 100).toFixed(2),
-        (Number(item.platform_fee_cents) / 100).toFixed(2),
-        (Number(item.seller_amount_cents) / 100).toFixed(2),
-        item.seller_name,
-        item.buyer_name,
-        item.created_at,
-      ]),
-    ];
-    const csv = rows.map((row) => row.map(cell).join(',')).join('\r\n');
-    const url = URL.createObjectURL(
-      new Blob([csv], { type: 'text/csv;charset=utf-8' }),
-    );
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `dealivra-revenue-${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    setExportMessage('');
+    setExportFailed(false);
+    try {
+      const rows = [
+        [
+          'Dealivra ID',
+          'Title',
+          'Status',
+          'Gross USD',
+          'Dealivra fee allocation USD',
+          'Seller amount USD',
+          'Seller',
+          'Buyer',
+          'Created',
+        ],
+        ...filteredTransactions.map((item) => [
+          item.public_id,
+          item.title,
+          item.status,
+          (Number(item.item_amount_cents) / 100).toFixed(2),
+          (Number(item.platform_fee_cents) / 100).toFixed(2),
+          (Number(item.seller_amount_cents) / 100).toFixed(2),
+          item.seller_name,
+          item.buyer_name,
+          item.created_at,
+        ]),
+      ];
+      const csv = rows
+        .map((row) => row.map(formatCsvCell).join(','))
+        .join('\r\n');
+      const url = URL.createObjectURL(
+        new Blob([csv], { type: 'text/csv;charset=utf-8' }),
+      );
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `dealivra-revenue-${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setExportMessage('CSV export started.');
+    } catch {
+      setExportMessage(
+        'The CSV could not be prepared. Refresh the page and try again.',
+      );
+      setExportFailed(true);
+    }
   };
 
   return (
@@ -695,6 +713,15 @@ function AdminRevenueCenter({
             {transactionsMessage && (
               <div className="notice" role="alert">
                 {t(transactionsMessage)}
+              </div>
+            )}
+            {exportMessage && (
+              <div
+                className={`notice ${exportFailed ? 'error' : ''}`}
+                role={exportFailed ? 'alert' : 'status'}
+                aria-live={exportFailed ? 'assertive' : 'polite'}
+              >
+                {t(exportMessage)}
               </div>
             )}
             {filteredTransactions.length ? (

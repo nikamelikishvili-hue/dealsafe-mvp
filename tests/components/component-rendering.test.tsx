@@ -14,6 +14,7 @@ Object.defineProperty(globalThis, 'document', {
 
 const { AccountEntryPage, ForgotPasswordEntry } = await import('../../src/AccountEntryPages');
 const { AddressAutocomplete } = await import('../../src/AddressAutocomplete');
+const { formatCsvCell } = await import('../../src/AdministrationWorkspace');
 const { BrandLogo } = await import('../../src/BrandLogo');
 const { FeedbackMessage } = await import('../../src/FeedbackMessage');
 const { FieldError } = await import('../../src/FieldError');
@@ -95,6 +96,13 @@ test('address entry always renders a usable manual line-one fallback', () => {
   assert.match(markup, /aria-label="Clear street address"/);
   assert.match(markup, /role="status"/);
   assert.match(markup, /Automatic suggestions are not configured\. Enter the complete address manually\./);
+});
+
+test('administrator CSV cells neutralize spreadsheet formulas and quote data', () => {
+  assert.equal(formatCsvCell('=HYPERLINK("https://example.test")'), `"'=HYPERLINK(""https://example.test"")"`);
+  assert.equal(formatCsvCell('  @SUM(1,2)'), `"'  @SUM(1,2)"`);
+  assert.equal(formatCsvCell('Buyer "One"'), `"Buyer ""One"""`);
+  assert.equal(formatCsvCell(null), '""');
 });
 
 test('Google address parts populate a complete US delivery address including unit and ZIP+4', () => {

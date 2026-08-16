@@ -15345,3 +15345,17 @@ test('published and acceptance failures use urgent accessible feedback', () => {
   assert.match(app, /creation-error notice" role="alert"/);
   assert.match(workspace, /authMessage && \([\s\S]*className="notice error" role="alert"/);
 });
+
+test('support detail failures return to a recoverable case list', () => {
+  const source = readText('src/SupportCaseCenter.tsx');
+
+  assert.match(
+    source,
+    /catch \(error\) \{\s+if \(request !== requestRef\.current\) return;\s+setSelectedReference\(''\);\s+setFeedback\(/,
+  );
+  assert.match(
+    source,
+    /if \(!detail\) \{\s+setSelectedReference\(''\);\s+setSelected\(null\);\s+setFeedback\(/,
+  );
+  assert.match(source, /Your reply was sent, but the refreshed support case is unavailable\./);
+});

@@ -86,6 +86,7 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
       setCases(next);
     } catch (error) {
       if (request !== requestRef.current) return;
+      setSelectedReference('');
       setFeedback(
         error instanceof Error
           ? error.message
@@ -122,6 +123,7 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
       setSelected(detail);
     } catch (error) {
       if (request !== requestRef.current) return;
+      setSelectedReference('');
       setFeedback(
         error instanceof Error
           ? error.message
@@ -204,6 +206,14 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
         selected.public_reference,
       );
       if (lifecycle !== lifecycleRef.current) return;
+      if (!detail) {
+        setSelectedReference('');
+        setSelected(null);
+        setFeedback(
+          'Your reply was sent, but the refreshed support case is unavailable. Return to the case list and try again.',
+        );
+        return;
+      }
       setSelected(detail);
       const next = await getMySupportCases(session);
       if (lifecycle !== lifecycleRef.current) return;
