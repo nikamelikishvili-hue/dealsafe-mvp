@@ -6231,6 +6231,9 @@ test('fulfillment mutations reject same-tick duplicate submissions', () => {
       3,
   );
   assert.match(fulfillment, /disabled=\{!inspectionRecorded \|\| shipmentBusy\}/);
+  assert.match(fulfillment, /className="primary inspection-save"[\s\S]*disabled=\{saving\}/);
+  assert.match(fulfillment, /inspection-\$\{firstIncomplete\?\.key\}/);
+  assert.doesNotMatch(fulfillment, /disabled=\{!complete \|\| saving\}/);
   assert.ok((fulfillment.match(/aria-busy=/g) || []).length >= 8);
   assert.match(fulfillment, /shipmentBusy \? 'Saving shipment…'/);
   assert.match(fulfillment, /shipmentBusy \? 'Confirming delivery…'/);

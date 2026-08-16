@@ -52,6 +52,47 @@ import {
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString(getAppLanguage());
 
+type ValidationError = { fieldId: string; message: string };
+
+function WorkflowValidationSummary({
+  id,
+  title,
+  description,
+  errors,
+}: {
+  id: string;
+  title: string;
+  description: string;
+  errors: ValidationError[];
+}) {
+  return (
+    <div
+      id={id}
+      className="workflow-validation-summary"
+      role="alert"
+      tabIndex={-1}
+    >
+      <CircleAlert aria-hidden="true" />
+      <div>
+        <h3>{t(title)}</h3>
+        <p>{t(description)}</p>
+        <ul>
+          {errors.map((error) => (
+            <li key={error.fieldId}>
+              <button
+                type="button"
+                onClick={() => document.getElementById(error.fieldId)?.focus()}
+              >
+                {t(error.message)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export function MeetingPanel({
   deal,
   session,
@@ -75,7 +116,6 @@ export function MeetingPanel({
   const [loadFailed, setLoadFailed] = useState(false);
   const [loadVersion, setLoadVersion] = useState(0);
   const [validationVisible, setValidationVisible] = useState(false);
-  const validationSummaryRef = useRef<HTMLDivElement>(null);
   const actionInFlight = useRef(false);
 
   useEffect(() => {
@@ -142,13 +182,15 @@ export function MeetingPanel({
       fieldId: 'meeting-scheduled-at',
       message: 'Choose the meeting date and time.',
     },
-  ].filter((error): error is { fieldId: string; message: string } => Boolean(error));
+  ].filter((error): error is ValidationError => Boolean(error));
 
   const propose = async (event: FormEvent) => {
     event.preventDefault();
     if (!formComplete) {
       setValidationVisible(true);
-      window.requestAnimationFrame(() => validationSummaryRef.current?.focus());
+      window.requestAnimationFrame(() =>
+        document.getElementById('meeting-validation-summary')?.focus(),
+      );
       return;
     }
     if (actionInFlight.current) return;
@@ -267,31 +309,12 @@ export function MeetingPanel({
           noValidate
         >
           {validationVisible && meetingErrors.length > 0 && (
-            <div
-              ref={validationSummaryRef}
-              className="workflow-validation-summary"
-              role="alert"
-              tabIndex={-1}
-              aria-labelledby="meeting-validation-title"
-            >
-              <CircleAlert aria-hidden="true" />
-              <div>
-                <h3 id="meeting-validation-title">{t('Complete the meeting details')}</h3>
-                <p>{t('Review the highlighted fields before proposing the meeting.')}</p>
-                <ul>
-                  {meetingErrors.map((error) => (
-                    <li key={error.fieldId}>
-                      <button
-                        type="button"
-                        onClick={() => document.getElementById(error.fieldId)?.focus()}
-                      >
-                        {t(error.message)}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+            <WorkflowValidationSummary
+              id="meeting-validation-summary"
+              title="Complete the meeting details"
+              description="Review the highlighted fields before proposing the meeting."
+              errors={meetingErrors}
+            />
           )}
           <label className="meeting-field meeting-field-place">
             {t('Public meeting place')}
@@ -558,7 +581,16 @@ export function InspectionRecorder({
     },
   ];
   const save = async () => {
-    if (!complete || saveInFlight.current) return;
+    if (!complete) {
+      setMessage('Complete every inspection check before saving the receipt.');
+      const firstIncomplete = items.find((item) => !checks[item.key]);
+      window.requestAnimationFrame(() =>
+        document.getElementById(`inspection-${firstIncomplete?.key}`)?.focus(),
+      );
+      return;
+    }
+    if (saveInFlight.current) return;
+    setMessage('');
     saveInFlight.current = true;
     setSaving(true);
     setMessage('');
@@ -613,13 +645,17 @@ export function InspectionRecorder({
             className={checks[item.key] ? 'checked' : ''}
           >
             <input
+              id={`inspection-${item.key}`}
               type="checkbox"
               checked={checks[item.key]}
               onChange={(event) =>
-                setChecks((current) => ({
-                  ...current,
-                  [item.key]: event.target.checked,
-                }))
+                {
+                  setChecks((current) => ({
+                    ...current,
+                    [item.key]: event.target.checked,
+                  }));
+                  setMessage('');
+                }
               }
             />
             <span>{t(item.label)}</span>
@@ -629,7 +665,7 @@ export function InspectionRecorder({
       <button
         type="button"
         className="primary inspection-save"
-        disabled={!complete || saving}
+        disabled={saving}
         aria-busy={saving}
         onClick={save}
       >
@@ -998,7 +1034,9 @@ export function ShippingPanel({
     event.preventDefault();
     if (addressIncomplete) {
       setAddressValidationVisible(true);
-      window.requestAnimationFrame(() => addressValidationSummaryRef.current?.focus());
+      window.requestAnimationFrame(() =>
+        document.getElementById('shipping-validation-summary')?.focus(),
+      );
       return;
     }
     if (mutationInFlight.current) return;
@@ -1140,7 +1178,6 @@ export function ShippingPanel({
     !address.state ||
     !isUsPostalCode(address.postalCode);
   const [addressValidationVisible, setAddressValidationVisible] = useState(false);
-  const addressValidationSummaryRef = useRef<HTMLDivElement>(null);
   const addressErrors = [
     address.recipientName.trim().length < 2 && {
       fieldId: 'shipping-recipient-name',
@@ -1164,7 +1201,7 @@ export function ShippingPanel({
       fieldId: 'shipping-postal-code',
       message: 'Enter a valid 5-digit ZIP code or ZIP+4.',
     },
-  ].filter((error): error is { fieldId: string; message: string } => Boolean(error));
+  ].filter((error): error is ValidationError => Boolean(error));
   const shippingState =
     shipment?.status === 'delivered'
       ? 'Delivered'
@@ -1259,31 +1296,12 @@ export function ShippingPanel({
             noValidate
           >
             {addressValidationVisible && addressErrors.length > 0 && (
-              <div
-                ref={addressValidationSummaryRef}
-                className="workflow-validation-summary"
-                role="alert"
-                tabIndex={-1}
-                aria-labelledby="shipping-validation-title"
-              >
-                <CircleAlert aria-hidden="true" />
-                <div>
-                  <h3 id="shipping-validation-title">{t('Complete the delivery address')}</h3>
-                  <p>{t('Review the highlighted fields before saving this address.')}</p>
-                  <ul>
-                    {addressErrors.map((error) => (
-                      <li key={error.fieldId}>
-                        <button
-                          type="button"
-                          onClick={() => document.getElementById(error.fieldId)?.focus()}
-                        >
-                          {t(error.message)}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
+              <WorkflowValidationSummary
+                id="shipping-validation-summary"
+                title="Complete the delivery address"
+                description="Review the highlighted fields before saving this address."
+                errors={addressErrors}
+              />
             )}
             <label>
               {t('Recipient name')}
