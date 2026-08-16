@@ -222,7 +222,7 @@ test('Vercel configuration includes the minimum browser security headers', () =>
   assert.equal(values.get('x-permitted-cross-domain-policies'), 'none');
 
   const html = readText('index.html');
-  const inlineScripts = [...html.matchAll(/<script(?:\s+[^>]*)?>([\s\S]*?)<\/script>/g)]
+  const inlineScripts = [...html.matchAll(/<script(?:\s+[^>]*)?>([\s\S]*?)<\/script>/gi)]
     .map(match => match[1])
     .filter(Boolean);
   for (const source of inlineScripts) {
@@ -3271,7 +3271,7 @@ test('security notification worker is authenticated, idempotent, staged, and pri
   assert.match(worker, /"claim_security_notification_delivery_batch"/);
   assert.match(worker, /admin\.auth\.admin\.getUserById\(job\.target_user_id\)/);
   assert.match(worker, /data\.user\.email_confirmed_at/);
-  assert.match(worker, /https:\/\/api\.resend\.com\/emails/);
+  assert.ok(worker.includes('https://api.resend.com/emails'));
   assert.match(worker, /"Idempotency-Key": `dealivra_security_\$\{job\.notification_id\}`/);
   assert.match(worker, /AbortSignal\.timeout\(10_000\)/);
   assert.match(worker, /readSecurityNotificationProviderJson\(response\)/);
@@ -3939,7 +3939,7 @@ test('VIN decoding maps only reviewed NHTSA fields and reuses its bounded memory
   resetVehicleVinCacheForTests();
   globalThis.fetch = async url => {
     providerCalls += 1;
-    assert.match(String(url), /vpic\.nhtsa\.dot\.gov\/api\/vehicles\/DecodeVinValues\//);
+    assert.ok(String(url).startsWith('https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/'));
     assert.match(String(url), /modelyear=2003/);
     return new Response(JSON.stringify({
       Results: [{
@@ -5348,7 +5348,7 @@ test('public route presentation and metadata are isolated from application state
   assert.match(publicRoutes, /export function DealLinkError/);
   assert.match(publicRoutes, /noindex,nofollow,noarchive/);
   assert.match(publicRoutes, /link\[rel="canonical"\]/);
-  assert.match(publicRoutes, /https:\/\/dealivra\.com/);
+  assert.ok(publicRoutes.includes('https://dealivra.com'));
 });
 
 test('account entry and recovery pages are isolated without moving authentication state', () => {
@@ -7244,8 +7244,8 @@ test('the third ARC-004 boundary validates every browser payment success respons
   assert.match(schemas, /dealivra\.payment\.response-rejection\.v1/);
   assert.match(schemas, /amounts_do_not_balance/);
   assert.match(schemas, /event_timestamp_order_invalid/);
-  assert.match(schemas, /https:\/\/checkout\.stripe\.com/);
-  assert.match(schemas, /https:\/\/connect\.stripe\.com/);
+  assert.ok(schemas.includes('https://checkout.stripe.com'));
+  assert.ok(schemas.includes('https://connect.stripe.com'));
   assert.match(schemas, /PaymentResponseValidationError/);
   assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
 });
