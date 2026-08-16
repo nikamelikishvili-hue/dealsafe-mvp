@@ -5819,7 +5819,7 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   for (const [button] of fulfillmentActionButtons) {
     assert.match(button, /\btype="button"/);
   }
-  assert.match(fulfillment, /getElementById\('deal-evidence-vault'\)/);
+  assert.match(fulfillment, /focusPageDestination\('deal-evidence-vault'\)/);
   assert.match(
     fulfillment,
     /This address is used only for this deal and is never shown on the public Deal Link\./,
@@ -13890,6 +13890,8 @@ test('global motion preferences suppress nonessential animation and smooth scrol
   const navigation = readText('src/accessibleNavigation.ts');
   const app = readText('src/app.tsx');
   const landing = readText('src/PublicLanding.tsx');
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+  const workspaceFeatures = readText('src/DealWorkspaceFeatures.tsx');
 
   assert.match(styles, /@media\(prefers-reduced-motion:reduce\)/);
   assert.match(styles, /\*,\*::before,\*::after\{[^}]*animation-duration:\.01ms!important/);
@@ -13900,12 +13902,16 @@ test('global motion preferences suppress nonessential animation and smooth scrol
   assert.match(navigation, /requested === 'smooth'[\s\S]*return 'auto'/);
   assert.doesNotMatch(app, /behavior:'smooth'/);
   assert.doesNotMatch(landing, /behavior: 'smooth'/);
+  assert.doesNotMatch(fulfillment, /behavior: 'smooth'/);
+  assert.doesNotMatch(workspaceFeatures, /behavior: 'smooth'/);
 });
 
 test('home and section navigation moves keyboard focus with the visual viewport', () => {
   const navigation = readText('src/accessibleNavigation.ts');
   const app = readText('src/app.tsx');
   const landing = readText('src/PublicLanding.tsx');
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+  const workspaceFeatures = readText('src/DealWorkspaceFeatures.tsx');
 
   assert.match(navigation, /document\.getElementById\(id \|\| 'main-content'\)/);
   assert.match(navigation, /setAttribute\('tabindex', '-1'\)/);
@@ -13913,6 +13919,8 @@ test('home and section navigation moves keyboard focus with the visual viewport'
   assert.match(navigation, /scrollIntoView\(\{ behavior, block: 'start' \}\)/);
   assert.ok((app.match(/focusPageDestination\(/g) ?? []).length >= 3);
   assert.match(landing, /focusPageDestination\(id\)/);
+  assert.match(fulfillment, /focusPageDestination\('deal-evidence-vault'\)/);
+  assert.match(workspaceFeatures, /focusPageDestination\('deal-editor'\)/);
 });
 
 test('resolution mutations use same-tick single-flight guards', () => {

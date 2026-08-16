@@ -13,6 +13,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { AddressAutocomplete } from './AddressAutocomplete';
+import { focusPageDestination } from './accessibleNavigation';
 import { AsyncStatePanel } from './AsyncStatePanel';
 import { copyTextToClipboard } from './clipboard';
 import { useConfirmAction } from './ConfirmActionDialog';
@@ -1481,11 +1482,7 @@ export function ShippingPanel({
               <button
                 type="button"
                 className="secondary shipping-evidence-link"
-                onClick={() =>
-                  document
-                    .getElementById('deal-evidence-vault')
-                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                }
+                onClick={() => focusPageDestination('deal-evidence-vault')}
               >
                 <ShieldCheck size={17} />
                 {t('Upload required evidence')}

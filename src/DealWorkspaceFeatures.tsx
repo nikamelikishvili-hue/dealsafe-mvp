@@ -41,6 +41,7 @@ import {
   X,
   ZoomIn,
 } from 'lucide-react';
+import { focusPageDestination } from './accessibleNavigation';
 import { copyTextToClipboard } from './clipboard';
 import { AsyncStatePanel } from './AsyncStatePanel';
 import { useConfirmAction } from './ConfirmActionDialog';
@@ -3099,12 +3100,7 @@ export function DealEditor({
   useEffect(() => {
     if (!openRequestedAt) return;
     setOpen(true);
-    window.requestAnimationFrame(() =>
-      sectionRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      }),
-    );
+    window.requestAnimationFrame(() => focusPageDestination('deal-editor'));
   }, [openRequestedAt]);
 
   const save = async (event: React.FormEvent) => {
