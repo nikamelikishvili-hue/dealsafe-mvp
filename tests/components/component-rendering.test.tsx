@@ -157,13 +157,10 @@ test('sign-up form keeps consent and policy links visible before submission', ()
   assert.match(markup, /enterKeyHint="next"/);
   assert.match(markup, /type="password"[^>]*name="password"/);
   assert.match(markup, /maxLength="256" type="password"/);
-  assert.match(markup, /type="checkbox"/);
+  assert.match(markup, /<input required="" type="checkbox"\/>/);
   assert.match(markup, /href="\/terms"/);
   assert.match(markup, /href="\/privacy"/);
-  assert.match(
-    markup,
-    /<button type="submit" class="primary full" disabled="">Create account &amp; continue<\/button>/,
-  );
+  assert.match(markup, /<button type="submit" class="primary full">Create account &amp; continue<\/button>/);
 });
 
 test('critical secondary actions cannot accidentally submit an account form', () => {

@@ -6058,10 +6058,9 @@ test('account entry prevents duplicate authentication requests', () => {
   assert.match(app, /finally\{authSubmittingRef\.current=false;setAuthSubmitting\(false\)\}/);
   assert.match(app, /submitting=\{authSubmitting\}/);
   assert.match(entry, /aria-busy=\{submitting\}/);
-  assert.match(
-    entry,
-    /disabled=\{submitting \|\| \(isSignup && !acceptedPolicies\)\}/,
-  );
+  assert.match(entry, /disabled=\{submitting\}/);
+  assert.match(entry, /checked=\{acceptedPolicies\}/);
+  assert.match(entry, /required/);
   assert.match(entry, /'Creating account…'/);
   assert.match(entry, /'Signing in…'/);
 });
@@ -14711,6 +14710,20 @@ test('password recovery exposes field-specific errors and deterministic focus re
   assert.match(fieldError, /role="alert"/);
   assert.match(fieldError, /aria-hidden="true"/);
   assert.match(fieldErrorStyles, /\[aria-invalid='true'\]/);
+});
+
+test('account, support, and safety forms keep native validation actions available', () => {
+  const account = readText('src/AccountProfileWorkspace.tsx');
+  const entry = readText('src/AccountEntryPages.tsx');
+  const support = readText('src/SupportCaseCenter.tsx');
+  const resolution = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(account, /id="account-confirm-password"/);
+  assert.match(account, /account-confirm-password'\)\?\.focus\(\)/);
+  assert.doesNotMatch(account, /savingPassword \|\| !currentPassword/);
+  assert.doesNotMatch(entry, /submitting \|\| \(isSignup && !acceptedPolicies\)/);
+  assert.doesNotMatch(support, /saving \|\| reply\.trim\(\)\.length < 10/);
+  assert.doesNotMatch(resolution, /sending \|\| details\.trim\(\)\.length < 10/);
 });
 
 test('shared async state exposes accurate loading and retry semantics', () => {

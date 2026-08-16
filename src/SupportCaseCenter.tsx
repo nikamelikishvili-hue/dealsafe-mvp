@@ -331,11 +331,7 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
               className="primary"
               type="submit"
               aria-busy={saving}
-              disabled={
-                saving
-                || subject.trim().length < 5
-                || message.trim().length < 10
-              }
+              disabled={saving}
             >
               {t(saving ? 'Opening…' : 'Open case')}
             </button>
@@ -421,7 +417,7 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
                     className="primary"
                     type="submit"
                     aria-busy={saving}
-                    disabled={saving || reply.trim().length < 10}
+                    disabled={saving}
                   >
                     <Send size={17} aria-hidden="true" />
                     {t(saving ? 'Sending…' : 'Send reply')}

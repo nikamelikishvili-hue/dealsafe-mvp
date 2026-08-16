@@ -339,7 +339,7 @@ export function AccountEntryPage({
         </span>
       </label>}
       {message && <FeedbackMessage tone="error">{t(message)}</FeedbackMessage>}
-      <button type="submit" className="primary full" disabled={submitting || (isSignup && !acceptedPolicies)}>
+      <button type="submit" className="primary full" disabled={submitting}>
         {t(
           submitting
             ? isSignup

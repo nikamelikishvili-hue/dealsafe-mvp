@@ -142,6 +142,9 @@ function AccountSettings({
     setPasswordMessage('');
     if (password !== confirmPassword) {
       setPasswordMessage('Passwords do not match.');
+      window.requestAnimationFrame(() =>
+        document.getElementById('account-confirm-password')?.focus(),
+      );
       return;
     }
     savingPasswordRef.current = true;
@@ -233,6 +236,7 @@ function AccountSettings({
           <label>
             {t('Confirm password')}
             <input
+              id="account-confirm-password"
               required
               name="confirm"
               minLength={12}
@@ -253,7 +257,7 @@ function AccountSettings({
           <button
             type="submit"
             className="primary"
-            disabled={savingPassword || !currentPassword || !password || !confirmPassword}
+            disabled={savingPassword}
           >
             {t(savingPassword ? 'Updating…' : 'Update password')}
           </button>

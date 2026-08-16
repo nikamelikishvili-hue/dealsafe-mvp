@@ -443,7 +443,7 @@ export function ReportDealPanel({
                 <button
                   className="primary"
                   type="submit"
-                  disabled={sending || details.trim().length < 10}
+                  disabled={sending}
                 >
                   {t(sending ? 'Sending…' : 'Submit report')}
                 </button>
