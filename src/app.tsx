@@ -276,6 +276,7 @@ function NotificationCenter({items,deals,loading,error,onRetry,onOpen,onOpenPubl
 
 function PublishedDealSuccess({deal,warning,session,acceptanceProtected,acceptanceProtectionState,acceptanceProtectionError,onRetryProtection,onProtectionChanged,onOpen,onDashboard,onCreateAnother}:{deal:Deal;warning:string;session:StoredSession|null;acceptanceProtected:boolean;acceptanceProtectionState:'idle'|'loading'|'ready'|'error';acceptanceProtectionError:string;onRetryProtection:()=>void;onProtectionChanged:(enabled:boolean)=>void;onOpen:()=>void;onDashboard:()=>void;onCreateAnother:()=>void}){
   const [notice,setNotice]=useState('');
+  const [noticeFailed,setNoticeFailed]=useState(false);
   const [accessCode,setAccessCode]=useState('');
   const [accessMessage,setAccessMessage]=useState('');
   const [accessBusy,setAccessBusy]=useState(false);
@@ -283,13 +284,13 @@ function PublishedDealSuccess({deal,warning,session,acceptanceProtected,acceptan
   const link=`${location.origin}/?deal=${deal.publicId}`;
   const message=`Review this Dealivra agreement: ${deal.title} · ${dealPrice(deal)} · ${link}`;
   useEffect(()=>()=>window.clearTimeout(noticeTimer.current),[]);
-  const flash=(text:string)=>{window.clearTimeout(noticeTimer.current);setNotice(text);noticeTimer.current=window.setTimeout(()=>setNotice(''),2200)};
+  const flash=(text:string,failed=false)=>{window.clearTimeout(noticeTimer.current);setNotice(text);setNoticeFailed(failed);noticeTimer.current=window.setTimeout(()=>setNotice(''),2200)};
   const copy=async(value=link,successMessage=value===link?'Deal Link copied.':'Invitation message copied.')=>{
     try{
       await copyTextToClipboard(value);
       flash(successMessage);
     }catch{
-      flash('Could not copy automatically. Select the link and copy it.');
+      flash('Could not copy automatically. Select the link and copy it.',true);
     }
   };
   const protectAcceptance=async()=>{
@@ -353,7 +354,7 @@ function PublishedDealSuccess({deal,warning,session,acceptanceProtected,acceptan
             <p>{t(acceptanceProtected?'Acceptance protection is active. Generate a new code if the buyer no longer has the original.':'Add a 6-digit code when you want only the intended buyer to accept this deal.')}</p>
             <button type="button" className="secondary" disabled={accessBusy} onClick={()=>void protectAcceptance()}><LockKeyhole size={16}/>{t(accessBusy?'Creating code…':acceptanceProtected?'Generate new code':'Require buyer code')}</button>
           </div>}
-          {accessMessage&&<div className="published-access-message notice" role="status">{t(accessMessage)}</div>}
+          {accessMessage&&<div className="published-access-message notice error" role="alert">{t(accessMessage)}</div>}
           </>}
         </section>
         <div className="published-share-actions" aria-label={t('Share Deal Link')}>
@@ -362,7 +363,7 @@ function PublishedDealSuccess({deal,warning,session,acceptanceProtected,acceptan
           <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer"><MessageCircle size={17}/>WhatsApp</a>
           <button type="button" onClick={()=>void share()}><Share2 size={17}/>{t('More apps')}</button>
         </div>
-        {notice&&<div className="published-copy-notice" role="status"><Check/>{t(notice)}</div>}
+        {notice&&<div className={`published-copy-notice ${noticeFailed?'error':''}`} role={noticeFailed?'alert':'status'} aria-live={noticeFailed?'assertive':'polite'}>{noticeFailed?<ShieldAlert/>:<Check/>}{t(notice)}</div>}
       </section>
 
       <aside className="published-next-card">
@@ -1248,7 +1249,7 @@ export function App() {
       {view==='home'&&<InstallApp/>}
       {view==='admin'&&session&&isAdmin&&<React.Suspense fallback={<RouteLoading/>}><AdministrationWorkspace session={session} onBack={()=>setView('home')} onOpenDeal={deal=>{setActive(deal);setView('deal')}}/></React.Suspense>}
       {view==='published'&&active&&<PublishedDealSuccess deal={active} warning={authMessage} session={session} acceptanceProtected={acceptanceProtected} acceptanceProtectionState={acceptanceProtectionState} acceptanceProtectionError={acceptanceProtectionError} onRetryProtection={()=>setAcceptanceProtectionRevision(revision=>revision+1)} onProtectionChanged={enabled=>{setAcceptanceProtected(enabled);setAcceptanceProtectionState('ready')}} onOpen={()=>{setAuthMessage('');setView('deal')}} onDashboard={()=>goHomeSection()} onCreateAnother={openCreate}/>}
-      {view==='create'&&authMessage&&<div className="creation-error notice">{t(authMessage)}</div>}
+      {view==='create'&&authMessage&&<div className="creation-error notice" role="alert">{t(authMessage)}</div>}
       {view==='create'&&creating&&<div className="creation-progress notice">{t('Creating your Deal Link…')}</div>}
       {view==='home'&&user&&<NotificationCenter items={notifications} deals={deals} loading={notificationsLoading} error={notificationsError} onRetry={()=>setNotificationsRevision(revision=>revision+1)} onOpen={open} onOpenPublic={publicId=>void openPublicDeal(publicId)} onMarkAll={markAllActivityRead}/>}
       {view==='home'&&user&&<WorkspaceDealExplorer deals={deals} savedDeals={savedDeals} loading={dashboardLoading} error={dashboardError} onRetry={()=>setDashboardRevision(revision=>revision+1)} onOpen={open} onCreate={openCreate}/>}

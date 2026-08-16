@@ -810,7 +810,7 @@ export function DealWorkspace({
                           />
                         </label>
                         {authMessage && (
-                          <div className="notice" role="status">
+                          <div className="notice error" role="alert">
                             {t(authMessage)}
                           </div>
                         )}

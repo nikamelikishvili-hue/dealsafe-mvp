@@ -15330,3 +15330,14 @@ test('receipt, invitation, and VIN failures are announced urgently', () => {
   assert.match(creation, /role=\{vehicleVinLookup\.status === 'error' \? 'alert' : 'status'\}/);
   assert.match(creation, /aria-live=\{vehicleVinLookup\.status === 'error' \? 'assertive' : 'polite'\}/);
 });
+
+test('published and acceptance failures use urgent accessible feedback', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+
+  assert.match(app, /const \[noticeFailed,setNoticeFailed\]=useState\(false\)/);
+  assert.match(app, /role=\{noticeFailed\?'alert':'status'\}/);
+  assert.match(app, /published-access-message notice error" role="alert"/);
+  assert.match(app, /creation-error notice" role="alert"/);
+  assert.match(workspace, /authMessage && \([\s\S]*className="notice error" role="alert"/);
+});
