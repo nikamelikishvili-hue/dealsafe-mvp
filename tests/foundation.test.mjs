@@ -12330,6 +12330,18 @@ test('MFA removal can be cancelled by keyboard and restores the initiating contr
   assert.match(accountMfa, /window\.requestAnimationFrame\(\(\)=>removalTriggerRef\.current\?\.focus\(\)\)/);
 });
 
+test('account password changes expose field-specific validation and deterministic focus', () => {
+  const accountProfile = readText('src/AccountProfileWorkspace.tsx');
+
+  assert.match(accountProfile, /<FieldError id="account-password-error">/);
+  assert.match(accountProfile, /<FieldError id="account-confirm-password-error">/);
+  assert.match(accountProfile, /aria-describedby=\{passwordError \? 'account-password-requirements account-password-error'/);
+  assert.match(accountProfile, /aria-describedby=\{confirmPasswordError \? 'account-password-requirements account-confirm-password-error'/);
+  assert.match(accountProfile, /New password'[\s\S]*?<input\s+ref=\{passwordRef\}/);
+  assert.match(accountProfile, /passwordRef\.current\?\.focus\(\)/);
+  assert.match(accountProfile, /confirmPasswordRef\.current\?\.focus\(\)/);
+});
+
 test('sample deals remain inside the local data boundary', () => {
   const app = readText('src/app.tsx');
   const agreement = readText('src/AgreementRecordSummary.tsx');
@@ -14912,7 +14924,7 @@ test('account, support, and safety forms keep native validation actions availabl
   const resolution = readText('src/DealResolutionWorkspace.tsx');
 
   assert.match(account, /id="account-confirm-password"/);
-  assert.match(account, /account-confirm-password'\)\?\.focus\(\)/);
+  assert.match(account, /confirmPasswordRef\.current\?\.focus\(\)/);
   assert.doesNotMatch(account, /savingPassword \|\| !currentPassword/);
   assert.doesNotMatch(entry, /submitting \|\| \(isSignup && !acceptedPolicies\)/);
   assert.doesNotMatch(support, /saving \|\| reply\.trim\(\)\.length < 10/);

@@ -13,6 +13,7 @@ import { AccountMfaSecurity } from './AccountMfaSecurity';
 import { AccountSessionSecurity } from './AccountSessionSecurity';
 import { AsyncStatePanel } from './AsyncStatePanel';
 import { copyTextToClipboard } from './clipboard';
+import { FieldError } from './FieldError';
 import { supportCasesEnabled } from './featureFlags';
 import { getAppLanguage, t } from './i18n';
 import { SupportCaseCenter } from './SupportCaseCenter';
@@ -111,10 +112,14 @@ function AccountSettings({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [nameMessage, setNameMessage] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const [savingName, setSavingName] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const savingNameRef = useRef(false);
   const savingPasswordRef = useRef(false);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => setName(displayName), [displayName]);
 
@@ -140,11 +145,16 @@ function AccountSettings({
     event.preventDefault();
     if (savingPasswordRef.current) return;
     setPasswordMessage('');
+    setPasswordError('');
+    setConfirmPasswordError('');
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/.test(password)) {
+      setPasswordError('Use 12+ characters with uppercase, lowercase, a number, and a symbol.');
+      window.requestAnimationFrame(() => passwordRef.current?.focus());
+      return;
+    }
     if (password !== confirmPassword) {
-      setPasswordMessage('Passwords do not match.');
-      window.requestAnimationFrame(() =>
-        document.getElementById('account-confirm-password')?.focus(),
-      );
+      setConfirmPasswordError('Passwords do not match.');
+      window.requestAnimationFrame(() => confirmPasswordRef.current?.focus());
       return;
     }
     savingPasswordRef.current = true;
@@ -221,6 +231,7 @@ function AccountSettings({
           <label>
             {t('New password')}
             <input
+              ref={passwordRef}
               required
               name="new"
               minLength={12}
@@ -228,14 +239,21 @@ function AccountSettings({
               autoComplete="new-password"
               enterKeyHint="next"
               type="password"
+              aria-invalid={Boolean(passwordError)}
+              aria-describedby={passwordError ? 'account-password-requirements account-password-error' : 'account-password-requirements'}
               disabled={savingPassword}
               value={password}
-              onChange={event => setPassword(event.target.value)}
+              onChange={event => {
+                setPassword(event.target.value);
+                if (passwordError) setPasswordError('');
+              }}
             />
+            {passwordError ? <FieldError id="account-password-error">{passwordError}</FieldError> : null}
           </label>
           <label>
             {t('Confirm password')}
             <input
+              ref={confirmPasswordRef}
               id="account-confirm-password"
               required
               name="confirm"
@@ -244,11 +262,20 @@ function AccountSettings({
               autoComplete="new-password"
               enterKeyHint="done"
               type="password"
+              aria-invalid={Boolean(confirmPasswordError)}
+              aria-describedby={confirmPasswordError ? 'account-password-requirements account-confirm-password-error' : 'account-password-requirements'}
               disabled={savingPassword}
               value={confirmPassword}
-              onChange={event => setConfirmPassword(event.target.value)}
+              onChange={event => {
+                setConfirmPassword(event.target.value);
+                if (confirmPasswordError) setConfirmPasswordError('');
+              }}
             />
+            {confirmPasswordError ? <FieldError id="account-confirm-password-error">{confirmPasswordError}</FieldError> : null}
           </label>
+          <small id="account-password-requirements">
+            {t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}
+          </small>
           {passwordMessage ? (
             <div className="notice" role="alert">
               {t(passwordMessage)}
