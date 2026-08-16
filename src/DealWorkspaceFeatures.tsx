@@ -2588,6 +2588,7 @@ export function SavedDraftPanel({
   const [busy, setBusy] = useState(false);
   const mutationInFlight = useRef(false);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [declarations, setDeclarations] = useState<SellerDeclarations>(
     emptySellerDeclarations,
   );
@@ -2606,12 +2607,14 @@ export function SavedDraftPanel({
       )?.value || 'save';
     if (busy || mutationInFlight.current) return;
     if (action === 'publish' && !declarationsComplete) {
+      setMessageFailed(true);
       setMessage('Confirm all declarations before publishing.');
       return;
     }
     mutationInFlight.current = true;
     setBusy(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const updated =
         action === 'publish'
@@ -2622,6 +2625,7 @@ export function SavedDraftPanel({
         action === 'publish' ? 'Deal Link published.' : 'Draft saved.',
       );
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not update draft',
       );
@@ -2761,7 +2765,7 @@ export function SavedDraftPanel({
             {t('Confirm all declarations before publishing.')}
           </small>
         )}
-        {message && <div className="notice" role="status" aria-live="polite">{t(message)}</div>}
+        {message && <div className="notice" role={messageFailed ? 'alert' : 'status'} aria-live={messageFailed ? 'assertive' : 'polite'}>{t(message)}</div>}
         <div className="saved-draft-actions">
           <button
             type="submit"
@@ -2799,6 +2803,7 @@ export function PhotoManager({
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [uploading, setUploading] = useState(false);
   const uploadingRef = useRef(false);
   const remaining = Math.max(0, 6 - (deal.mediaUrls?.length || 0));
@@ -2806,8 +2811,10 @@ export function PhotoManager({
 
   const choose = (selected: File[]) => {
     setMessage('');
+    setMessageFailed(false);
     const unsupported = selected.find((file) => mediaFileKind(file) === null);
     if (unsupported) {
+      setMessageFailed(true);
       setMessage(`${unsupported.name} ${t('is not a supported media file.')}`);
       return;
     }
@@ -2825,6 +2832,7 @@ export function PhotoManager({
       (file) => file.size > (isVideoFile(file) ? 25 : 20) * 1024 * 1024,
     );
     if (invalid || videos.length + (hasVideo ? 1 : 0) > 1) {
+      setMessageFailed(true);
       setMessage(
         invalid
           ? `${invalid.name} ${t('is too large.')}`
@@ -2839,6 +2847,7 @@ export function PhotoManager({
     uploadingRef.current = true;
     setUploading(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const urls = await uploadDealPhotos(
         session,
@@ -2850,6 +2859,7 @@ export function PhotoManager({
       setFiles([]);
       setMessage('Media added successfully.');
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not upload media',
       );
@@ -2917,7 +2927,7 @@ export function PhotoManager({
               )}`}
         </button>
       )}
-      {message && <div className="notice" role="status" aria-live="polite">{t(message)}</div>}
+      {message && <div className="notice" role={messageFailed ? 'alert' : 'status'} aria-live={messageFailed ? 'assertive' : 'polite'}>{t(message)}</div>}
     </section>
   );
 }
@@ -2934,6 +2944,7 @@ export function ExistingMediaManager({
   const [removing, setRemoving] = useState('');
   const removingRef = useRef(false);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [previewSource, setPreviewSource] = useState<string | null>(null);
   const { confirmAction, confirmDialog } = useConfirmAction();
 
@@ -2954,12 +2965,14 @@ export function ExistingMediaManager({
     }
     setRemoving(url);
     setMessage('');
+    setMessageFailed(false);
     try {
       await deleteDealMedia(session, deal.id, url);
       onRemoved(url);
       setMessage('Media removed.');
       if (previewSource === url) setPreviewSource(null);
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not remove media',
       );
@@ -2997,7 +3010,7 @@ export function ExistingMediaManager({
           </article>
         ))}
       </div>
-      {message && <div className="notice" role="status" aria-live="polite">{t(message)}</div>}
+      {message && <div className="notice" role={messageFailed ? 'alert' : 'status'} aria-live={messageFailed ? 'assertive' : 'polite'}>{t(message)}</div>}
       {previewSource && (
         <MediaLightbox
           source={previewSource}
@@ -3023,6 +3036,7 @@ export function CoverSelector({
   const urls = deal.mediaUrls || [];
   const [selected, setSelected] = useState(urls[0] || '');
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
 
@@ -3034,11 +3048,13 @@ export function CoverSelector({
     const ordered = [selected, ...urls.filter((url) => url !== selected)];
     setSaving(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       await reorderDealMedia(session, deal.id, ordered);
       onReordered(ordered);
       setMessage('Cover media updated.');
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not update cover',
       );
@@ -3090,7 +3106,7 @@ export function CoverSelector({
       >
         {t(saving ? 'Saving…' : 'Set as cover')}
       </button>
-      {message && <div className="notice" role="status" aria-live="polite">{t(message)}</div>}
+      {message && <div className="notice" role={messageFailed ? 'alert' : 'status'} aria-live={messageFailed ? 'assertive' : 'polite'}>{t(message)}</div>}
     </section>
   );
 }
@@ -3111,6 +3127,7 @@ export function DealEditor({
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [edit, setEdit] = useState<DealDraft>({
     title: deal.title,
     description: deal.description,
@@ -3134,6 +3151,7 @@ export function DealEditor({
     savingRef.current = true;
     setSaving(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const version = await updatePublishedDeal(
         session,
@@ -3152,6 +3170,7 @@ export function DealEditor({
       setMessage(`${t('Changes published as agreement version')} ${version}.`);
       setOpen(false);
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not update deal',
       );
@@ -3272,7 +3291,7 @@ export function DealEditor({
           </button>
         </form>
       )}
-      {message && <div className="notice" role="status" aria-live="polite">{t(message)}</div>}
+      {message && <div className="notice" role={messageFailed ? 'alert' : 'status'} aria-live={messageFailed ? 'assertive' : 'polite'}>{t(message)}</div>}
     </section>
   );
 }

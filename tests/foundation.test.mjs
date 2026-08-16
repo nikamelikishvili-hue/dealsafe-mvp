@@ -15273,3 +15273,13 @@ test('inquiry and offer failures preserve stale data and announce urgently', () 
   assert.match(source, /setMessageFailed\(false\);\s+try \{\s+await askDealQuestion/);
   assert.match(source, /setMessageFailed\(false\);\s+try \{\s+await makeDealOffer/);
 });
+
+test('draft and media mutation failures use urgent accessible feedback', () => {
+  const source = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(source, /setMessageFailed\(true\);\s+setMessage\('Confirm all declarations before publishing\.'\)/);
+  assert.match(source, /setMessageFailed\(true\);\s+setMessage\(`\$\{unsupported\.name\}/);
+  assert.match(source, /await deleteDealMedia[\s\S]{0,240}catch \(error\) \{\s+setMessageFailed\(true\)/);
+  assert.match(source, /await reorderDealMedia[\s\S]{0,240}catch \(error\) \{\s+setMessageFailed\(true\)/);
+  assert.match(source, /await updatePublishedDeal[\s\S]{0,500}catch \(error\) \{\s+setMessageFailed\(true\)/);
+});
