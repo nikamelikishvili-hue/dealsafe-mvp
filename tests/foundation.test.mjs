@@ -12311,6 +12311,16 @@ test('sample and local fallback deal identifiers satisfy every public boundary',
   assert.doesNotMatch(`${main}\n${demoRepository}`, /DV-/);
 });
 
+test('global session revocation uses the governed accessible confirmation dialog', () => {
+  const sessionSecurity = readText('src/AccountSessionSecurity.tsx');
+
+  assert.match(sessionSecurity, /useConfirmAction\(\)/);
+  assert.match(sessionSecurity, /tone:'danger'/);
+  assert.match(sessionSecurity, /if\(confirmed\)await signOutAll\(\)/);
+  assert.match(sessionSecurity, /\{confirmDialog\}/);
+  assert.doesNotMatch(sessionSecurity, /className="session-confirmation"/);
+});
+
 test('sample deals remain inside the local data boundary', () => {
   const app = readText('src/app.tsx');
   const agreement = readText('src/AgreementRecordSummary.tsx');

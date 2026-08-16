@@ -16,6 +16,7 @@ import {
   type StoredSession,
 } from './services/supabaseRest';
 import { AsyncStatePanel } from './AsyncStatePanel';
+import { useConfirmAction } from './ConfirmActionDialog';
 
 function describeDevice(userAgent:string){
   const ua=userAgent.toLowerCase();
@@ -58,7 +59,7 @@ export function AccountSessionSecurity({
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
   const [loadError,setLoadError]=useState('');
-  const [confirmEverywhere,setConfirmEverywhere]=useState(false);
+  const {confirmAction,confirmDialog}=useConfirmAction();
 
   const loadSessions=async()=>{
     const request=++loadRequestRef.current;
@@ -117,11 +118,21 @@ export function AccountSessionSecurity({
       onSignedOut();
     }catch(actionError){
       setError(actionError instanceof Error?actionError.message:'Could not sign out all devices.');
-      setConfirmEverywhere(false);
     }finally{
       busyRef.current=false;
       setBusy('');
     }
+  };
+
+  const requestSignOutAll=async()=>{
+    const confirmed=await confirmAction({
+      title:'Sign out on every device?',
+      description:'You will need to sign in again everywhere, including on this device.',
+      confirmLabel:'Sign out everywhere',
+      cancelLabel:'Keep me signed in',
+      tone:'danger',
+    });
+    if(confirmed)await signOutAll();
   };
 
   const otherSessionCount=sessions.filter(item=>!item.current_session).length;
@@ -165,21 +176,12 @@ export function AccountSessionSecurity({
         <LogOut aria-hidden="true"/>
         <span><strong>{busy==='others'?'Signing out…':'Sign out other devices'}</strong><small>Keep this device signed in</small></span>
       </button>
-      <button type="button" className="session-signout-all" onClick={()=>setConfirmEverywhere(true)} disabled={Boolean(busy)}>
+      <button type="button" className="session-signout-all" onClick={requestSignOutAll} disabled={Boolean(busy)}>
         <LogOut aria-hidden="true"/>
         <span><strong>Sign out everywhere</strong><small>Includes this device</small></span>
       </button>
     </div>}
 
-    {confirmEverywhere?<div className="session-confirmation" role="alert" aria-labelledby="session-confirmation-title">
-      <div>
-        <strong id="session-confirmation-title">Sign out on every device?</strong>
-        <span>You will need to sign in again everywhere, including on this device.</span>
-      </div>
-      <div>
-        <button type="button" onClick={()=>setConfirmEverywhere(false)} disabled={Boolean(busy)}>Cancel</button>
-        <button type="button" className="confirm-danger" onClick={signOutAll} disabled={Boolean(busy)}>{busy==='global'?'Signing out…':'Yes, sign out everywhere'}</button>
-      </div>
-    </div>:null}
+    {confirmDialog}
   </section>;
 }
