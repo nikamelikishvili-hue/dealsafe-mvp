@@ -5464,7 +5464,7 @@ test('account profile and security workspace is isolated without moving session 
   assert.match(workspace, /function ProfileOverview/);
   assert.match(workspace, /<AccountMfaSecurity session=\{session\}/);
   assert.match(workspace, /<AccountSessionSecurity session=\{session\}/);
-  assert.match(workspace, /updateAccountName\(session, name\)/);
+  assert.match(workspace, /updateAccountName\(session, normalizedName\)/);
   assert.match(workspace, /updateAccountPassword\(session, currentPassword, password\)/);
   assert.match(workspace, /getTrustPassportSettings\(session\)/);
   assert.match(workspace, /setTrustPassportEnabled\(session, enabled\)/);
@@ -12340,6 +12340,17 @@ test('account password changes expose field-specific validation and deterministi
   assert.match(accountProfile, /New password'[\s\S]*?<input\s+ref=\{passwordRef\}/);
   assert.match(accountProfile, /passwordRef\.current\?\.focus\(\)/);
   assert.match(accountProfile, /confirmPasswordRef\.current\?\.focus\(\)/);
+});
+
+test('account display names reject whitespace and expose field-specific recovery', () => {
+  const accountProfile = readText('src/AccountProfileWorkspace.tsx');
+
+  assert.match(accountProfile, /const normalizedName = name\.trim\(\)/);
+  assert.match(accountProfile, /if \(normalizedName\.length < 2\)/);
+  assert.match(accountProfile, /aria-describedby=\{nameError \? 'account-name-error' : undefined\}/);
+  assert.match(accountProfile, /<FieldError id="account-name-error">/);
+  assert.match(accountProfile, /nameRef\.current\?\.focus\(\)/);
+  assert.match(accountProfile, /updateAccountName\(session, normalizedName\)/);
 });
 
 test('sample deals remain inside the local data boundary', () => {

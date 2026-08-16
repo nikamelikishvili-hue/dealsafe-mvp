@@ -111,6 +111,7 @@ function AccountSettings({
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [nameMessage, setNameMessage] = useState('');
+  const [nameError, setNameError] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
@@ -118,6 +119,7 @@ function AccountSettings({
   const [savingPassword, setSavingPassword] = useState(false);
   const savingNameRef = useRef(false);
   const savingPasswordRef = useRef(false);
+  const nameRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const confirmPasswordRef = useRef<HTMLInputElement>(null);
 
@@ -126,15 +128,24 @@ function AccountSettings({
   const saveName = async (event: React.FormEvent) => {
     event.preventDefault();
     if (savingNameRef.current) return;
-    savingNameRef.current = true;
+    const normalizedName = name.trim();
     setNameMessage('');
+    setNameError('');
+    if (normalizedName.length < 2) {
+      setNameError('Enter a display name with at least 2 characters.');
+      window.requestAnimationFrame(() => nameRef.current?.focus());
+      return;
+    }
+    savingNameRef.current = true;
     setSavingName(true);
     try {
-      await updateAccountName(session, name);
-      onNameUpdated(name.trim());
+      await updateAccountName(session, normalizedName);
+      setName(normalizedName);
+      onNameUpdated(normalizedName);
       setNameMessage('Your display name was updated.');
     } catch (error) {
-      setNameMessage(error instanceof Error ? error.message : 'Could not update name');
+      setNameError(error instanceof Error ? error.message : 'Could not update name');
+      window.requestAnimationFrame(() => nameRef.current?.focus());
     } finally {
       savingNameRef.current = false;
       setSavingName(false);
@@ -189,14 +200,22 @@ function AccountSettings({
           <label>
             {t('Your name')}
             <input
+              ref={nameRef}
               required
               minLength={2}
               maxLength={80}
               autoComplete="name"
+              aria-invalid={Boolean(nameError)}
+              aria-describedby={nameError ? 'account-name-error' : undefined}
               disabled={savingName}
               value={name}
-              onChange={event => setName(event.target.value)}
+              onChange={event => {
+                setName(event.target.value);
+                if (nameError) setNameError('');
+                if (nameMessage) setNameMessage('');
+              }}
             />
+            {nameError ? <FieldError id="account-name-error">{nameError}</FieldError> : null}
           </label>
           {nameMessage ? (
             <div className="notice" role="status">
