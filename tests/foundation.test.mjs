@@ -15242,6 +15242,19 @@ test('deal inquiry role checks fail closed and expose a retry path', () => {
   assert.match(source, /!accessChecking && !accessFailed && items\.length === 0/);
 });
 
+test('shipping reads do not render false empty states while loading or failed', () => {
+  const source = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(source, /const \[shipmentLoading, setShipmentLoading\] = useState<boolean \| null>\(true\)/);
+  assert.match(source, /const \[deliveryLoading, setDeliveryLoading\] = useState<boolean \| null>\(true\)/);
+  assert.match(source, /deliveryLoading === null && \([\s\S]{0,160}title="Unavailable"/);
+  assert.match(source, /onAction=\{loadDelivery\}/);
+  assert.match(source, /shipmentLoading === null && \([\s\S]{0,160}title="Unavailable"/);
+  assert.match(source, /onAction=\{loadShipment\}/);
+  assert.match(source, /deliveryLoading === false && deal\.viewerRole === 'buyer'/);
+  assert.match(source, /shipmentLoading === false && \(shipment \?/);
+});
+
 test('deal safety action failures use urgent accessible feedback', () => {
   const source = readText('src/DealResolutionWorkspace.tsx');
 
@@ -15277,8 +15290,8 @@ test('shipping workflow failures use urgent accessible feedback', () => {
   const source = readText('src/DealFulfillmentWorkspace.tsx');
 
   assert.match(source, /const \[messageFailed, setMessageFailed\] = useState\(false\)/);
-  assert.match(source, /setMessageFailed\(true\);\s+setMessage\('Shipment status could not be loaded/);
-  assert.match(source, /setMessageFailed\(true\);\s+setMessage\('Delivery address could not be loaded/);
+  assert.match(source, /setShipmentLoading\(null\)/);
+  assert.match(source, /setDeliveryLoading\(null\)/);
   assert.match(source, /setMessageFailed\(true\);\s+setMessage\('Complete the shipping readiness checklist first/);
   assert.match(source, /role=\{messageFailed \? 'alert' : 'status'\}/);
   assert.match(source, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);

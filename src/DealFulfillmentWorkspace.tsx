@@ -894,6 +894,8 @@ export function ShippingPanel({
   const { confirmAction, confirmDialog } = useConfirmAction();
   const [shipment, setShipment] = useState<DealShipment | null>(null);
   const [delivery, setDelivery] = useState<DealDeliveryDetails | null>(null);
+  const [shipmentLoading, setShipmentLoading] = useState<boolean | null>(true);
+  const [deliveryLoading, setDeliveryLoading] = useState<boolean | null>(true);
   const [carrier, setCarrier] = useState('');
   const [tracking, setTracking] = useState('');
   const [message, setMessage] = useState('');
@@ -919,17 +921,23 @@ export function ShippingPanel({
   });
 
   const loadShipment = async (isCurrent = () => true) => {
+    if (isCurrent()) {
+      setShipmentLoading(true);
+    }
     try {
       const next = await getDealShipment(session, deal.id);
-      if (isCurrent()) setShipment(next);
-    } catch {
       if (isCurrent()) {
-        setMessageFailed(true);
-        setMessage('Shipment status could not be loaded. Try again.');
+        setShipment(next);
+        setShipmentLoading(false);
       }
+    } catch {
+      if (isCurrent()) setShipmentLoading(null);
     }
   };
   const loadDelivery = async (isCurrent = () => true) => {
+    if (isCurrent()) {
+      setDeliveryLoading(true);
+    }
     try {
       const details = await getDealDeliveryDetails(session, deal.id);
       if (!isCurrent()) return;
@@ -947,11 +955,9 @@ export function ShippingPanel({
           instructions: details.instructions || '',
         });
       }
+      setDeliveryLoading(false);
     } catch {
-      if (isCurrent()) {
-        setMessageFailed(true);
-        setMessage('Delivery address could not be loaded. Try again.');
-      }
+      if (isCurrent()) setDeliveryLoading(null);
     }
   };
   const loadReadiness = async (isCurrent = () => true) => {
@@ -1209,7 +1215,20 @@ export function ShippingPanel({
             <span>{t('Only the buyer and seller can view this address.')}</span>
           </div>
         </div>
-        {delivery && !editingAddress && (
+        {deliveryLoading === true && (
+          <AsyncStatePanel
+            state="loading"
+            title="Loading"
+          />
+        )}
+        {deliveryLoading === null && (
+          <AsyncStatePanel
+            state="error"
+            title="Unavailable"
+            onAction={loadDelivery}
+          />
+        )}
+        {deliveryLoading === false && delivery && !editingAddress && (
           <div className="delivery-address-card">
             <div>
               <span>{t('Recipient name')}</span>
@@ -1252,7 +1271,7 @@ export function ShippingPanel({
             </div>
           </div>
         )}
-        {deal.viewerRole === 'buyer' && (!delivery || editingAddress) && (
+        {deliveryLoading === false && deal.viewerRole === 'buyer' && (!delivery || editingAddress) && (
           <form
             className="delivery-address-form"
             onSubmit={saveAddress}
@@ -1442,19 +1461,32 @@ export function ShippingPanel({
             </div>
           </form>
         )}
-        {deal.viewerRole === 'seller' && !delivery && (
+        {deliveryLoading === false && deal.viewerRole === 'seller' && !delivery && (
           <div className="shipping-wait">
             {t('Waiting for the buyer to add a delivery address.')}
           </div>
         )}
-        <p className="delivery-privacy">
+        {deliveryLoading === false && <p className="delivery-privacy">
           <LockKeyhole size={15} />
           {t(
             'This address is used only for this deal and is never shown on the public Deal Link.',
           )}
-        </p>
+        </p>}
       </div>
-      {deal.viewerRole === 'seller' && !shipment && (
+      {shipmentLoading === true && (
+        <AsyncStatePanel
+          state="loading"
+          title="Loading"
+        />
+      )}
+      {shipmentLoading === null && (
+        <AsyncStatePanel
+          state="error"
+          title="Unavailable"
+          onAction={loadShipment}
+        />
+      )}
+      {shipmentLoading === false && deal.viewerRole === 'seller' && !shipment && (
         <details
           className={`shipping-readiness ${readyToShip ? 'is-ready' : ''}`}
           aria-busy={checkingReadiness}
@@ -1524,7 +1556,7 @@ export function ShippingPanel({
           </div>
         </details>
       )}
-      {shipment ? (
+      {shipmentLoading === false && (shipment ? (
         <div className="shipment-card">
           <PackageCheck />
           <div>
@@ -1573,7 +1605,7 @@ export function ShippingPanel({
         <div className="shipping-wait">
           {t('Waiting for the seller to add tracking information.')}
         </div>
-      ) : null}
+      ) : null)}
       {shipment?.status === 'shipped' && deal.status === 'accepted' && (
         <InspectionRecorder
           deal={deal}
@@ -1604,14 +1636,14 @@ export function ShippingPanel({
           {t(message)}
         </div>
       )}
-      <p className="shipping-note">
+      {shipmentLoading === false && <p className="shipping-note">
         <ShieldCheck />{' '}
         {t(
           inspectionRecorded
             ? 'Inspection recorded. Delivery can now be confirmed.'
             : 'Confirm delivery only after receiving and inspecting the item.',
         )}
-      </p>
+      </p>}
     </section>
     {confirmDialog}
     </>
