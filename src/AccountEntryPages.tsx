@@ -42,18 +42,27 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [failed, setFailed] = useState(false);
+  const [emailError, setEmailError] = useState('');
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
+  const emailRef = useRef<HTMLInputElement>(null);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (sendingRef.current) return;
+    const normalizedEmail = email.trim().toLowerCase();
+    setEmailError('');
+    if (!normalizedEmail) {
+      setEmailError('Enter your account email.');
+      window.requestAnimationFrame(() => emailRef.current?.focus());
+      return;
+    }
     sendingRef.current = true;
     setSending(true);
     setMessage('');
     setFailed(false);
     try {
-      await requestPasswordReset(email);
+      await requestPasswordReset(normalizedEmail);
       setMessage('If an account exists for this email, a password reset link has been sent.');
     } catch (error) {
       setFailed(true);
@@ -73,6 +82,7 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
       <label>
         {t('Email')}
         <input
+          ref={emailRef}
           required
           type="email"
           name="email"
@@ -82,10 +92,16 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
           spellCheck={false}
           enterKeyHint="send"
           disabled={sending}
+          aria-invalid={Boolean(emailError)}
+          aria-describedby={emailError ? 'forgot-password-email-error' : undefined}
           value={email}
-          onChange={event => setEmail(event.target.value)}
+          onChange={event => {
+            setEmail(event.target.value);
+            if (emailError) setEmailError('');
+          }}
           placeholder="you@example.com"
         />
+        {emailError && <FieldError id="forgot-password-email-error">{emailError}</FieldError>}
       </label>
       {message && <FeedbackMessage tone={failed ? 'error' : 'info'}>{t(message)}</FeedbackMessage>}
       <button type="submit" className="primary full" disabled={sending}>

@@ -5426,7 +5426,7 @@ test('account entry and recovery pages are isolated without moving authenticatio
   assert.match(accountEntry, /export function ForgotPasswordEntry/);
   assert.match(accountEntry, /export function ForgotPassword/);
   assert.match(accountEntry, /export function ResetPassword/);
-  assert.match(accountEntry, /await requestPasswordReset\(email\)/);
+  assert.match(accountEntry, /await requestPasswordReset\(normalizedEmail\)/);
   assert.match(accountEntry, /await updateRecoveredPassword\(token, password\)/);
   assert.match(accountEntry, /autoComplete=\{isSignup \? 'new-password' : 'current-password'\}/);
   assert.match(accountEntry, /publicInfoPaths\.terms/);
@@ -15250,4 +15250,15 @@ test('evidence and payment failures use urgent accessible feedback', () => {
   assert.match(evidence, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
   assert.match(payment, /\{message && \(\s+<div className="notice" role="alert" aria-live="assertive">/);
   assert.doesNotMatch(payment, /\{message && \(\s+<div className="notice" role="status" aria-live="polite">/);
+});
+
+test('password recovery normalizes email and restores invalid-field focus', () => {
+  const source = readText('src/AccountEntryPages.tsx');
+
+  assert.match(source, /const normalizedEmail = email\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(source, /setEmailError\('Enter your account email\.'\)/);
+  assert.match(source, /emailRef\.current\?\.focus\(\)/);
+  assert.match(source, /await requestPasswordReset\(normalizedEmail\)/);
+  assert.match(source, /aria-describedby=\{emailError \? 'forgot-password-email-error' : undefined\}/);
+  assert.match(source, /<FieldError id="forgot-password-email-error">/);
 });
