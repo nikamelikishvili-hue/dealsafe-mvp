@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, BadgeCheck, BadgeDollarSign, Bell, Bookmark, Car, Check, ChevronDown, CircleCheckBig, Copy, Eye, FileSignature, Fingerprint, ImagePlus, Laptop, Link2, LockKeyhole, Menu, MessageCircle, Package, PackageCheck, Plus, Scale, Search, Send, Share2, ShieldAlert, ShieldCheck, Smartphone, Star, Truck, Watch, X } from 'lucide-react';
 import { DEMO_DEAL_PUBLIC_ID, demoRepository } from './services/demoRepository';
-import { acceptPublicDeal, createUserDeal, getAdminAccess, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicDeal, getPublicTrustPassport, getSellerShippingEvidenceReadiness, getStoredSession, isSupabaseConfigured, isTransientAuthenticationError, listUserDeals, markSessionActivity, refreshSession, requestIdentityVerification, saveUserDealDraft, sessionExpiredEvent, sessionUpdatedEvent, signIn, signOut, signUp, uploadDealPhotos, type DealNotification, type ProfileSummary, type StoredSession, type TrustPassport } from './services/supabaseRest';
+import { acceptPublicDeal, createUserDeal, getAdminAccess, getMyNotifications, getMyProfileSummary, getMySavedDeals, getPublicDeal, getPublicTrustPassport, getSellerShippingEvidenceReadiness, getStoredSession, hasSessionHint, isSupabaseConfigured, isTransientAuthenticationError, listUserDeals, markSessionActivity, refreshSession, requestIdentityVerification, restoreSession, saveUserDealDraft, sessionExpiredEvent, sessionUpdatedEvent, signIn, signOut, signUp, uploadDealPhotos, type DealNotification, type ProfileSummary, type StoredSession, type TrustPassport } from './services/supabaseRest';
 import { markAllNotificationsRead, markDealNotificationsRead } from './services/supabaseRest';
 import { configureBuyerAccessCode, getDealAcceptanceProtection } from './services/supabaseRest';
 import { type DealParticipants } from './services/supabaseRest';
@@ -911,6 +911,16 @@ export function App() {
   },[routeRevision]);
   useEffect(()=>{const timer=window.setInterval(()=>setClock(Date.now()),60_000);return()=>window.clearInterval(timer)},[]);
   useEffect(()=>{if(view==='auth'&&!isSupabaseConfigured)setAuthMessage('Account service is temporarily unavailable. Please try again later.')},[view,authMode]);
+  useEffect(()=>{
+    if(initialSession||!hasSessionHint())return;
+    let current=true;
+    restoreSession()
+      .then(restored=>{if(current&&restored)setSession(restored)})
+      .catch(error=>{
+        if(current&&view==='auth')setAuthMessage(error instanceof Error?error.message:'Could not restore your session.');
+      });
+    return()=>{current=false};
+  },[]);
   useEffect(()=>{const updated=(event:Event)=>setSession((event as CustomEvent<StoredSession>).detail);const expired=()=>{setSession(null);setMfaLogin(null);setAuthMessage('Your session expired. Please sign in again.');setView('auth')};const requiresMfa=()=>{setAuthMessage('Verify or enroll an authenticator before continuing with this protected account.');setView('profile')};window.addEventListener(sessionUpdatedEvent,updated);window.addEventListener(sessionExpiredEvent,expired);window.addEventListener(mfaRequiredEvent,requiresMfa);return()=>{window.removeEventListener(sessionUpdatedEvent,updated);window.removeEventListener(sessionExpiredEvent,expired);window.removeEventListener(mfaRequiredEvent,requiresMfa)}},[]);
   useEffect(()=>{if(!session)return;const recordActivity=()=>markSessionActivity();const events=['pointerdown','keydown','touchstart'] as const;events.forEach(event=>{window.addEventListener(event,recordActivity,{passive:true})});window.addEventListener('focus',recordActivity);return()=>{events.forEach(event=>{window.removeEventListener(event,recordActivity)});window.removeEventListener('focus',recordActivity)}},[session?.user.id]);
   useEffect(()=>{const request=++dealListRequestRef.current;const savedRequest=++savedDealsRequestRef.current;setDashboardLoading(true);setDashboardError('');const sources=session?Promise.all([listUserDeals(session),getMySavedDeals(session)]):Promise.all([demoRepository.list(),Promise.resolve([] as Deal[])]);sources.then(([nextDeals,nextSaved])=>{if(request===dealListRequestRef.current&&savedRequest===savedDealsRequestRef.current){setDeals(nextDeals);setSavedDeals(nextSaved)}}).catch(error=>{if(request===dealListRequestRef.current&&savedRequest===savedDealsRequestRef.current)setDashboardError(error instanceof Error?error.message:'Could not load your workspace.')}).finally(()=>{if(request===dealListRequestRef.current&&savedRequest===savedDealsRequestRef.current)setDashboardLoading(false)});return()=>{dealListRequestRef.current+=1;savedDealsRequestRef.current+=1}},[session,dashboardRevision]);

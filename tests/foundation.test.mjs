@@ -483,8 +483,15 @@ test('browser auth keeps the long-lived refresh secret in an HttpOnly cookie', (
   const loginFunction = readText('api/auth/login.mjs');
   const refreshFunction = readText('api/auth/refresh.mjs');
 
-  assert.match(authService, /sessionStorage\.setItem\(sessionStorageKey/);
-  assert.doesNotMatch(authService, /localStorage\.setItem\(/);
+  assert.doesNotMatch(authService, /(?:localStorage|sessionStorage)\.setItem\([^\n]*(?:accessToken|access_token)/);
+  assert.match(authService, /let activeSession: StoredSession \| null = null/);
+  assert.match(authService, /localStorage\.setItem\(sessionHintStorageKey/);
+  assert.match(authService, /writeSessionContinuity\(session\)/);
+  assert.match(authService, /export async function restoreSession\(\)/);
+  assert.match(authService, /now-continuity\.createdAt>sessionAbsoluteTimeoutMs/);
+  assert.match(authService, /sessionStorage\.removeItem\(legacyBrowserSessionStorageKey\)/);
+  assert.doesNotMatch(authService, /JSON\.stringify\(session\)[\s\S]{0,120}(?:localStorage|sessionStorage)\.setItem/);
+  assert.match(authService, /fetchWithDeadline\('\/api\/auth\/refresh'/);
   assert.match(authService, /fetchWithDeadline\('\/api\/auth\/login'/);
   assert.match(authService, /fetchWithDeadline\('\/api\/auth\/refresh'/);
   assert.match(serverAuth, /__Host-dealivra-refresh/);
@@ -13455,8 +13462,8 @@ test('browser storage inventory is deny-by-default and release-gated', async () 
     schema: 'dealivra.browser-storage-policy-result.v1',
     status: 'passed',
     reviewed_files: 4,
-    local_storage_calls: 14,
-    session_storage_calls: 6,
+    local_storage_calls: 18,
+    session_storage_calls: 3,
   });
   assert.equal(
     packageJson.scripts['security:browser-storage'],

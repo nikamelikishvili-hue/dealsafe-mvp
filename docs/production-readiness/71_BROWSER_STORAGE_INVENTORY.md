@@ -12,14 +12,16 @@ The executable policy permits four source files:
 
 1. `app.tsx` — the short-lived, byte-bounded guest Deal draft;
 2. `i18nFull.ts` — the non-sensitive language preference and legacy cleanup;
-3. `main.tsx` — legacy token cleanup and presence-only session bootstrap;
-4. `supabaseRest.ts` — the tab-scoped access session and persistent legacy
-   refresh-token cleanup.
+3. `main.tsx` — legacy token cleanup and a non-secret session-presence hint;
+4. `supabaseRest.ts` — memory-only access tokens, non-secret session lifetime
+   timestamps, and persistent legacy refresh-token cleanup.
 
-There are 14 reviewed local-storage calls and six reviewed session-storage
+There are 18 reviewed local-storage calls and three reviewed session-storage
 calls. Only `getItem`, `setItem`, and `removeItem` are accepted. Account session
-data may not be written to or read from local storage; refresh secrets remain
-in the server-managed HttpOnly cookie.
+credentials may not be written to or read from browser storage. The short-lived
+access JWT exists only in module memory, the refresh secret remains in the
+server-managed HttpOnly cookie, and storage contains only bounded guest data,
+language preference, legacy cleanup, and non-secret session timestamps.
 
 Any new file, call, method, count, persistent session access, `document.cookie`,
 or IndexedDB use fails locally and in CI until the inventory and its privacy
@@ -33,7 +35,8 @@ only aggregate counts. It is part of `npm run verify`, with a regression test
 that locks the current result and package-script wiring.
 
 Before public activation, protected Preview evidence must cover guest draft
-expiry and cleanup, tab-close session removal, server cookie rotation,
+expiry and cleanup, reload restoration from the HttpOnly refresh cookie,
+memory-only access-token removal, server cookie rotation,
 sign-out, storage-denied behavior, legacy cleanup, and a deliberately
 unreviewed fixture rejected by CI.
 

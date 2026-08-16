@@ -71,7 +71,7 @@ export default async function handler(request, response) {
       return;
     }
     // A local sign-out still clears the browser-only refresh cookie. The
-    // short-lived access JWT is removed from sessionStorage by the client.
+    // short-lived access JWT is removed from module memory by the client.
   }
 
   if (scope === 'local' || scope === 'global') {

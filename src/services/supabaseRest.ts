@@ -452,8 +452,9 @@ export interface DealRenewalResult extends DealRenewalResultPayload {}
 export type DealParticipants = DealParticipantsPayload;
 export type DealActionPlan = DealActionPlanPayload;
 
-export const sessionStorageKey = 'dealivra_session_v2';
+const legacyBrowserSessionStorageKey = 'dealivra_session_v2';
 export const legacySessionStorageKey = 'dealsafe_session';
+export const sessionHintStorageKey = 'dealivra_session_hint_v1';
 export const sessionUpdatedEvent = 'dealivra-session-updated';
 export const sessionExpiredEvent = 'dealivra-session-expired';
 export const mfaRequiredEvent = 'dealivra-mfa-required';
@@ -461,6 +462,8 @@ export const sessionIdleTimeoutMs = 30 * 60 * 1000;
 export const sessionAbsoluteTimeoutMs = 8 * 60 * 60 * 1000;
 const activityWriteIntervalMs = 60 * 1000;
 let refreshPromise: Promise<StoredSession> | null = null;
+let restorePromise: Promise<StoredSession | null> | null = null;
+let activeSession: StoredSession | null = null;
 
 function decodeJwtPayload(token:string){
   try{
@@ -478,10 +481,46 @@ function decodeJwtExpiry(token:string){
 }
 
 function clearStoredSession(){
-  sessionStorage.removeItem(sessionStorageKey);
+  activeSession=null;
+  try{sessionStorage.removeItem(legacyBrowserSessionStorageKey)}catch{}
+  try{localStorage.removeItem(sessionHintStorageKey)}catch{}
   // Remove the legacy browser-readable refresh token if an older release left
   // it behind. Legacy sessions are not migrated into the new architecture.
-  localStorage.removeItem(legacySessionStorageKey);
+  try{localStorage.removeItem(legacySessionStorageKey)}catch{}
+}
+
+type SessionContinuity = Pick<StoredSession,'createdAt'|'lastActivityAt'>;
+
+function readSessionContinuity():SessionContinuity|null{
+  try{
+    const value=JSON.parse(localStorage.getItem(sessionHintStorageKey)||'null') as Partial<SessionContinuity>|null;
+    const now=Date.now();
+    if(
+      !value
+      ||typeof value.createdAt!=='number'
+      ||typeof value.lastActivityAt!=='number'
+      ||value.createdAt<=0
+      ||value.lastActivityAt<value.createdAt
+      ||value.createdAt>now+60_000
+      ||value.lastActivityAt>now+60_000
+    )return null;
+    return {createdAt:value.createdAt,lastActivityAt:value.lastActivityAt};
+  }catch{return null}
+}
+
+function writeSessionContinuity(session:SessionContinuity){
+  try{
+    localStorage.setItem(sessionHintStorageKey,JSON.stringify({
+      createdAt:session.createdAt,
+      lastActivityAt:session.lastActivityAt,
+    }));
+  }catch{}
+}
+
+export function hasSessionHint(){
+  const continuity=readSessionContinuity();
+  if(!continuity)try{localStorage.removeItem(sessionHintStorageKey)}catch{}
+  return continuity!==null;
 }
 
 type SignOutScope='local'|'others'|'global';
@@ -507,46 +546,20 @@ async function revokeServerSession(accessToken?:string,scope:SignOutScope='local
   }
 }
 
-function normalizeSession(value:unknown):StoredSession|null{
-  if(!value||typeof value!=='object')return null;
-  const candidate=value as Partial<StoredSession>;
-  if(
-    typeof candidate.accessToken!=='string'
-    ||!candidate.user
-    ||typeof candidate.user.id!=='string'
-    ||typeof candidate.user.email!=='string'
-  )return null;
-  const now=Date.now();
-  const createdAt=typeof candidate.createdAt==='number'?candidate.createdAt:now;
-  const lastActivityAt=typeof candidate.lastActivityAt==='number'?candidate.lastActivityAt:now;
-  const tokenExpiry=decodeJwtExpiry(candidate.accessToken);
-  const expiresAt=tokenExpiry??(typeof candidate.expiresAt==='number'?candidate.expiresAt:now);
-  return {
-    accessToken:candidate.accessToken,
-    expiresAt,
-    createdAt,
-    lastActivityAt,
-    user:{
-      id:candidate.user.id,
-      email:candidate.user.email,
-      displayName:candidate.user.displayName||candidate.user.email.split('@')[0],
-      emailConfirmed:Boolean(candidate.user.emailConfirmed),
-    },
-  };
-}
-
 function readStoredSession(){
-  try{
-    const current=normalizeSession(JSON.parse(sessionStorage.getItem(sessionStorageKey)||'null'));
-    localStorage.removeItem(legacySessionStorageKey);
-    return current;
-  }catch{
-    clearStoredSession();
-    return null;
-  }
+  return activeSession;
 }
 
-function storeSession(data:AuthSessionPayload,user:AuthUser,previous?:StoredSession){
+function activateSession(session:StoredSession){
+  activeSession=session;
+  writeSessionContinuity(session);
+  try{sessionStorage.removeItem(legacyBrowserSessionStorageKey)}catch{}
+  try{localStorage.removeItem(legacySessionStorageKey)}catch{}
+  window.dispatchEvent(new CustomEvent<StoredSession>(sessionUpdatedEvent,{detail:session}));
+  return session;
+}
+
+function storeSession(data:AuthSessionPayload,user:AuthUser,previous?:SessionContinuity){
   const now=Date.now();
   const session:StoredSession={
     accessToken:data.access_token,
@@ -555,10 +568,7 @@ function storeSession(data:AuthSessionPayload,user:AuthUser,previous?:StoredSess
     lastActivityAt:previous?.lastActivityAt||now,
     user,
   };
-  sessionStorage.setItem(sessionStorageKey,JSON.stringify(session));
-  localStorage.removeItem(legacySessionStorageKey);
-  window.dispatchEvent(new CustomEvent<StoredSession>(sessionUpdatedEvent,{detail:session}));
-  return session;
+  return activateSession(session);
 }
 
 function headers(token?: string) {
@@ -599,7 +609,43 @@ export function markSessionActivity(){
   const session=getStoredSession();
   if(!session||Date.now()-session.lastActivityAt<activityWriteIntervalMs)return;
   const updated={...session,lastActivityAt:Date.now()};
-  sessionStorage.setItem(sessionStorageKey,JSON.stringify(updated));
+  activeSession=updated;
+  writeSessionContinuity(updated);
+}
+
+export async function restoreSession(){
+  const current=getStoredSession();
+  if(current)return current;
+  const continuity=readSessionContinuity();
+  if(!continuity)return null;
+  const now=Date.now();
+  if(
+    now-continuity.lastActivityAt>sessionIdleTimeoutMs
+    ||now-continuity.createdAt>sessionAbsoluteTimeoutMs
+  ){
+    clearStoredSession();
+    void revokeServerSession().catch(()=>{});
+    return null;
+  }
+  if(restorePromise)return restorePromise;
+  restorePromise=(async()=>{
+    const requestBody=parseAuthRefreshRequest({});
+    const response=await fetchWithDeadline('/api/auth/refresh',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'same-origin',
+      body:JSON.stringify(requestBody),
+    });
+    const responseBody=await readBoundedJson(response);
+    if(response.status===401){
+      clearStoredSession();
+      return null;
+    }
+    if(!response.ok)throw authenticationApiError(response,responseBody,'auth_refresh_error');
+    const data=parseAuthSession(responseBody,'auth_refresh');
+    return storeSession(data,toUser(data),continuity);
+  })();
+  try{return await restorePromise}finally{restorePromise=null}
 }
 
 export async function signUp(email: string, password: string, displayName: string) {
@@ -894,9 +940,7 @@ export async function updateAccountName(session:StoredSession,displayName:string
     ...current,
     user:{...current.user,displayName:request.displayName},
   };
-  sessionStorage.setItem(sessionStorageKey,JSON.stringify(updated));
-  window.dispatchEvent(new CustomEvent<StoredSession>(sessionUpdatedEvent,{detail:updated}));
-  return updated;
+  return activateSession(updated);
 }
 
 export async function updateAccountPassword(session:StoredSession,currentPassword:string,password:string){
