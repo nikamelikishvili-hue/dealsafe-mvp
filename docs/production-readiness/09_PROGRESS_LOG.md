@@ -4931,3 +4931,34 @@ resource, customer record, or real-money capability changed during this pass.
 
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
+
+## Stack-head Preview release evidence
+
+- Vercel deployment `dpl_5YDd3qawTRU7ufTWPj1uzxfcaX3x` built commit
+  `165f38575dbf56fb21e87285a6fb7dda420b553a` from the review-only `#180`
+  branch and reached `READY` without promotion or alias changes.
+- The hosted build configured the required browser/server Supabase public
+  boundary, verified browser/server project and publishable-key alignment, and
+  confirmed that the optional Google Maps browser integration is configured.
+  Secret values were neither read nor recorded.
+- The hosted performance gate measured 132,766 initial application JavaScript
+  bytes, 834,703 total JavaScript bytes, and 286,188 CSS bytes. The result is
+  below the fixed 835,000-byte JavaScript ceiling; only 297 bytes of hosted
+  headroom remain, so the next customer-facing JavaScript change must include
+  a measured offset or an approved chunking improvement.
+- A fresh unauthenticated browser run loaded the stack-head Preview with the
+  expected Dealivra title and public trust copy. At a 390 by 844 viewport, the
+  document client and scroll widths were both 375 pixels, with no horizontal
+  overflow, duplicate IDs, missing image alternatives, or console warnings and
+  errors.
+- Mobile-menu navigation reached `#how-it-works`, and the exact `Home` link
+  returned to the public hero without a page error.
+- Preview runtime logs for the reviewed three-hour window contained no warning,
+  error, or fatal entries. The only grouped serverless response status was four
+  successful `204` diagnostic-intake responses.
+
+### Activation boundary
+
+The verification used an unauthenticated review-only Preview. It did not sign
+in, submit customer data, invoke real payments, modify hosted configuration,
+promote Production, restore public access, or change a live Supabase resource.
