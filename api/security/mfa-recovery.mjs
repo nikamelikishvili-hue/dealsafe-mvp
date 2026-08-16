@@ -13,6 +13,7 @@ import {
 import {
   hasRecentTotpAal2,
   parseRecoveryRequest,
+  parseRecoveryResult,
   RecoveryRequestError,
 } from '../../server/mfaRecoveryPolicy.mjs';
 
@@ -114,7 +115,7 @@ export default async function handler(request, response) {
       recoveryFailure(response, data, upstream.status);
       return;
     }
-    response.status(200).json({ result: data ?? null });
+    response.status(200).json({ result: parseRecoveryResult(recoveryRequest.action, data ?? null) });
   } catch (error) {
     logAuthFailure(`mfa-recovery:${recoveryRequest.action}`, error);
     response.status(503).json({

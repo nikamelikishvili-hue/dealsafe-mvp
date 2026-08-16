@@ -2770,6 +2770,48 @@ test('privileged MFA recovery request policy rejects secrets and requires recent
   assert.equal(hasRecentTotpAal2('not-a-jwt', now), false);
 });
 
+test('privileged MFA recovery results are action-scoped and reject unexpected provider data', async () => {
+  const {
+    parseRecoveryResult,
+    RecoveryResponseError,
+  } = await import('../server/mfaRecoveryPolicy.mjs');
+  const caseId = '33333333-3333-4333-8333-333333333333';
+  const userId = '22222222-2222-4222-8222-222222222222';
+  const timestamp = '2026-08-15T12:00:00.000Z';
+
+  assert.equal(parseRecoveryResult('open', caseId), caseId);
+  assert.equal(parseRecoveryResult('review', null), null);
+  assert.deepEqual(parseRecoveryResult('my_hold', [{
+    scope: 'mfa',
+    expires_at: timestamp,
+    active: true,
+  }]), [{ scope: 'mfa', expires_at: timestamp, active: true }]);
+  assert.deepEqual(parseRecoveryResult('list', [{
+    case_id: caseId,
+    case_reference: 'SEC-2026-0042',
+    target_user_id: userId,
+    target_display_name: 'Protected member',
+    target_role: 'admin',
+    reason_code: 'lost_all_factors',
+    status: 'open',
+    requested_at: timestamp,
+    identity_verified_at: null,
+    reviewed_at: null,
+    completed_at: null,
+    cooldown_until: null,
+  }]).length, 1);
+
+  for (const [action, payload] of [
+    ['open', 'not-a-case-id'],
+    ['review', { secret: 'must-not-reach-browser' }],
+    ['my_hold', [{ scope: 'mfa', expires_at: timestamp, active: true, token: 'hidden' }]],
+    ['list', [{ secret: 'must-not-reach-browser' }]],
+    ['unknown', null],
+  ]) {
+    assert.throws(() => parseRecoveryResult(action, payload), RecoveryResponseError);
+  }
+});
+
 test('MFA recovery endpoint validates before provider access and rejects password-only operators', async () => {
   const { default: recovery } = await import('../api/security/mfa-recovery.mjs');
   const now = Math.floor(Date.now() / 1000);
@@ -2865,6 +2907,39 @@ test('recent TOTP AAL2 recovery operator reaches only the validated RPC', async 
     p_reason_code: 'lost_all_factors',
     p_evidence_reference: 'IDENTITY-REPROOF-0042',
   });
+});
+
+test('MFA recovery endpoint rejects unexpected successful RPC fields without disclosure', async () => {
+  const { default: recovery } = await import('../api/security/mfa-recovery.mjs');
+  const providerPayload = [{
+    scope: 'mfa',
+    expires_at: '2026-08-15T12:00:00.000Z',
+    active: true,
+    secret: 'must-not-reach-the-browser',
+  }];
+  let providerCalls = 0;
+
+  await withAuthProvider(async (input) => {
+    providerCalls += 1;
+    assert.match(String(input), /\/rest\/v1\/rpc\/get_my_sensitive_change_holds$/);
+    return new Response(JSON.stringify(providerPayload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, async () => {
+    const response = createResponse();
+    await recovery(authRequest({ action: 'my_hold' }, {
+      authorization: 'Bearer member-session-token',
+    }), response);
+
+    assert.equal(response.statusCode, 503);
+    assert.deepEqual(response.payload, {
+      error: 'The protected recovery workflow is temporarily unavailable.',
+    });
+    assert.equal(JSON.stringify(response.payload).includes(providerPayload[0].secret), false);
+  });
+
+  assert.equal(providerCalls, 1);
 });
 
 test('password-only negative matrix records status-only evidence for every protected surface', async () => {
