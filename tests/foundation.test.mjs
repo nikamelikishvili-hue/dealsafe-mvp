@@ -14876,7 +14876,7 @@ test('transaction polling renders only the newest completed request', () => {
   assert.match(features, /request !== loadRequestRef\.current \|\| !record/);
   assert.match(payment, /Payment receipt is temporarily unavailable\. Retrying automatically\./);
   assert.match(payment, /setLoadError\(''\)/);
-  assert.match(payment, /role="status" aria-live="polite"/);
+  assert.match(payment, /className="notice error" role="alert"/);
 });
 
 test('meeting and watchlist reads fail visibly without exposing false state', () => {
@@ -15259,6 +15259,8 @@ test('evidence and payment failures use urgent accessible feedback', () => {
   assert.match(evidence, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
   assert.match(payment, /\{message && \(\s+<div className="notice" role="alert" aria-live="assertive">/);
   assert.doesNotMatch(payment, /\{message && \(\s+<div className="notice" role="status" aria-live="polite">/);
+  assert.ok((payment.match(/className="notice error" role="alert"/g) ?? []).length >= 2);
+  assert.match(payment, /className="notice error no-print"\s+role="alert"/);
 });
 
 test('password recovery normalizes email and restores invalid-field focus', () => {

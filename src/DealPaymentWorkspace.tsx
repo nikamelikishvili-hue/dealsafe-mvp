@@ -553,7 +553,7 @@ export function ProtectedPaymentReceipt({
 
   if (!payment) {
     return loadError ? (
-      <div className="notice" role="status" aria-live="polite">
+      <div className="notice error" role="alert">
         {t(loadError)}
       </div>
     ) : null;
@@ -613,7 +613,7 @@ export function ProtectedPaymentReceipt({
         </button>
       </div>
       {loadError && (
-        <div className="notice" role="status" aria-live="polite">
+        <div className="notice error" role="alert">
           {t(loadError)}
         </div>
       )}
@@ -671,9 +671,8 @@ export function ProtectedPaymentReceipt({
       </p>
       {message && (
         <div
-          className="notice no-print"
-          role="status"
-          aria-live="polite"
+          className="notice error no-print"
+          role="alert"
         >
           {t(message)}
         </div>
