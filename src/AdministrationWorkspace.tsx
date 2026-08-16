@@ -784,6 +784,7 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState('');
   const savingRef = useRef(false);
@@ -794,6 +795,7 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
     const request = ++requestRef.current;
     setLoading(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const next = await getAdminDisputes(session, filter);
       if (request === requestRef.current) setDisputes(next);
@@ -804,6 +806,7 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
             ? error.message
             : 'Could not load dispute queue',
         );
+        setMessageFailed(true);
       }
     } finally {
       if (request === requestRef.current) setLoading(false);
@@ -848,6 +851,7 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
     }
     setSaving(dispute.dispute_id);
     setMessage('');
+    setMessageFailed(false);
     try {
       if (decision === 'cancelled') {
         await resolveAdminDispute(
@@ -892,10 +896,12 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
             ? 'Dispute resolved and funds released to seller.'
             : 'Dispute closed.',
       );
+      setMessageFailed(false);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'Could not resolve dispute',
       );
+      setMessageFailed(true);
     } finally {
       savingRef.current = false;
       setSaving('');
@@ -934,7 +940,11 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
         ))}
       </div>
       {message && (
-        <div className="notice" role="status" aria-live="polite">
+        <div
+          className={`notice ${messageFailed ? 'error' : ''}`}
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
           {t(message)}
         </div>
       )}
@@ -1114,6 +1124,7 @@ function AdminReportCenter({
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState('');
   const [openingDeal, setOpeningDeal] = useState('');
@@ -1125,6 +1136,7 @@ function AdminReportCenter({
     const request = ++requestRef.current;
     setLoading(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const next = await getAdminReports(session, filter);
       if (request === requestRef.current) setReports(next);
@@ -1135,6 +1147,7 @@ function AdminReportCenter({
             ? error.message
             : 'Could not load report queue',
         );
+        setMessageFailed(true);
       }
     } finally {
       if (request === requestRef.current) setLoading(false);
@@ -1153,12 +1166,14 @@ function AdminReportCenter({
     openingDealRef.current = true;
     setOpeningDeal(publicId);
     setMessage('');
+    setMessageFailed(false);
     try {
       onOpenDeal(await getPublicDeal(publicId));
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'Deal Link unavailable',
       );
+      setMessageFailed(true);
     } finally {
       openingDealRef.current = false;
       setOpeningDeal('');
@@ -1174,6 +1189,7 @@ function AdminReportCenter({
     savingRef.current = true;
     setSaving(report.report_id);
     setMessage('');
+    setMessageFailed(false);
     try {
       await resolveAdminReport(
         session,
@@ -1191,12 +1207,14 @@ function AdminReportCenter({
           : items.filter((item) => item.report_id !== report.report_id),
       );
       setMessage('Decision saved.');
+      setMessageFailed(false);
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
           : 'Could not save report decision',
       );
+      setMessageFailed(true);
     } finally {
       savingRef.current = false;
       setSaving('');
@@ -1211,6 +1229,7 @@ function AdminReportCenter({
       report.moderation_status === 'hidden' ? 'visible' : 'hidden';
     setSaving(report.report_id);
     setMessage('');
+    setMessageFailed(false);
     try {
       await setAdminDealVisibility(
         session,
@@ -1230,12 +1249,14 @@ function AdminReportCenter({
           ? 'Deal hidden from public access.'
           : 'Deal restored to public access.',
       );
+      setMessageFailed(false);
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
           : 'Could not update Deal Link visibility',
       );
+      setMessageFailed(true);
     } finally {
       savingRef.current = false;
       setSaving('');
@@ -1276,7 +1297,11 @@ function AdminReportCenter({
         ))}
       </div>
       {message && (
-        <div className="notice" role="status" aria-live="polite">
+        <div
+          className={`notice ${messageFailed ? 'error' : ''}`}
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
           {t(message)}
         </div>
       )}

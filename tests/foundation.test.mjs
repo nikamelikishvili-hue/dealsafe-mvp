@@ -14166,6 +14166,9 @@ test('administrative dispute and moderation decisions are single-flight', () => 
   assert.match(workspace, /function AdminReportCenter[\s\S]*const openingDealRef = useRef\(false\)/);
   assert.match(workspace, /if \(openingDealRef\.current\) return/);
   assert.ok((workspace.match(/savingRef\.current = true/g) ?? []).length >= 3);
+  assert.ok((workspace.match(/const \[messageFailed, setMessageFailed\] = useState\(false\)/g) ?? []).length >= 2);
+  assert.ok((workspace.match(/role=\{messageFailed \? 'alert' : 'status'\}/g) ?? []).length >= 2);
+  assert.ok((workspace.match(/aria-live=\{messageFailed \? 'assertive' : 'polite'\}/g) ?? []).length >= 2);
 });
 
 test('watchlist, access-code, and renewal mutations are single-flight', () => {
