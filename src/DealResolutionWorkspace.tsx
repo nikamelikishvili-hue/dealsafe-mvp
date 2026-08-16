@@ -43,6 +43,7 @@ export function RatingPanel({ deal, session }: RatingPanelProps) {
   const [stars, setStars] = useState(5);
   const [comment, setComment] = useState('');
   const [message, setMessage] = useState('');
+  const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
 
@@ -52,10 +53,12 @@ export function RatingPanel({ deal, session }: RatingPanelProps) {
     savingRef.current = true;
     setSaving(true);
     setMessage('');
+    setFailed(false);
     try {
-      await submitRating(session, deal.id, stars, comment);
+      await submitRating(session, deal.id, stars, comment.trim());
       setMessage('Thank you. Your rating was saved.');
     } catch (error) {
+      setFailed(true);
       setMessage(error instanceof Error ? error.message : 'Could not save rating');
     } finally {
       savingRef.current = false;
@@ -97,7 +100,7 @@ export function RatingPanel({ deal, session }: RatingPanelProps) {
           </button>
         </form>
         {message && (
-          <div className="notice" role="status" aria-live="polite">
+          <div className="notice" role={failed ? 'alert' : 'status'} aria-live={failed ? 'assertive' : 'polite'}>
             {t(message)}
           </div>
         )}
@@ -625,7 +628,7 @@ export function DealChat({ deal, session }: DealChatProps) {
     setSending(true);
     setError('');
     try {
-      await sendDealMessage(session, deal.id, body);
+      await sendDealMessage(session, deal.id, body.trim());
       if (context !== contextRef.current) return;
       setBody('');
       await load();

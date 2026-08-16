@@ -6351,7 +6351,7 @@ test('participant resolution and private deal chat are isolated safely', () => {
   assert.match(resolution, /export function DealSafetyActions/);
   assert.match(resolution, /export function ReportDealPanel/);
   assert.match(resolution, /export function DealChat/);
-  assert.match(resolution, /submitRating\(session, deal\.id, stars, comment\)/);
+  assert.match(resolution, /submitRating\(session, deal\.id, stars, comment\.trim\(\)\)/);
   assert.match(resolution, /cancelDeal\(session, deal\.id, normalizedReason\)/);
   assert.match(resolution, /openDealDispute\(session, deal\.id, normalizedReason\)/);
   assert.match(
@@ -6359,7 +6359,7 @@ test('participant resolution and private deal chat are isolated safely', () => {
     /reportPublicDeal\(session, deal\.publicId, category, normalizedDetails\)/,
   );
   assert.match(resolution, /getDealMessages\(session, deal\.id\)/);
-  assert.match(resolution, /sendDealMessage\(session, deal\.id, body\)/);
+  assert.match(resolution, /sendDealMessage\(session, deal\.id, body\.trim\(\)\)/);
   assert.match(resolution, /let current = true/);
   assert.match(resolution, /request !== requestRef\.current/);
   assert.match(resolution, /window\.clearInterval\(timer\)/);
@@ -12409,6 +12409,16 @@ test('deal safety reports validate normalized reasons before confirmation or mut
   assert.match(resolution, /reportPublicDeal\(session, deal\.publicId, category, normalizedDetails\)/);
   assert.match(resolution, /<FieldError id="report-details-error">/);
   assert.match(resolution, /detailsRef\.current\?\.focus\(\)/);
+});
+
+test('deal communications normalize text and announce rating failures assertively', () => {
+  const resolution = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(resolution, /submitRating\(session, deal\.id, stars, comment\.trim\(\)\)/);
+  assert.match(resolution, /sendDealMessage\(session, deal\.id, body\.trim\(\)\)/);
+  assert.match(resolution, /setFailed\(true\)/);
+  assert.match(resolution, /role=\{failed \? 'alert' : 'status'\}/);
+  assert.match(resolution, /aria-live=\{failed \? 'assertive' : 'polite'\}/);
 });
 
 test('sample deals remain inside the local data boundary', () => {
