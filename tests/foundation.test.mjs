@@ -14187,6 +14187,20 @@ test('watchlist, access-code, and renewal failures use assertive feedback', () =
   assert.match(workspace, /export function DealRenewalPanel[\s\S]*className="notice error" role="alert"/);
 });
 
+test('trust passport success and failure feedback remain semantically distinct', () => {
+  const account = readText('src/AccountProfileWorkspace.tsx');
+  const app = readText('src/app.tsx');
+
+  assert.match(account, /function TrustPassportControls[\s\S]*const \[messageFailed, setMessageFailed\] = useState\(false\)/);
+  assert.match(account, /setMessage\('Passport link copied\.'\);\s+setMessageFailed\(false\)/);
+  assert.match(account, /setMessage\('Could not copy the passport link[\s\S]*setMessageFailed\(true\)/);
+  assert.match(account, /role=\{messageFailed \? 'alert' : 'status'\}/);
+  assert.match(account, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
+  assert.match(app, /const \[verificationMessageFailed,setVerificationMessageFailed\]=useState\(false\)/);
+  assert.match(app, /Could not request verification'\);setVerificationMessageFailed\(true\)/);
+  assert.match(account, /messageFailed=\{verificationMessageFailed\}/);
+});
+
 test('restricted evidence lifecycle actions are mutually single-flight', () => {
   const workspace = readText('src/EvidenceLifecycleCenter.tsx');
 

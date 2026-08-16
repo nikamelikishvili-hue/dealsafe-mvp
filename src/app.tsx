@@ -837,6 +837,7 @@ export function App() {
   const [savedDeals,setSavedDeals]=useState<Deal[]>([]);
   const savedDealsRequestRef=useRef(0);
   const [verificationMessage,setVerificationMessage]=useState('');
+  const [verificationMessageFailed,setVerificationMessageFailed]=useState(false);
   const [verificationRequesting,setVerificationRequesting]=useState(false);
   const [notifications,setNotifications]=useState<DealNotification[]>([]);
   const [notificationsLoading,setNotificationsLoading]=useState(false);
@@ -1122,7 +1123,7 @@ export function App() {
   const finishSignedOutSession=()=>{publicDealRequestRef.current+=1;profileRequestRef.current+=1;updateBrowserAddress('/',true);setSession(null);setMfaLogin(null);setIsAdmin(false);setView('home')};
   const logout=()=>{void signOut(session);finishSignedOutSession()};
   const openProfile=async()=>{if(!session)return;const request=++profileRequestRef.current;setProfileLoading(true);setAuthMessage('');setView('profile');try{const next=await getMyProfileSummary(session);if(request===profileRequestRef.current)setProfile(next)}catch(error){if(request===profileRequestRef.current)setAuthMessage(error instanceof Error?error.message:'Could not load profile')}finally{if(request===profileRequestRef.current)setProfileLoading(false)}};
-  const requestVerification=async()=>{if(!session||!profile||verificationMutationRef.current)return;verificationMutationRef.current=true;setVerificationRequesting(true);setVerificationMessage('');try{const status=await requestIdentityVerification(session);setProfile({...profile,verification_status:status});setVerificationMessage('Request recorded. A verification provider must be connected before identity can be approved.')}catch(error){setVerificationMessage(error instanceof Error?error.message:'Could not request verification')}finally{verificationMutationRef.current=false;setVerificationRequesting(false)}};
+  const requestVerification=async()=>{if(!session||!profile||verificationMutationRef.current)return;verificationMutationRef.current=true;setVerificationRequesting(true);setVerificationMessage('');setVerificationMessageFailed(false);try{const status=await requestIdentityVerification(session);setProfile({...profile,verification_status:status});setVerificationMessage('Request recorded. A verification provider must be connected before identity can be approved.');setVerificationMessageFailed(false)}catch(error){setVerificationMessage(error instanceof Error?error.message:'Could not request verification');setVerificationMessageFailed(true)}finally{verificationMutationRef.current=false;setVerificationRequesting(false)}};
   const refreshSavedDeals=()=>{if(!session)return;const request=++savedDealsRequestRef.current;setDashboardError('');getMySavedDeals(session).then(items=>{if(request===savedDealsRequestRef.current)setSavedDeals(items)}).catch(error=>{if(request===savedDealsRequestRef.current)setDashboardError(error instanceof Error?error.message:'Could not refresh your Watchlist.')})};
   const markAllActivityRead=()=>{if(!session)return;const request=++notificationRequestRef.current;const previous=notifications;setNotifications(items=>items.map(item=>({...item,is_read:true})));setNotificationsError('');void markAllNotificationsRead(session).catch(error=>{if(request===notificationRequestRef.current){setNotifications(previous);setNotificationsError(error instanceof Error?error.message:'Could not mark activity as read.')}})};
   const applyDealParticipants=(dealId:string,participants:DealParticipants)=>{const merge=(deal:Deal):Deal=>({...deal,sellerName:participants.seller_name,sellerVerification:participants.seller_verification,buyerName:participants.buyer_name,buyerVerification:participants.buyer_verification,viewerRole:participants.viewer_role});setActive(current=>current?.id===dealId?merge(current):current);setDeals(items=>items.map(item=>item.id===dealId?merge(item):item))};
@@ -1258,6 +1259,7 @@ export function App() {
         displayName={user?.displayName||''}
         message={authMessage}
         verificationMessage={verificationMessage}
+        verificationMessageFailed={verificationMessageFailed}
         verificationRequesting={verificationRequesting}
         onRequestVerification={requestVerification}
         onSessionUpdated={setSession}

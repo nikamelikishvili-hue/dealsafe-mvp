@@ -31,12 +31,14 @@ function SecurityCenter({
   email,
   status,
   message,
+  messageFailed,
   requesting,
   onRequest,
 }: {
   email: string;
   status: ProfileSummary['verification_status'];
   message: string;
+  messageFailed: boolean;
   requesting: boolean;
   onRequest: () => void;
 }) {
@@ -84,7 +86,15 @@ function SecurityCenter({
           )}
         </div>
       ) : null}
-      {message ? <div className="notice" role="status" aria-live="polite">{t(message)}</div> : null}
+      {message ? (
+        <div
+          className={`notice ${messageFailed ? 'error' : ''}`}
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
+          {t(message)}
+        </div>
+      ) : null}
       <p className="security-warning">
         <LockKeyhole aria-hidden="true" />{' '}
         {t(
@@ -316,12 +326,14 @@ function AccountSettings({
 function TrustPassportControls({ session }: { session: StoredSession }) {
   const [settings, setSettings] = useState<TrustPassportSettings | null>(null);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
 
   useEffect(() => {
     let active = true;
     setMessage('');
+    setMessageFailed(false);
     getTrustPassportSettings(session)
       .then(result => {
         if (active) setSettings(result);
@@ -329,6 +341,7 @@ function TrustPassportControls({ session }: { session: StoredSession }) {
       .catch(error => {
         if (active) {
           setMessage(error instanceof Error ? error.message : 'Could not load passport settings');
+          setMessageFailed(true);
         }
       });
     return () => {
@@ -343,12 +356,14 @@ function TrustPassportControls({ session }: { session: StoredSession }) {
     savingRef.current = true;
     setSaving(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const enabled = !settings.enabled;
       const publicId = await setTrustPassportEnabled(session, enabled);
       setSettings({ public_id: publicId, enabled });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not update passport settings');
+      setMessageFailed(true);
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -359,8 +374,10 @@ function TrustPassportControls({ session }: { session: StoredSession }) {
     try {
       await copyTextToClipboard(publicUrl);
       setMessage('Passport link copied.');
+      setMessageFailed(false);
     } catch {
       setMessage('Could not copy the passport link. Copy it from the address shown above.');
+      setMessageFailed(true);
     }
   };
 
@@ -374,6 +391,7 @@ function TrustPassportControls({ session }: { session: StoredSession }) {
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
       setMessage('Could not share the passport link. Copy it instead.');
+      setMessageFailed(true);
     }
   };
 
@@ -424,7 +442,15 @@ function TrustPassportControls({ session }: { session: StoredSession }) {
       ) : !message ? (
         <div className="notice" role="status" aria-live="polite">{t('Loading passport…')}</div>
       ) : null}
-      {message ? <div className="notice" role="status" aria-live="polite">{t(message)}</div> : null}
+      {message ? (
+        <div
+          className={`notice ${messageFailed ? 'error' : ''}`}
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
+          {t(message)}
+        </div>
+      ) : null}
       <p className="passport-private">
         <LockKeyhole size={17} aria-hidden="true" />
         {t('Your email, phone, addresses, and identity documents are never shown.')}
@@ -524,6 +550,7 @@ export function AccountProfileWorkspace({
   displayName,
   message,
   verificationMessage,
+  verificationMessageFailed,
   verificationRequesting,
   onRequestVerification,
   onSessionUpdated,
@@ -540,6 +567,7 @@ export function AccountProfileWorkspace({
   displayName: string;
   message: string;
   verificationMessage: string;
+  verificationMessageFailed: boolean;
   verificationRequesting: boolean;
   onRequestVerification: () => void;
   onSessionUpdated: (session: StoredSession) => void;
@@ -560,6 +588,7 @@ export function AccountProfileWorkspace({
           email={email}
           status={profile.verification_status}
           message={verificationMessage}
+          messageFailed={verificationMessageFailed}
           requesting={verificationRequesting}
           onRequest={onRequestVerification}
         />
