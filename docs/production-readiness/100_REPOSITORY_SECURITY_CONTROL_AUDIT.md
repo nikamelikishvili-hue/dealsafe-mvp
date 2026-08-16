@@ -60,6 +60,21 @@ and prove one non-production alert-to-triage workflow. The repository's local
 lockfile, license, install-script, SBOM, and audit gates remain useful defense
 in depth but do not replace hosted advisory monitoring.
 
+### Hosted secret detection is not enabled
+
+The repository security-and-analysis response reports `disabled` for secret
+scanning, push protection, non-provider pattern scanning, and validity checks.
+The repository's deterministic local secret gate remains required, but it
+cannot reject a secret before a Git push or continuously re-evaluate hosted
+history when provider patterns improve.
+
+Before external private beta, enable the supported GitHub secret-scanning and
+push-protection controls, assign bypass review to a named security owner, and
+prove the block/approved-bypass/revocation workflow with a non-secret synthetic
+fixture. Never upload a real credential to test the control. Any existing
+finding must be treated as potentially exposed: revoke first, then investigate
+and document remediation without copying the value into an issue or log.
+
 ## Required verification after remediation
 
 1. Capture the branch-protection response showing the intended approval count,
@@ -69,10 +84,12 @@ in depth but do not replace hosted advisory monitoring.
    candidate; rerun analysis after each source fix and after the final rebase.
 3. Verify Dependabot alert visibility with the named owner and record the
    triage SLA without copying advisory payloads or credentials into CI logs.
-4. Open a synthetic pull request that cannot merge without the independent
+4. Verify hosted secret scanning and push protection with a synthetic token
+   pattern, including named bypass review and a recorded revocation exercise.
+5. Open a synthetic pull request that cannot merge without the independent
    approval and all required checks. Update the head and prove stale approval
    is invalidated.
-5. Bind the resulting evidence to the immutable candidate commit and retain it
+6. Bind the resulting evidence to the immutable candidate commit and retain it
    with the release record.
 
 ## Go/no-go effect
@@ -80,7 +97,7 @@ in depth but do not replace hosted advisory monitoring.
 The current repository control state is **no-go for external private beta**.
 A clean Draft PR, passing `verify`, and a `READY` Preview do not override the
 missing approval requirement, unresolved scanner triage, or disabled hosted
-dependency alerts.
+dependency and secret-detection controls.
 
 ### Activation boundary
 
