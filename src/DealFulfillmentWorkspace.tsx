@@ -1533,12 +1533,7 @@ export function ShippingPanel({
           <button
             type="submit"
             className="primary"
-            disabled={
-              !readyToShip ||
-              shipmentBusy ||
-              carrier.trim().length < 2 ||
-              tracking.trim().length < 4
-            }
+            disabled={shipmentBusy}
             aria-busy={shipmentBusy}
           >
             {t(shipmentBusy ? 'Saving shipment…' : 'Mark as shipped')}

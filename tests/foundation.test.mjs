@@ -13858,6 +13858,15 @@ test('evidence upload keeps native file validation actionable', () => {
   assert.match(evidence, /setFiles\(\[\]\);[\s\S]*form\.reset\(\)/);
 });
 
+test('shipment submission keeps native carrier and tracking validation actionable', () => {
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(fulfillment, /required[\s\S]*minLength=\{2\}[\s\S]*value=\{carrier\}/);
+  assert.match(fulfillment, /required[\s\S]*minLength=\{4\}[\s\S]*value=\{tracking\}/);
+  assert.match(fulfillment, /type="submit"[\s\S]*disabled=\{shipmentBusy\}[\s\S]*Mark as shipped/);
+  assert.match(fulfillment, /if \(!readyToShip\) \{[\s\S]*Complete the shipping readiness checklist first/);
+});
+
 test('deal media and editor mutations use same-tick guards', () => {
   const workspace = readText('src/DealWorkspaceFeatures.tsx');
 
