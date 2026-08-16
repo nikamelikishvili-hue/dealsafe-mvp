@@ -15318,3 +15318,15 @@ test('draft and media mutation failures use urgent accessible feedback', () => {
   assert.match(source, /await reorderDealMedia[\s\S]{0,240}catch \(error\) \{\s+setMessageFailed\(true\)/);
   assert.match(source, /await updatePublishedDeal[\s\S]{0,500}catch \(error\) \{\s+setMessageFailed\(true\)/);
 });
+
+test('receipt, invitation, and VIN failures are announced urgently', () => {
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+  const creation = readText('src/DealCreationWorkspace.tsx');
+
+  assert.match(features, /const \[shareFailed, setShareFailed\] = useState\(false\)/);
+  assert.match(features, /role=\{shareFailed \? 'alert' : 'status'\}/);
+  assert.match(features, /const \[noticeFailed, setNoticeFailed\] = useState\(false\)/);
+  assert.match(features, /role=\{noticeFailed \? 'alert' : 'status'\}/);
+  assert.match(creation, /role=\{vehicleVinLookup\.status === 'error' \? 'alert' : 'status'\}/);
+  assert.match(creation, /aria-live=\{vehicleVinLookup\.status === 'error' \? 'assertive' : 'polite'\}/);
+});

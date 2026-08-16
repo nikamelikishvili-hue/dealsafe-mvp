@@ -808,8 +808,8 @@ export function DealCreationWorkspace({
             {templateId === 'vehicle' && vehicleVinLookup.status !== 'idle' && (
               <div
                 className={`vin-lookup-status is-${vehicleVinLookup.status}`}
-                role="status"
-                aria-live="polite"
+                role={vehicleVinLookup.status === 'error' ? 'alert' : 'status'}
+                aria-live={vehicleVinLookup.status === 'error' ? 'assertive' : 'polite'}
               >
                 {vehicleVinLookup.status === 'success' ? (
                   <BadgeCheck aria-hidden="true" />

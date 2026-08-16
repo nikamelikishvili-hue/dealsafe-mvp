@@ -634,6 +634,7 @@ export function CompletionReceipt({
   const [completedAt, setCompletedAt] = useState('');
   const [payment, setPayment] = useState<DealPaymentRecord | null>(null);
   const [shareMessage, setShareMessage] = useState('');
+  const [shareFailed, setShareFailed] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -661,6 +662,7 @@ export function CompletionReceipt({
   const link = `${location.origin}/?deal=${deal.publicId}`;
   const share = async () => {
     setShareMessage('');
+    setShareFailed(false);
     try {
       if (navigator.share) {
         await navigator.share({
@@ -677,6 +679,7 @@ export function CompletionReceipt({
       setShareMessage(
         'Could not share this receipt. Copy the Deal Link manually.',
       );
+      setShareFailed(true);
     }
   };
 
@@ -772,7 +775,11 @@ export function CompletionReceipt({
         )}
       </p>
       {shareMessage && (
-        <div className="notice" role="status">
+        <div
+          className={`notice ${shareFailed ? 'error' : ''}`}
+          role={shareFailed ? 'alert' : 'status'}
+          aria-live={shareFailed ? 'assertive' : 'polite'}
+        >
           {t(shareMessage)}
         </div>
       )}
@@ -782,6 +789,7 @@ export function CompletionReceipt({
 
 export function BuyerInvitePanel({ deal }: { deal: Deal }) {
   const [notice, setNotice] = useState('');
+  const [noticeFailed, setNoticeFailed] = useState(false);
   const noticeTimer = useRef<number | undefined>(undefined);
   const link = `${location.origin}/?deal=${deal.publicId}`;
   const message = `${t('Review agreement')}: ${deal.title} · ${dealPrice(
@@ -792,8 +800,9 @@ export function BuyerInvitePanel({ deal }: { deal: Deal }) {
     () => () => window.clearTimeout(noticeTimer.current),
     [],
   );
-  const flash = (text: string) => {
+  const flash = (text: string, failed = false) => {
     setNotice(text);
+    setNoticeFailed(failed);
     window.clearTimeout(noticeTimer.current);
     noticeTimer.current = window.setTimeout(() => setNotice(''), 2200);
   };
@@ -802,7 +811,7 @@ export function BuyerInvitePanel({ deal }: { deal: Deal }) {
       await copyTextToClipboard(link);
       flash('Deal Link copied.');
     } catch {
-      flash('Could not copy automatically. Select the Deal Link and copy it.');
+      flash('Could not copy automatically. Select the Deal Link and copy it.', true);
     }
   };
   const sms = async () => {
@@ -830,7 +839,7 @@ export function BuyerInvitePanel({ deal }: { deal: Deal }) {
         await copyTextToClipboard(message);
         flash('Sharing is not available. Message copied.');
       } catch {
-        flash('Sharing and automatic copy are unavailable. Copy the invitation manually.');
+        flash('Sharing and automatic copy are unavailable. Copy the invitation manually.', true);
       }
     }
   };
@@ -897,7 +906,11 @@ export function BuyerInvitePanel({ deal }: { deal: Deal }) {
         </button>
       </div>
       {notice && (
-        <div className="notice" role="status">
+        <div
+          className={`notice ${noticeFailed ? 'error' : ''}`}
+          role={noticeFailed ? 'alert' : 'status'}
+          aria-live={noticeFailed ? 'assertive' : 'polite'}
+        >
           {t(notice)}
         </div>
       )}
