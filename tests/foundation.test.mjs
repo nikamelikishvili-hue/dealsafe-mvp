@@ -12353,6 +12353,21 @@ test('account display names reject whitespace and expose field-specific recovery
   assert.match(accountProfile, /updateAccountName\(session, normalizedName\)/);
 });
 
+test('support messages reject whitespace and recover focus at the exact invalid field', () => {
+  const supportCenter = readText('src/SupportCaseCenter.tsx');
+
+  assert.match(supportCenter, /const normalizedSubject = subject\.trim\(\)/);
+  assert.match(supportCenter, /const normalizedMessage = message\.trim\(\)/);
+  assert.match(supportCenter, /const normalizedReply = reply\.trim\(\)/);
+  assert.match(supportCenter, /<FieldError id="support-subject-error">/);
+  assert.match(supportCenter, /<FieldError id="support-message-error">/);
+  assert.match(supportCenter, /<FieldError id="support-reply-error">/);
+  assert.match(supportCenter, /subjectRef\.current\?\.focus\(\)/);
+  assert.match(supportCenter, /messageRef\.current\?\.focus\(\)/);
+  assert.match(supportCenter, /replyRef\.current\?\.focus\(\)/);
+  assert.match(supportCenter, /replySupportCase\(session, selected\.public_reference, normalizedReply\)/);
+});
+
 test('sample deals remain inside the local data boundary', () => {
   const app = readText('src/app.tsx');
   const agreement = readText('src/AgreementRecordSummary.tsx');

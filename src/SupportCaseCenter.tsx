@@ -21,6 +21,7 @@ import {
   type SupportCaseDetail,
   type SupportCaseSummary,
 } from './services/supabaseRest';
+import { FieldError } from './FieldError';
 
 const categoryOptions: Array<{
   value: SupportCaseCategory;
@@ -62,12 +63,18 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [reply, setReply] = useState('');
+  const [subjectError, setSubjectError] = useState('');
+  const [messageError, setMessageError] = useState('');
+  const [replyError, setReplyError] = useState('');
   const [feedback, setFeedback] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const requestRef = useRef(0);
   const lifecycleRef = useRef(0);
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const messageRef = useRef<HTMLTextAreaElement>(null);
+  const replyRef = useRef<HTMLTextAreaElement>(null);
 
   const loadCases = useCallback(async () => {
     const request = ++requestRef.current;
@@ -128,6 +135,20 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
   const submitCase = async (event: React.FormEvent) => {
     event.preventDefault();
     if (savingRef.current) return;
+    const normalizedSubject = subject.trim();
+    const normalizedMessage = message.trim();
+    setSubjectError('');
+    setMessageError('');
+    if (normalizedSubject.length < 5) {
+      setSubjectError('Enter a subject with at least 5 characters.');
+      window.requestAnimationFrame(() => subjectRef.current?.focus());
+      return;
+    }
+    if (normalizedMessage.length < 10) {
+      setMessageError('Enter a message with at least 10 characters.');
+      window.requestAnimationFrame(() => messageRef.current?.focus());
+      return;
+    }
     savingRef.current = true;
     const lifecycle = lifecycleRef.current;
     setSaving(true);
@@ -135,8 +156,8 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
     try {
       const reference = await createSupportCase(session, {
         category,
-        subject,
-        message,
+        subject: normalizedSubject,
+        message: normalizedMessage,
       });
       if (lifecycle !== lifecycleRef.current) return;
       setCategory('deal_help');
@@ -163,12 +184,19 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
   const submitReply = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selected || savingRef.current) return;
+    const normalizedReply = reply.trim();
+    setReplyError('');
+    if (normalizedReply.length < 10) {
+      setReplyError('Enter a reply with at least 10 characters.');
+      window.requestAnimationFrame(() => replyRef.current?.focus());
+      return;
+    }
     savingRef.current = true;
     const lifecycle = lifecycleRef.current;
     setSaving(true);
     setFeedback('');
     try {
-      await replySupportCase(session, selected.public_reference, reply);
+      await replySupportCase(session, selected.public_reference, normalizedReply);
       if (lifecycle !== lifecycleRef.current) return;
       setReply('');
       const detail = await getSupportCase(
@@ -198,6 +226,7 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
     setSelected(null);
     setSelectedReference('');
     setReply('');
+    setReplyError('');
     setFeedback('');
     setLoading(false);
   };
@@ -227,6 +256,8 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
             onClick={() => {
               setCreating(true);
               setFeedback('');
+              setSubjectError('');
+              setMessageError('');
             }}
           >
             <Plus size={17} aria-hidden="true" />
@@ -262,7 +293,11 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
               type="button"
               aria-label={t('Close')}
               disabled={saving}
-              onClick={() => setCreating(false)}
+              onClick={() => {
+                setCreating(false);
+                setSubjectError('');
+                setMessageError('');
+              }}
             >
               <X aria-hidden="true" />
             </button>
@@ -285,28 +320,42 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
             <label>
               {t('Subject')}
               <input
+                ref={subjectRef}
                 required
                 minLength={5}
                 maxLength={120}
+                aria-invalid={Boolean(subjectError)}
+                aria-describedby={subjectError ? 'support-subject-error' : undefined}
                 value={subject}
-                onChange={event => setSubject(event.target.value)}
+                onChange={event => {
+                  setSubject(event.target.value);
+                  if (subjectError) setSubjectError('');
+                }}
                 placeholder={t('Briefly describe what you need')}
               />
+              {subjectError ? <FieldError id="support-subject-error">{subjectError}</FieldError> : null}
             </label>
           </div>
           <label>
             {t('Message')}
             <textarea
+              ref={messageRef}
               required
               minLength={10}
               maxLength={2000}
+              aria-invalid={Boolean(messageError)}
+              aria-describedby={messageError ? 'support-message-count support-message-error' : 'support-message-count'}
               value={message}
-              onChange={event => setMessage(event.target.value)}
+              onChange={event => {
+                setMessage(event.target.value);
+                if (messageError) setMessageError('');
+              }}
               placeholder={t(
                 'Describe the issue, what you already tried, and the outcome you need.',
               )}
             />
-            <small>{message.trim().length}/2000</small>
+            <small id="support-message-count">{message.trim().length}/2000</small>
+            {messageError ? <FieldError id="support-message-error">{messageError}</FieldError> : null}
           </label>
           {category === 'safety_concern' ? (
             <div className="support-priority-note">
@@ -323,7 +372,11 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
               className="secondary"
               type="button"
               disabled={saving}
-              onClick={() => setCreating(false)}
+              onClick={() => {
+                setCreating(false);
+                setSubjectError('');
+                setMessageError('');
+              }}
             >
               {t('Cancel')}
             </button>
@@ -405,13 +458,20 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
                   <label>
                     {t('Reply')}
                     <textarea
+                      ref={replyRef}
                       required
                       minLength={10}
                       maxLength={2000}
+                      aria-invalid={Boolean(replyError)}
+                      aria-describedby={replyError ? 'support-reply-error' : undefined}
                       value={reply}
-                      onChange={event => setReply(event.target.value)}
+                      onChange={event => {
+                        setReply(event.target.value);
+                        if (replyError) setReplyError('');
+                      }}
                       placeholder={t('Add information to this case')}
                     />
+                    {replyError ? <FieldError id="support-reply-error">{replyError}</FieldError> : null}
                   </label>
                   <button
                     className="primary"
