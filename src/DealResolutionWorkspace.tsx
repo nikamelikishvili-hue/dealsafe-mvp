@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useConfirmAction } from './ConfirmActionDialog';
 import type { Deal } from './domain';
+import { FieldError } from './FieldError';
 import { getAppLanguage, t } from './i18n';
 import {
   cancelDeal,
@@ -118,6 +119,7 @@ export function DealSafetyActions({
 }: DealSafetyActionsProps) {
   const [mode, setMode] = useState<'cancel' | 'dispute' | null>(null);
   const [reason, setReason] = useState('');
+  const [reasonError, setReasonError] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -126,6 +128,7 @@ export function DealSafetyActions({
   const [paymentStateError, setPaymentStateError] = useState('');
   const [paymentStateVersion, setPaymentStateVersion] = useState(0);
   const { confirmAction, confirmDialog } = useConfirmAction();
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (deal.status !== 'completed') {
@@ -159,11 +162,24 @@ export function DealSafetyActions({
     if (saving) return;
     setMode(null);
     setReason('');
+    setReasonError('');
   };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!mode || savingRef.current) return;
+    const normalizedReason = reason.trim();
+    const minimumReasonLength = mode === 'cancel' ? 5 : 10;
+    setReasonError('');
+    if (normalizedReason.length < minimumReasonLength) {
+      setReasonError(
+        mode === 'cancel'
+          ? 'Enter a cancellation reason with at least 5 characters.'
+          : 'Describe the problem with at least 10 characters.',
+      );
+      window.requestAnimationFrame(() => reasonRef.current?.focus());
+      return;
+    }
     savingRef.current = true;
 
     const confirmed = await confirmAction({
@@ -185,11 +201,11 @@ export function DealSafetyActions({
     setMessage('');
     try {
       if (mode === 'cancel') {
-        await cancelDeal(session, deal.id, reason);
+        await cancelDeal(session, deal.id, normalizedReason);
         onStatus('cancelled');
         setMessage('Deal cancelled.');
       } else {
-        await openDealDispute(session, deal.id, reason);
+        await openDealDispute(session, deal.id, normalizedReason);
         onStatus('disputed');
         setMessage('Problem reported. The deal is now disputed.');
       }
@@ -279,17 +295,24 @@ export function DealSafetyActions({
           <label>
             {t(mode === 'cancel' ? 'Why are you cancelling?' : 'Describe the problem')}
             <textarea
+              ref={reasonRef}
               required
               minLength={mode === 'cancel' ? 5 : 10}
               maxLength={500}
+              aria-invalid={Boolean(reasonError)}
+              aria-describedby={reasonError ? 'deal-safety-reason-error' : undefined}
               value={reason}
-              onChange={(event) => setReason(event.target.value)}
+              onChange={(event) => {
+                setReason(event.target.value);
+                if (reasonError) setReasonError('');
+              }}
               placeholder={t(
                 mode === 'cancel'
                   ? 'Example: Item is no longer available'
                   : 'Include what happened and what outcome you expect',
               )}
             />
+            {reasonError ? <FieldError id="deal-safety-reason-error">{reasonError}</FieldError> : null}
           </label>
           <div>
             <button
@@ -337,19 +360,28 @@ export function ReportDealPanel({
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState('Suspected fraud');
   const [details, setDetails] = useState('');
+  const [detailsError, setDetailsError] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
   const [submitted, setSubmitted] = useState(false);
+  const detailsRef = useRef<HTMLTextAreaElement>(null);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!session || sendingRef.current || details.trim().length < 10) return;
+    if (!session || sendingRef.current) return;
+    const normalizedDetails = details.trim();
+    setDetailsError('');
+    if (normalizedDetails.length < 10) {
+      setDetailsError('Describe what you noticed with at least 10 characters.');
+      window.requestAnimationFrame(() => detailsRef.current?.focus());
+      return;
+    }
     sendingRef.current = true;
     setSending(true);
     setMessage('');
     try {
-      await reportPublicDeal(session, deal.publicId, category, details);
+      await reportPublicDeal(session, deal.publicId, category, normalizedDetails);
       setSubmitted(true);
       setOpen(false);
     } catch (error) {
@@ -415,16 +447,23 @@ export function ReportDealPanel({
               <label>
                 {t('Details')}
                 <textarea
+                  ref={detailsRef}
                   required
                   minLength={10}
                   maxLength={1000}
+                  aria-invalid={Boolean(detailsError)}
+                  aria-describedby={detailsError ? 'report-details-count report-details-error' : 'report-details-count'}
                   value={details}
-                  onChange={(event) => setDetails(event.target.value)}
+                  onChange={(event) => {
+                    setDetails(event.target.value);
+                    if (detailsError) setDetailsError('');
+                  }}
                   placeholder={t(
                     'Describe what you noticed without sharing passwords or financial information.',
                   )}
                 />
-                <small>{details.trim().length}/1000</small>
+                <small id="report-details-count">{details.trim().length}/1000</small>
+                {detailsError ? <FieldError id="report-details-error">{detailsError}</FieldError> : null}
               </label>
               {message && (
                 <div className="notice" role="alert">
@@ -436,7 +475,10 @@ export function ReportDealPanel({
                   type="button"
                   className="secondary"
                   disabled={sending}
-                  onClick={() => setOpen(false)}
+                  onClick={() => {
+                    setOpen(false);
+                    setDetailsError('');
+                  }}
                 >
                   {t('Go back')}
                 </button>

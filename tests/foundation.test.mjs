@@ -6352,11 +6352,11 @@ test('participant resolution and private deal chat are isolated safely', () => {
   assert.match(resolution, /export function ReportDealPanel/);
   assert.match(resolution, /export function DealChat/);
   assert.match(resolution, /submitRating\(session, deal\.id, stars, comment\)/);
-  assert.match(resolution, /cancelDeal\(session, deal\.id, reason\)/);
-  assert.match(resolution, /openDealDispute\(session, deal\.id, reason\)/);
+  assert.match(resolution, /cancelDeal\(session, deal\.id, normalizedReason\)/);
+  assert.match(resolution, /openDealDispute\(session, deal\.id, normalizedReason\)/);
   assert.match(
     resolution,
-    /reportPublicDeal\(session, deal\.publicId, category, details\)/,
+    /reportPublicDeal\(session, deal\.publicId, category, normalizedDetails\)/,
   );
   assert.match(resolution, /getDealMessages\(session, deal\.id\)/);
   assert.match(resolution, /sendDealMessage\(session, deal\.id, body\)/);
@@ -12396,6 +12396,21 @@ test('account registration rejects weak credentials before calling the provider'
   assert.match(app, /signIn\(authForm\.email\.trim\(\),authForm\.password\)/);
 });
 
+test('deal safety reports validate normalized reasons before confirmation or mutation', () => {
+  const resolution = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(resolution, /const normalizedReason = reason\.trim\(\)/);
+  assert.match(resolution, /if \(normalizedReason\.length < minimumReasonLength\)/);
+  assert.match(resolution, /cancelDeal\(session, deal\.id, normalizedReason\)/);
+  assert.match(resolution, /openDealDispute\(session, deal\.id, normalizedReason\)/);
+  assert.match(resolution, /<FieldError id="deal-safety-reason-error">/);
+  assert.match(resolution, /reasonRef\.current\?\.focus\(\)/);
+  assert.match(resolution, /const normalizedDetails = details\.trim\(\)/);
+  assert.match(resolution, /reportPublicDeal\(session, deal\.publicId, category, normalizedDetails\)/);
+  assert.match(resolution, /<FieldError id="report-details-error">/);
+  assert.match(resolution, /detailsRef\.current\?\.focus\(\)/);
+});
+
 test('sample deals remain inside the local data boundary', () => {
   const app = readText('src/app.tsx');
   const agreement = readText('src/AgreementRecordSummary.tsx');
@@ -14026,7 +14041,8 @@ test('resolution mutations use same-tick single-flight guards', () => {
   assert.match(workspace, /const savingRef = useRef\(false\)/);
   assert.match(workspace, /if \(savingRef\.current\) return;[\s\S]*savingRef\.current = true/);
   assert.match(workspace, /if \(!mode \|\| savingRef\.current\) return;[\s\S]*savingRef\.current = true/);
-  assert.match(workspace, /if \(!session \|\| sendingRef\.current \|\| details\.trim\(\)\.length < 10\) return/);
+  assert.match(workspace, /if \(!session \|\| sendingRef\.current\) return/);
+  assert.match(workspace, /if \(normalizedDetails\.length < 10\)/);
   assert.match(workspace, /if \(!body\.trim\(\) \|\| sendingRef\.current\) return/);
   assert.match(workspace, /aria-busy=\{sending\}/);
 });
