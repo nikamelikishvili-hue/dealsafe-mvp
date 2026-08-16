@@ -16,6 +16,8 @@ import {
   supabaseAuthRequest,
 } from '../../server/authShared.mjs';
 
+const accountIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
 function currentPasswordMode() {
   const mode = (process.env.DEALIVRA_CURRENT_PASSWORD_MODE || 'staged')
     .trim()
@@ -67,6 +69,9 @@ export default async function handler(request, response) {
       }),
     }, request);
     const data = await authPayload(upstream);
+    if (upstream.ok && !accountIdPattern.test(typeof data?.id === 'string' ? data.id : '')) {
+      throw new Error('Authentication provider response was rejected.');
+    }
     if (!upstream.ok || !data?.id) {
       const code = authProviderCode(data);
       logAuthRejection(`password:${action}`, upstream.status, code);

@@ -2288,6 +2288,26 @@ test('password recovery completion uses the same-origin server boundary and clea
   assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
 });
 
+test('password mutation rejects malformed successful provider identities without clearing the session', async () => {
+  const { default: password } = await import('../api/auth/password.mjs');
+
+  for (const providerPayload of [{}, { id: 'malformed-account-id' }, { id: 'x'.repeat(1_000) }]) {
+    const response = createResponse();
+    await withAuthProvider(async () => new Response(JSON.stringify(providerPayload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }), () => password(authRequest({
+      action: 'recovery',
+      newPassword: 'RecoveredPassword123!',
+    }, { authorization: 'Bearer recovery-access-token' }), response));
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.payload.error, 'Password security is temporarily unavailable. Please try again later.');
+    assert.equal(response.headers.has('set-cookie'), false);
+    assert.equal(JSON.stringify(response.payload).includes('malformed-account-id'), false);
+  }
+});
+
 test('signed-in password changes fail closed until provider current-password verification is approved', async () => {
   const { default: password } = await import('../api/auth/password.mjs');
   const response = createResponse();
