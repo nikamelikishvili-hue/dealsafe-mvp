@@ -897,6 +897,7 @@ export function ShippingPanel({
   const [carrier, setCarrier] = useState('');
   const [tracking, setTracking] = useState('');
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [inspectionRecorded, setInspectionRecorded] = useState(false);
   const [editingAddress, setEditingAddress] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
@@ -923,6 +924,7 @@ export function ShippingPanel({
       if (isCurrent()) setShipment(next);
     } catch {
       if (isCurrent()) {
+        setMessageFailed(true);
         setMessage('Shipment status could not be loaded. Try again.');
       }
     }
@@ -947,6 +949,7 @@ export function ShippingPanel({
       }
     } catch {
       if (isCurrent()) {
+        setMessageFailed(true);
         setMessage('Delivery address could not be loaded. Try again.');
       }
     }
@@ -1001,6 +1004,7 @@ export function ShippingPanel({
     mutationInFlight.current = true;
     setSavingAddress(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const storedAddress = serializeUsAddress(address);
       await saveDealDeliveryDetails(
@@ -1016,6 +1020,7 @@ export function ShippingPanel({
       setEditingAddress(false);
       setMessage('Address saved. The seller can now prepare the shipment.');
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error
           ? error.message
@@ -1028,6 +1033,8 @@ export function ShippingPanel({
   };
   const copyAddress = async () => {
     if (!delivery) return;
+    setMessage('');
+    setMessageFailed(false);
     try {
       await copyTextToClipboard(
         `${delivery.recipient_name}\n${delivery.full_address}\n${delivery.country}${
@@ -1036,6 +1043,7 @@ export function ShippingPanel({
       );
       setMessage('Address copied.');
     } catch {
+      setMessageFailed(true);
       setMessage('Address could not be copied. Select and copy it manually.');
     }
   };
@@ -1072,7 +1080,9 @@ export function ShippingPanel({
     event.preventDefault();
     if (mutationInFlight.current) return;
     setMessage('');
+    setMessageFailed(false);
     if (!readyToShip) {
+      setMessageFailed(true);
       setMessage('Complete the shipping readiness checklist first.');
       return;
     }
@@ -1086,6 +1096,7 @@ export function ShippingPanel({
       await loadReadiness();
       onProgressChanged?.();
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not save shipment',
       );
@@ -1107,6 +1118,7 @@ export function ShippingPanel({
     mutationInFlight.current = true;
     setShipmentBusy(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       await confirmShipmentDelivery(session, deal.id);
       setMessage('Delivery confirmed. Deal completed.');
@@ -1115,6 +1127,7 @@ export function ShippingPanel({
       onProgressChanged?.();
       onDelivered();
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not confirm delivery',
       );
@@ -1585,8 +1598,8 @@ export function ShippingPanel({
       {message && (
         <div
           className="notice"
-          role="status"
-          aria-live="polite"
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
         >
           {t(message)}
         </div>

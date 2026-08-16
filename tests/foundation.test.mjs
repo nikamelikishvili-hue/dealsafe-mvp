@@ -15229,3 +15229,14 @@ test('inspection and handoff failures use urgent accessible feedback', () => {
   assert.match(source, /setBusy\('finish'\);\s+setMessage\(''\);\s+setActionFailed\(false\)/);
   assert.match(source, /role=\{actionFailed \? 'alert' : 'status'\}[\s\S]{0,120}aria-live=\{actionFailed \? 'assertive' : 'polite'\}/);
 });
+
+test('shipping workflow failures use urgent accessible feedback', () => {
+  const source = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(source, /const \[messageFailed, setMessageFailed\] = useState\(false\)/);
+  assert.match(source, /setMessageFailed\(true\);\s+setMessage\('Shipment status could not be loaded/);
+  assert.match(source, /setMessageFailed\(true\);\s+setMessage\('Delivery address could not be loaded/);
+  assert.match(source, /setMessageFailed\(true\);\s+setMessage\('Complete the shipping readiness checklist first/);
+  assert.match(source, /role=\{messageFailed \? 'alert' : 'status'\}/);
+  assert.match(source, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
+});
