@@ -51,6 +51,14 @@ requires a tested fix; a false positive requires a reviewer, rationale,
 affected commit, expiry/re-review condition, and retained dismissal record.
 No alert should be dismissed solely to obtain a green merge check.
 
+The CodeQL workflow runs for pushes to `main`, pull requests whose base is
+`main`, the weekly schedule, and manual dispatch. The current stacked Draft
+pull requests target their preceding review branches, so their green `verify`
+and Vercel results do not include the required `Analyze JavaScript and
+TypeScript` check. The final main-target pull request must run CodeQL on the
+fully assembled exact head; earlier component PR results cannot substitute for
+that final analysis.
+
 ### Dependency alerts are not enabled
 
 The Dependabot alerts API reported that alerts are disabled for this
@@ -82,6 +90,8 @@ and document remediation without copying the value into an issue or log.
    enforcement, signatures, conversations, and exact required checks.
 2. Record disposition for every CodeQL alert against the exact release
    candidate; rerun analysis after each source fix and after the final rebase.
+   Confirm that the final pull request is based on `main` and reports the
+   required `Analyze JavaScript and TypeScript` check for its exact head.
 3. Verify Dependabot alert visibility with the named owner and record the
    triage SLA without copying advisory payloads or credentials into CI logs.
 4. Verify hosted secret scanning and push protection with a synthetic token
