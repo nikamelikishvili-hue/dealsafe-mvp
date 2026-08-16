@@ -14580,7 +14580,7 @@ test('meeting and watchlist reads fail visibly without exposing false state', ()
   assert.match(fulfillment, /Could not load meeting details/);
   assert.match(fulfillment, /!loaded \? \([\s\S]*Loading meeting details/);
   assert.match(fulfillment, /loadFailed \? \([\s\S]*<AsyncStatePanel[\s\S]*state="error"/);
-  assert.match(fulfillment, /setLoadVersion\(\(version\) => version \+ 1\)/);
+  assert.match(fulfillment, /setLoadVersion\(\(?version\)? => version \+ 1\)/);
   assert.match(fulfillment, /Could not load handoff status/);
   assert.match(fulfillment, /if \(loadError\) \{[\s\S]*role="alert"[\s\S]*Try again/);
   assert.match(features, /Could not check whether this deal is saved\. Try again\./);
@@ -14746,7 +14746,7 @@ test('shared async state exposes accurate loading and retry semantics', () => {
   assert.match(styles, /min-height: var\(--touch-target\)/);
   assert.match(styles, /prefers-reduced-motion: reduce/);
   assert.ok((fulfillment.match(/<AsyncStatePanel/g) || []).length >= 2);
-  assert.match(fulfillment, /setLoadVersion\(\(version\) => version \+ 1\)/);
+  assert.match(fulfillment, /setLoadVersion\(\(?version\)? => version \+ 1\)/);
 });
 
 test('account security reads fail closed with an explicit retry path', () => {
