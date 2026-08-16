@@ -66,7 +66,7 @@ export function MfaLoginVerification({
         />
       </label>
       {error?<div className="notice mfa-login-error" role="alert">{error}</div>:null}
-      <button type="submit" className="primary full" disabled={busy||code.length!==6}>
+      <button type="submit" className="primary full" disabled={busy}>
         <ShieldCheck/>{busy?'Verifying…':'Verify and continue'}
       </button>
     </form>

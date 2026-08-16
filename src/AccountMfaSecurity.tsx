@@ -44,6 +44,7 @@ export function AccountMfaSecurity({
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState<'enroll'|'verify'|'cancel'|'remove'|''>('');
   const busyRef=useRef(false);
+  const deviceNameRef=useRef<HTMLInputElement>(null);
   const loadRequestRef=useRef(0);
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
@@ -86,6 +87,11 @@ export function AccountMfaSecurity({
 
   const beginEnrollment=async()=>{
     if(busyRef.current)return;
+    if(friendlyName.trim().length<2){
+      setError('Enter a device name.');
+      deviceNameRef.current?.focus();
+      return;
+    }
     busyRef.current=true;
     setBusy('enroll');
     setMessage('');
@@ -262,9 +268,9 @@ export function AccountMfaSecurity({
       </div>
       <label>
         <span>Device name</span>
-        <input value={friendlyName} minLength={2} maxLength={48} disabled={Boolean(busy)} onChange={event=>setFriendlyName(event.target.value)} autoComplete="off"/>
+        <input ref={deviceNameRef} value={friendlyName} minLength={2} maxLength={48} disabled={Boolean(busy)} onChange={event=>setFriendlyName(event.target.value)} autoComplete="off"/>
       </label>
-      <button type="button" className="mfa-primary" onClick={beginEnrollment} disabled={Boolean(busy)||friendlyName.trim().length<2}>
+      <button type="button" className="mfa-primary" onClick={beginEnrollment} disabled={Boolean(busy)}>
         <Plus aria-hidden="true"/>{busy==='enroll'?'Starting…':protectedByMfa?'Add authenticator':'Set up authenticator'}
       </button>
     </div>:null}
@@ -301,7 +307,7 @@ export function AccountMfaSecurity({
                 onChange={event=>setCode(event.target.value.replace(/\D/g,'').slice(0,6))}
               />
             </label>
-            <button type="submit" className="mfa-primary" disabled={Boolean(busy)||code.length!==6}>
+            <button type="submit" className="mfa-primary" disabled={Boolean(busy)}>
               <ShieldCheck aria-hidden="true"/>{busy==='verify'?'Verifying…':'Enable protection'}
             </button>
           </form>
@@ -360,7 +366,7 @@ export function AccountMfaSecurity({
       </div>
       <div className="mfa-remove-actions">
         <button type="button" onClick={cancelFactorRemoval} disabled={Boolean(busy)}>Keep authenticator</button>
-        <button type="submit" className="confirm-danger" disabled={Boolean(busy)||removeCode.length!==6}>
+        <button type="submit" className="confirm-danger" disabled={Boolean(busy)}>
           <ShieldCheck aria-hidden="true"/>{busy==='remove'?'Verifying and removing…':'Verify and remove'}
         </button>
       </div>

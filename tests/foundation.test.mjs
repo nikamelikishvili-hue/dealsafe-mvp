@@ -14726,6 +14726,16 @@ test('account, support, and safety forms keep native validation actions availabl
   assert.doesNotMatch(resolution, /sending \|\| details\.trim\(\)\.length < 10/);
 });
 
+test('MFA forms keep native code validation actionable', () => {
+  const accountMfa = readText('src/AccountMfaSecurity.tsx');
+  const loginMfa = readText('src/MfaLoginVerification.tsx');
+
+  assert.match(accountMfa, /deviceNameRef\.current\?\.focus\(\)/);
+  assert.doesNotMatch(accountMfa, /disabled=\{Boolean\(busy\)\|\|code\.length!==6\}/);
+  assert.doesNotMatch(accountMfa, /disabled=\{Boolean\(busy\)\|\|removeCode\.length!==6\}/);
+  assert.doesNotMatch(loginMfa, /disabled=\{busy\|\|code\.length!==6\}/);
+});
+
 test('shared async state exposes accurate loading and retry semantics', () => {
   const panel = readText('src/AsyncStatePanel.tsx');
   const styles = readText('src/async-state-panel.css');

@@ -18,6 +18,7 @@ const { BrandLogo } = await import('../../src/BrandLogo');
 const { FeedbackMessage } = await import('../../src/FeedbackMessage');
 const { FieldError } = await import('../../src/FieldError');
 const { AsyncStatePanel } = await import('../../src/AsyncStatePanel');
+const { MfaLoginVerification } = await import('../../src/MfaLoginVerification');
 const { isUsPostalCode, normalizeUsState, parseGoogleUsAddress, parseStoredUsAddress, serializeUsAddress } =
   await import('../../src/usAddress');
 
@@ -166,6 +167,33 @@ test('sign-up form keeps consent and policy links visible before submission', ()
 test('critical secondary actions cannot accidentally submit an account form', () => {
   const markup = renderToStaticMarkup(<ForgotPasswordEntry onOpen={noop} />);
   assert.equal(markup, '<div class="forgot-entry"><button type="button">Forgot password?</button></div>');
+});
+
+test('MFA sign-in keeps the validation action available for an incomplete code', () => {
+  const markup = renderToStaticMarkup(
+    <MfaLoginVerification
+      challenge={{
+        mfaRequired: true,
+        pendingAccessToken: 'pending-token',
+        expiresAt: Date.now() + 60_000,
+        factors: [
+          {
+            id: 'factor-1',
+            factorType: 'totp',
+            friendlyName: 'Primary authenticator',
+            createdAt: null,
+            updatedAt: null,
+          },
+        ],
+      }}
+      onVerified={noop}
+      onCancel={noop}
+    />,
+  );
+
+  assert.match(markup, /required=""/);
+  assert.match(markup, /pattern="\[0-9\]\{6\}"/);
+  assert.match(markup, /<button type="submit" class="primary full">/);
 });
 
 test('brand lockup exposes one stable accessible name', () => {
