@@ -88,6 +88,7 @@ export function DealEvidenceWorkspace({
 
   const upload = async (event: FormEvent) => {
     event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
     if (!files.length || busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
@@ -103,6 +104,7 @@ export function DealEvidenceWorkspace({
         );
       }
       setFiles([]);
+      form.reset();
       await load();
       onChanged?.();
       setMessage(
@@ -181,11 +183,11 @@ export function DealEvidenceWorkspace({
           {t('Choose photos or video')}
           <input
             type="file"
+            required
             accept={acceptedFiles}
             multiple
             onChange={event => {
               setFiles(Array.from(event.target.files || []));
-              event.currentTarget.value = '';
             }}
           />
           <small>
@@ -207,7 +209,7 @@ export function DealEvidenceWorkspace({
             ))}
           </div>
         )}
-        <button type="submit" className="primary" disabled={busy || !files.length}>
+        <button type="submit" className="primary" disabled={busy}>
           {busy ? t('Scanning and saving…') : t('Scan and save evidence')}
         </button>
       </form>

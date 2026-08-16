@@ -13848,6 +13848,16 @@ test('agreement verification and evidence uploads are single-flight', () => {
   assert.match(evidence, /aria-busy=\{busy\}/);
 });
 
+test('evidence upload keeps native file validation actionable', () => {
+  const evidence = readText('src/DealEvidenceWorkspace.tsx');
+
+  assert.match(evidence, /type="file"[\s\S]*required/);
+  assert.match(evidence, /type="submit" className="primary" disabled=\{busy\}/);
+  assert.doesNotMatch(evidence, /disabled=\{busy \|\| !files\.length\}/);
+  assert.match(evidence, /const form = event\.currentTarget as HTMLFormElement/);
+  assert.match(evidence, /setFiles\(\[\]\);[\s\S]*form\.reset\(\)/);
+});
+
 test('deal media and editor mutations use same-tick guards', () => {
   const workspace = readText('src/DealWorkspaceFeatures.tsx');
 
