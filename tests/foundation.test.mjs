@@ -15168,7 +15168,7 @@ test('deal action plan exposes initial loading, stale failure, and manual retry 
   assert.match(source, /const \[loadRevision, setLoadRevision\] = useState\(0\)/);
   assert.match(source, /title=\{loadError \? 'Deal progress unavailable' : 'Loading deal progress'\}/);
   assert.match(source, /Showing the previously loaded milestones\. Retry before relying on the next step\./);
-  assert.match(source, /setLoadRevision\(\(revision\) => revision \+ 1\)/);
+  assert.match(source, /setLoadRevision\(\(?revision\)? => revision \+ 1\)/);
   assert.match(source, /role="status" aria-live="polite"/);
   assert.doesNotMatch(source, /if \(!plan\) \{[\s\S]{0,400}return loadError \?/);
 });
@@ -15230,6 +15230,16 @@ test('buyer-code protection reads fail closed across seller and buyer flows', ()
   assert.match(app, /onRetryProtection=\{\(\)=>setAcceptanceProtectionRevision\(revision=>revision\+1\)\}/);
   assert.match(workspace, /title=\{acceptanceProtectionState === 'error' \? 'Acceptance protection unavailable'/);
   assert.match(workspace, /acceptanceProtectionState === 'ready' &&\s+acceptanceProtected/);
+});
+
+test('deal inquiry role checks fail closed and expose a retry path', () => {
+  const source = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(source, /const \[accessChecking, setAccessChecking\] = useState\(Boolean\(session\)\)/);
+  assert.match(source, /setSellerAccess\(false\);\s*setAccessFailed\(true\)/);
+  assert.match(source, /Could not verify your deal access\./);
+  assert.match(source, /onClick=\{\(\) => void verifySellerAccess\(\)\}/);
+  assert.match(source, /!accessChecking && !accessFailed && items\.length === 0/);
 });
 
 test('deal safety action failures use urgent accessible feedback', () => {

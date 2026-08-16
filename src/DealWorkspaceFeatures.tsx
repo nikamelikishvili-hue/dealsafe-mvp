@@ -1887,6 +1887,8 @@ export function DealInquiries({
   const [sellerAccess, setSellerAccess] = useState(
     deal.viewerRole === 'seller',
   );
+  const [accessChecking, setAccessChecking] = useState(Boolean(session));
+  const [accessFailed, setAccessFailed] = useState(false);
   const isSeller = sellerAccess;
   const expired = isDealExpired(deal);
 
@@ -1912,14 +1914,45 @@ export function DealInquiries({
     }
   }, [deal.id, session?.accessToken]);
 
+  const verifySellerAccess = useCallback(async () => {
+    if (!session) {
+      setSellerAccess(false);
+      setAccessChecking(false);
+      setAccessFailed(false);
+      return;
+    }
+    setAccessChecking(true);
+    setAccessFailed(false);
+    try {
+      const value = await isCurrentUserDealSeller(session, deal.id);
+      setSellerAccess(value);
+    } catch {
+      // Fail closed until the current user's role can be verified.
+      setSellerAccess(false);
+      setAccessFailed(true);
+    } finally {
+      setAccessChecking(false);
+    }
+  }, [deal.id, session?.accessToken]);
+
   useEffect(() => {
     let current = true;
-    setSellerAccess(deal.viewerRole === 'seller');
-    if (session) {
-      void isCurrentUserDealSeller(session, deal.id).then((value) => {
-        if (current) setSellerAccess(value);
-      });
+    if (!session) {
+      setSellerAccess(false);
+      setAccessChecking(false);
+      setAccessFailed(false);
+      return () => { current = false; };
     }
+    setAccessChecking(true);
+    setAccessFailed(false);
+    void isCurrentUserDealSeller(session, deal.id)
+      .then(value => { if (current) setSellerAccess(value); })
+      .catch(() => {
+        if (!current) return;
+        setSellerAccess(false);
+        setAccessFailed(true);
+      })
+      .finally(() => { if (current) setAccessChecking(false); });
     return () => {
       current = false;
     };
@@ -2011,6 +2044,18 @@ export function DealInquiries({
             {t('Sign in')}
           </button>
         </div>
+      ) : accessChecking ? (
+        <div className="inquiry-empty" role="status" aria-live="polite">
+          <Clock3 size={17} aria-hidden="true" />
+          {t('Checking your deal access…')}
+        </div>
+      ) : accessFailed ? (
+        <div className="notice" role="alert" aria-live="assertive">
+          <span>{t('Could not verify your deal access.')}</span>
+          <button type="button" className="secondary" onClick={() => void verifySellerAccess()}>
+            {t('Try again')}
+          </button>
+        </div>
       ) : (
         !isSeller &&
         !expired && (
@@ -2032,13 +2077,13 @@ export function DealInquiries({
           </form>
         )
       )}
-      {session && items.length === 0 && (
+      {session && !accessChecking && !accessFailed && items.length === 0 && (
         <div className="inquiry-empty">
           <MessageCircle size={17} />
           {t('No questions yet.')}
         </div>
       )}
-      <div className="inquiry-list">
+      {!accessChecking && !accessFailed && <div className="inquiry-list">
         {items.map((inquiry) => (
           <article className="inquiry-card" key={inquiry.id}>
             <div className="inquiry-question">
@@ -2096,7 +2141,7 @@ export function DealInquiries({
             )}
           </article>
         ))}
-      </div>
+      </div>}
       {message && (
         <div
           className="notice"
