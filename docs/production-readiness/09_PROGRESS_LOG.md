@@ -4883,3 +4883,51 @@ resource, customer record, or real-money capability changed during this pass.
 
 No Production deployment, public alias, hosted configuration, live Supabase
 resource, customer record, or real-money capability changed during this pass.
+
+## Actionable workspace and provider-boundary review stack
+
+- Prepared the review-only sequence `#164`, then `#165` through `#179`.
+  Each pull request is intentionally stacked on the preceding reviewed branch;
+  it must not be merged or rebased out of order.
+- Hardened Auth provider success boundaries for sessions, MFA factors,
+  enrollment, identifiers, password mutations, recovery, and privacy-safe
+  diagnostics before changing customer-facing actions.
+- Kept incomplete fulfillment, inspection, account, support, safety, MFA,
+  evidence-upload, shipment, and agreement controls actionable. Native form
+  validation now identifies and focuses the first incomplete control while
+  mutation guards still prevent duplicate requests.
+- Corrected meeting and shipping address focus targets so City no longer
+  resolves to optional Address Line 2. Address Line 2 remains available for
+  apartment, suite, and unit values.
+- Removed duplicate fulfillment validation surfaces and retained one compact,
+  actionable summary. This reduced the authenticated bundle without raising
+  the reviewed performance ceiling.
+- The stack head through `#179` passes the full repository gate: dependency and
+  catalog governance, formatting, lint, TypeScript, 354 foundation tests, 13
+  component tests, incident drill, secret scan, production build, and Preview
+  smoke.
+- The local stack-head build contains 832,146 bytes of JavaScript against the
+  835,000-byte ceiling. The representative Vercel build at `#176` contained
+  834,726 bytes; later local deltas remain below that reviewed ceiling and are
+  independently checked by every Preview deployment.
+- Individual Vercel failures recorded on `#172` through `#175` were bundle
+  budget results from their intermediate heads. `#176` compacts the same stack
+  below budget and is the first deployable head; those older failures must not
+  be interpreted as regressions in the later stacked heads.
+
+### Reviewed merge order
+
+1. Merge `#164` only after its current checks and review requirements pass.
+2. Merge `#165` through `#175` in numeric order without skipping a base.
+3. Merge `#176` before evaluating the resulting Preview as the deployable UX
+   head.
+4. Merge `#177`, `#178`, and `#179` in order, requiring fresh GitHub and Vercel
+   checks at each head.
+5. Run the exact-commit release gate again after the final merge. Do not promote
+   Production, restore public access, apply staged SQL, or enable live payment
+   gates as part of this documentation sequence.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
