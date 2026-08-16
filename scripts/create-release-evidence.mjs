@@ -1,11 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
-  lstatSync,
+  closeSync,
+  constants,
+  fstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
   readdirSync,
-  statSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
@@ -64,14 +66,26 @@ function listFiles(relativeDirectory) {
 
 function evidenceFile(relativePath) {
   const path = resolveInside(relativePath);
-  if (!lstatSync(path).isFile()) fail(`${relativePath} is not a regular file`);
-  const bytes = statSync(path).size;
-  const sha256 = createHash('sha256').update(readFileSync(path)).digest('hex');
-  return {
-    path: relative(root, path).split(sep).join('/'),
-    sha256,
-    bytes,
-  };
+  const noFollow = process.platform === 'win32' ? 0 : constants.O_NOFOLLOW;
+  let descriptor;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | noFollow);
+    const file = fstatSync(descriptor);
+    if (!file.isFile()) fail(`${relativePath} is not a regular file`);
+    const contents = readFileSync(descriptor);
+    return {
+      path: relative(root, path).split(sep).join('/'),
+      sha256: createHash('sha256').update(contents).digest('hex'),
+      bytes: contents.byteLength,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Release evidence rejected:')) {
+      throw error;
+    }
+    fail(`${relativePath} could not be opened as a regular file`);
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
 }
 
 const requestedCommit = process.env.DEALIVRA_RELEASE_COMMIT?.trim() ?? '';

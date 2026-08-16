@@ -12520,6 +12520,11 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
   assert.match(script, /git\(\['status', '--porcelain=v1', '--untracked-files=all'\]\)/);
   assert.match(script, /workflowCommit !== requestedCommit/);
   assert.match(script, /createHash\('sha256'\)/);
+  assert.match(script, /openSync\(path, constants\.O_RDONLY \| noFollow\)/);
+  assert.match(script, /fstatSync\(descriptor\)/);
+  assert.match(script, /readFileSync\(descriptor\)/);
+  assert.match(script, /closeSync\(descriptor\)/);
+  assert.doesNotMatch(script, /lstatSync\(path\)[\s\S]{0,200}readFileSync\(path\)/);
   assert.match(policy, /production_authorization: 'not_granted'/);
   assert.match(policy, /'browser_storage_policy_passed'/);
   assert.match(policy, /'outbound_transport_policy_passed'/);
