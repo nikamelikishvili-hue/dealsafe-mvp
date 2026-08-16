@@ -132,6 +132,7 @@ export function DealSafetyActions({
   const [paymentStateVersion, setPaymentStateVersion] = useState(0);
   const { confirmAction, confirmDialog } = useConfirmAction();
   const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const safetyTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (deal.status !== 'completed') {
@@ -166,6 +167,17 @@ export function DealSafetyActions({
     setMode(null);
     setReason('');
     setReasonError('');
+    window.requestAnimationFrame(() => safetyTriggerRef.current?.focus());
+  };
+
+  const openForm = (
+    nextMode: 'cancel' | 'dispute',
+    trigger: HTMLButtonElement,
+  ) => {
+    safetyTriggerRef.current = trigger;
+    setReasonError('');
+    setMode(nextMode);
+    window.requestAnimationFrame(() => reasonRef.current?.focus());
   };
 
   const submit = async (event: React.FormEvent) => {
@@ -265,7 +277,7 @@ export function DealSafetyActions({
             className="secondary danger"
             type="button"
             disabled={saving}
-            onClick={() => setMode('cancel')}
+            onClick={(event) => openForm('cancel', event.currentTarget)}
           >
             {t('Cancel deal')}
           </button>
@@ -275,7 +287,7 @@ export function DealSafetyActions({
             className="secondary"
             type="button"
             disabled={saving}
-            onClick={() => setMode('dispute')}
+            onClick={(event) => openForm('dispute', event.currentTarget)}
           >
             {t('Report a problem')}
           </button>
@@ -369,6 +381,19 @@ export function ReportDealPanel({
   const sendingRef = useRef(false);
   const [submitted, setSubmitted] = useState(false);
   const detailsRef = useRef<HTMLTextAreaElement>(null);
+  const reportTriggerRef = useRef<HTMLButtonElement>(null);
+
+  const openReport = () => {
+    setDetailsError('');
+    setOpen(true);
+    window.requestAnimationFrame(() => detailsRef.current?.focus());
+  };
+
+  const closeReport = () => {
+    setOpen(false);
+    setDetailsError('');
+    window.requestAnimationFrame(() => reportTriggerRef.current?.focus());
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -421,9 +446,10 @@ export function ReportDealPanel({
         <>
           {!open ? (
             <button
+              ref={reportTriggerRef}
               className="secondary danger"
               type="button"
-              onClick={() => setOpen(true)}
+              onClick={openReport}
             >
               <Flag size={16} />
               {t('Report suspicious deal')}
@@ -478,10 +504,7 @@ export function ReportDealPanel({
                   type="button"
                   className="secondary"
                   disabled={sending}
-                  onClick={() => {
-                    setOpen(false);
-                    setDetailsError('');
-                  }}
+                  onClick={closeReport}
                 >
                   {t('Go back')}
                 </button>

@@ -12421,6 +12421,20 @@ test('deal communications normalize text and announce rating failures assertivel
   assert.match(resolution, /aria-live=\{failed \? 'assertive' : 'polite'\}/);
 });
 
+test('deal safety composers move and restore keyboard focus predictably', () => {
+  const resolution = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(resolution, /openForm\('cancel', event\.currentTarget\)/);
+  assert.match(resolution, /openForm\('dispute', event\.currentTarget\)/);
+  assert.match(resolution, /reasonRef\.current\?\.focus\(\)/);
+  assert.match(resolution, /safetyTriggerRef\.current\?\.focus\(\)/);
+  assert.match(resolution, /ref=\{reportTriggerRef\}/);
+  assert.match(resolution, /onClick=\{openReport\}/);
+  assert.match(resolution, /onClick=\{closeReport\}/);
+  assert.match(resolution, /detailsRef\.current\?\.focus\(\)/);
+  assert.match(resolution, /reportTriggerRef\.current\?\.focus\(\)/);
+});
+
 test('sample deals remain inside the local data boundary', () => {
   const app = readText('src/app.tsx');
   const agreement = readText('src/AgreementRecordSummary.tsx');
