@@ -633,11 +633,15 @@ export function CompletionReceipt({
 }) {
   const [completedAt, setCompletedAt] = useState('');
   const [payment, setPayment] = useState<DealPaymentRecord | null>(null);
+  const [receiptMessage, setReceiptMessage] = useState('');
   const [shareMessage, setShareMessage] = useState('');
   const [shareFailed, setShareFailed] = useState(false);
 
   useEffect(() => {
     let current = true;
+    setCompletedAt('');
+    setPayment(null);
+    setReceiptMessage('');
     void Promise.allSettled([
       getDealTimeline(session, deal.id),
       getDealPaymentRecord(session, deal.id),
@@ -652,6 +656,14 @@ export function CompletionReceipt({
       }
       if (paymentResult.status === 'fulfilled') {
         setPayment(paymentResult.value);
+      }
+      if (
+        timelineResult.status === 'rejected' ||
+        paymentResult.status === 'rejected'
+      ) {
+        setReceiptMessage(
+          'Some receipt details could not be loaded. Refresh before saving a final copy.',
+        );
       }
     });
     return () => {
@@ -774,6 +786,11 @@ export function CompletionReceipt({
           'Use your browser’s print screen to save a PDF copy. The live Deal Link remains the current record.',
         )}
       </p>
+      {receiptMessage && (
+        <div className="notice error" role="alert" aria-live="assertive">
+          {t(receiptMessage)}
+        </div>
+      )}
       {shareMessage && (
         <div
           className={`notice ${shareFailed ? 'error' : ''}`}
@@ -1866,6 +1883,7 @@ export function DealInquiries({
   const [busy, setBusy] = useState('');
   const requestInFlight = useRef(false);
   const loadRequestRef = useRef(0);
+  const loadFailedRef = useRef(false);
   const [sellerAccess, setSellerAccess] = useState(
     deal.viewerRole === 'seller',
   );
@@ -1877,9 +1895,17 @@ export function DealInquiries({
     const request = ++loadRequestRef.current;
     try {
       const next = await getDealInquiries(session, deal.id);
-      if (request === loadRequestRef.current) setItems(next);
+      if (request === loadRequestRef.current) {
+        setItems(next);
+        if (loadFailedRef.current) {
+          loadFailedRef.current = false;
+          setMessage('');
+          setMessageFailed(false);
+        }
+      }
     } catch {
       if (request === loadRequestRef.current) {
+        loadFailedRef.current = true;
         setMessageFailed(true);
         setMessage('Could not load questions');
       }
@@ -2105,16 +2131,25 @@ export function OfferPanel({
   const [busy, setBusy] = useState('');
   const requestInFlight = useRef(false);
   const loadSequenceRef = useRef(0);
+  const loadFailedRef = useRef(false);
 
   const load = useCallback(
     async () => {
       const request = ++loadSequenceRef.current;
       try {
         const next = await getDealOffers(session, deal.id);
-        if (request === loadSequenceRef.current) setOffers(next);
+        if (request === loadSequenceRef.current) {
+          setOffers(next);
+          if (loadFailedRef.current) {
+            loadFailedRef.current = false;
+            setMessage('');
+            setMessageFailed(false);
+          }
+        }
       } catch {
         // Keep the last known offer list when a background refresh fails.
         if (request === loadSequenceRef.current) {
+          loadFailedRef.current = true;
           setMessageFailed(true);
           setMessage('Could not refresh offers. Showing the last known list.');
         }

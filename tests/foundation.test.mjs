@@ -14848,7 +14848,7 @@ test('offer loading ignores responses from a previous deal or session', () => {
   const features = readText('src/DealWorkspaceFeatures.tsx');
   assert.match(features, /const loadSequenceRef = useRef\(0\)/);
   assert.match(features, /const request = \+\+loadSequenceRef\.current/);
-  assert.match(features, /request === loadSequenceRef\.current\) setOffers\(next\)/);
+  assert.match(features, /if \(request === loadSequenceRef\.current\) \{\s+setOffers\(next\)/);
   assert.match(features, /loadSequenceRef\.current \+= 1/);
 });
 
@@ -15303,6 +15303,8 @@ test('inquiry and offer failures preserve stale data and announce urgently', () 
 
   assert.match(source, /setMessage\('Could not load questions'\)/);
   assert.match(source, /setMessage\('Could not refresh offers\. Showing the last known list\.'\)/);
+  assert.ok((source.match(/const loadFailedRef = useRef\(false\)/g) ?? []).length >= 2);
+  assert.match(source, /if \(loadFailedRef\.current\) \{\s+loadFailedRef\.current = false;\s+setMessage\(''\);\s+setMessageFailed\(false\)/);
   assert.match(source, /role=\{messageFailed \? 'alert' : 'status'\}/);
   assert.match(source, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
   assert.match(source, /setMessageFailed\(false\);\s+try \{\s+await askDealQuestion/);
@@ -15327,6 +15329,8 @@ test('receipt, invitation, and VIN failures are announced urgently', () => {
   assert.match(features, /role=\{shareFailed \? 'alert' : 'status'\}/);
   assert.match(features, /const \[noticeFailed, setNoticeFailed\] = useState\(false\)/);
   assert.match(features, /role=\{noticeFailed \? 'alert' : 'status'\}/);
+  assert.match(features, /Some receipt details could not be loaded\. Refresh before saving a final copy\./);
+  assert.match(features, /\{receiptMessage && \(\s+<div className="notice error" role="alert" aria-live="assertive">/);
   assert.match(creation, /role=\{vehicleVinLookup\.status === 'error' \? 'alert' : 'status'\}/);
   assert.match(creation, /aria-live=\{vehicleVinLookup\.status === 'error' \? 'assertive' : 'polite'\}/);
 });
