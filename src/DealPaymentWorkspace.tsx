@@ -476,7 +476,7 @@ export function DealPaymentWorkspace({
         <div className="notice" role="alert">{t(payment.failure_message)}</div>
       )}
       {message && (
-        <div className="notice" role="status" aria-live="polite">
+        <div className="notice" role="alert" aria-live="assertive">
           {t(message)}
         </div>
       )}

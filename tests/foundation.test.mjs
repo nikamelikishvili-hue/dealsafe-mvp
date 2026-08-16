@@ -15240,3 +15240,14 @@ test('shipping workflow failures use urgent accessible feedback', () => {
   assert.match(source, /role=\{messageFailed \? 'alert' : 'status'\}/);
   assert.match(source, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
 });
+
+test('evidence and payment failures use urgent accessible feedback', () => {
+  const evidence = readText('src/DealEvidenceWorkspace.tsx');
+  const payment = readText('src/DealPaymentWorkspace.tsx');
+
+  assert.match(evidence, /const \[messageFailed, setMessageFailed\] = useState\(false\)/);
+  assert.match(evidence, /role=\{messageFailed \? 'alert' : 'status'\}/);
+  assert.match(evidence, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
+  assert.match(payment, /\{message && \(\s+<div className="notice" role="alert" aria-live="assertive">/);
+  assert.doesNotMatch(payment, /\{message && \(\s+<div className="notice" role="status" aria-live="polite">/);
+});

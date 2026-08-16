@@ -60,6 +60,7 @@ export function DealEvidenceWorkspace({
   const busyRef = useRef(false);
   const loadSequenceRef = useRef(0);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
 
   const load = async () => {
     const request = ++loadSequenceRef.current;
@@ -67,9 +68,12 @@ export function DealEvidenceWorkspace({
       const next = await listDealEvidence(session, deal.id);
       if (request === loadSequenceRef.current) setItems(next);
     } catch (error) {
-      if (request === loadSequenceRef.current) setMessage(
-        error instanceof Error ? error.message : 'Could not load evidence',
-      );
+      if (request === loadSequenceRef.current) {
+        setMessageFailed(true);
+        setMessage(
+          error instanceof Error ? error.message : 'Could not load evidence',
+        );
+      }
     }
   };
 
@@ -80,6 +84,7 @@ export function DealEvidenceWorkspace({
     setFiles([]);
     setSelected(null);
     setMessage('');
+    setMessageFailed(false);
     void load();
     return () => {
       loadSequenceRef.current += 1;
@@ -111,6 +116,7 @@ export function DealEvidenceWorkspace({
         'Security scan passed. Evidence was saved privately to this deal record.',
       );
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not upload evidence',
       );
@@ -220,7 +226,11 @@ export function DealEvidenceWorkspace({
         )}
       </p>
       {message && (
-        <div className="notice" role="status" aria-live="polite">
+        <div
+          className="notice"
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
           {t(message)}
         </div>
       )}
