@@ -5429,7 +5429,7 @@ test('deal creation presentation is isolated without moving draft persistence ow
   assert.match(app, /createUserDeal\(activeSession,draftForPersistence\(\)\)/);
   assert.match(app, /saveUserDealDraft\(activeSession,draftForPersistence\(\)\)/);
   assert.match(app, /uploadDealPhotos\(activeSession,deal\.id,photos\)/);
-  assert.match(dealFeatures, /URL\.revokeObjectURL\(nextSource\)/);
+  assert.doesNotMatch(dealFeatures, /URL\.createObjectURL\(file\)/);
   assert.doesNotMatch(app, /id="create-step-1"/);
   assert.doesNotMatch(app, /function DealTemplatePicker/);
   assert.doesNotMatch(app, /function CreateDealProgress/);
@@ -13880,6 +13880,18 @@ test('agreement acceptance keeps every confirmation actionable', () => {
   assert.match(workspace, /required[\s\S]*minLength=\{2\}[\s\S]*value=\{buyer\}/);
   assert.match(workspace, /type="submit"[\s\S]*disabled=\{accepting\}[\s\S]*Accept these terms/);
   assert.doesNotMatch(workspace, /disabled=\{!agreementActionReady \|\| accepting\}/);
+});
+
+test('local media previews never place user-selected file URLs into the DOM', () => {
+  const workspace = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(workspace, /const mediaFileKind = \(file: File\)/);
+  assert.match(workspace, /createImageBitmap\(file\)/);
+  assert.match(workspace, /context\.drawImage\(bitmap/);
+  assert.match(workspace, /mediaFileKind\(file\) === null/);
+  assert.doesNotMatch(workspace, /URL\.createObjectURL\(file\)/);
+  assert.doesNotMatch(workspace, /<img src=\{source\} alt=\{alt\} \/>/);
+  assert.doesNotMatch(workspace, /<video[\s\S]{0,160}src=\{source\}[\s\S]{0,160}file/);
 });
 
 test('deal media and editor mutations use same-tick guards', () => {

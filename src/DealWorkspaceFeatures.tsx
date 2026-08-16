@@ -2247,8 +2247,22 @@ export function OfferPanel({
 
 const isVideoSource = (source: string) =>
   /\.(mp4|webm)(?:$|\?)/i.test(source);
-const isVideoFile = (file: File) =>
-  file.type.startsWith('video/') || /\.(mp4|webm)$/i.test(file.name);
+const acceptedImageTypes = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+]);
+const acceptedVideoTypes = new Set(['video/mp4', 'video/webm']);
+const mediaFileKind = (file: File): 'image' | 'video' | null => {
+  const type = file.type.toLowerCase();
+  if (acceptedImageTypes.has(type)) return 'image';
+  if (acceptedVideoTypes.has(type)) return 'video';
+  if (!type && /\.(jpe?g|png|webp|heic)$/i.test(file.name)) return 'image';
+  if (!type && /\.(mp4|webm)$/i.test(file.name)) return 'video';
+  return null;
+};
+const isVideoFile = (file: File) => mediaFileKind(file) === 'video';
 
 export function MediaPreview({
   source,
@@ -2470,24 +2484,67 @@ export function FilePreview({
   file: File;
   alt: string;
 }) {
-  const [source, setSource] = useState('');
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const kind = mediaFileKind(file);
+  const [imageState, setImageState] = useState<'loading' | 'ready' | 'error'>(
+    kind === 'image' ? 'loading' : 'ready',
+  );
   useEffect(() => {
-    const nextSource = URL.createObjectURL(file);
-    setSource(nextSource);
-    return () => URL.revokeObjectURL(nextSource);
-  }, [file]);
-  if (!source) return null;
-  return isVideoFile(file) ? (
-    <video
-      src={source}
-      controls
-      muted
-      playsInline
-      preload="metadata"
-      aria-label={alt}
-    />
-  ) : (
-    <img src={source} alt={alt} />
+    if (kind !== 'image') return;
+    if (typeof createImageBitmap !== 'function') {
+      setImageState('error');
+      return;
+    }
+    let active = true;
+    setImageState('loading');
+    void createImageBitmap(file).then((bitmap) => {
+      if (!active) {
+        bitmap.close();
+        return;
+      }
+      const canvas = canvasRef.current;
+      const context = canvas?.getContext('2d');
+      if (!canvas || !context) {
+        bitmap.close();
+        setImageState('error');
+        return;
+      }
+      const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      setImageState('ready');
+    }).catch(() => {
+      if (active) setImageState('error');
+    });
+    return () => {
+      active = false;
+    };
+  }, [file, kind]);
+  if (kind === 'image') {
+    return (
+      <div className="local-media-preview">
+        <canvas
+          ref={canvasRef}
+          role="img"
+          aria-label={alt}
+          hidden={imageState !== 'ready'}
+        />
+        {imageState !== 'ready' && (
+          <span role="status">
+            <ImagePlus aria-hidden="true" />
+            {t(imageState === 'error' ? 'Preview unavailable' : 'Preparing preview…')}
+          </span>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="local-media-preview video-file-selected" role="status">
+      <PackageCheck aria-hidden="true" />
+      <span>{t('Video selected')}</span>
+    </div>
   );
 }
 
@@ -2743,6 +2800,11 @@ export function PhotoManager({
 
   const choose = (selected: File[]) => {
     setMessage('');
+    const unsupported = selected.find((file) => mediaFileKind(file) === null);
+    if (unsupported) {
+      setMessage(`${unsupported.name} ${t('is not a supported media file.')}`);
+      return;
+    }
     const combined = [...files, ...selected]
       .filter(
         (file, index, all) =>
