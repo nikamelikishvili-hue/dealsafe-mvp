@@ -108,6 +108,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [97_BROWSER_ISOLATION_HEADERS.md](97_BROWSER_ISOLATION_HEADERS.md) | Same-origin resource isolation, origin agent clustering, popup compatibility, and rollback gate |
 | [98_GLOBAL_LOGOUT_BROWSER_CLEAR.md](98_GLOBAL_LOGOUT_BROWSER_CLEAR.md) | Provider-confirmed global logout clears residual browser cache, cookies, and origin storage |
 | [99_RELEASE_READINESS_SNAPSHOT.md](99_RELEASE_READINESS_SNAPSHOT.md) | Exact-candidate go/no-go decision, protected-beta blockers, real-money blockers, evidence ownership, and activation boundary |
+| [100_REPOSITORY_SECURITY_CONTROL_AUDIT.md](100_REPOSITORY_SECURITY_CONTROL_AUDIT.md) | Read-only branch-protection, approval, CodeQL, and dependency-alert audit with exact release-remediation gates |
 
 ## Authority and change control
 
