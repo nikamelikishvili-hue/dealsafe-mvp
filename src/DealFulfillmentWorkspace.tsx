@@ -106,6 +106,7 @@ export function MeetingPanel({
     scheduledAt: '',
   });
   const [message, setMessage] = useState('');
+  const [actionFailed, setActionFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -186,6 +187,7 @@ export function MeetingPanel({
     actionInFlight.current = true;
     setBusy(true);
     setMessage('');
+    setActionFailed(false);
     try {
       await proposeMeeting(
         session,
@@ -197,6 +199,7 @@ export function MeetingPanel({
       setMeeting(await getDealMeeting(session, deal.id));
       setMessage('Meeting proposal sent to the other party.');
     } catch (error) {
+      setActionFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not propose meeting',
       );
@@ -211,11 +214,13 @@ export function MeetingPanel({
     actionInFlight.current = true;
     setBusy(true);
     setMessage('');
+    setActionFailed(false);
     try {
       await confirmMeeting(session, deal.id);
       setMeeting(await getDealMeeting(session, deal.id));
       setMessage('Meeting confirmed.');
     } catch (error) {
+      setActionFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not confirm meeting',
       );
@@ -455,8 +460,8 @@ export function MeetingPanel({
       {message && (
         <div
           className="notice"
-          role="status"
-          aria-live="polite"
+          role={actionFailed ? 'alert' : 'status'}
+          aria-live={actionFailed ? 'assertive' : 'polite'}
         >
           {t(message)}
         </div>

@@ -15207,3 +15207,13 @@ test('deal safety action failures use urgent accessible feedback', () => {
   assert.match(source, /role=\{messageFailed \? 'alert' : 'status'\}/);
   assert.match(source, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
 });
+
+test('meeting action failures use urgent accessible feedback', () => {
+  const source = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(source, /const \[actionFailed, setActionFailed\] = useState\(false\)/);
+  assert.match(source, /setActionFailed\(false\);\s+try \{\s+await proposeMeeting/);
+  assert.match(source, /setActionFailed\(false\);\s+try \{\s+await confirmMeeting/);
+  assert.match(source, /role=\{actionFailed \? 'alert' : 'status'\}/);
+  assert.match(source, /aria-live=\{actionFailed \? 'assertive' : 'polite'\}/);
+});
