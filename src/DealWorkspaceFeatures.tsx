@@ -340,6 +340,7 @@ export function SaveDealButton({
   const [loading, setLoading] = useState(Boolean(session));
   const mutationRef = useRef(false);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -354,12 +355,14 @@ export function SaveDealButton({
         if (current) {
           setSaved(value);
           setMessage('');
+          setMessageFailed(false);
         }
       })
       .catch(() => {
         if (current) {
           setSaved(false);
           setMessage('Could not check whether this deal is saved. Try again.');
+          setMessageFailed(true);
         }
       })
       .finally(() => {
@@ -379,6 +382,7 @@ export function SaveDealButton({
     mutationRef.current = true;
     setLoading(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const next = await setDealSaved(session, deal.publicId, !saved);
       setSaved(next);
@@ -387,11 +391,13 @@ export function SaveDealButton({
           ? 'Deal Link saved to your Watchlist.'
           : 'Deal Link removed from your Watchlist.',
       );
+      setMessageFailed(false);
       onChanged();
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'Could not update saved deal',
       );
+      setMessageFailed(true);
     } finally {
       mutationRef.current = false;
       setLoading(false);
@@ -428,7 +434,15 @@ export function SaveDealButton({
             : 'Sign in to save',
         )}
       </button>
-      {message && <div className="notice" role="status" aria-live="polite">{t(message)}</div>}
+      {message && (
+        <div
+          className={`notice ${messageFailed ? 'error' : ''}`}
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
+          {t(message)}
+        </div>
+      )}
     </section>
   );
 }
@@ -1045,7 +1059,7 @@ export function BuyerAccessCodeManager({
           </button>
         )}
       </div>
-      {message && <div className="notice" role="status" aria-live="polite">{t(message)}</div>}
+      {message && <div className="notice error" role="alert">{t(message)}</div>}
     </section>
     {confirmDialog}
     </>
@@ -1193,7 +1207,7 @@ export function DealRenewalPanel({
           {formatDateTime(newExpiry)}
         </div>
       )}
-      {message && <div className="notice" role="status" aria-live="polite">{t(message)}</div>}
+      {message && <div className="notice error" role="alert">{t(message)}</div>}
     </section>
   );
 }

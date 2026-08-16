@@ -14178,6 +14178,15 @@ test('watchlist, access-code, and renewal mutations are single-flight', () => {
   assert.match(workspace, /export function DealRenewalPanel[\s\S]*const savingRef = useRef\(false\)/);
 });
 
+test('watchlist, access-code, and renewal failures use assertive feedback', () => {
+  const workspace = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(workspace, /export function SaveDealButton[\s\S]*const \[messageFailed, setMessageFailed\] = useState\(false\)/);
+  assert.match(workspace, /className=\{`notice \$\{messageFailed \? 'error' : ''\}`\}[\s\S]*role=\{messageFailed \? 'alert' : 'status'\}/);
+  assert.match(workspace, /export function BuyerAccessCodeManager[\s\S]*className="notice error" role="alert"/);
+  assert.match(workspace, /export function DealRenewalPanel[\s\S]*className="notice error" role="alert"/);
+});
+
 test('restricted evidence lifecycle actions are mutually single-flight', () => {
   const workspace = readText('src/EvidenceLifecycleCenter.tsx');
 
