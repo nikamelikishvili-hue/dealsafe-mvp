@@ -15012,7 +15012,13 @@ test('notification reads preserve stale activity and expose retryable failures',
   assert.match(source, /onRetry=\{\(\)=>setNotificationsRevision\(revision=>revision\+1\)\}/);
   assert.match(source, /setNotifications\(previous\)/);
   assert.doesNotMatch(source, /getMyNotifications\(session\)[\s\S]{0,240}catch\(\(\)=>\{if\(current&&request===notificationRequestRef\.current\)setNotifications\(\[\]\)\}\)/);
-  assert.match(source, /aria-expanded=\{expanded\} aria-controls="notification-menu"/);
+  assert.match(source, /aria-haspopup="true" aria-expanded=\{expanded\} aria-controls="notification-menu"/);
+  assert.match(source, /role="region" aria-labelledby="notification-menu-title"/);
+  assert.match(source, /id="notification-menu-title"/);
+  assert.match(source, /event\.key==='Escape'[\s\S]*close\(true\)/);
+  assert.match(source, /document\.addEventListener\('pointerdown',onPointerDown\)/);
+  assert.match(source, /toggleRef\.current\?\.focus\(\)/);
+  assert.match(source, /unread>99\?'99\+':unread/);
 });
 
 test('profile loading fails closed before account security controls render', () => {
