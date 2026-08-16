@@ -12321,6 +12321,15 @@ test('global session revocation uses the governed accessible confirmation dialog
   assert.doesNotMatch(sessionSecurity, /className="session-confirmation"/);
 });
 
+test('MFA removal can be cancelled by keyboard and restores the initiating control', () => {
+  const accountMfa = readText('src/AccountMfaSecurity.tsx');
+
+  assert.match(accountMfa, /removalTriggerRef=useRef<HTMLButtonElement\|null>\(null\)/);
+  assert.match(accountMfa, /removalTriggerRef\.current=trigger/);
+  assert.match(accountMfa, /event\.key!==['"]Escape['"]/);
+  assert.match(accountMfa, /window\.requestAnimationFrame\(\(\)=>removalTriggerRef\.current\?\.focus\(\)\)/);
+});
+
 test('sample deals remain inside the local data boundary', () => {
   const app = readText('src/app.tsx');
   const agreement = readText('src/AgreementRecordSummary.tsx');

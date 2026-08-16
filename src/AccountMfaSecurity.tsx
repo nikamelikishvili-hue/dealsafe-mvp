@@ -45,6 +45,7 @@ export function AccountMfaSecurity({
   const [busy,setBusy]=useState<'enroll'|'verify'|'cancel'|'remove'|''>('');
   const busyRef=useRef(false);
   const deviceNameRef=useRef<HTMLInputElement>(null);
+  const removalTriggerRef=useRef<HTMLButtonElement|null>(null);
   const loadRequestRef=useRef(0);
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
@@ -150,7 +151,7 @@ export function AccountMfaSecurity({
     }
   };
 
-  const beginFactorRemoval=(factorId:string)=>{
+  const beginFactorRemoval=(factorId:string,trigger:HTMLButtonElement)=>{
     const verificationFactor=status?.factors.find(factor=>factor.id!==factorId)
       ??status?.factors.find(factor=>factor.id===factorId);
     if(!verificationFactor){
@@ -159,6 +160,7 @@ export function AccountMfaSecurity({
     }
     setMessage('');
     setError('');
+    removalTriggerRef.current=trigger;
     setConfirmRemove(factorId);
     setRemoveVerificationFactorId(verificationFactor.id);
     setRemoveCode('');
@@ -169,6 +171,7 @@ export function AccountMfaSecurity({
     setConfirmRemove(null);
     setRemoveVerificationFactorId('');
     setRemoveCode('');
+    window.requestAnimationFrame(()=>removalTriggerRef.current?.focus());
   };
 
   const removeFactor=async(event:React.FormEvent)=>{
@@ -247,7 +250,7 @@ export function AccountMfaSecurity({
         <b>{status.assuranceLevel==='aal2'?'Verified this session':'Verification required'}</b>
         <button
           type="button"
-          onClick={()=>beginFactorRemoval(factor.id)}
+          onClick={event=>beginFactorRemoval(factor.id,event.currentTarget)}
           disabled={Boolean(busy)||factorFloorReached}
           aria-label={`Remove ${factor.friendlyName}`}
           title={factorFloorReached?'Add and verify another authenticator before removing this one.':undefined}
@@ -326,6 +329,11 @@ export function AccountMfaSecurity({
       aria-labelledby="mfa-remove-title"
       aria-describedby="mfa-remove-description"
       onSubmit={removeFactor}
+      onKeyDown={event=>{
+        if(event.key!=='Escape'||busy)return;
+        event.preventDefault();
+        cancelFactorRemoval();
+      }}
       aria-busy={busy==='remove'}
     >
       <div className="mfa-remove-copy">
