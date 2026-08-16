@@ -480,6 +480,8 @@ export function DealChat({ deal, session }: DealChatProps) {
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
   const launcherRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const openRef = useRef(false);
   const loadedRef = useRef(false);
   const lastSeenRef = useRef<string | undefined>(undefined);
@@ -553,10 +555,22 @@ export function DealChat({ deal, session }: DealChatProps) {
 
   useEffect(() => {
     if (!open) return;
+    window.requestAnimationFrame(() => composerRef.current?.focus());
     void load();
     const timer = window.setInterval(() => void load(), 10_000);
+    const closeFromOutside = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !panelRef.current?.contains(event.target) &&
+        !launcherRef.current?.contains(event.target)
+      ) {
+        closeChat(false);
+      }
+    };
+    document.addEventListener('pointerdown', closeFromOutside);
     return () => {
       window.clearInterval(timer);
+      document.removeEventListener('pointerdown', closeFromOutside);
       requestRef.current += 1;
     };
   }, [load, open]);
@@ -589,8 +603,6 @@ export function DealChat({ deal, session }: DealChatProps) {
   return (
     <div
       className={`deal-chat-float ${open ? 'open' : ''}`}
-      onMouseEnter={() => setChatOpen(true)}
-      onMouseLeave={() => setChatOpen(false)}
     >
       <button
         ref={launcherRef}
@@ -609,9 +621,11 @@ export function DealChat({ deal, session }: DealChatProps) {
       </button>
       {open && (
         <section
+          ref={panelRef}
           id="deal-chat-panel"
           className="deal-chat deal-chat-panel no-print"
-          aria-label={t('Deal chat')}
+          role="region"
+          aria-labelledby="deal-chat-title"
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
               event.preventDefault();
@@ -623,7 +637,7 @@ export function DealChat({ deal, session }: DealChatProps) {
             <MessageCircle />
             <div>
               <p className="eyebrow">{t('Private conversation')}</p>
-              <h2>{t('Deal chat')}</h2>
+              <h2 id="deal-chat-title">{t('Deal chat')}</h2>
             </div>
             <button
               type="button"
@@ -656,6 +670,7 @@ export function DealChat({ deal, session }: DealChatProps) {
           )}
           <form onSubmit={send}>
             <textarea
+              ref={composerRef}
               required
               aria-label={t('Deal chat message')}
               maxLength={1000}

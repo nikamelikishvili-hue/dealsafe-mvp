@@ -6364,10 +6364,17 @@ test('participant resolution and private deal chat are isolated safely', () => {
   assert.match(resolution, /request !== requestRef\.current/);
   assert.match(resolution, /window\.clearInterval\(timer\)/);
   assert.match(resolution, /aria-controls="deal-chat-panel"/);
+  assert.match(resolution, /role="region"/);
+  assert.match(resolution, /aria-labelledby="deal-chat-title"/);
+  assert.match(resolution, /id="deal-chat-title"/);
   assert.match(resolution, /aria-live="polite"/);
   assert.match(resolution, /<X aria-hidden="true" size=\{19\} \/>/);
   assert.match(resolution, /if \(event\.key === 'Escape'\)/);
   assert.match(resolution, /launcherRef\.current\?\.focus\(\)/);
+  assert.match(resolution, /composerRef\.current\?\.focus\(\)/);
+  assert.match(resolution, /document\.addEventListener\('pointerdown', closeFromOutside\)/);
+  assert.doesNotMatch(resolution, /onMouseEnter=\{\(\) => setChatOpen\(true\)\}/);
+  assert.doesNotMatch(resolution, /onMouseLeave=\{\(\) => setChatOpen\(false\)\}/);
   assert.match(chatStyles, /\.view-deal \.deal-chat-float/);
   assert.match(
     chatStyles,
