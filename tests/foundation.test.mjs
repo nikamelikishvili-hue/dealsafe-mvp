@@ -11386,6 +11386,8 @@ test('every runtime schema uses the governed rejection transport', () => {
   assert.match(reporter, /signatureCooldownMs = 30_000/);
   assert.match(reporter, /sendBoundedDiagnostic\(/);
   assert.match(reporter, /\/api\/security\/runtime-rejection/);
+  assert.match(reporter, /boundary=\$\{event\.boundary\} issue=\$\{event\.issue\}/);
+  assert.doesNotMatch(reporter, /console\.error\([^)]*,\s*event\)/);
   assert.doesNotMatch(reporter, /location\.(?:href|pathname|search|hash)/);
   assert.match(endpoint, /DEALIVRA_RUNTIME_REJECTION_MODE/);
   assert.match(endpoint, /mode === 'staged'/);
@@ -12300,6 +12302,31 @@ test('sample and local fallback deal identifiers satisfy every public boundary',
   assert.match(demoRepository, /DEMO_DEAL_PUBLIC_ID = 'DV7K4M2Q'/);
   assert.match(demoRepository, /publicId: `DV\$\{Math\.random\(\)/);
   assert.doesNotMatch(`${main}\n${demoRepository}`, /DV-/);
+});
+
+test('sample deals remain inside the local data boundary', () => {
+  const app = readText('src/app.tsx');
+  const agreement = readText('src/AgreementRecordSummary.tsx');
+
+  assert.match(
+    app,
+    /if\(active\.publicId===DEMO_DEAL_PUBLIC_ID\)\{setAcceptanceProtectionState\('ready'\);return\}/,
+  );
+  assert.ok(
+    (agreement.match(/deal\.publicId === DEMO_DEAL_PUBLIC_ID/g) ?? []).length >= 3,
+  );
+  assert.match(
+    agreement,
+    /deal\.publicId === DEMO_DEAL_PUBLIC_ID[\s\S]*setLoading\(false\);[\s\S]*return;/,
+  );
+  assert.match(
+    agreement,
+    /deal\.publicId === DEMO_DEAL_PUBLIC_ID[\s\S]*setFingerprint\('—'\);[\s\S]*return;/,
+  );
+  assert.match(
+    agreement,
+    /deal\.publicId === DEMO_DEAL_PUBLIC_ID[\s\S]*setVersions\(\[\]\);[\s\S]*setLoaded\(true\);[\s\S]*return;/,
+  );
 });
 
 test('served asset manifest is deterministic, bounded, and hash-only', () => {

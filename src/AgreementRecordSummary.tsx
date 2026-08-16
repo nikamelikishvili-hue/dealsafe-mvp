@@ -15,6 +15,7 @@ import { formatMoney } from './currency';
 import { copyTextToClipboard } from './clipboard';
 import type { Deal } from './domain';
 import { getAppLanguage, t } from './i18n';
+import { DEMO_DEAL_PUBLIC_ID } from './services/demoRepository';
 import {
   getPublicAgreementDocument,
   getPublicAgreementHistory,
@@ -36,6 +37,10 @@ export function useStoredAgreementDocument(deal: Deal) {
     setLoading(true);
     setError('');
     setRecord(null);
+    if (deal.publicId === DEMO_DEAL_PUBLIC_ID) {
+      setLoading(false);
+      return;
+    }
     getPublicAgreementDocument(deal.publicId, deal.agreementVersion)
       .then(value => {
         if (current) setRecord(value);
@@ -170,6 +175,10 @@ export function AgreementFingerprint({ deal }: { deal: Deal }) {
     let current = true;
     setFingerprint('');
     setLoadError('');
+    if (deal.publicId === DEMO_DEAL_PUBLIC_ID) {
+      setFingerprint('—');
+      return;
+    }
     getPublicAgreementDocument(deal.publicId, deal.agreementVersion)
       .then(record => {
         if (current) {
@@ -258,6 +267,11 @@ export function AgreementHistory({ deal }: { deal: Deal }) {
     let current = true;
     setLoaded(false);
     setLoadError('');
+    if (deal.publicId === DEMO_DEAL_PUBLIC_ID) {
+      setVersions([]);
+      setLoaded(true);
+      return;
+    }
     getPublicAgreementHistory(deal.publicId)
       .then(items => {
         if (current) {
