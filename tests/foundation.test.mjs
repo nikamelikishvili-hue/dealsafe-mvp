@@ -13923,6 +13923,18 @@ test('home and section navigation moves keyboard focus with the visual viewport'
   assert.match(workspaceFeatures, /focusPageDestination\('deal-editor'\)/);
 });
 
+test('mobile deal actions use one governed persistent dock', () => {
+  const shell = readText('src/DealWorkspaceShell.tsx');
+  const workspaceStyles = readText('src/workspace-redesign.css');
+  const brandStyles = readText('src/dealivra-brand.css');
+
+  assert.match(shell, /className="deal-primary-dock"/);
+  assert.match(workspaceStyles, /\.deal-primary-dock\{/);
+  assert.match(workspaceStyles, /bottom:calc\(10px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.doesNotMatch(workspaceStyles, /\.mobile-deal-action/);
+  assert.doesNotMatch(brandStyles, /\.mobile-deal-action/);
+});
+
 test('resolution mutations use same-tick single-flight guards', () => {
   const workspace = readText('src/DealResolutionWorkspace.tsx');
 

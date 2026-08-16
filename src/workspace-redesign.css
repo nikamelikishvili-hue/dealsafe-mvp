@@ -828,7 +828,7 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .deal-workspace-next{display:grid;gap:2px;min-width:230px}
 .deal-workspace-next small{color:#7a8b9e;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
 .deal-workspace-next b{overflow:hidden;color:#263c56;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
-.deal-mobile-summary,.mobile-deal-action{display:none}
+.deal-mobile-summary{display:none}
 
 /* Keep the single next action reachable without requiring a long scroll. */
 .view-deal #main-content,.view-create #main-content{padding-bottom:104px}
@@ -994,43 +994,6 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   .deal-mobile-summary strong{font:800 15px Manrope,sans-serif}
   .view-deal .product-art-empty{height:170px}
   .view-deal #main-content{padding-bottom:108px}
-  .mobile-deal-action{
-    position:fixed;
-    right:10px;
-    bottom:calc(10px + env(safe-area-inset-bottom));
-    left:10px;
-    z-index:90;
-    display:grid;
-    grid-template-columns:minmax(0,1fr) auto;
-    align-items:center;
-    gap:12px;
-    padding:11px 11px 11px 14px;
-    border:1px solid rgba(119,156,203,.35);
-    border-radius:16px;
-    color:#fff;
-    background:rgba(8,25,47,.97);
-    box-shadow:0 20px 48px rgba(4,16,34,.38);
-    backdrop-filter:blur(18px);
-  }
-  .mobile-deal-action div{min-width:0}
-  .mobile-deal-action small,.mobile-deal-action strong,.mobile-deal-action span{display:block}
-  .mobile-deal-action small{color:#83baff;font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
-  .mobile-deal-action strong{margin-top:1px;font:800 17px Manrope,sans-serif}
-  .mobile-deal-action span{overflow:hidden;color:#9eafc3;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
-  .mobile-deal-action button{
-    min-height:45px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:6px;
-    border:0;
-    border-radius:11px;
-    padding:0 14px;
-    color:#fff;
-    background:#2577e9;
-    font-size:12px;
-    font-weight:800;
-  }
 }
 
 @media(max-width:430px){
@@ -1043,7 +1006,6 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   }
   .view-deal .demo-deal-banner .eyebrow{display:none}
   .view-deal .demo-deal-banner .primary svg{display:none}
-  .mobile-deal-action{grid-template-columns:minmax(0,1fr) 132px}
 }
 
 @media(max-width:640px){
