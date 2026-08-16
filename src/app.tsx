@@ -1316,7 +1316,6 @@ export function App() {
         demo={isDemoActive}
         demoCompleted={demoFlowCompleted}
         agreementChecks={agreementChecks}
-        agreementActionReady={agreementActionReady}
         buyer={buyer}
         buyerAccessCode={buyerAccessCode}
         paymentReady={activePaymentReady}

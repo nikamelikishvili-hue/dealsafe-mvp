@@ -94,7 +94,6 @@ interface DealWorkspaceProps {
   demo: boolean;
   demoCompleted: boolean;
   agreementChecks: AgreementChecks;
-  agreementActionReady: boolean;
   buyer: string;
   buyerAccessCode: string;
   paymentReady: boolean;
@@ -159,7 +158,6 @@ export function DealWorkspace({
   demo,
   demoCompleted,
   agreementChecks,
-  agreementActionReady,
   buyer,
   buyerAccessCode,
   paymentReady,
@@ -760,7 +758,13 @@ export function DealWorkspace({
                         </div>
                       </>
                     ) : (
-                      <>
+                      <form
+                        className="agreement-acceptance-form"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          onAccept();
+                        }}
+                      >
                         <p className="agreement-instruction">
                           {t('Review agreement')}
                         </p>
@@ -779,6 +783,7 @@ export function DealWorkspace({
                               <label>
                                 <input
                                   type="checkbox"
+                                  required
                                   checked={agreementChecks[key]}
                                   onChange={(event) =>
                                     onAgreementCheckChange(
@@ -795,6 +800,8 @@ export function DealWorkspace({
                         <label>
                           {t('Your full name')}
                           <input
+                            required
+                            minLength={2}
                             placeholder={t('Buyer name')}
                             value={buyer}
                             onChange={(event) =>
@@ -808,22 +815,19 @@ export function DealWorkspace({
                           </div>
                         )}
                         <button
-                          type="button"
+                          type="submit"
                           className="primary full"
-                          disabled={!agreementActionReady || accepting}
+                          disabled={accepting}
                           aria-busy={accepting}
-                          onClick={onAccept}
                         >
                           {t(accepting ? 'Accepting…' : 'Accept these terms')}
                         </button>
                         <small>
                           {t(
-                            agreementActionReady
-                              ? 'Your name records consent to this agreement version.'
-                              : 'Complete all three confirmations and enter your full name.',
+                            'Complete all three confirmations and enter your full name to record consent.',
                           )}
                         </small>
-                      </>
+                      </form>
                     )
                   ) : expired ? (
                     <AgreementExpiredNotice />

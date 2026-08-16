@@ -13867,6 +13867,16 @@ test('shipment submission keeps native carrier and tracking validation actionabl
   assert.match(fulfillment, /if \(!readyToShip\) \{[\s\S]*Complete the shipping readiness checklist first/);
 });
 
+test('agreement acceptance keeps every confirmation actionable', () => {
+  const workspace = readText('src/DealWorkspace.tsx');
+
+  assert.match(workspace, /className="agreement-acceptance-form"[\s\S]*onSubmit=/);
+  assert.match(workspace, /type="checkbox"[\s\S]*required/);
+  assert.match(workspace, /required[\s\S]*minLength=\{2\}[\s\S]*value=\{buyer\}/);
+  assert.match(workspace, /type="submit"[\s\S]*disabled=\{accepting\}[\s\S]*Accept these terms/);
+  assert.doesNotMatch(workspace, /disabled=\{!agreementActionReady \|\| accepting\}/);
+});
+
 test('deal media and editor mutations use same-tick guards', () => {
   const workspace = readText('src/DealWorkspaceFeatures.tsx');
 
@@ -14499,7 +14509,7 @@ test('application-level deal and verification mutations are same-tick guarded', 
   assert.match(app, /verificationRequesting=\{verificationRequesting\}/);
   assert.match(app, /accepting=\{accepting\}/);
   const workspace = readText('src/DealWorkspace.tsx');
-  assert.match(workspace, /disabled=\{!agreementActionReady \|\| accepting\}/);
+  assert.match(workspace, /type="submit"[\s\S]*disabled=\{accepting\}/);
   assert.match(workspace, /aria-busy=\{accepting\}/);
   assert.match(workspace, /accepting \? 'Accepting…' : 'Accept these terms'/);
   const profile = readText('src/AccountProfileWorkspace.tsx');
