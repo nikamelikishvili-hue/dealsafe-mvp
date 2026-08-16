@@ -15262,3 +15262,14 @@ test('password recovery normalizes email and restores invalid-field focus', () =
   assert.match(source, /aria-describedby=\{emailError \? 'forgot-password-email-error' : undefined\}/);
   assert.match(source, /<FieldError id="forgot-password-email-error">/);
 });
+
+test('inquiry and offer failures preserve stale data and announce urgently', () => {
+  const source = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(source, /setMessage\('Could not load questions'\)/);
+  assert.match(source, /setMessage\('Could not refresh offers\. Showing the last known list\.'\)/);
+  assert.match(source, /role=\{messageFailed \? 'alert' : 'status'\}/);
+  assert.match(source, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
+  assert.match(source, /setMessageFailed\(false\);\s+try \{\s+await askDealQuestion/);
+  assert.match(source, /setMessageFailed\(false\);\s+try \{\s+await makeDealOffer/);
+});

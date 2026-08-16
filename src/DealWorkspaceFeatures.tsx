@@ -1835,6 +1835,7 @@ export function DealInquiries({
   const [question, setQuestion] = useState('');
   const [replies, setReplies] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [busy, setBusy] = useState('');
   const requestInFlight = useRef(false);
   const loadRequestRef = useRef(0);
@@ -1851,7 +1852,10 @@ export function DealInquiries({
       const next = await getDealInquiries(session, deal.id);
       if (request === loadRequestRef.current) setItems(next);
     } catch {
-      if (request === loadRequestRef.current) setMessage('Could not load questions');
+      if (request === loadRequestRef.current) {
+        setMessageFailed(true);
+        setMessage('Could not load questions');
+      }
     }
   }, [deal.id, session?.accessToken]);
 
@@ -1892,12 +1896,14 @@ export function DealInquiries({
     requestInFlight.current = true;
     setBusy('ask');
     setMessage('');
+    setMessageFailed(false);
     try {
       await askDealQuestion(session, deal.publicId, question);
       setQuestion('');
       setMessage('Question sent.');
       await load();
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not send question',
       );
@@ -1916,12 +1922,14 @@ export function DealInquiries({
     requestInFlight.current = true;
     setBusy(inquiry.id);
     setMessage('');
+    setMessageFailed(false);
     try {
       await replyDealInquiry(session, inquiry.id, text);
       setReplies((current) => ({ ...current, [inquiry.id]: '' }));
       setMessage('Reply sent.');
       await load();
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not send reply',
       );
@@ -2037,7 +2045,11 @@ export function DealInquiries({
         ))}
       </div>
       {message && (
-        <div className="notice" role="status">
+        <div
+          className="notice"
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
           {t(message)}
         </div>
       )}
@@ -2062,6 +2074,7 @@ export function OfferPanel({
   const [amount, setAmount] = useState('');
   const [name, setName] = useState(session.user.displayName);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [busy, setBusy] = useState('');
   const requestInFlight = useRef(false);
   const loadSequenceRef = useRef(0);
@@ -2074,6 +2087,10 @@ export function OfferPanel({
         if (request === loadSequenceRef.current) setOffers(next);
       } catch {
         // Keep the last known offer list when a background refresh fails.
+        if (request === loadSequenceRef.current) {
+          setMessageFailed(true);
+          setMessage('Could not refresh offers. Showing the last known list.');
+        }
       }
     },
     [deal.id, session.accessToken],
@@ -2091,6 +2108,7 @@ export function OfferPanel({
     requestInFlight.current = true;
     setBusy('submit');
     setMessage('');
+    setMessageFailed(false);
     try {
       await makeDealOffer(
         session,
@@ -2102,6 +2120,7 @@ export function OfferPanel({
       setMessage('Your offer was sent to the seller.');
       await load();
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not send offer',
       );
@@ -2115,6 +2134,7 @@ export function OfferPanel({
     requestInFlight.current = true;
     setBusy(offer.id);
     setMessage('');
+    setMessageFailed(false);
     try {
       await respondToOffer(session, offer.id, accept);
       setMessage(
@@ -2125,6 +2145,7 @@ export function OfferPanel({
       await load();
       if (accept) onAccepted(offer.amount_cents);
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not respond',
       );
@@ -2213,7 +2234,11 @@ export function OfferPanel({
         ))}
       </div>
       {message && (
-        <div className="notice" role="status">
+        <div
+          className="notice"
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
           {t(message)}
         </div>
       )}
