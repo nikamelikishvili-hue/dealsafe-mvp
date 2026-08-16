@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { Check, Eye, EyeOff } from 'lucide-react';
 import { FeedbackMessage } from './FeedbackMessage';
 import { FieldError } from './FieldError';
@@ -223,6 +223,38 @@ export function AccountEntryPage({
     ? pendingCreateAction === 'save' ? 'Create account & save' : 'Create account & publish'
     : pendingCreateAction === 'save' ? 'Sign in & save' : 'Sign in & publish';
   const isSignup = mode === 'signup';
+  const [displayNameError, setDisplayNameError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const displayNameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setDisplayNameError('');
+    setPasswordError('');
+  }, [mode]);
+
+  const submitEntry = (event: FormEvent<HTMLFormElement>) => {
+    if (!isSignup) {
+      onSubmit(event);
+      return;
+    }
+    event.preventDefault();
+    const normalizedDisplayName = form.displayName.trim();
+    setDisplayNameError('');
+    setPasswordError('');
+    if (normalizedDisplayName.length < 2) {
+      setDisplayNameError('Enter your name with at least 2 characters.');
+      window.requestAnimationFrame(() => displayNameRef.current?.focus());
+      return;
+    }
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/.test(form.password)) {
+      setPasswordError('Use 12+ characters with uppercase, lowercase, a number, and a symbol.');
+      window.requestAnimationFrame(() => passwordRef.current?.focus());
+      return;
+    }
+    onFormChange({ ...form, displayName: normalizedDisplayName });
+    onSubmit(event);
+  };
 
   const openInfo = (event: MouseEvent<HTMLAnchorElement>, view: PublicInfoView) => {
     event.preventDefault();
@@ -265,19 +297,26 @@ export function AccountEntryPage({
       </li>
     </ol>}
 
-    <form onSubmit={onSubmit} aria-busy={submitting}>
+    <form onSubmit={submitEntry} aria-busy={submitting}>
       {isSignup && <label>
         {t('Your name')}
         <input
+          ref={displayNameRef}
           required
           disabled={submitting}
           minLength={2}
           maxLength={80}
           autoComplete="name"
+          aria-invalid={Boolean(displayNameError)}
+          aria-describedby={displayNameError ? 'signup-display-name-error' : undefined}
           placeholder="Alex Morgan"
           value={form.displayName}
-          onChange={event => onFormChange({ ...form, displayName: event.target.value })}
+          onChange={event => {
+            onFormChange({ ...form, displayName: event.target.value });
+            if (displayNameError) setDisplayNameError('');
+          }}
         />
+        {displayNameError && <FieldError id="signup-display-name-error">{displayNameError}</FieldError>}
       </label>}
       <label>
         {t('Email')}
@@ -300,6 +339,7 @@ export function AccountEntryPage({
         {t('Password')}
         <span className="password-field">
           <input
+            ref={passwordRef}
             required
             disabled={submitting}
             name="password"
@@ -308,9 +348,14 @@ export function AccountEntryPage({
             type={passwordVisible ? 'text' : 'password'}
             autoComplete={isSignup ? 'new-password' : 'current-password'}
             enterKeyHint="done"
+            aria-invalid={isSignup && Boolean(passwordError)}
+            aria-describedby={isSignup ? (passwordError ? 'signup-password-requirements signup-password-error' : 'signup-password-requirements') : undefined}
             placeholder={t(isSignup ? '12+ characters' : 'Your password')}
             value={form.password}
-            onChange={event => onFormChange({ ...form, password: event.target.value })}
+            onChange={event => {
+              onFormChange({ ...form, password: event.target.value });
+              if (passwordError) setPasswordError('');
+            }}
           />
           <button
             type="button"
@@ -321,7 +366,8 @@ export function AccountEntryPage({
             {passwordVisible ? <EyeOff /> : <Eye />}
           </button>
         </span>
-        {isSignup && <small>{t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}</small>}
+        {isSignup && <small id="signup-password-requirements">{t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}</small>}
+        {isSignup && passwordError && <FieldError id="signup-password-error">{passwordError}</FieldError>}
       </label>
       {isSignup && <label className="policy-consent">
         <input

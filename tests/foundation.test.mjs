@@ -5414,8 +5414,8 @@ test('account entry and recovery pages are isolated without moving authenticatio
     /import \{ AccountEntryPage, ForgotPassword, ForgotPasswordEntry, ResetPassword, type AuthFormState, type AuthMode \} from '\.\/AccountEntryPages'/,
   );
   assert.match(app, /const submitAuth=async\(e:React\.FormEvent\)=>/);
-  assert.match(app, /await signUp\(authForm\.email,authForm\.password,authForm\.displayName\)/);
-  assert.match(app, /await signIn\(authForm\.email,authForm\.password\)/);
+  assert.match(app, /await signUp\(authForm\.email\.trim\(\),authForm\.password,authForm\.displayName\.trim\(\)\)/);
+  assert.match(app, /await signIn\(authForm\.email\.trim\(\),authForm\.password\)/);
   assert.match(app, /view==='auth'&&!mfaLogin&&<AccountEntryPage/);
   assert.doesNotMatch(app, /function ForgotPassword/);
   assert.doesNotMatch(app, /function ResetPassword/);
@@ -12378,6 +12378,22 @@ test('agreement verification restores focus to the first invalid field', () => {
   assert.match(verifier, /<FieldError id="deal-id-error">/);
   assert.match(verifier, /<FieldError id="agreement-code-error">/);
   assert.match(verifier, /if \(validationVisible\) setMessage\(''\)/);
+});
+
+test('account registration rejects weak credentials before calling the provider', () => {
+  const accountEntry = readText('src/AccountEntryPages.tsx');
+  const app = readText('src/app.tsx');
+
+  assert.match(accountEntry, /const normalizedDisplayName = form\.displayName\.trim\(\)/);
+  assert.match(accountEntry, /if \(normalizedDisplayName\.length < 2\)/);
+  assert.match(accountEntry, /<FieldError id="signup-display-name-error">/);
+  assert.match(accountEntry, /<FieldError id="signup-password-error">/);
+  assert.match(accountEntry, /displayNameRef\.current\?\.focus\(\)/);
+  assert.match(accountEntry, /passwordRef\.current\?\.focus\(\)/);
+  assert.match(accountEntry, /onFormChange\(\{ \.\.\.form, displayName: normalizedDisplayName \}\)/);
+  assert.match(accountEntry, /<form onSubmit=\{submitEntry\}/);
+  assert.match(app, /signUp\(authForm\.email\.trim\(\),authForm\.password,authForm\.displayName\.trim\(\)\)/);
+  assert.match(app, /signIn\(authForm\.email\.trim\(\),authForm\.password\)/);
 });
 
 test('sample deals remain inside the local data boundary', () => {
