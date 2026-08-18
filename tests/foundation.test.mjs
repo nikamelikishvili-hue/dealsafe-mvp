@@ -4360,6 +4360,19 @@ test('account takeover response is fail-closed, non-secret, and rehearsal-gated'
   assert.match(backlog, /suspected-account-takeover runbook exist/);
 });
 
+test('release snapshot names the current consolidated no-go evidence', () => {
+  const snapshot = readText('docs/production-readiness/99_RELEASE_READINESS_SNAPSHOT.md');
+
+  assert.match(snapshot, /Status date: 2026-08-18/);
+  assert.match(snapshot, /agent\/p0-reviewed-release-candidate/);
+  assert.match(snapshot, /385 foundation, and 17 component checks/);
+  assert.match(snapshot, /820,555 JavaScript bytes/);
+  assert.match(snapshot, /does not create or merge the Draft pull\s+request/);
+  assert.match(snapshot, /No-go for public or real-money launch/);
+  assert.doesNotMatch(snapshot, /Draft PR `#181`/);
+  assert.doesNotMatch(snapshot, /Only 297 bytes/);
+});
+
 test('active-session lookup is minimal, owner-bound, and service-only for arbitrary identifiers', () => {
   const validation = readText('supabase/active_session_validation.sql');
 

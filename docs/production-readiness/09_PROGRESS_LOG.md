@@ -5077,3 +5077,17 @@ promote Production, restore public access, or change a live Supabase resource.
 This review change does not alter Production, public access, Vercel aliases or
 configuration, Supabase resources, customer records, or payment capabilities.
 Its exact signed commit was published for protected GitHub and Vercel review.
+# 2026-08-18 — Consolidated release-candidate evidence
+
+- Combined the signed canonical-route, single-primary-action, account-takeover,
+  shared-validation-summary, and Node 24 artifact-upload changes on one linear
+  review branch above merged `main`.
+- Resolved the documentation overlap by preserving both the newer shared
+  validation-summary status and the completed single-primary-action status.
+- Re-ran the complete repository release gate on the integrated head: 385
+  foundation and 17 component tests, incident drill, secret scan, production
+  build, asset manifest, fixed performance budgets, and Preview smoke passed.
+- Refreshed the no-go snapshot so its evidence and blockers no longer refer to
+  superseded PR `#181`, test counts, or bundle measurements.
+- No Production alias, public access, live Supabase resource, customer record,
+  or real-payment configuration changed.
