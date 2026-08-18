@@ -12,8 +12,10 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { formatMoney } from './currency';
+import { copyTextToClipboard } from './clipboard';
 import type { Deal } from './domain';
 import { getAppLanguage, t } from './i18n';
+import { DEMO_DEAL_PUBLIC_ID } from './services/demoRepository';
 import {
   getPublicAgreementDocument,
   getPublicAgreementHistory,
@@ -35,6 +37,10 @@ export function useStoredAgreementDocument(deal: Deal) {
     setLoading(true);
     setError('');
     setRecord(null);
+    if (deal.publicId === DEMO_DEAL_PUBLIC_ID) {
+      setLoading(false);
+      return;
+    }
     getPublicAgreementDocument(deal.publicId, deal.agreementVersion)
       .then(value => {
         if (current) setRecord(value);
@@ -61,10 +67,13 @@ export function useStoredAgreementDocument(deal: Deal) {
 
 export function AgreementExport({ deal }: { deal: Deal }) {
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const { record, loading, error } = useStoredAgreementDocument(deal);
   const url = `${location.origin}/?deal=${deal.publicId}`;
 
   const share = async () => {
+    setMessage('');
+    setMessageFailed(false);
     try {
       if (navigator.share) {
         await navigator.share({
@@ -72,14 +81,31 @@ export function AgreementExport({ deal }: { deal: Deal }) {
           text: `Review Dealivra agreement ${deal.publicId}`,
           url,
         });
+        setMessage('Agreement shared.');
       } else {
-        await navigator.clipboard.writeText(url);
+        await copyTextToClipboard(url);
         setMessage('Deal Link copied.');
       }
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
         setMessage('Could not share this link.');
+        setMessageFailed(true);
       }
+    }
+  };
+
+  const preview = () => {
+    setMessage('');
+    setMessageFailed(false);
+    const popup = window.open(
+      `${url}&document=1`,
+      '_blank',
+    );
+    if (!popup) {
+      setMessage('Allow pop-ups to preview the agreement document.');
+      setMessageFailed(true);
+    } else {
+      popup.opener = null;
     }
   };
 
@@ -129,13 +155,7 @@ export function AgreementExport({ deal }: { deal: Deal }) {
           type="button"
           className="secondary"
           disabled={!record}
-          onClick={() =>
-            window.open(
-              `${url}&document=1`,
-              '_blank',
-              'noopener,noreferrer',
-            )
-          }
+          onClick={preview}
         >
           <Eye size={17} aria-hidden="true" />
           {t('Preview document')}
@@ -147,9 +167,9 @@ export function AgreementExport({ deal }: { deal: Deal }) {
       </div>
       {(message || error) && (
         <div
-          className={`notice ${error ? 'agreement-record-error' : ''}`}
-          role="status"
-          aria-live="polite"
+          className={`notice ${error || messageFailed ? 'agreement-record-error' : ''}`}
+          role={error || messageFailed ? 'alert' : 'status'}
+          aria-live={error || messageFailed ? 'assertive' : 'polite'}
         >
           {t(message || error)}
         </div>
@@ -160,28 +180,48 @@ export function AgreementExport({ deal }: { deal: Deal }) {
 
 export function AgreementFingerprint({ deal }: { deal: Deal }) {
   const [fingerprint, setFingerprint] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [loadVersion, setLoadVersion] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState('');
 
   useEffect(() => {
     let current = true;
     setFingerprint('');
+    setLoadError('');
+    if (deal.publicId === DEMO_DEAL_PUBLIC_ID) {
+      setFingerprint('—');
+      return;
+    }
     getPublicAgreementDocument(deal.publicId, deal.agreementVersion)
       .then(record => {
-        if (current) setFingerprint(record.content_hash.toUpperCase());
+        if (current) {
+          setFingerprint(record.content_hash.toUpperCase());
+          setLoadError('');
+        }
       })
       .catch(() => {
-        if (current) setFingerprint('—');
+        if (current) {
+          setFingerprint('—');
+          setLoadError('Agreement fingerprint is temporarily unavailable.');
+        }
       });
     return () => {
       current = false;
     };
-  }, [deal.publicId, deal.agreementVersion]);
+  }, [deal.publicId, deal.agreementVersion, loadVersion]);
 
   const copy = async () => {
     if (!fingerprint || fingerprint === '—') return;
-    await navigator.clipboard?.writeText(fingerprint);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+    try {
+      await copyTextToClipboard(fingerprint);
+      setCopyError('');
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+      setCopyError('Fingerprint could not be copied. Select it and copy it manually.');
+    }
   };
 
   return (
@@ -197,6 +237,18 @@ export function AgreementFingerprint({ deal }: { deal: Deal }) {
         </div>
       </div>
       <code>{fingerprint || 'Checking stored record…'}</code>
+      {loadError && (
+        <div className="notice agreement-record-error" role="alert">
+          <span>{t(loadError)}</span>
+          <button
+            type="button"
+            className="secondary no-print"
+            onClick={() => setLoadVersion(version => version + 1)}
+          >
+            {t('Try again')}
+          </button>
+        </div>
+      )}
       <div className="fingerprint-footer">
         <p>
           <ShieldCheck aria-hidden="true" />
@@ -214,6 +266,7 @@ export function AgreementFingerprint({ deal }: { deal: Deal }) {
           {t(copied ? 'Fingerprint copied.' : 'Copy fingerprint')}
         </button>
       </div>
+      {copyError && <div className="notice" role="alert">{t(copyError)}</div>}
     </section>
   );
 }
@@ -221,29 +274,56 @@ export function AgreementFingerprint({ deal }: { deal: Deal }) {
 export function AgreementHistory({ deal }: { deal: Deal }) {
   const [versions, setVersions] = useState<AgreementHistoryVersion[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [loadVersion, setLoadVersion] = useState(0);
 
   useEffect(() => {
     let current = true;
     setLoaded(false);
+    setLoadError('');
+    if (deal.publicId === DEMO_DEAL_PUBLIC_ID) {
+      setVersions([]);
+      setLoaded(true);
+      return;
+    }
     getPublicAgreementHistory(deal.publicId)
       .then(items => {
         if (current) {
           setVersions(items);
           setLoaded(true);
+          setLoadError('');
         }
       })
       .catch(() => {
         if (current) {
           setVersions([]);
           setLoaded(true);
+          setLoadError('Agreement history is temporarily unavailable.');
         }
       });
     return () => {
       current = false;
     };
-  }, [deal.publicId, deal.agreementVersion]);
+  }, [deal.publicId, deal.agreementVersion, loadVersion]);
 
-  if (!isSupabaseConfigured || !loaded || !versions.length) return null;
+  if (!isSupabaseConfigured || !loaded) return null;
+  if (loadError) {
+    return (
+      <section className="agreement-history">
+        <div className="notice agreement-record-error" role="alert">
+          <span>{t(loadError)}</span>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setLoadVersion(version => version + 1)}
+          >
+            {t('Try again')}
+          </button>
+        </div>
+      </section>
+    );
+  }
+  if (!versions.length) return null;
 
   const acceptanceLabel = (count: number) =>
     count >= 2

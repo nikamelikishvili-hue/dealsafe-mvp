@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   BadgeCheck,
   CalendarClock,
@@ -13,9 +13,18 @@ import {
   Truck,
 } from 'lucide-react';
 import { AddressAutocomplete } from './AddressAutocomplete';
+import { focusPageDestination } from './accessibleNavigation';
+import { AsyncStatePanel } from './AsyncStatePanel';
+import { copyTextToClipboard } from './clipboard';
+import { useConfirmAction } from './ConfirmActionDialog';
 import type { Deal } from './domain';
 import { getAppLanguage, t } from './i18n';
-import { isUsPostalCode, US_STATE_OPTIONS } from './usAddress';
+import {
+  isUsPostalCode,
+  parseStoredUsAddress,
+  serializeUsAddress,
+  US_STATE_OPTIONS,
+} from './usAddress';
 import {
   completeHandoff,
   confirmMeeting,
@@ -42,6 +51,43 @@ import {
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString(getAppLanguage());
 
+type ValidationError = { fieldId: string; message: string };
+
+function WorkflowValidationSummary({
+  id,
+  title,
+  errors,
+}: {
+  id: string;
+  title: string;
+  errors: ValidationError[];
+}) {
+  return (
+    <div
+      id={id}
+      className="workflow-validation-summary"
+      role="alert"
+      tabIndex={-1}
+    >
+      <div>
+        <h3>{t(title)}</h3>
+        <ul>
+          {errors.map((error) => (
+            <li key={error.fieldId}>
+              <button
+                type="button"
+                onClick={() => document.getElementById(error.fieldId)?.focus()}
+              >
+                {t(error.message)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 export function MeetingPanel({
   deal,
   session,
@@ -60,18 +106,38 @@ export function MeetingPanel({
     scheduledAt: '',
   });
   const [message, setMessage] = useState('');
+  const [actionFailed, setActionFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadVersion, setLoadVersion] = useState(0);
+  const [validationVisible, setValidationVisible] = useState(false);
+  const actionInFlight = useRef(false);
 
   useEffect(() => {
     let current = true;
+    setLoaded(false);
+    setLoadFailed(false);
+    setMessage('');
     void getDealMeeting(session, deal.id)
       .then((next) => {
         if (current) setMeeting(next);
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (current) {
+          setLoadFailed(true);
+          setMessage(
+            error instanceof Error ? error.message : 'Could not load meeting details',
+          );
+        }
+      })
+      .finally(() => {
+        if (current) setLoaded(true);
+      });
     return () => {
       current = false;
     };
-  }, [deal.id, session.accessToken]);
+  }, [deal.id, session.accessToken, loadVersion]);
 
   const completeAddress = [
     form.streetAddress.trim(),
@@ -80,18 +146,48 @@ export function MeetingPanel({
   ]
     .filter(Boolean)
     .join('\n');
-  const formComplete =
-    form.locationName.trim().length >= 2 &&
-    form.streetAddress.trim().length >= 3 &&
-    form.city.trim().length >= 2 &&
-    Boolean(form.state) &&
-    isUsPostalCode(form.postalCode) &&
-    Boolean(form.scheduledAt);
+  const meetingErrors = [
+    form.locationName.trim().length < 2 && {
+      fieldId: 'meeting-location-name',
+      message: 'Enter the name of a public meeting place.',
+    },
+    form.streetAddress.trim().length < 3 && {
+      fieldId: 'meeting-street-address',
+      message: 'Enter the street address.',
+    },
+    form.city.trim().length < 2 && {
+      fieldId: 'meeting-city',
+      message: 'Enter the city.',
+    },
+    !form.state && {
+      fieldId: 'meeting-state',
+      message: 'Select the state.',
+    },
+    !isUsPostalCode(form.postalCode) && {
+      fieldId: 'meeting-postal-code',
+      message: 'Enter a valid 5-digit ZIP code or ZIP+4.',
+    },
+    !form.scheduledAt && {
+      fieldId: 'meeting-scheduled-at',
+      message: 'Choose the meeting date and time.',
+    },
+  ].filter((error): error is ValidationError => Boolean(error));
 
   const propose = async (event: FormEvent) => {
     event.preventDefault();
-    if (!formComplete) return;
+    if (meetingErrors.length > 0) {
+      setValidationVisible(true);
+      window.requestAnimationFrame(() =>
+        document.getElementById('meeting-validation-summary')?.focus(),
+      );
+      return;
+    }
+    if (actionInFlight.current) return;
+    setValidationVisible(false);
+    actionInFlight.current = true;
+    setBusy(true);
     setMessage('');
+    setActionFailed(false);
     try {
       await proposeMeeting(
         session,
@@ -103,22 +199,34 @@ export function MeetingPanel({
       setMeeting(await getDealMeeting(session, deal.id));
       setMessage('Meeting proposal sent to the other party.');
     } catch (error) {
+      setActionFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not propose meeting',
       );
+    } finally {
+      actionInFlight.current = false;
+      setBusy(false);
     }
   };
 
   const confirm = async () => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setBusy(true);
     setMessage('');
+    setActionFailed(false);
     try {
       await confirmMeeting(session, deal.id);
       setMeeting(await getDealMeeting(session, deal.id));
       setMessage('Meeting confirmed.');
     } catch (error) {
+      setActionFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not confirm meeting',
       );
+    } finally {
+      actionInFlight.current = false;
+      setBusy(false);
     }
   };
 
@@ -139,7 +247,20 @@ export function MeetingPanel({
           </span>
         </div>
       </div>
-      {meeting ? (
+      {!loaded ? (
+        <AsyncStatePanel
+          state="loading"
+          title="Loading meeting details…"
+          message="Checking the latest handoff plan."
+        />
+      ) : loadFailed ? (
+        <AsyncStatePanel
+          state="error"
+          title="Meeting details are temporarily unavailable"
+          message={message || 'Could not load meeting details'}
+          onAction={() => setLoadVersion((version) => version + 1)}
+        />
+      ) : meeting ? (
         <div className="meeting-summary">
           <div>
             <MapPinned />
@@ -160,10 +281,13 @@ export function MeetingPanel({
           {meeting.status === 'proposed' &&
             meeting.proposed_by !== session.user.id && (
               <button
+                type="button"
                 className="primary"
+                disabled={busy}
+                aria-busy={busy}
                 onClick={confirm}
               >
-                {t('Confirm meeting')}
+                {t(busy ? 'Confirming…' : 'Confirm meeting')}
               </button>
             )}
           {meeting.status === 'proposed' &&
@@ -175,10 +299,19 @@ export function MeetingPanel({
         <form
           className="meeting-form"
           onSubmit={propose}
+          noValidate
         >
+          {validationVisible && meetingErrors.length > 0 && (
+            <WorkflowValidationSummary
+              id="meeting-validation-summary"
+              title="Complete the meeting details"
+              errors={meetingErrors}
+            />
+          )}
           <label className="meeting-field meeting-field-place">
             {t('Public meeting place')}
             <input
+              id="meeting-location-name"
               required
               minLength={2}
               maxLength={120}
@@ -192,6 +325,7 @@ export function MeetingPanel({
           <label className="meeting-field meeting-field-street">
             {t('Street address')}
             <AddressAutocomplete
+              inputId="meeting-street-address"
               streetAddressOnly
               placeholder={t('123 Main St')}
               value={form.streetAddress}
@@ -235,6 +369,7 @@ export function MeetingPanel({
           <label className="meeting-field meeting-field-city">
             {t('City')}
             <input
+              id="meeting-city"
               required
               minLength={2}
               maxLength={100}
@@ -249,6 +384,7 @@ export function MeetingPanel({
           <label className="meeting-field meeting-field-state">
             {t('State')}
             <select
+              id="meeting-state"
               required
               autoComplete="address-level1"
               value={form.state}
@@ -270,14 +406,13 @@ export function MeetingPanel({
           <label className="meeting-field meeting-field-zip">
             {t('ZIP code')}
             <input
+              id="meeting-postal-code"
               required
               inputMode="numeric"
               autoComplete="postal-code"
               pattern="[0-9]{5}(-[0-9]{4})?"
-              aria-invalid={
-                Boolean(form.postalCode) &&
-                !isUsPostalCode(form.postalCode)
-              }
+              maxLength={10}
+              aria-describedby="meeting-zip-help"
               placeholder="10001"
               value={form.postalCode}
               onChange={(event) =>
@@ -285,6 +420,7 @@ export function MeetingPanel({
               }
             />
             <small
+              id="meeting-zip-help"
               className={
                 form.postalCode && !isUsPostalCode(form.postalCode)
                   ? 'field-help invalid'
@@ -301,6 +437,7 @@ export function MeetingPanel({
           <label className="meeting-field meeting-field-date">
             {t('Date and time')}
             <input
+              id="meeting-scheduled-at"
               required
               type="datetime-local"
               value={form.scheduledAt}
@@ -310,19 +447,21 @@ export function MeetingPanel({
             />
           </label>
           <button
+            type="submit"
             className="primary meeting-submit"
-            disabled={!formComplete}
+            disabled={busy}
+            aria-busy={busy}
           >
             <CalendarClock size={18} />
-            {t('Propose meeting')}
+            {t(busy ? 'Sending…' : 'Propose meeting')}
           </button>
         </form>
       )}
       {message && (
         <div
           className="notice"
-          role="status"
-          aria-live="polite"
+          role={actionFailed ? 'alert' : 'status'}
+          aria-live={actionFailed ? 'assertive' : 'polite'}
         >
           {t(message)}
         </div>
@@ -354,7 +493,9 @@ export function InspectionRecorder({
     reference: false,
   });
   const [message, setMessage] = useState('');
+  const [saveFailed, setSaveFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const saveInFlight = useRef(false);
 
   useEffect(() => {
     let current = true;
@@ -383,7 +524,19 @@ export function InspectionRecorder({
     },
   ];
   const save = async () => {
-    if (!complete) return;
+    if (!complete) {
+      setSaveFailed(true);
+      setMessage('Complete every inspection check before saving the receipt.');
+      const firstIncomplete = items.find((item) => !checks[item.key]);
+      window.requestAnimationFrame(() =>
+        document.getElementById(`inspection-${firstIncomplete?.key}`)?.focus(),
+      );
+      return;
+    }
+    if (saveInFlight.current) return;
+    setMessage('');
+    setSaveFailed(false);
+    saveInFlight.current = true;
     setSaving(true);
     setMessage('');
     try {
@@ -393,12 +546,14 @@ export function InspectionRecorder({
       onRecorded(true);
       setMessage('Inspection receipt saved.');
     } catch (error) {
+      setSaveFailed(true);
       setMessage(
         error instanceof Error
           ? error.message
           : 'Could not save inspection receipt',
       );
     } finally {
+      saveInFlight.current = false;
       setSaving(false);
     }
   };
@@ -436,13 +591,18 @@ export function InspectionRecorder({
             className={checks[item.key] ? 'checked' : ''}
           >
             <input
+              id={`inspection-${item.key}`}
               type="checkbox"
               checked={checks[item.key]}
               onChange={(event) =>
-                setChecks((current) => ({
-                  ...current,
-                  [item.key]: event.target.checked,
-                }))
+                {
+                  setChecks((current) => ({
+                    ...current,
+                    [item.key]: event.target.checked,
+                  }));
+                  setMessage('');
+                  setSaveFailed(false);
+                }
               }
             />
             <span>{t(item.label)}</span>
@@ -450,8 +610,10 @@ export function InspectionRecorder({
         ))}
       </div>
       <button
+        type="button"
         className="primary inspection-save"
-        disabled={!complete || saving}
+        disabled={saving}
+        aria-busy={saving}
         onClick={save}
       >
         {t(saving ? 'Saving…' : 'Save inspection receipt')}
@@ -459,8 +621,8 @@ export function InspectionRecorder({
       {message && (
         <div
           className="notice"
-          role="status"
-          aria-live="polite"
+          role={saveFailed ? 'alert' : 'status'}
+          aria-live={saveFailed ? 'assertive' : 'polite'}
         >
           {t(message)}
         </div>
@@ -487,7 +649,12 @@ export function HandoffPanel({
   const [pin, setPin] = useState('');
   const [sellerPin, setSellerPin] = useState('');
   const [message, setMessage] = useState('');
+  const [actionFailed, setActionFailed] = useState(false);
   const [inspectionRecorded, setInspectionRecorded] = useState(false);
+  const [busy, setBusy] = useState<'arrive' | 'pin' | 'finish' | ''>('');
+  const [loadError, setLoadError] = useState('');
+  const [loadVersion, setLoadVersion] = useState(0);
+  const actionInFlight = useRef(false);
 
   const reload = async () => {
     const next = await getDealMeeting(session, deal.id);
@@ -496,51 +663,99 @@ export function HandoffPanel({
   };
   useEffect(() => {
     let current = true;
+    setLoadError('');
     void getDealMeeting(session, deal.id)
       .then((next) => {
         if (current) setMeeting(next);
       })
-      .catch(() => {});
+      .catch((error) => {
+        if (current) {
+          setLoadError(
+            error instanceof Error ? error.message : 'Could not load handoff status',
+          );
+        }
+      });
     return () => {
       current = false;
     };
-  }, [deal.id, session.accessToken]);
+  }, [deal.id, session.accessToken, loadVersion]);
 
+  if (loadError) {
+    return (
+      <section className="handoff-panel">
+        <div className="notice" role="alert">{t(loadError)}</div>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => setLoadVersion((version) => version + 1)}
+        >
+          {t('Try again')}
+        </button>
+      </section>
+    );
+  }
   if (!meeting || meeting.status !== 'confirmed') return null;
   const myArrived =
     deal.viewerRole === 'seller'
       ? meeting.seller_arrived
       : meeting.buyer_arrived;
   const arrive = async () => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setBusy('arrive');
+    setMessage('');
+    setActionFailed(false);
     try {
       await markArrived(session, deal.id);
       await reload();
       setMessage('Arrival recorded.');
     } catch (error) {
+      setActionFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not record arrival',
       );
+    } finally {
+      actionInFlight.current = false;
+      setBusy('');
     }
   };
   const makePin = async () => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setBusy('pin');
+    setMessage('');
+    setActionFailed(false);
     try {
       setSellerPin(await generateHandoffPin(session, deal.id));
       setMessage('Show this PIN only after the buyer inspects the item.');
     } catch (error) {
+      setActionFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not generate PIN',
       );
+    } finally {
+      actionInFlight.current = false;
+      setBusy('');
     }
   };
   const finish = async () => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setBusy('finish');
+    setMessage('');
+    setActionFailed(false);
     try {
       await completeHandoff(session, deal.id, pin);
       setMessage('Item receipt confirmed. Deal completed.');
       onComplete();
     } catch (error) {
+      setActionFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not complete deal',
       );
+    } finally {
+      actionInFlight.current = false;
+      setBusy('');
     }
   };
 
@@ -560,10 +775,13 @@ export function HandoffPanel({
       </div>
       {!myArrived && (
         <button
+          type="button"
           className="primary"
+          disabled={Boolean(busy)}
+          aria-busy={busy === 'arrive'}
           onClick={arrive}
         >
-          {t('I arrived')}
+          {t(busy === 'arrive' ? 'Saving…' : 'I arrived')}
         </button>
       )}
       {meeting.seller_arrived && meeting.buyer_arrived && (
@@ -592,11 +810,13 @@ export function HandoffPanel({
               </>
             ) : (
               <button
+                type="button"
                 className="primary"
-                disabled={!paymentReady}
+                disabled={!paymentReady || Boolean(busy)}
+                aria-busy={busy === 'pin'}
                 onClick={makePin}
               >
-                {t('Generate handoff PIN')}
+                {t(busy === 'pin' ? 'Generating…' : 'Generate handoff PIN')}
               </button>
             )}
           </div>
@@ -620,21 +840,30 @@ export function HandoffPanel({
               />
             </label>
             <button
+              type="button"
               className="primary"
               disabled={
-                !inspectionRecorded || !paymentReady || pin.length !== 6
+                !inspectionRecorded ||
+                !paymentReady ||
+                pin.length !== 6 ||
+                Boolean(busy)
               }
+              aria-busy={busy === 'finish'}
               onClick={finish}
             >
-              {t('Confirm item received')}
+              {t(
+                busy === 'finish'
+                  ? 'Completing…'
+                  : 'Confirm item received',
+              )}
             </button>
           </div>
         )}
       {message && (
         <div
           className="notice"
-          role="status"
-          aria-live="polite"
+          role={actionFailed ? 'alert' : 'status'}
+          aria-live={actionFailed ? 'assertive' : 'polite'}
         >
           {t(message)}
         </div>
@@ -645,32 +874,6 @@ export function HandoffPanel({
       </p>
     </section>
   );
-}
-
-function splitDeliveryAddress(value: string) {
-  const lines = value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const locationLine = lines.at(-1) || '';
-  const usLocation = locationLine.match(
-    /^(.+?),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/i,
-  );
-  if (usLocation)
-    return {
-      streetAddress: lines[0] || '',
-      addressLine2: lines.slice(1, -1).join(' '),
-      city: usLocation[1].trim(),
-      state: usLocation[2].toUpperCase(),
-      postalCode: usLocation[3],
-    };
-  return {
-    streetAddress: lines[0] || '',
-    addressLine2: lines.length > 2 ? lines[1] || '' : '',
-    city: lines.length > 2 ? lines.slice(2).join(' ') : lines[1] || '',
-    state: '',
-    postalCode: '',
-  };
 }
 
 export function ShippingPanel({
@@ -688,14 +891,20 @@ export function ShippingPanel({
   onProgressChanged?: () => void;
   onDelivered: () => void;
 }) {
+  const { confirmAction, confirmDialog } = useConfirmAction();
   const [shipment, setShipment] = useState<DealShipment | null>(null);
   const [delivery, setDelivery] = useState<DealDeliveryDetails | null>(null);
+  const [shipmentLoading, setShipmentLoading] = useState<boolean | null>(true);
+  const [deliveryLoading, setDeliveryLoading] = useState<boolean | null>(true);
   const [carrier, setCarrier] = useState('');
   const [tracking, setTracking] = useState('');
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [inspectionRecorded, setInspectionRecorded] = useState(false);
   const [editingAddress, setEditingAddress] = useState(false);
   const [savingAddress, setSavingAddress] = useState(false);
+  const [shipmentBusy, setShipmentBusy] = useState(false);
+  const mutationInFlight = useRef(false);
   const [readiness, setReadiness] =
     useState<SellerShippingEvidenceReadiness | null>(null);
   const [checkingReadiness, setCheckingReadiness] = useState(false);
@@ -712,18 +921,29 @@ export function ShippingPanel({
   });
 
   const loadShipment = async (isCurrent = () => true) => {
+    if (isCurrent()) {
+      setShipmentLoading(true);
+    }
     try {
       const next = await getDealShipment(session, deal.id);
-      if (isCurrent()) setShipment(next);
-    } catch {}
+      if (isCurrent()) {
+        setShipment(next);
+        setShipmentLoading(false);
+      }
+    } catch {
+      if (isCurrent()) setShipmentLoading(null);
+    }
   };
   const loadDelivery = async (isCurrent = () => true) => {
+    if (isCurrent()) {
+      setDeliveryLoading(true);
+    }
     try {
       const details = await getDealDeliveryDetails(session, deal.id);
       if (!isCurrent()) return;
       setDelivery(details);
       if (details) {
-        const parsed = splitDeliveryAddress(details.full_address);
+        const parsed = parseStoredUsAddress(details.full_address);
         setAddress({
           recipientName: details.recipient_name,
           streetAddress: parsed.streetAddress,
@@ -735,7 +955,10 @@ export function ShippingPanel({
           instructions: details.instructions || '',
         });
       }
-    } catch {}
+      setDeliveryLoading(false);
+    } catch {
+      if (isCurrent()) setDeliveryLoading(null);
+    }
   };
   const loadReadiness = async (isCurrent = () => true) => {
     if (deal.viewerRole !== 'seller') return;
@@ -775,17 +998,21 @@ export function ShippingPanel({
 
   const saveAddress = async (event: FormEvent) => {
     event.preventDefault();
-    if (!address.state || !isUsPostalCode(address.postalCode)) return;
+    if (addressErrors.length > 0) {
+      setAddressValidationVisible(true);
+      window.requestAnimationFrame(() =>
+        document.getElementById('shipping-validation-summary')?.focus(),
+      );
+      return;
+    }
+    if (mutationInFlight.current) return;
+    setAddressValidationVisible(false);
+    mutationInFlight.current = true;
     setSavingAddress(true);
     setMessage('');
+    setMessageFailed(false);
     try {
-      const storedAddress = [
-        address.streetAddress.trim(),
-        address.addressLine2.trim(),
-        `${address.city.trim()}, ${address.state} ${address.postalCode.trim()}`,
-      ]
-        .filter(Boolean)
-        .join('\n');
+      const storedAddress = serializeUsAddress(address);
       await saveDealDeliveryDetails(
         session,
         deal.id,
@@ -799,23 +1026,32 @@ export function ShippingPanel({
       setEditingAddress(false);
       setMessage('Address saved. The seller can now prepare the shipment.');
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error
           ? error.message
           : 'Could not save delivery address',
       );
     } finally {
+      mutationInFlight.current = false;
       setSavingAddress(false);
     }
   };
   const copyAddress = async () => {
     if (!delivery) return;
-    await navigator.clipboard?.writeText(
-      `${delivery.recipient_name}\n${delivery.full_address}\n${delivery.country}${
-        delivery.instructions ? `\n${delivery.instructions}` : ''
-      }`,
-    );
-    setMessage('Address copied.');
+    setMessage('');
+    setMessageFailed(false);
+    try {
+      await copyTextToClipboard(
+        `${delivery.recipient_name}\n${delivery.full_address}\n${delivery.country}${
+          delivery.instructions ? `\n${delivery.instructions}` : ''
+        }`,
+      );
+      setMessage('Address copied.');
+    } catch {
+      setMessageFailed(true);
+      setMessage('Address could not be copied. Select and copy it manually.');
+    }
   };
 
   const evidenceReady = readiness?.ready === true;
@@ -848,11 +1084,16 @@ export function ShippingPanel({
   ).length;
   const saveShipment = async (event: FormEvent) => {
     event.preventDefault();
+    if (mutationInFlight.current) return;
     setMessage('');
+    setMessageFailed(false);
     if (!readyToShip) {
+      setMessageFailed(true);
       setMessage('Complete the shipping readiness checklist first.');
       return;
     }
+    mutationInFlight.current = true;
+    setShipmentBusy(true);
     try {
       await createDealShipment(session, deal.id, carrier, tracking);
       setMessage('Shipment details saved.');
@@ -861,15 +1102,29 @@ export function ShippingPanel({
       await loadReadiness();
       onProgressChanged?.();
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not save shipment',
       );
+    } finally {
+      mutationInFlight.current = false;
+      setShipmentBusy(false);
     }
   };
   const delivered = async () => {
-    if (!confirm(t('Confirm that you received and inspected this item?')))
-      return;
+    const confirmed = await confirmAction({
+      title: t('Confirm delivery?'),
+      description: t(
+        'Confirm only after you received and inspected the item. This completes the deal record.',
+      ),
+      confirmLabel: t('Confirm delivery'),
+    });
+    if (!confirmed) return;
+    if (mutationInFlight.current) return;
+    mutationInFlight.current = true;
+    setShipmentBusy(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       await confirmShipmentDelivery(session, deal.id);
       setMessage('Delivery confirmed. Deal completed.');
@@ -878,22 +1133,44 @@ export function ShippingPanel({
       onProgressChanged?.();
       onDelivered();
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not confirm delivery',
       );
+    } finally {
+      mutationInFlight.current = false;
+      setShipmentBusy(false);
     }
   };
 
   const streetNumberMissing =
     address.streetAddress.trim().length > 0 &&
     !/\d/.test(address.streetAddress);
-  const addressIncomplete =
-    address.recipientName.trim().length < 2 ||
-    address.streetAddress.trim().length < 3 ||
-    streetNumberMissing ||
-    address.city.trim().length < 2 ||
-    !address.state ||
-    !isUsPostalCode(address.postalCode);
+  const [addressValidationVisible, setAddressValidationVisible] = useState(false);
+  const addressErrors = [
+    address.recipientName.trim().length < 2 && {
+      fieldId: 'shipping-recipient-name',
+      message: 'Enter the recipient name.',
+    },
+    (address.streetAddress.trim().length < 3 || streetNumberMissing) && {
+      fieldId: 'shipping-street-address',
+      message: streetNumberMissing
+        ? 'Enter a specific address that includes a street number.'
+        : 'Enter the street address.',
+    },
+    address.city.trim().length < 2 && {
+      fieldId: 'shipping-city',
+      message: 'Enter the city.',
+    },
+    !address.state && {
+      fieldId: 'shipping-state',
+      message: 'Select the state.',
+    },
+    !isUsPostalCode(address.postalCode) && {
+      fieldId: 'shipping-postal-code',
+      message: 'Enter a valid 5-digit ZIP code or ZIP+4.',
+    },
+  ].filter((error): error is ValidationError => Boolean(error));
   const shippingState =
     shipment?.status === 'delivered'
       ? 'Delivered'
@@ -906,6 +1183,7 @@ export function ShippingPanel({
             : 'Address needed';
 
   return (
+    <>
     <section className="shipping-panel no-print">
       <div className="shipping-heading">
         <span className="workflow-icon">
@@ -937,7 +1215,20 @@ export function ShippingPanel({
             <span>{t('Only the buyer and seller can view this address.')}</span>
           </div>
         </div>
-        {delivery && !editingAddress && (
+        {deliveryLoading === true && (
+          <AsyncStatePanel
+            state="loading"
+            title="Loading"
+          />
+        )}
+        {deliveryLoading === null && (
+          <AsyncStatePanel
+            state="error"
+            title="Unavailable"
+            onAction={loadDelivery}
+          />
+        )}
+        {deliveryLoading === false && delivery && !editingAddress && (
           <div className="delivery-address-card">
             <div>
               <span>{t('Recipient name')}</span>
@@ -961,6 +1252,7 @@ export function ShippingPanel({
                 </em>
               )}
               <button
+                type="button"
                 className="secondary"
                 onClick={copyAddress}
               >
@@ -969,6 +1261,7 @@ export function ShippingPanel({
               </button>
               {deal.viewerRole === 'buyer' && !delivery.locked && (
                 <button
+                  type="button"
                   className="secondary"
                   onClick={() => setEditingAddress(true)}
                 >
@@ -978,14 +1271,23 @@ export function ShippingPanel({
             </div>
           </div>
         )}
-        {deal.viewerRole === 'buyer' && (!delivery || editingAddress) && (
+        {deliveryLoading === false && deal.viewerRole === 'buyer' && (!delivery || editingAddress) && (
           <form
             className="delivery-address-form"
             onSubmit={saveAddress}
+            noValidate
           >
+            {addressValidationVisible && addressErrors.length > 0 && (
+              <WorkflowValidationSummary
+                id="shipping-validation-summary"
+                title="Complete the delivery address"
+                errors={addressErrors}
+              />
+            )}
             <label>
               {t('Recipient name')}
               <input
+                id="shipping-recipient-name"
                 required
                 minLength={2}
                 maxLength={100}
@@ -1002,6 +1304,7 @@ export function ShippingPanel({
             <label className="address-field-wide">
               {t('Street address (number and name)')}
               <AddressAutocomplete
+                inputId="shipping-street-address"
                 streetAddressOnly
                 placeholder={t('123 Main St')}
                 value={address.streetAddress}
@@ -1022,18 +1325,11 @@ export function ShippingPanel({
                   }))
                 }
               />
-              {streetNumberMissing && (
-                <small className="address-validation">
-                  {t(
-                    'Choose a specific address that includes a street number.',
-                  )}
-                </small>
-              )}
             </label>
             <label className="address-field-wide address-field-line-two">
               {t('Address line 2 (optional)')}
               <input
-                maxLength={100}
+                  maxLength={100}
                 autoComplete="address-line2"
                 value={address.addressLine2}
                 onChange={(event) =>
@@ -1049,9 +1345,10 @@ export function ShippingPanel({
                 )}
               </small>
             </label>
-            <label>
-              {t('City')}
-              <input
+              <label>
+                {t('City')}
+                <input
+                  id="shipping-city"
                 required
                 minLength={2}
                 maxLength={100}
@@ -1066,6 +1363,7 @@ export function ShippingPanel({
             <label>
               {t('State')}
               <select
+                id="shipping-state"
                 required
                 autoComplete="address-level1"
                 value={address.state}
@@ -1087,14 +1385,13 @@ export function ShippingPanel({
             <label>
               {t('ZIP code')}
               <input
+                id="shipping-postal-code"
                 required
                 inputMode="numeric"
                 autoComplete="postal-code"
                 pattern="[0-9]{5}(-[0-9]{4})?"
-                aria-invalid={
-                  Boolean(address.postalCode) &&
-                  !isUsPostalCode(address.postalCode)
-                }
+                maxLength={10}
+                aria-describedby="shipping-zip-help"
                 placeholder="10001"
                 value={address.postalCode}
                 onChange={(event) =>
@@ -1105,6 +1402,7 @@ export function ShippingPanel({
                 }
               />
               <small
+                id="shipping-zip-help"
                 className={
                   address.postalCode &&
                   !isUsPostalCode(address.postalCode)
@@ -1153,27 +1451,42 @@ export function ShippingPanel({
                 </button>
               )}
               <button
+                type="submit"
                 className="primary"
-                disabled={savingAddress || addressIncomplete}
+                disabled={savingAddress}
+                aria-busy={savingAddress}
               >
                 {t(savingAddress ? 'Saving…' : 'Save delivery address')}
               </button>
             </div>
           </form>
         )}
-        {deal.viewerRole === 'seller' && !delivery && (
+        {deliveryLoading === false && deal.viewerRole === 'seller' && !delivery && (
           <div className="shipping-wait">
             {t('Waiting for the buyer to add a delivery address.')}
           </div>
         )}
-        <p className="delivery-privacy">
+        {deliveryLoading === false && <p className="delivery-privacy">
           <LockKeyhole size={15} />
           {t(
             'This address is used only for this deal and is never shown on the public Deal Link.',
           )}
-        </p>
+        </p>}
       </div>
-      {deal.viewerRole === 'seller' && !shipment && (
+      {shipmentLoading === true && (
+        <AsyncStatePanel
+          state="loading"
+          title="Loading"
+        />
+      )}
+      {shipmentLoading === null && (
+        <AsyncStatePanel
+          state="error"
+          title="Unavailable"
+          onAction={loadShipment}
+        />
+      )}
+      {shipmentLoading === false && deal.viewerRole === 'seller' && !shipment && (
         <details
           className={`shipping-readiness ${readyToShip ? 'is-ready' : ''}`}
           aria-busy={checkingReadiness}
@@ -1223,22 +1536,18 @@ export function ShippingPanel({
               ))}
             </div>
             {checkingReadiness && (
-              <div className="shipping-readiness-status">
+              <div className="shipping-readiness-status" role="status" aria-live="polite">
                 {t('Checking shipping readiness…')}
               </div>
             )}
             {readinessError && (
-              <div className="notice">{t(readinessError)}</div>
+              <div className="notice" role="alert">{t(readinessError)}</div>
             )}
             {!readyToShip && (
               <button
                 type="button"
                 className="secondary shipping-evidence-link"
-                onClick={() =>
-                  document
-                    .getElementById('deal-evidence-vault')
-                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                }
+                onClick={() => focusPageDestination('deal-evidence-vault')}
               >
                 <ShieldCheck size={17} />
                 {t('Upload required evidence')}
@@ -1247,7 +1556,7 @@ export function ShippingPanel({
           </div>
         </details>
       )}
-      {shipment ? (
+      {shipmentLoading === false && (shipment ? (
         <div className="shipment-card">
           <PackageCheck />
           <div>
@@ -1284,21 +1593,19 @@ export function ShippingPanel({
             />
           </label>
           <button
+            type="submit"
             className="primary"
-            disabled={
-              !readyToShip ||
-              carrier.trim().length < 2 ||
-              tracking.trim().length < 4
-            }
+            disabled={shipmentBusy}
+            aria-busy={shipmentBusy}
           >
-            {t('Mark as shipped')}
+            {t(shipmentBusy ? 'Saving shipment…' : 'Mark as shipped')}
           </button>
         </form>
       ) : deal.viewerRole === 'buyer' && delivery ? (
         <div className="shipping-wait">
           {t('Waiting for the seller to add tracking information.')}
         </div>
-      ) : null}
+      ) : null)}
       {shipment?.status === 'shipped' && deal.status === 'accepted' && (
         <InspectionRecorder
           deal={deal}
@@ -1310,31 +1617,35 @@ export function ShippingPanel({
         deal.viewerRole === 'buyer' &&
         deal.status === 'accepted' && (
           <button
+            type="button"
             className="primary confirm-delivery"
-            disabled={!inspectionRecorded}
+            disabled={!inspectionRecorded || shipmentBusy}
+            aria-busy={shipmentBusy}
             onClick={delivered}
           >
             <PackageCheck size={18} />
-            {t('Confirm delivery')}
+            {t(shipmentBusy ? 'Confirming delivery…' : 'Confirm delivery')}
           </button>
         )}
       {message && (
         <div
           className="notice"
-          role="status"
-          aria-live="polite"
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
         >
           {t(message)}
         </div>
       )}
-      <p className="shipping-note">
+      {shipmentLoading === false && <p className="shipping-note">
         <ShieldCheck />{' '}
         {t(
           inspectionRecorded
             ? 'Inspection recorded. Delivery can now be confirmed.'
             : 'Confirm delivery only after receiving and inspecting the item.',
         )}
-      </p>
+      </p>}
     </section>
+    {confirmDialog}
+    </>
   );
 }

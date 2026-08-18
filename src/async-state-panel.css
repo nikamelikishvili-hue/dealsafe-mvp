@@ -1,0 +1,33 @@
+.async-state-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  padding: 1rem;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-subtle);
+  color: var(--color-ink-600);
+}
+
+.async-state-panel > svg { width: 1.25rem; height: 1.25rem; color: var(--color-info-800); }
+.async-state-panel strong,
+.async-state-panel p { display: block; margin: 0; }
+.async-state-panel strong { color: var(--ds-ink); }
+.async-state-panel p { margin-top: 0.25rem; line-height: 1.45; }
+.async-state-panel.error { border-color: var(--color-danger-border); background: var(--color-danger-100); }
+.async-state-panel.error > svg { color: var(--color-danger-800); }
+.async-state-panel button { min-height: var(--touch-target); white-space: nowrap; }
+.async-state-panel .is-spinning { animation: async-state-spin 0.9s linear infinite; }
+
+@keyframes async-state-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 520px) {
+  .async-state-panel { grid-template-columns: auto minmax(0, 1fr); }
+  .async-state-panel button { grid-column: 1 / -1; width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .async-state-panel .is-spinning { animation: none; }
+}

@@ -21,6 +21,6 @@
 .draft-review-save span,.draft-review-save b,.draft-review-save small{display:block}
 .draft-review-summary .draft-review-save b{text-align:left;color:#253d55;font-size:11px}
 .draft-review-save small{margin-top:2px;color:#718078;font-size:9px;line-height:1.35}
-.draft-review-save button{min-height:38px;flex:none;padding:0 11px;font-size:10px;white-space:nowrap}
+.draft-review-save button{min-height:44px;flex:none;padding:0 13px;font-size:10px;white-space:nowrap}
 @media(max-width:760px){.draft-review-save{align-items:flex-start;flex-direction:column}.draft-review-save button{width:100%}}
 .seller-declarations{margin:18px 0 12px;padding:15px;border:1px solid #cad8cf;border-radius:13px;background:#f8faf8}.seller-declarations legend{display:flex;align-items:center;gap:7px;padding:0 7px;color:var(--green);font-weight:800}.seller-declarations legend svg{width:19px;height:19px}.seller-declarations label{display:flex;align-items:flex-start;gap:10px;padding:10px;border-radius:10px;color:#53645a;font-size:13px;line-height:1.45;cursor:pointer}.seller-declarations label.checked{background:#e8f3eb;color:#274b37}.seller-declarations input{width:18px;height:18px;flex:none;margin-top:1px;accent-color:var(--green)}.seller-declarations small{display:flex;align-items:flex-start;gap:7px;margin-top:8px;color:#68766e;line-height:1.4}.seller-declarations small svg{width:15px;height:15px;flex:none}.declaration-required{display:block;color:#9a5418;font-weight:700;line-height:1.45}.saved-draft .seller-declarations{margin-top:20px}

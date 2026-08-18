@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   BadgeDollarSign,
   Check,
@@ -127,11 +127,14 @@ export function DealPaymentWorkspace({
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState<'connect' | 'checkout' | ''>('');
   const [loaded, setLoaded] = useState(false);
+  const actionInFlight = useRef(false);
+  const loadRequest = useRef(0);
 
   useEffect(() => {
     let current = true;
     setLoaded(false);
     const load = async () => {
+      const request = ++loadRequest.current;
       try {
         const [next, account] = await Promise.all([
           getProtectedPaymentStatus(session, deal.id),
@@ -140,7 +143,7 @@ export function DealPaymentWorkspace({
         const actionPlan = await getDealActionPlan(session, deal.id).catch(
           () => null,
         );
-        if (!current) return;
+        if (!current || request !== loadRequest.current) return;
         setPayment(next);
         setConnect(account);
         setPlan(actionPlan);
@@ -148,7 +151,7 @@ export function DealPaymentWorkspace({
           ['funds_secured', 'release_pending', 'released'].includes(next.status),
         );
       } catch (error) {
-        if (!current) return;
+        if (!current || request !== loadRequest.current) return;
         setMessage(
           error instanceof Error
             ? error.message
@@ -156,41 +159,47 @@ export function DealPaymentWorkspace({
         );
         onChanged(false);
       } finally {
-        if (current) setLoaded(true);
+        if (current && request === loadRequest.current) setLoaded(true);
       }
     };
     void load();
     const timer = window.setInterval(() => void load(), 15_000);
     return () => {
       current = false;
+      loadRequest.current += 1;
       window.clearInterval(timer);
     };
   }, [deal.id, session.accessToken]);
 
   const startOnboarding = async () => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
     setBusy('connect');
     setMessage('');
     try {
       const result = await startStripeConnectOnboarding(session, deal.publicId);
       window.location.assign(result.url);
     } catch (error) {
+      actionInFlight.current = false;
       setMessage(
         error instanceof Error
           ? error.message
           : 'Could not open Stripe onboarding',
       );
-    } finally {
       setBusy('');
     }
   };
 
   const checkout = async () => {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
     setBusy('checkout');
     setMessage('');
     try {
       const result = await createProtectedCheckout(session, deal.id);
       window.location.assign(result.url);
     } catch (error) {
+      actionInFlight.current = false;
       setMessage(
         error instanceof Error
           ? error.message
@@ -375,8 +384,10 @@ export function DealPaymentWorkspace({
               </span>
             </div>
             <button
+              type="button"
               className="primary"
               disabled={busy === 'connect'}
+              aria-busy={busy === 'connect'}
               onClick={startOnboarding}
             >
               {t(busy === 'connect' ? 'Opening…' : 'Connect Stripe')}
@@ -407,8 +418,10 @@ export function DealPaymentWorkspace({
         deal.status === 'accepted' && (
           <div className="payment-actions">
             <button
+              type="button"
               className="primary"
               disabled={busy === 'checkout'}
+              aria-busy={busy === 'checkout'}
               onClick={checkout}
             >
               <BadgeDollarSign size={17} />
@@ -423,11 +436,17 @@ export function DealPaymentWorkspace({
       {state === 'checkout_created' && deal.viewerRole === 'buyer' && (
         <div className="payment-actions">
           <button
+            type="button"
             className="primary"
             disabled={busy === 'checkout'}
+            aria-busy={busy === 'checkout'}
             onClick={checkout}
           >
-            {t('Continue Stripe Sandbox checkout')}
+            {t(
+              busy === 'checkout'
+                ? 'Opening Stripe Sandbox…'
+                : 'Continue Stripe Sandbox checkout',
+            )}
           </button>
         </div>
       )}
@@ -454,10 +473,10 @@ export function DealPaymentWorkspace({
         </div>
       )}
       {payment?.failure_message && (
-        <div className="notice">{t(payment.failure_message)}</div>
+        <div className="notice" role="alert">{t(payment.failure_message)}</div>
       )}
       {message && (
-        <div className="notice" role="status" aria-live="polite">
+        <div className="notice" role="alert" aria-live="assertive">
           {t(message)}
         </div>
       )}
@@ -503,24 +522,43 @@ export function ProtectedPaymentReceipt({
 }) {
   const [payment, setPayment] = useState<ProtectedPaymentStatus | null>(null);
   const [message, setMessage] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const loadRequest = useRef(0);
 
   useEffect(() => {
     let current = true;
-    const load = () =>
-      getProtectedPaymentStatus(session, deal.id)
+    const load = () => {
+      const request = ++loadRequest.current;
+      return getProtectedPaymentStatus(session, deal.id)
         .then((result) => {
-          if (current) setPayment(result);
+          if (current && request === loadRequest.current) {
+            setPayment(result);
+            setLoadError('');
+          }
         })
-        .catch(() => {});
+        .catch(() => {
+          if (current && request === loadRequest.current) {
+            setLoadError('Payment receipt is temporarily unavailable. Retrying automatically.');
+          }
+        });
+    };
     void load();
     const timer = window.setInterval(() => void load(), 15_000);
     return () => {
       current = false;
+      loadRequest.current += 1;
       window.clearInterval(timer);
     };
   }, [deal.id, session.accessToken]);
 
-  if (!payment || payment.status === 'not_started') return null;
+  if (!payment) {
+    return loadError ? (
+      <div className="notice error" role="alert">
+        {t(loadError)}
+      </div>
+    ) : null;
+  }
+  if (payment.status === 'not_started') return null;
   const money = (amount: number) =>
     formatMoney(amount, payment.currency, getAppLanguage());
   const paid = Boolean(payment.paid_at);
@@ -566,6 +604,7 @@ export function ProtectedPaymentReceipt({
           </div>
         </div>
         <button
+          type="button"
           className="secondary no-print"
           onClick={printReceipt}
         >
@@ -573,6 +612,11 @@ export function ProtectedPaymentReceipt({
           {t('Print payment receipt')}
         </button>
       </div>
+      {loadError && (
+        <div className="notice error" role="alert">
+          {t(loadError)}
+        </div>
+      )}
       {!paid && (
         <div className="payment-receipt-unpaid">
           <ShieldAlert size={18} />
@@ -627,9 +671,8 @@ export function ProtectedPaymentReceipt({
       </p>
       {message && (
         <div
-          className="notice no-print"
-          role="status"
-          aria-live="polite"
+          className="notice error no-print"
+          role="alert"
         >
           {t(message)}
         </div>

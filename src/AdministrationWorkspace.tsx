@@ -19,6 +19,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { formatMoney } from './currency';
+import { useConfirmAction } from './ConfirmActionDialog';
 import type { Deal } from './domain';
 import { EvidenceLifecycleCenter } from './EvidenceLifecycleCenter';
 import { EvidenceViewer } from './EvidenceViewer';
@@ -48,6 +49,12 @@ import { smartCatalogVersion } from './smartCatalog';
 
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString(getAppLanguage());
+
+export const formatCsvCell = (value: unknown) => {
+  const text = String(value ?? '');
+  const safe = /^[\t\r\n ]*[=+\-@]/.test(text) ? `'${text}` : text;
+  return `"${safe.replaceAll('"', '""')}"`;
+};
 
 interface AdministrationWorkspaceProps {
   session: StoredSession;
@@ -294,20 +301,26 @@ function AdminEvidenceReview({
   const [items, setItems] = useState<DealEvidence[]>([]);
   const [selected, setSelected] = useState<DealEvidence | null>(null);
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let current = true;
+    setLoading(true);
     setMessage('');
     setSelected(null);
     void listDealEvidence(session, dispute.deal_id)
       .then((next) => {
-        if (current) setItems(next);
+        if (current) {
+          setItems(next);
+          setLoading(false);
+        }
       })
       .catch((error) => {
         if (current) {
           setMessage(
             error instanceof Error ? error.message : 'Could not load evidence',
           );
+          setLoading(false);
         }
       });
     return () => {
@@ -341,7 +354,9 @@ function AdminEvidenceReview({
           {t(message)}
         </div>
       )}
-      {items.length ? (
+      {loading ? (
+        <p role="status" aria-live="polite">{t('Loading evidence…')}</p>
+      ) : items.length ? (
         items.map((item) => (
           <article key={item.id}>
             <div className="admin-evidence-preview">
@@ -410,6 +425,8 @@ function AdminRevenueCenter({
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [transactionsMessage, setTransactionsMessage] = useState('');
+  const [exportMessage, setExportMessage] = useState('');
+  const [exportFailed, setExportFailed] = useState(false);
   const [transactionQuery, setTransactionQuery] = useState('');
   const [transactionStatus, setTransactionStatus] = useState('all');
   const [openingDeal, setOpeningDeal] = useState('');
@@ -544,43 +561,53 @@ function AdminRevenueCenter({
 
   const exportCsv = () => {
     if (!filteredTransactions.length) return;
-    const cell = (value: unknown) =>
-      `"${String(value ?? '').replaceAll('"', '""')}"`;
-    const rows = [
-      [
-        'Dealivra ID',
-        'Title',
-        'Status',
-        'Gross USD',
-        'Dealivra fee allocation USD',
-        'Seller amount USD',
-        'Seller',
-        'Buyer',
-        'Created',
-      ],
-      ...filteredTransactions.map((item) => [
-        item.public_id,
-        item.title,
-        item.status,
-        (Number(item.item_amount_cents) / 100).toFixed(2),
-        (Number(item.platform_fee_cents) / 100).toFixed(2),
-        (Number(item.seller_amount_cents) / 100).toFixed(2),
-        item.seller_name,
-        item.buyer_name,
-        item.created_at,
-      ]),
-    ];
-    const csv = rows.map((row) => row.map(cell).join(',')).join('\r\n');
-    const url = URL.createObjectURL(
-      new Blob([csv], { type: 'text/csv;charset=utf-8' }),
-    );
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `dealivra-revenue-${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    setExportMessage('');
+    setExportFailed(false);
+    try {
+      const rows = [
+        [
+          'Dealivra ID',
+          'Title',
+          'Status',
+          'Gross USD',
+          'Dealivra fee allocation USD',
+          'Seller amount USD',
+          'Seller',
+          'Buyer',
+          'Created',
+        ],
+        ...filteredTransactions.map((item) => [
+          item.public_id,
+          item.title,
+          item.status,
+          (Number(item.item_amount_cents) / 100).toFixed(2),
+          (Number(item.platform_fee_cents) / 100).toFixed(2),
+          (Number(item.seller_amount_cents) / 100).toFixed(2),
+          item.seller_name,
+          item.buyer_name,
+          item.created_at,
+        ]),
+      ];
+      const csv = rows
+        .map((row) => row.map(formatCsvCell).join(','))
+        .join('\r\n');
+      const url = URL.createObjectURL(
+        new Blob([csv], { type: 'text/csv;charset=utf-8' }),
+      );
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `dealivra-revenue-${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setExportMessage('CSV export started.');
+    } catch {
+      setExportMessage(
+        'The CSV could not be prepared. Refresh the page and try again.',
+      );
+      setExportFailed(true);
+    }
   };
 
   return (
@@ -688,6 +715,15 @@ function AdminRevenueCenter({
                 {t(transactionsMessage)}
               </div>
             )}
+            {exportMessage && (
+              <div
+                className={`notice ${exportFailed ? 'error' : ''}`}
+                role={exportFailed ? 'alert' : 'status'}
+                aria-live={exportFailed ? 'assertive' : 'polite'}
+              >
+                {t(exportMessage)}
+              </div>
+            )}
             {filteredTransactions.length ? (
               <div className="admin-revenue-table-wrap">
                 <table className="admin-revenue-table">
@@ -783,14 +819,18 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState('');
+  const savingRef = useRef(false);
   const requestRef = useRef(0);
+  const { confirmAction, confirmDialog } = useConfirmAction();
 
   const load = useCallback(async () => {
     const request = ++requestRef.current;
     setLoading(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const next = await getAdminDisputes(session, filter);
       if (request === requestRef.current) setDisputes(next);
@@ -801,6 +841,7 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
             ? error.message
             : 'Could not load dispute queue',
         );
+        setMessageFailed(true);
       }
     } finally {
       if (request === requestRef.current) setLoading(false);
@@ -819,16 +860,33 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
     decision: 'resolved_buyer' | 'resolved_seller' | 'cancelled',
   ) => {
     const note = (notes[dispute.dispute_id] || '').trim();
-    if (note.length < 3 || saving) return;
+    if (note.length < 3 || savingRef.current) return;
+    savingRef.current = true;
     const prompt =
       decision === 'resolved_buyer'
         ? 'Resolve for buyer and issue a full Stripe refund?'
         : decision === 'resolved_seller'
           ? 'Resolve for seller and release the protected Stripe funds?'
           : 'Close this dispute without moving funds?';
-    if (!confirm(t(prompt))) return;
+    const confirmed = await confirmAction({
+      title: t('Confirm dispute decision'),
+      description: t(prompt),
+      confirmLabel: t(
+        decision === 'resolved_buyer'
+          ? 'Resolve for buyer'
+          : decision === 'resolved_seller'
+            ? 'Resolve for seller'
+            : 'Close dispute',
+      ),
+      tone: decision === 'cancelled' ? 'default' : 'danger',
+    });
+    if (!confirmed) {
+      savingRef.current = false;
+      return;
+    }
     setSaving(dispute.dispute_id);
     setMessage('');
+    setMessageFailed(false);
     try {
       if (decision === 'cancelled') {
         await resolveAdminDispute(
@@ -873,16 +931,20 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
             ? 'Dispute resolved and funds released to seller.'
             : 'Dispute closed.',
       );
+      setMessageFailed(false);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'Could not resolve dispute',
       );
+      setMessageFailed(true);
     } finally {
+      savingRef.current = false;
       setSaving('');
     }
   };
 
   return (
+    <>
     <section className="admin-disputes">
       <div className="admin-disputes-heading">
         <Scale />
@@ -913,7 +975,11 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
         ))}
       </div>
       {message && (
-        <div className="notice" role="status" aria-live="polite">
+        <div
+          className={`notice ${messageFailed ? 'error' : ''}`}
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
           {t(message)}
         </div>
       )}
@@ -1071,6 +1137,8 @@ function AdminDisputeCenter({ session }: { session: StoredSession }) {
         )}
       </p>
     </section>
+    {confirmDialog}
+    </>
   );
 }
 
@@ -1091,15 +1159,19 @@ function AdminReportCenter({
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState('');
   const [openingDeal, setOpeningDeal] = useState('');
+  const savingRef = useRef(false);
+  const openingDealRef = useRef(false);
   const requestRef = useRef(0);
 
   const load = useCallback(async () => {
     const request = ++requestRef.current;
     setLoading(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const next = await getAdminReports(session, filter);
       if (request === requestRef.current) setReports(next);
@@ -1110,6 +1182,7 @@ function AdminReportCenter({
             ? error.message
             : 'Could not load report queue',
         );
+        setMessageFailed(true);
       }
     } finally {
       if (request === requestRef.current) setLoading(false);
@@ -1124,16 +1197,20 @@ function AdminReportCenter({
   }, [load]);
 
   const openDeal = async (publicId: string) => {
-    if (openingDeal) return;
+    if (openingDealRef.current) return;
+    openingDealRef.current = true;
     setOpeningDeal(publicId);
     setMessage('');
+    setMessageFailed(false);
     try {
       onOpenDeal(await getPublicDeal(publicId));
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'Deal Link unavailable',
       );
+      setMessageFailed(true);
     } finally {
+      openingDealRef.current = false;
       setOpeningDeal('');
     }
   };
@@ -1143,9 +1220,11 @@ function AdminReportCenter({
     decision: 'reviewed' | 'dismissed',
   ) => {
     const note = (notes[report.report_id] || '').trim();
-    if (note.length < 3 || saving) return;
+    if (note.length < 3 || savingRef.current) return;
+    savingRef.current = true;
     setSaving(report.report_id);
     setMessage('');
+    setMessageFailed(false);
     try {
       await resolveAdminReport(
         session,
@@ -1163,24 +1242,29 @@ function AdminReportCenter({
           : items.filter((item) => item.report_id !== report.report_id),
       );
       setMessage('Decision saved.');
+      setMessageFailed(false);
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
           : 'Could not save report decision',
       );
+      setMessageFailed(true);
     } finally {
+      savingRef.current = false;
       setSaving('');
     }
   };
 
   const changeVisibility = async (report: AdminReport) => {
     const note = (notes[report.report_id] || '').trim();
-    if (note.length < 3 || saving) return;
+    if (note.length < 3 || savingRef.current) return;
+    savingRef.current = true;
     const status =
       report.moderation_status === 'hidden' ? 'visible' : 'hidden';
     setSaving(report.report_id);
     setMessage('');
+    setMessageFailed(false);
     try {
       await setAdminDealVisibility(
         session,
@@ -1200,13 +1284,16 @@ function AdminReportCenter({
           ? 'Deal hidden from public access.'
           : 'Deal restored to public access.',
       );
+      setMessageFailed(false);
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
           : 'Could not update Deal Link visibility',
       );
+      setMessageFailed(true);
     } finally {
+      savingRef.current = false;
       setSaving('');
     }
   };
@@ -1245,7 +1332,11 @@ function AdminReportCenter({
         ))}
       </div>
       {message && (
-        <div className="notice" role="status" aria-live="polite">
+        <div
+          className={`notice ${messageFailed ? 'error' : ''}`}
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
           {t(message)}
         </div>
       )}

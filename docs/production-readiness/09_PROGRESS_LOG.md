@@ -1,5 +1,241 @@
 # Production-readiness progress log
 
+## 2026-08-15 — Global logout browser clearing
+
+- Added browser cache, cookie, and origin-storage clearing only after the Auth
+  provider confirms global session revocation.
+- Kept local, other-session, invalid, and failed revocation paths free of the
+  destructive browser-clear signal.
+- Added exact header-presence and absence regression checks across scopes.
+
+### Activation boundary
+
+No live session was revoked. Production, public aliases, hosted configuration,
+customer data, and real-money capabilities remain unchanged.
+
+## 2026-08-15 — Browser resource and process isolation
+
+- Added same-origin resource isolation and origin agent clustering to every
+  application response.
+- Preserved popup-compatible opener isolation for approved provider journeys.
+- Added exact-value regression gates and a protected-Preview compatibility and
+  rollback requirement.
+
+### Activation boundary
+
+Only review-branch repository configuration changed. No live Vercel alias,
+Production deployment, public access, provider setting, customer data, or
+real-money capability changed during this pass.
+
+## 2026-08-15 — Logout JSON boundary correction
+
+- Corrected logout from a bodyless mutation classification to a bounded JSON
+  scope mutation.
+- Required canonical JSON media before parsing, provider contact, or session
+  revocation and added a negative provider-isolation test.
+- Kept refresh as the only bodyless Auth mutation.
+
+### Activation boundary
+
+No live session was revoked and no Production, public access, hosted resource,
+customer data, or real-money capability changed during this pass.
+
+## 2026-08-15 — Shared reporting request boundary
+
+- Consolidated method, canonical Origin, JSON media, bounded body, response
+  header, and runtime metadata controls for three diagnostic intake endpoints.
+- Kept endpoint schema allowlists, byte ceilings, modes, and privacy-safe log
+  contracts isolated while removing duplicated security logic.
+- Extended the API inventory and negative matrix to prevent boundary drift.
+
+### Activation boundary
+
+No monitoring mode, Production deployment, public alias, hosted configuration,
+live resource, customer record, or real-money capability changed in this pass.
+
+## 2026-08-15 — JSON mutation media boundary
+
+- Added one shared normalized `application/json` requirement for every
+  same-origin endpoint that accepts a request body.
+- Rejected unsupported media with a bounded 415 response before body parsing,
+  provider contact, credential work, or database access.
+- Extended the API inventory gate so removing the media guard fails verify.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Preview bundle budget alignment
+
+- Confirmed that the Vercel Preview feature configuration produces 832,516
+  bytes of total JavaScript while the safe-default local build produces
+  829,974 bytes from the same reviewed source stack.
+- Raised only the total JavaScript ceiling from 830,000 to 835,000 bytes,
+  leaving the initial-application, individual-chunk, and CSS ceilings unchanged.
+- Retained less than 0.3% headroom over the measured Preview artifact so future
+  bundle growth still fails closed instead of silently normalizing drift.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## 2026-08-15 — API mutation-origin inventory
+
+- Added a fail-closed inventory for every application API route and wired it
+  into the complete repository verification gate.
+- Classified shared same-origin, local telemetry, read-only, and intentionally
+  cross-origin CSP reporting boundaries with mode-specific required controls.
+- New, missing, or weakened route files now fail verification.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## 2026-08-15 — Authentication origin canonicalization
+
+- Replaced host-only Auth origin comparison with the existing strict canonical
+  Origin parser and a bounded single-host validation boundary.
+- Rejected insecure public HTTP, same-host paths, host lists, host path
+  injection, and credential-like host input before any provider request.
+- Preserved explicit local HTTP support only for localhost development.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## 2026-08-15 — Deal action-plan recovery
+
+- Replaced the blank initial Deal progress state with an accessible loading
+  contract and a direct retry when the first read fails.
+- Preserved prior milestones after a polling failure while explicitly warning
+  that they are stale and should not drive the next action until refreshed.
+- Reused request-generation guards for polling and manual retries.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## 2026-08-15 — Shipping readiness recovery
+
+- Stopped converting a failed seller evidence-readiness read into a valid
+  incomplete checklist.
+- Added distinct loading, ready, and error states while retaining a prior
+  successful value only as stale continuity data.
+- Added a direct primary-action retry that remains fail-closed until the
+  provider confirms current readiness.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## 2026-08-15 — English launch identity-call headroom
+
+- Expanded the parser-scoped English launch transform from literal-only calls
+  to every bare, single-argument `t()` call imported from the reviewed identity
+  helper, preserving one evaluation of the original expression.
+- Kept member calls, comments, quoted examples, and modules without the named
+  `i18n` import outside the transform boundary.
+- Passed 294 foundation tests, twelve focused component tests, TypeScript,
+  lint, security gates, the production build, and Preview smoke verification.
+- Reduced total production JavaScript from 829,641 to 828,551 bytes, restoring
+  1,449 bytes of governed headroom below the 830,000-byte ceiling.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## 2026-08-11 — DAT-002 machine-readable ownership inventory
+
+- Added a read-only catalog inventory for every application table, view,
+  function, Storage bucket, policy, table grant, and routine grant.
+- Each object records its database owner, exposure class, and one reviewed
+  engineering/security steward without reading application rows.
+- Added a fail-closed validator and wired it after the 17-suite protected
+  Staging database gate. Missing object classes, duplicate identities, unsafe
+  owner roles, or unassigned stewards now fail the gate.
+
+## 2026-08-11 — DAT-003 hosted authorization harness prepared
+
+- Added a status-only hosted Data API and Storage matrix for synthetic seller,
+  buyer, outsider, expired, and anonymous Staging sessions.
+- Added positive participant RPC checks, cross-user and expired-session denial,
+  owner-folder Storage writes, and mandatory deletion of both generated probes.
+- Tokens, identities, deal IDs, object paths, bodies, and bytes are excluded
+  from the report. Production and customer data remain outside the harness.
+
+## 2026-08-11 — DAT-001 baseline capture controls prepared
+
+- Added an offline migration-manifest verifier that requires a CLI-generated
+  Staging baseline, canonical timestamp order, unique timestamps, and SHA-256
+  evidence while rejecting Auth user data, database URLs, privileged
+  credentials, and deprecated extension version pins.
+- Added strict and status-only package commands so readiness can be reported
+  before capture without falsely treating a missing baseline as complete.
+- Added a manual-only protected Staging workflow that installs a pinned
+  Supabase CLI, captures the baseline, verifies its manifest, rebuilds a
+  disposable local database, runs all 17 SQL suites and local advisors, and
+  retains only the verified migration artifact for seven days.
+- Documented the official `db pull`, local `db reset`, 17-suite authorization,
+  advisor, upgrade, and forward-rollback evidence path. The baseline itself is
+  still pending because Supabase CLI is not installed in this workspace.
+- Production, public access, customer data, and real payments were not changed.
+
+## 2026-08-10 — isolated Staging authorization suite completed
+
+- Provisioned and used the isolated `dealivra-staging` Supabase project; the
+  Production project remained unchanged.
+- Applied the reviewed schema, authorization, MFA, evidence, dispute, support,
+  payment-command, and audit boundaries to Staging with synthetic-only test
+  fixtures.
+- Corrected the case-administrator evidence policy so it checks dispute
+  membership through a narrow administrator-bound `security definer` helper
+  without exposing dispute rows to ordinary authenticated users.
+- Made PAY-003 verification transaction-bound and provider identifiers unique,
+  preventing repeat test executions from leaving new records or colliding with
+  earlier synthetic fixtures.
+- Passed all 17 rollback-only Staging database suites and all 232 repository
+  foundation tests. Type checking and the production Vite build also pass.
+- Expanded the protected manual Staging database workflow from one
+  representative authorization test to the complete sorted inventory of 17
+  rollback suites. The workflow now fails on inventory drift or the first SQL
+  error, and the 232-test repository contract verifies that behavior.
+- DAT-001 remains open because the historical setup SQL still needs a complete
+  timestamped empty-database migration chain. DAT-003 remains open for
+  real-token HTTP and Storage tests against synthetic Staging identities.
+- No Production database object, customer record, Vercel alias, public-access
+  setting, or real payment mode was changed.
+
+## 2026-07-31 — isolated Staging database authorization gate
+
+### Completed in the repository
+
+- Added a manual-only GitHub `staging` environment workflow that rejects a
+  Production or mixed Supabase target before any SQL runs.
+- Added a defense-in-depth RLS migration for the owner-only private evidence
+  maintenance settings table identified by the live database advisor.
+- Added database-wide RLS, private-schema grant, policy-role, invoker-view,
+  and elevated-function search-path assertions.
+- Put the existing authenticated seller/buyer/outsider/admin RPC matrix behind
+  the exact isolated Staging target guard.
+
+### Verified external state and limits
+
+- The connected Supabase organization currently exposes one active project;
+  a separate Staging project is not yet available.
+- The live remote database reports 27 applied migrations, but the repository
+  does not yet contain a complete timestamped empty-database migration chain.
+- The private maintenance settings table has owner-only ACLs and is not in an
+  exposed schema, but RLS remains required for consistent defense in depth.
+- No Production table, policy, grant, function, project, public-access setting,
+  Vercel alias, or real payment was changed by this batch.
+
 ## 2026-07-30 — FND-006 legacy identifier governance
 
 - Removed the ambiguous legacy Vercel project/team defaults from the Edge
@@ -4000,3 +4236,771 @@ dispute, or real-money state changed.
 
 No hosted variable value, Supabase resource, Production alias, public-access
 setting, customer record, or real-money capability changed.
+
+## 2026-08-14 - UX-005 mobile action and chat collision boundary
+
+### Implemented locally for review
+
+- Moved the private Deal chat above the persistent mobile next-action dock,
+  including device safe-area spacing.
+- Bounded the open chat panel with dynamic viewport height and contained its
+  overscroll so the page behind it does not become the accidental scroll
+  target.
+- Standardized the close affordance on the reviewed icon system, added Escape
+  handling, and restored keyboard focus to the chat launcher after an explicit
+  close.
+- Added static regression coverage for the dock clearance, viewport boundary,
+  Escape behavior, and focus restoration.
+
+### Remaining acceptance gate
+
+Exercise the exact protected Preview at 320, 360, 390, 768, 1024, and 1440
+CSS pixels with keyboard-only and 200% zoom checks. Confirm the chat launcher,
+open panel, primary action, focused controls, and software-keyboard viewport do
+not overlap or create horizontal page scroll.
+
+### Activation boundary
+
+No deployment, Production alias, public-access setting, hosted configuration,
+Supabase resource, customer record, or real-money capability changed.
+
+## 2026-08-14 - UX-005 accessible comparison boundary
+
+### Implemented locally for review
+
+- Contained the private Watchlist comparison inside the dynamic viewport and
+  device safe areas, including bounded internal overscroll.
+- Added a complete modal keyboard boundary: initial close-button focus, Tab
+  containment, Escape dismissal, background scroll lock, and focus restoration.
+- Added regression coverage for accessibility and mobile viewport behavior.
+
+### Remaining acceptance gate
+
+Verify two- and three-deal comparisons in the protected Preview using keyboard
+only, 200% zoom, and the UX-005 viewport matrix.
+
+### Activation boundary
+
+No deployment, Production alias, public-access setting, hosted configuration,
+Supabase resource, customer record, or real-money capability changed.
+
+## 2026-08-14 - UX-005 accessible media preview boundary
+
+### Implemented locally for review
+
+- Constrained full-size deal media to the dynamic mobile viewport and kept the
+  close control clear of device safe areas.
+- Trapped keyboard focus inside the modal, supported Escape dismissal, locked
+  background scrolling, and restored focus to the originating media control.
+- Replaced the text glyph close affordance with the standard reviewed icon and
+  added regression coverage for the complete modal interaction boundary.
+
+### Remaining acceptance gate
+
+Exercise image previews on the exact protected Preview at the viewport and
+keyboard matrix listed under UX-005, including iOS-style safe areas and 200%
+zoom.
+
+### Activation boundary
+
+No deployment, Production alias, public-access setting, hosted configuration,
+Supabase resource, customer record, or real-money capability changed.
+
+## 2026-08-14 - Address persistence round-trip integrity
+
+### Implemented locally for review
+
+- Centralized formatting and parsing of stored U.S. delivery addresses instead
+  of maintaining a second parser inside the shipping workspace.
+- Preserved Address Line 2 values, including apartment, suite, unit, building,
+  and floor details, across save, reload, edit, display, and copy flows.
+- Normalized full state names to two-letter U.S. codes while retaining 5-digit
+  and ZIP+4 postal codes.
+- Added a component regression test proving an address containing Apartment 7B
+  survives an exact serialize-and-parse round trip.
+- Passed component rendering and TypeScript checks.
+
+### Remaining hosted gate
+
+Automatic suggestions require the restricted `VITE_GOOGLE_MAPS_API_KEY` in the
+exact protected Preview environment. Manual structured entry remains available
+when the provider is missing or unavailable.
+
+### Activation boundary
+
+No Google Cloud setting, hosted environment variable, deployment, Production
+alias, public-access setting, Supabase resource, customer record, or real-money
+capability changed.
+
+## 2026-08-14 - Shipping failure visibility and clipboard resilience
+
+### Implemented locally for review
+
+- Replaced silent shipment and delivery-address load failures with concise,
+  accessible status messages that tell the participant to retry.
+- Added one shared clipboard utility with a browser-selection fallback when the
+  modern Clipboard API is missing or permission is denied.
+- Updated Copy address and Copy Deal Link to use the same proven behavior.
+- Prevented Copy address from reporting false success when nothing was copied.
+- Added release-gate coverage that rejects empty catches in the shipping
+  workspace and preserves the manual-copy recovery message.
+
+### Verification
+
+- TypeScript, lint, and all 238 foundation tests passed.
+
+### Activation boundary
+
+No deployment, Production alias, public-access setting, hosted configuration,
+Supabase resource, customer record, or real-money capability changed.
+
+## 2026-08-14 - Fulfillment action-button semantics
+
+### Implemented locally for review
+
+- Marked every non-submit meeting, inspection, handoff, address, and delivery
+  action as `type="button"`.
+- Kept only the three intentional form submission controls on browser-default
+  submit semantics.
+- Added a regression check so a future fulfillment action with an `onClick`
+  handler cannot accidentally submit its surrounding form.
+
+### Verification
+
+- TypeScript, lint, and all 238 foundation tests passed.
+
+### Activation boundary
+
+No deployment, Production alias, public-access setting, hosted configuration,
+Supabase resource, customer record, or real-money capability changed.
+
+## 2026-08-14 - Local mobile creation workflow verification
+
+### Verified locally
+
+- Completed the four-step guest creation flow at 390 CSS pixels using only
+  visible, labeled controls: structured phone selection, terms, optional media,
+  and final review.
+- Confirmed the persistent next action remained present on every step without
+  requiring a page-bottom search and without horizontal document overflow.
+- Verified category-driven brand, model, and storage choices generate an
+  editable title while preserving manual entry.
+- Reached the final seller-declaration gate without publishing, creating an
+  account, contacting hosted services, or changing any live record.
+- Completed the isolated Sample buyer review and confirmed the interface states
+  explicitly that no agreement, payment, or account was created.
+
+### Remaining acceptance gate
+
+Repeat the flow on the exact protected Preview with keyboard-only navigation,
+200% zoom, software keyboards, file-selection cancellation, and authenticated
+draft recovery.
+
+### Activation boundary
+
+No deployment, Production alias, public-access setting, hosted configuration,
+Supabase resource, customer record, or real-money capability changed.
+
+## 2026-08-14 - UX-004 address autocomplete readiness clarity
+
+### Implemented locally for review
+
+- Confirmed from the protected Preview build report that the browser Maps key
+  is configured without reading or disclosing its value.
+- Distinguished a missing local provider configuration from a temporary hosted
+  provider failure while preserving complete manual U.S. address entry.
+- Connected the combobox to its live status, exposed loading state and listbox
+  intent to assistive technology, and restored keyboard focus after clearing.
+- Retained editable Address Line 2 fields in meeting and shipping, including
+  apartment, suite, unit, building, floor, and mailbox details.
+- Expanded the restricted-key runbook to make billing, enabled APIs, quota,
+  and the exact Preview HTTP-referrer allowlist explicit hosted gates.
+- Passed component rendering, TypeScript, and lint checks.
+
+### Remaining activation gate
+
+Run the mouse, keyboard, and mobile acceptance matrix on the exact protected
+Preview hostname. If suggestions still do not appear, inspect Google Cloud's
+sanitized request/error metrics and correct only the exact reviewed hostname,
+API enablement, billing, or quota control. Never broaden the key to every
+Vercel hostname or remove Website restrictions.
+
+### Activation boundary
+
+No Google Cloud setting, browser key, hosted environment variable, deployment,
+Production alias, public-access setting, Supabase resource, customer record,
+or real-money capability changed.
+
+## 2026-08-14 - Local responsive and navigation verification
+
+### Verified locally
+
+- Loaded the current integrated branch in a real browser with meaningful page
+  content, no framework error overlay, and no console warnings or errors.
+- Checked 320, 390, 768, and 1440 CSS-pixel widths; none produced horizontal
+  document overflow and the primary interactive controls remained rendered.
+- Opened the mobile navigation, followed the How it works route, and returned
+  through the exact Home link; both URL state and the home heading updated as
+  expected.
+- Confirmed the mobile landmark and accessible-name structure includes the
+  skip link, banner, labeled navigation, main content, and legal footer.
+
+### Remaining acceptance gate
+
+Repeat the full UX-005 matrix on the exact protected Preview with authenticated
+deal data, keyboard-only navigation, 200% zoom, and software keyboards.
+
+### Activation boundary
+
+No deployment, Production alias, public-access setting, hosted configuration,
+Supabase resource, customer record, or real-money capability changed.
+# 2026-08-14 — Hosted address autocomplete failure visibility
+
+- Confirmed the current Google Places Autocomplete (New) request contract
+  supports the existing U.S. region and `street_address` type restrictions.
+- Added three fixed, privacy-safe browser failure categories for provider load,
+  suggestion request, and place-details failures.
+- Kept typed and selected addresses, provider responses, URLs, credentials, and
+  API key material outside both the browser transport and server log contract.
+- Preserved the manual address fallback and existing per-signature/per-minute
+  diagnostic throttles.
+
+## FND-001 dependency gate confirmation
+
+- Confirmed npm is the only repository package manager and lockfile version 3
+  is the canonical dependency source.
+- Re-ran the dependency policy over 98 locked packages and generated the
+  deterministic CycloneDX 1.5 SBOM.
+- Confirmed the current reviewed graph reports zero known npm audit findings.
+
+## Explicit form-action semantics
+
+- Declared every current form action as an explicit `submit` or `button`
+  control so a layout refactor cannot silently turn navigation/cancel actions
+  into submissions.
+- Added a TypeScript-AST regression gate across the account, MFA, creation,
+  evidence, payment, delivery, dispute, support, and Deal Workspace forms.
+- Added a repository-wide TSX gate that rejects any non-form button without an
+  explicit click action or intentional disabled state, preventing silent dead
+  controls from reaching review.
+- Confirmed type-checking, lint, and the new action-semantics test pass.
+
+## Keyboard-safe authenticated mobile navigation
+
+- Matched the authenticated application header to the public landing behavior:
+  the mobile menu now closes with Escape, restores focus to its trigger, and
+  closes automatically above the tablet breakpoint.
+- Connected the trigger and menu with stable `aria-controls`/`id` values and
+  made header controls explicitly non-submitting.
+- Added a regression check covering both guest and authenticated navigation.
+
+## Resilient copy and share actions
+
+- Routed every user-facing browser copy action through one governed clipboard
+  helper with a legacy fallback for restricted browser contexts.
+- Removed false-positive success messages from agreement fingerprints,
+  receipts, invitations, evidence hashes, MFA setup, account passports, and
+  buyer access codes.
+- Added a repository-wide regression gate that rejects direct Clipboard API
+  use outside the reviewed helper.
+
+## Accessible critical confirmations
+
+- Replaced browser-native confirmations for deal cancellation, disputes,
+  delivery completion, buyer-code removal, media deletion, and administrator
+  payment decisions with one consistent Dealivra dialog.
+- Made cancellation the initial focus, trapped keyboard focus, supported Escape,
+  restored the invoking control, and locked background scrolling while open.
+- Added mobile bottom-sheet presentation, reduced-motion support, and a
+  regression gate that prevents critical flows from returning to native
+  confirmations.
+
+## Form-control naming gate
+
+- Added a TypeScript-AST accessibility gate requiring every input, select, and
+  textarea to inherit a label, reference an explicit label, or declare an ARIA
+  name.
+- Named the reusable address combobox independently of its parent layout and
+  gave the private deal-chat composer a stable screen-reader label.
+- Preserved existing visible labels for the published Deal Link and item
+  identifier while validating their `htmlFor` relationships automatically.
+
+## Connection-state clarity
+
+- Added a global offline notice so failed network actions are not mistaken for
+  broken controls, plus a short reconnection confirmation that preserves the
+  user's current page and form state.
+- Kept the feature entirely local to browser connectivity events: it sends no
+  diagnostics, stores no identifiers, and makes no background request.
+- Added cleanup, reduced-motion, mobile layout, live-region announcements, and
+  a regression check for the privacy boundary.
+
+## Duplicate authentication prevention
+
+- Added one guarded sign-in/sign-up request state so rapid taps cannot create
+  parallel Auth calls, confusing rate-limit responses, or duplicate account
+  creation attempts.
+- Locked mutable account-entry controls only while the request is active and
+  exposed the form's busy state plus explicit signing-in/creating-account copy.
+- Added a regression gate covering the request guard, `finally` recovery, and
+  disabled primary action.
+
+## Recovery and MFA single-flight controls
+
+- Extended the immediate request lock to password-reset email delivery,
+  recovered-password updates, and second-factor sign-in verification.
+- Disabled mutable recovery and MFA controls while their network request is in
+  flight, exposed the form busy state, and kept failure recovery in `finally`.
+- Added a regression gate that prevents these account-security actions from
+  silently returning to same-tick duplicate submissions.
+
+## Privileged account-action concurrency guards
+
+- Added immediate single-flight locks to profile-name and password changes,
+  authenticator enrollment/verification/removal, and session revocation.
+- Kept all relevant inputs immutable while each sensitive mutation is active
+  and exposed busy state on password and authenticator forms.
+- Added a repository regression gate covering every privileged account action
+  and its guaranteed lock release path.
+
+## Truthful install-app action
+
+- Reworked the browser install prompt into a single-flight action with an
+  explicit opening state and a non-submitting button.
+- Reported accepted, cancelled, and browser-failure outcomes without claiming
+  installation succeeded before the browser confirms it.
+- Added an accessibility announcement and a regression gate for prompt outcome
+  handling and request-lock release.
+
+## Mobile touch-target verification
+
+- Verified the built homepage at a 390-by-844 viewport with no horizontal
+  overflow and confirmed the mobile menu closes from the keyboard.
+- Increased the compact menu trigger, menu actions, and icon-only Deal Room
+  sample action to a minimum 44-by-44-pixel touch target.
+- Added a regression check so later visual compaction cannot shrink these
+  essential mobile actions below the reviewed target.
+
+## Secondary action and recovery accessibility
+
+- Extended the 44-pixel touch-target baseline to password visibility,
+  account-mode switching, password recovery, recovered-draft actions, and
+  legal/protection footer links.
+- Added password-recovery autocomplete metadata, connected both new-password
+  fields to their requirements, and announced recovery outcomes through a
+  polite live region.
+- Verified the rebuilt sign-up and recovery screens at 390 by 844 pixels with
+  no horizontal overflow and no visible button below the reviewed target.
+
+## Public-route responsive acceptance pass
+
+- Rechecked Home, Fees, Buyer Protection, Seller Protection, Disputes,
+  Agreement Verification, Terms, Privacy, Sign in, and Create account at both
+  mobile and 1440-by-900 desktop viewports.
+- Confirmed every route renders its primary landmark and heading without
+  horizontal overflow; the inspected browser session emitted no console errors
+  or warnings.
+- Confirmed password-recovery navigation works without a page reload and the
+  recovery email field exposes the expected browser autocomplete purpose.
+
+## Explicit secondary workspace actions
+
+- Declared non-submitting behavior on profile, deal-creation, payment,
+  evidence-lifecycle, and public-route actions that sit near forms.
+- Added a regression gate for those high-risk surfaces so later layout changes
+  cannot accidentally convert navigation, copy, payment-launch, or governance
+  controls into implicit form submissions.
+
+## Dense workspace interaction baseline
+
+- Extended the 44-pixel target baseline to catalog clearing, category guidance,
+  agreement and document tools, support, session confirmation, workspace
+  navigation, validation summaries, and draft review actions.
+- Preserved full-size account and navigation actions at the compact
+  720-by-450 acceptance viewport used to approximate 200-percent zoom.
+- Announced account, payment, delivery, shipping-readiness, and Deal Link
+  outcomes through polite status or urgent alert regions without moving focus.
+
+## Transaction single-flight and progress feedback
+
+- Added immediate same-tick request locks to Stripe onboarding and checkout,
+  meeting and handoff actions, inspection receipts, delivery-address and
+  shipment mutations, questions, offers, and draft publication.
+- Kept the initiating controls disabled for the complete request and exposed
+  truthful in-progress labels plus `aria-busy` on payment and fulfillment
+  actions.
+- Passed lint, TypeScript, 258 foundation tests, eight focused component tests,
+  and the production build with JavaScript and CSS within their release
+  budgets.
+
+## Authenticated workspace delivery
+
+- Moved the profile/security center, administrator console, and full Deal Room
+  behind route-level React lazy boundaries with an accessible loading state.
+- Reduced the main application JavaScript chunk from about 362 KB to 128 KB;
+  the deferred profile, administration, and Deal Room code now downloads only
+  when the user opens those authenticated workspaces.
+- Preserved the existing central authorization and transaction-orchestration
+  boundaries and added regression coverage preventing these workspaces from
+  silently returning to the initial bundle.
+
+## Async integrity and stale-response containment
+
+- Added same-tick single-flight guards and visible progress feedback across
+  agreement acceptance, identity verification, deal media and editing,
+  support, resolution, moderation, restricted evidence, and Deal Link actions.
+- Versioned address autocomplete and VIN decoding requests so a delayed
+  provider response cannot overwrite newer user input, a cleared field, or a
+  different catalog selection; Address line 2 remains preserved in both
+  meeting and shipping flows.
+- Scoped session refresh, dashboard deals, saved deals, notifications, admin
+  access, profiles, public Deal Link navigation, offers, and evidence loading
+  to their initiating session or record so stale responses cannot repopulate a
+  signed-out or newly selected workspace.
+- Added reduced-motion coverage and a source-encoding regression gate for the
+  user-facing TypeScript surface.
+- Reverified the built application at 1440 by 900 and 390 by 844 pixels: no
+  horizontal overflow, duplicate IDs, missing image alternatives, or browser
+  console errors were observed; mobile navigation and sign-in semantics passed.
+- Passed lint across 212 files, TypeScript, 276 foundation tests, eight focused
+  component tests, dependency and transport policy checks, browser-storage
+  review, brand migration verification, and repository secret scanning.
+- Built 29 served assets from commit `9a77628`; initial application JavaScript
+  is 128,972 bytes, total JavaScript is 820,978 bytes, and total CSS is 280,383
+  bytes, all within the governed release budgets.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Acceptance protection recovery
+
+- Replaced the false unprotected fallback with explicit buyer-code status states.
+- Blocked real Deal acceptance until the protection read succeeds.
+- Added retryable seller and buyer status presentation.
+- Preserved the authoritative pre-acceptance server check and demo isolation.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Public Deal route recovery
+
+- Unified direct-link and notification-originated public Deal loading.
+- Preserved the canonical Deal URL during loading and failure.
+- Added a retry of the same deep link plus a separate return-home action.
+- Added mobile wrapping and 44-pixel recovery action targets.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Profile data recovery
+
+- Added explicit profile loading, failure, and retry behavior.
+- Prevented partially initialized security and trust controls from rendering
+  before the owner-bound profile read succeeds.
+- Preserved the existing newest-request-wins guard through retry and finalization.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Notification data recovery
+
+- Stopped turning notification provider failures into a false empty activity
+  state.
+- Added explicit initial loading, stale-data error, and retry behavior.
+- Restored unread state when an optimistic mark-all mutation fails.
+- Added disclosure semantics and minimum-size notification actions.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## English launch bundle headroom
+
+- Added a TypeScript-AST build transform for identity-only static English
+  translation calls.
+- Scoped the transform to modules importing the reviewed `i18n` helper and
+  preserved dynamic keys, member calls, comments, and quoted examples.
+- Kept source translation boundaries intact for a later governed localization
+  release while reclaiming initial bundle headroom.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Account security read recovery
+
+- Migrated signed-in device and authenticator loading failures to the shared
+  accessible async-state contract with a bounded secure retry.
+- Kept session revocation, authenticator enrollment, and authenticator removal
+  fail-closed until the newest provider read succeeds.
+- Preserved request-generation guards so delayed responses cannot replace the
+  latest account security state.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Accessible field validation foundation
+
+- Added one reusable field-error primitive with assertive semantics, semantic
+  error color tokens, and decorative-icon isolation.
+- Upgraded password recovery so password-policy and confirmation failures are
+  attached to the exact invalid field through `aria-invalid` and
+  `aria-describedby`.
+- Added deterministic focus recovery to the first field requiring correction
+  and cleared stale field errors as the customer edits.
+- Prevented invalid password-policy submissions from reaching the Auth
+  boundary, while keeping network/provider failures in the page-level shared
+  feedback component.
+- Passed TypeScript, 285 foundation tests, and eleven focused component tests.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Semantic design and feedback foundation
+
+- Introduced one semantic token contract for brand, surface, border, status, focus, radius, shadow, and touch-target decisions while preserving temporary compatibility aliases for incremental migration.
+- Added one accessible feedback primitive with distinct information, success, warning, and error behavior; urgent errors announce assertively, while non-destructive outcomes remain polite.
+- Migrated sign-in, sign-up, password recovery, password reset, and connectivity feedback to the shared contract, including accurate success-versus-error presentation.
+- Added a forced-colors focus fallback and automated WCAG AA contrast checks for every shared status pair.
+- Verified the account and recovery routes at 390 by 844 pixels with no horizontal overflow, intact password-manager semantics, and 44-pixel primary interaction targets.
+- Passed TypeScript, lint, 284 foundation tests, and ten focused component tests. The production bundle compiled successfully; commit-bound served-manifest generation remains delegated to the exact-commit release run.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Async transaction integrity and recoverable read failures
+
+- Serialized automatic session renewal so a delayed refresh cannot overlap a
+  second rotation request against the same server-managed session cookie.
+- Made payment status, payment receipts, Deal timelines, action plans,
+  inquiries, account sessions, and MFA status accept only the newest completed
+  request for the current session and Deal.
+- Bound support-case creation and replies to the initiating session lifecycle,
+  preventing a delayed response from reopening or repopulating a workspace
+  after account replacement or navigation.
+- Replaced silent meeting, handoff, Watchlist, participant, and action-plan read
+  failures with bounded loading/error states; meeting creation remains hidden
+  until the existing meeting lookup succeeds, with an explicit retry path.
+- Revalidated buyer-code protection immediately before public agreement
+  acceptance. The UI exposes the code field and stops when protection is
+  required, while the server remains the final authorization boundary.
+- Passed lint, TypeScript, 278 foundation tests, and eight focused component
+  tests after the changes.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Trust-critical read recovery and responsive route verification
+
+- Exposed payment-receipt, agreement-history, agreement-fingerprint,
+  dispute-eligibility, seller-declaration, and safety-assessment provider
+  failures instead of allowing missing data to look like approval or a clean
+  trust state. Each recoverable read now offers a bounded retry path.
+- Preserved previously loaded payment information during a refresh failure and
+  clearly labels it as temporarily stale; an initial failure remains visible
+  while automatic polling continues.
+- Corrected the public hero heading's accessible text boundary so assistive
+  technology reads the intended sentence with natural word spacing.
+- Reverified every public route at 1440 by 900 and 390 by 844 pixels. The route
+  matrix found no horizontal overflow, duplicate IDs, missing image
+  alternatives, or browser console errors; mobile navigation, Escape behavior,
+  Home navigation, and sign-in autocomplete semantics passed.
+- Passed lint, TypeScript, 282 foundation tests, eight focused component tests,
+  the incident drill, repository secret scanning, and the production build.
+- Built 29 served assets from commit `904d9d8`; initial application JavaScript
+  is 129,038 bytes, total JavaScript is 826,026 bytes, and total CSS is 280,383
+  bytes. The total JavaScript ceiling is intentionally held at 830,000 bytes,
+  leaving less than 4 KB of governed headroom after the new failure states.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Shared async state and meeting recovery
+
+- Added one reusable loading, error, and empty-state presentation contract with
+  accurate live regions, `aria-busy`, atomic announcements, and real retry
+  actions.
+- Added responsive error actions with a 44-pixel minimum target and a
+  reduced-motion fallback for loading indicators.
+- Migrated meeting-detail loading and failure states while preserving the
+  existing request lifecycle and explicit retry version.
+- Kept the meeting form fail-closed until the latest provider read succeeds,
+  preventing an unavailable read from appearing as an empty safe state.
+- Passed TypeScript, lint, 286 foundation tests, and twelve focused component
+  tests.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Trust Passport route recovery
+
+- Replaced the public Trust Passport's ambiguous loading card with the shared
+  loading/error contract and a bounded route retry.
+- Kept provider failures distinct from valid empty reputation history.
+- Added an explicit page heading relationship, numeric rating names, hidden
+  decorative content, and a non-submitting back action.
+- Preserved the existing newest-request-wins route guard.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Dashboard data-source recovery
+
+- Stopped converting authenticated Deal and Watchlist provider failures into
+  valid empty arrays.
+- Added atomic loading, error, stale-data, and retry presentation for both
+  dashboard sources.
+- Preserved previously loaded records after a refresh failure and labels them
+  as previously loaded rather than current.
+- Kept every completion and loading transition behind the existing
+  request-generation guards, including Watchlist refreshes after mutations.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Actionable workspace and provider-boundary review stack
+
+- Prepared the review-only sequence `#164`, then `#165` through `#179`.
+  Each pull request is intentionally stacked on the preceding reviewed branch;
+  it must not be merged or rebased out of order.
+- Hardened Auth provider success boundaries for sessions, MFA factors,
+  enrollment, identifiers, password mutations, recovery, and privacy-safe
+  diagnostics before changing customer-facing actions.
+- Kept incomplete fulfillment, inspection, account, support, safety, MFA,
+  evidence-upload, shipment, and agreement controls actionable. Native form
+  validation now identifies and focuses the first incomplete control while
+  mutation guards still prevent duplicate requests.
+- Corrected meeting and shipping address focus targets so City no longer
+  resolves to optional Address Line 2. Address Line 2 remains available for
+  apartment, suite, and unit values.
+- Removed duplicate fulfillment validation surfaces and retained one compact,
+  actionable summary. This reduced the authenticated bundle without raising
+  the reviewed performance ceiling.
+- The stack head through `#179` passes the full repository gate: dependency and
+  catalog governance, formatting, lint, TypeScript, 354 foundation tests, 13
+  component tests, incident drill, secret scan, production build, and Preview
+  smoke.
+- The local stack-head build contains 832,146 bytes of JavaScript against the
+  835,000-byte ceiling. The representative Vercel build at `#176` contained
+  834,726 bytes; later local deltas remain below that reviewed ceiling and are
+  independently checked by every Preview deployment.
+- Individual Vercel failures recorded on `#172` through `#175` were bundle
+  budget results from their intermediate heads. `#176` compacts the same stack
+  below budget and is the first deployable head; those older failures must not
+  be interpreted as regressions in the later stacked heads.
+
+### Reviewed merge order
+
+1. Merge `#164` only after its current checks and review requirements pass.
+2. Merge `#165` through `#175` in numeric order without skipping a base.
+3. Merge `#176` before evaluating the resulting Preview as the deployable UX
+   head.
+4. Merge `#177`, `#178`, and `#179` in order, requiring fresh GitHub and Vercel
+   checks at each head.
+5. Run the exact-commit release gate again after the final merge. Do not promote
+   Production, restore public access, apply staged SQL, or enable live payment
+   gates as part of this documentation sequence.
+
+### Activation boundary
+
+No Production deployment, public alias, hosted configuration, live Supabase
+resource, customer record, or real-money capability changed during this pass.
+
+## Stack-head Preview release evidence
+
+- Vercel deployment `dpl_5YDd3qawTRU7ufTWPj1uzxfcaX3x` built commit
+  `165f38575dbf56fb21e87285a6fb7dda420b553a` from the review-only `#180`
+  branch and reached `READY` without promotion or alias changes.
+- The hosted build configured the required browser/server Supabase public
+  boundary, verified browser/server project and publishable-key alignment, and
+  confirmed that the optional Google Maps browser integration is configured.
+  Secret values were neither read nor recorded.
+- The hosted performance gate measured 132,766 initial application JavaScript
+  bytes, 834,703 total JavaScript bytes, and 286,188 CSS bytes. The result is
+  below the fixed 835,000-byte JavaScript ceiling; only 297 bytes of hosted
+  headroom remain, so the next customer-facing JavaScript change must include
+  a measured offset or an approved chunking improvement.
+- A fresh unauthenticated browser run loaded the stack-head Preview with the
+  expected Dealivra title and public trust copy. At a 390 by 844 viewport, the
+  document client and scroll widths were both 375 pixels, with no horizontal
+  overflow, duplicate IDs, missing image alternatives, or console warnings and
+  errors.
+- Mobile-menu navigation reached `#how-it-works`, and the exact `Home` link
+  returned to the public hero without a page error.
+- Preview runtime logs for the reviewed three-hour window contained no warning,
+  error, or fatal entries. The only grouped serverless response status was four
+  successful `204` diagnostic-intake responses.
+
+### Activation boundary
+
+The verification used an unauthenticated review-only Preview. It did not sign
+in, submit customer data, invoke real payments, modify hosted configuration,
+promote Production, restore public access, or change a live Supabase resource.
+
+## Unified release candidate verification — 2026-08-17
+
+- Squashed the reviewed local stack onto current `main` as the isolated
+  `agent/release-candidate-2026-08-17` release candidate. The candidate contains
+  two commits only: the product stack and a repository-wide line-ending policy.
+- Added a `.gitattributes` contract that keeps source and configuration text on
+  LF across Windows and CI while retaining CRLF for Windows command scripts.
+  This removed a reproducible fresh-checkout format failure without changing
+  application behavior.
+- Passed the exact-commit release gate at
+  `5896a8a554ec1465ac7d3b75dc4a1ad83ef297fa`: dependency and catalog policy,
+  browser-storage and transport security, formatting, lint, strict TypeScript,
+  384 foundation tests, 15 rendered-component tests, incident drill, secret
+  scan, production build, served-asset manifest, performance budgets, and
+  Preview smoke.
+- The exact served manifest contains 28 assets totaling 1,111,359 bytes. Initial
+  application JavaScript is 134,405 bytes, total JavaScript is 819,994 bytes,
+  and CSS is 285,468 bytes; each remains below its fixed release ceiling.
+- Re-ran the public route matrix on the latest available hosted Preview and the
+  unified candidate locally. Home, protection, fees, legal, dispute, agreement
+  verification, authentication, and 404 routes rendered without console errors.
+  The 390 by 844 mobile viewport had no horizontal page overflow.
+- Completed the unauthenticated Deal creation journey locally through item,
+  terms, optional photos, review, all three seller declarations, and the safe
+  account boundary. No account, customer record, public Deal Link, or payment
+  was created.
+- Confirmed that meeting and shipping forms expose manual Address Line 2,
+  state, and ZIP/ZIP+4 fields. Component coverage verifies Google address parts,
+  apartment/suite/unit preservation, state parsing, ZIP+4, and manual fallback.
+
+### Remaining external release gates
+
+- GitHub publication is pending because the local GitHub CLI credential is
+  invalid and the execution environment cannot currently reach GitHub through
+  its configured proxy. The candidate remains local and unmodified.
+- The isolated Supabase Staging target, CLI-generated baseline migration,
+  ownership/exposure inventory, and real-token authorization matrix remain
+  intentionally unexecuted. The repository fails closed when the required
+  staging identity and configuration are absent.
+- Production aliases, public access, live Supabase resources, real payments,
+  and privileged enforcement were not changed.

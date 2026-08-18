@@ -14,6 +14,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import type { Deal } from './domain';
+import { AsyncStatePanel } from './AsyncStatePanel';
 import { t } from './i18n';
 import type {
   DealActionPlan,
@@ -93,12 +94,13 @@ interface DealWorkspaceProps {
   demo: boolean;
   demoCompleted: boolean;
   agreementChecks: AgreementChecks;
-  agreementActionReady: boolean;
   buyer: string;
   buyerAccessCode: string;
   paymentReady: boolean;
   evidenceRevision: number;
   acceptanceProtected: boolean;
+  acceptanceProtectionState: 'idle' | 'loading' | 'ready' | 'error';
+  acceptanceProtectionError: string;
   agreementDocumentMode: boolean;
   primaryAction: DealPrimaryAction;
   nextStep: string;
@@ -110,6 +112,7 @@ interface DealWorkspaceProps {
   onSignIn: () => void;
   onRefreshSavedDeals: () => void;
   onAccept: () => void;
+  accepting: boolean;
   onResetDemo: () => void;
   onAgreementCheckChange: (
     key: keyof AgreementChecks,
@@ -124,6 +127,7 @@ interface DealWorkspaceProps {
   onRefreshActionPlan: () => void;
   onDealChanged: (deal: Deal) => void;
   onAcceptanceProtectedChanged: (enabled: boolean) => void;
+  onRetryAcceptanceProtection: () => void;
   onOpenActions: () => void;
   onOpenProtection: () => void;
   onOpenRecords: () => void;
@@ -154,12 +158,13 @@ export function DealWorkspace({
   demo,
   demoCompleted,
   agreementChecks,
-  agreementActionReady,
   buyer,
   buyerAccessCode,
   paymentReady,
   evidenceRevision,
   acceptanceProtected,
+  acceptanceProtectionState,
+  acceptanceProtectionError,
   agreementDocumentMode,
   primaryAction,
   nextStep,
@@ -171,6 +176,7 @@ export function DealWorkspace({
   onSignIn,
   onRefreshSavedDeals,
   onAccept,
+  accepting,
   onResetDemo,
   onAgreementCheckChange,
   onBuyerChange,
@@ -182,6 +188,7 @@ export function DealWorkspace({
   onRefreshActionPlan,
   onDealChanged,
   onAcceptanceProtectedChanged,
+  onRetryAcceptanceProtection,
   onOpenActions,
   onOpenProtection,
   onOpenRecords,
@@ -261,6 +268,19 @@ export function DealWorkspace({
             {deal.viewerRole !== 'seller' &&
               deal.status === 'published' &&
               !expired &&
+              acceptanceProtectionState !== 'ready' && (
+                <AsyncStatePanel
+                  state={acceptanceProtectionState === 'error' ? 'error' : 'loading'}
+                  title={acceptanceProtectionState === 'error' ? 'Acceptance protection unavailable' : 'Checking acceptance protection…'}
+                  message={acceptanceProtectionState === 'error' ? acceptanceProtectionError : 'Verifying whether this Deal requires a private buyer code.'}
+                  actionLabel="Retry"
+                  onAction={acceptanceProtectionState === 'error' ? onRetryAcceptanceProtection : undefined}
+                />
+              )}
+            {deal.viewerRole !== 'seller' &&
+              deal.status === 'published' &&
+              !expired &&
+              acceptanceProtectionState === 'ready' &&
               acceptanceProtected && (
                 <BuyerAccessCodeEntry
                   value={buyerAccessCode}
@@ -738,7 +758,13 @@ export function DealWorkspace({
                         </div>
                       </>
                     ) : (
-                      <>
+                      <form
+                        className="agreement-acceptance-form"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          onAccept();
+                        }}
+                      >
                         <p className="agreement-instruction">
                           {t('Review agreement')}
                         </p>
@@ -757,6 +783,7 @@ export function DealWorkspace({
                               <label>
                                 <input
                                   type="checkbox"
+                                  required
                                   checked={agreementChecks[key]}
                                   onChange={(event) =>
                                     onAgreementCheckChange(
@@ -773,6 +800,8 @@ export function DealWorkspace({
                         <label>
                           {t('Your full name')}
                           <input
+                            required
+                            minLength={2}
                             placeholder={t('Buyer name')}
                             value={buyer}
                             onChange={(event) =>
@@ -781,26 +810,24 @@ export function DealWorkspace({
                           />
                         </label>
                         {authMessage && (
-                          <div className="notice" role="status">
+                          <div className="notice error" role="alert">
                             {t(authMessage)}
                           </div>
                         )}
                         <button
-                          type="button"
+                          type="submit"
                           className="primary full"
-                          disabled={!agreementActionReady}
-                          onClick={onAccept}
+                          disabled={accepting}
+                          aria-busy={accepting}
                         >
-                          {t('Accept these terms')}
+                          {t(accepting ? 'Accepting…' : 'Accept these terms')}
                         </button>
                         <small>
                           {t(
-                            agreementActionReady
-                              ? 'Your name records consent to this agreement version.'
-                              : 'Complete all three confirmations and enter your full name.',
+                            'Complete all three confirmations and enter your full name to record consent.',
                           )}
                         </small>
-                      </>
+                      </form>
                     )
                   ) : expired ? (
                     <AgreementExpiredNotice />

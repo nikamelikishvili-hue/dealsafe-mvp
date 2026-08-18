@@ -6,6 +6,7 @@ import { publicInfoPaths, verifyPath } from './navigation';
 import { AppErrorBoundary, ApplicationFailurePage } from './AppErrorBoundary';
 import { reportClientFailure } from './services/clientFailureReporter.ts';
 import { startWebVitalMonitoring } from './services/webVitalReporter.ts';
+import './design-tokens.css';
 import './styles.css';
 import './home.css';
 import './global-redesign.css';
@@ -71,10 +72,14 @@ window.addEventListener('unhandledrejection', () => {
 });
 
 // Do not retain browser-readable refresh tokens created by pre-hardening builds.
-localStorage.removeItem('dealsafe_session');
-const hasStoredSession = Boolean(
-  sessionStorage.getItem('dealivra_session_v2'),
-);
+let hasStoredSession=false;
+try{
+  localStorage.removeItem('dealsafe_session');
+  sessionStorage.removeItem('dealivra_session_v2');
+  hasStoredSession=Boolean(localStorage.getItem('dealivra_session_hint_v1'));
+}catch{
+  // Storage may be disabled. Authentication still works in memory for this page.
+}
 const hashParams = new URLSearchParams(location.hash.slice(1));
 const hasRecoveryHash = hashParams.get('type') === 'recovery' && Boolean(hashParams.get('access_token'));
 const needsFullApp = hasStoredSession || location.pathname !== '/' || Boolean(location.search) || hasRecoveryHash;

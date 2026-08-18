@@ -1,0 +1,134 @@
+.confirm-action-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgb(7 17 35 / 64%);
+  backdrop-filter: blur(8px);
+}
+
+.confirm-action-dialog {
+  position: relative;
+  width: min(100%, 30rem);
+  padding: 1.5rem;
+  border: 1px solid rgb(45 96 160 / 18%);
+  border-radius: 1.25rem;
+  background: #fff;
+  box-shadow: 0 28px 80px rgb(9 27 58 / 28%);
+}
+
+.confirm-action-icon {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  margin-bottom: 1rem;
+  border-radius: 0.85rem;
+  color: #236c62;
+  background: #e9f7f3;
+}
+
+.confirm-action-dialog.danger .confirm-action-icon {
+  color: #a52929;
+  background: #fff0ef;
+}
+
+.confirm-action-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border: 0;
+  border-radius: 0.75rem;
+  color: #526179;
+  background: transparent;
+  cursor: pointer;
+}
+
+.confirm-action-close:hover,
+.confirm-action-close:focus-visible {
+  color: #12203a;
+  background: #edf2f8;
+}
+
+.confirm-action-copy h2 {
+  margin: 0;
+  color: #111d34;
+  font-size: clamp(1.25rem, 3vw, 1.55rem);
+  line-height: 1.25;
+}
+
+.confirm-action-copy p {
+  margin: 0.65rem 0 0;
+  color: #5a687d;
+  line-height: 1.6;
+}
+
+.confirm-action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.confirm-action-buttons button {
+  min-height: 3rem;
+}
+
+.confirm-action-buttons .danger-action {
+  border: 1px solid #b52d2d;
+  border-radius: 0.8rem;
+  color: #fff;
+  background: #b52d2d;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.confirm-action-buttons .danger-action:hover,
+.confirm-action-buttons .danger-action:focus-visible {
+  background: #952323;
+}
+
+@media (max-width: 520px) {
+  .confirm-action-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .confirm-action-dialog {
+    width: 100%;
+    padding: 1.35rem 1rem max(1rem, env(safe-area-inset-bottom));
+    border-radius: 1.25rem 1.25rem 0 0;
+  }
+
+  .confirm-action-buttons {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .confirm-action-backdrop {
+    animation: confirm-backdrop-in 140ms ease-out;
+  }
+
+  .confirm-action-dialog {
+    animation: confirm-dialog-in 180ms ease-out;
+  }
+}
+
+@keyframes confirm-backdrop-in {
+  from { opacity: 0; }
+}
+
+@keyframes confirm-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.985);
+  }
+}

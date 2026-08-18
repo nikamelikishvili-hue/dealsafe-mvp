@@ -8,6 +8,7 @@ import {
   prepareResponse,
   publicSession,
   readJsonBody,
+  requireJsonContentType,
   requirePost,
   requireSameOrigin,
   respondAuthRateLimited,
@@ -36,7 +37,7 @@ function signupRejection(code) {
 
 export default async function handler(request, response) {
   prepareResponse(response);
-  if (!requirePost(request, response) || !requireSameOrigin(request, response)) return;
+  if (!requirePost(request, response) || !requireSameOrigin(request, response) || !requireJsonContentType(request, response)) return;
 
   const body = readJsonBody(request);
   const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
@@ -80,6 +81,10 @@ export default async function handler(request, response) {
     }
 
     const session = publicSession(data);
+    const hasSessionMaterial = data.access_token !== undefined || data.refresh_token !== undefined;
+    if (hasSessionMaterial && (!session || !data.refresh_token)) {
+      throw new Error('Authentication provider response was rejected.');
+    }
     if (session && data.refresh_token) {
       setRefreshCookie(response, data.refresh_token);
       response.status(200).json({ session, needsEmailConfirmation: false });

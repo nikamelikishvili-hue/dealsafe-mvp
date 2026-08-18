@@ -9,15 +9,31 @@ import type { Deal } from './domain';
 import { t } from './i18n';
 import type { DealActionPlan } from './services/supabaseRest';
 
+export const DEAL_ACTION_TARGET_IDS = [
+  'deal-actions',
+  'deal-agreement',
+  'deal-evidence-vault',
+  'deal-manage',
+  'deal-overview',
+  'deal-records',
+  'deal-safety',
+  'meeting-panel',
+  'payment-status-panel',
+  'rating-panel',
+  'shipping-panel',
+] as const;
+
+export type DealActionTargetId = (typeof DEAL_ACTION_TARGET_IDS)[number];
+
 export type DealPrimaryAction = {
   label: string;
   detail: string;
-  targetId: string;
-  kind: 'scroll' | 'create' | 'accept' | 'signin';
+  targetId: DealActionTargetId;
+  kind: 'scroll' | 'create' | 'accept' | 'signin' | 'retry-shipping';
 };
 
 export type ShippingNavigationReadiness = {
-  loaded: boolean;
+  status: 'loading' | 'ready' | 'error';
   ready: boolean;
 };
 
@@ -35,7 +51,15 @@ function getShippingPrimaryAction(
         kind: 'scroll',
       };
     }
-    if (!readiness?.loaded) {
+    if (readiness?.status === 'error') {
+      return {
+        label: 'Retry shipping check',
+        detail: 'Shipping readiness is unavailable. Retry before continuing.',
+        targetId: 'shipping-panel',
+        kind: 'retry-shipping',
+      };
+    }
+    if (!readiness || readiness.status === 'loading') {
       return {
         label: 'Check package evidence',
         detail: 'Checking the required evidence before shipping.',

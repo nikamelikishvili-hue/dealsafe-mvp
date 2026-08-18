@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Clock3,
   Laptop,
@@ -15,6 +15,8 @@ import {
   type AccountSession,
   type StoredSession,
 } from './services/supabaseRest';
+import { AsyncStatePanel } from './AsyncStatePanel';
+import { useConfirmAction } from './ConfirmActionDialog';
 
 function describeDevice(userAgent:string){
   const ua=userAgent.toLowerCase();
@@ -52,34 +54,44 @@ export function AccountSessionSecurity({
   const [sessions,setSessions]=useState<AccountSession[]>([]);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState<'others'|'global'|''>('');
+  const busyRef=useRef(false);
+  const loadRequestRef=useRef(0);
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
-  const [confirmEverywhere,setConfirmEverywhere]=useState(false);
+  const [loadError,setLoadError]=useState('');
+  const {confirmAction,confirmDialog}=useConfirmAction();
 
   const loadSessions=async()=>{
+    const request=++loadRequestRef.current;
     setLoading(true);
-    setError('');
+    setLoadError('');
     try{
-      setSessions(await getMyAccountSessions(session));
+      const items=await getMyAccountSessions(session);
+      if(request!==loadRequestRef.current)return;
+      setSessions(items);
     }catch(loadError){
-      setError(loadError instanceof Error?loadError.message:'Could not load signed-in devices.');
+      if(request!==loadRequestRef.current)return;
+      setLoadError(loadError instanceof Error?loadError.message:'Could not load signed-in devices.');
     }finally{
-      setLoading(false);
+      if(request===loadRequestRef.current)setLoading(false);
     }
   };
 
   useEffect(()=>{
     let active=true;
+    const request=++loadRequestRef.current;
     setLoading(true);
-    setError('');
+    setLoadError('');
     getMyAccountSessions(session)
-      .then(items=>{if(active)setSessions(items)})
-      .catch(loadError=>{if(active)setError(loadError instanceof Error?loadError.message:'Could not load signed-in devices.')})
-      .finally(()=>{if(active)setLoading(false)});
-    return()=>{active=false};
+      .then(items=>{if(active&&request===loadRequestRef.current)setSessions(items)})
+      .catch(loadError=>{if(active&&request===loadRequestRef.current)setLoadError(loadError instanceof Error?loadError.message:'Could not load signed-in devices.')})
+      .finally(()=>{if(active&&request===loadRequestRef.current)setLoading(false)});
+    return()=>{active=false;loadRequestRef.current+=1};
   },[session.user.id,session.accessToken]);
 
   const signOutOthers=async()=>{
+    if(busyRef.current)return;
+    busyRef.current=true;
     setBusy('others');
     setMessage('');
     setError('');
@@ -90,11 +102,14 @@ export function AccountSessionSecurity({
     }catch(actionError){
       setError(actionError instanceof Error?actionError.message:'Could not sign out other devices.');
     }finally{
+      busyRef.current=false;
       setBusy('');
     }
   };
 
   const signOutAll=async()=>{
+    if(busyRef.current)return;
+    busyRef.current=true;
     setBusy('global');
     setMessage('');
     setError('');
@@ -103,9 +118,21 @@ export function AccountSessionSecurity({
       onSignedOut();
     }catch(actionError){
       setError(actionError instanceof Error?actionError.message:'Could not sign out all devices.');
+    }finally{
+      busyRef.current=false;
       setBusy('');
-      setConfirmEverywhere(false);
     }
+  };
+
+  const requestSignOutAll=async()=>{
+    const confirmed=await confirmAction({
+      title:'Sign out on every device?',
+      description:'You will need to sign in again everywhere, including on this device.',
+      confirmLabel:'Sign out everywhere',
+      cancelLabel:'Keep me signed in',
+      tone:'danger',
+    });
+    if(confirmed)await signOutAll();
   };
 
   const otherSessionCount=sessions.filter(item=>!item.current_session).length;
@@ -124,7 +151,8 @@ export function AccountSessionSecurity({
       </button>
     </header>
 
-    {loading?<div className="session-loading" role="status"><RefreshCw className="is-spinning" aria-hidden="true"/>Checking signed-in devices…</div>:
+    {loading?<AsyncStatePanel state="loading" title="Checking signed-in devices…" message="This may take a moment."/>:
+      loadError?<AsyncStatePanel state="error" title="Signed-in devices unavailable" message={loadError} actionLabel="Retry securely" onAction={loadSessions}/>:
       sessions.length>0?<ul className="session-device-list">
         {sessions.map(item=>{
           const description=describeDevice(item.user_agent);
@@ -143,26 +171,17 @@ export function AccountSessionSecurity({
     {message?<div className="session-feedback success" role="status">{message}</div>:null}
     {error?<div className="session-feedback error" role="alert">{error}</div>:null}
 
-    <div className="session-security-actions">
+    {!loadError&&<div className="session-security-actions">
       <button type="button" className="session-signout-others" onClick={signOutOthers} disabled={loading||Boolean(busy)||otherSessionCount===0}>
         <LogOut aria-hidden="true"/>
         <span><strong>{busy==='others'?'Signing out…':'Sign out other devices'}</strong><small>Keep this device signed in</small></span>
       </button>
-      <button type="button" className="session-signout-all" onClick={()=>setConfirmEverywhere(true)} disabled={Boolean(busy)}>
+      <button type="button" className="session-signout-all" onClick={requestSignOutAll} disabled={Boolean(busy)}>
         <LogOut aria-hidden="true"/>
         <span><strong>Sign out everywhere</strong><small>Includes this device</small></span>
       </button>
-    </div>
+    </div>}
 
-    {confirmEverywhere?<div className="session-confirmation" role="alert" aria-labelledby="session-confirmation-title">
-      <div>
-        <strong id="session-confirmation-title">Sign out on every device?</strong>
-        <span>You will need to sign in again everywhere, including on this device.</span>
-      </div>
-      <div>
-        <button type="button" onClick={()=>setConfirmEverywhere(false)} disabled={Boolean(busy)}>Cancel</button>
-        <button type="button" className="confirm-danger" onClick={signOutAll} disabled={Boolean(busy)}>{busy==='global'?'Signing out…':'Yes, sign out everywhere'}</button>
-      </div>
-    </div>:null}
+    {confirmDialog}
   </section>;
 }

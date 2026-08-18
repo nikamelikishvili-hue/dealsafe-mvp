@@ -1,10 +1,12 @@
 import {
+  authProviderDiagnostic,
   authProviderPayload,
   currentUserAppRole,
   logAuthFailure,
   prepareResponse,
   readBearerToken,
   readJsonBody,
+  requireJsonContentType,
   requirePost,
   requireSameOrigin,
   supabaseRestRpcRequest,
@@ -12,6 +14,7 @@ import {
 import {
   hasRecentTotpAal2,
   parseRecoveryRequest,
+  parseRecoveryResult,
   RecoveryRequestError,
 } from '../../server/mfaRecoveryPolicy.mjs';
 
@@ -19,12 +22,7 @@ const privilegedRoles = new Set(['support', 'compliance', 'admin']);
 const memberActions = new Set(['my_hold', 'assert_change_allowed']);
 
 function recoveryFailure(response, providerBody, providerStatus) {
-  const diagnostic = [
-    providerBody?.code,
-    providerBody?.message,
-    providerBody?.details,
-    providerBody?.hint,
-  ].filter(value => typeof value === 'string').join(' ');
+  const diagnostic = authProviderDiagnostic(providerBody);
 
   if (/SECOND_REVIEWER_REQUIRED|reviewer must be different/i.test(diagnostic)) {
     response.status(409).json({
@@ -65,6 +63,7 @@ export default async function handler(request, response) {
   if (
     !requirePost(request, response)
     || !requireSameOrigin(request, response, 'Cross-origin recovery requests are not allowed.')
+    || !requireJsonContentType(request, response)
   ) {
     return;
   }
@@ -112,7 +111,7 @@ export default async function handler(request, response) {
       recoveryFailure(response, data, upstream.status);
       return;
     }
-    response.status(200).json({ result: data ?? null });
+    response.status(200).json({ result: parseRecoveryResult(recoveryRequest.action, data ?? null) });
   } catch (error) {
     logAuthFailure(`mfa-recovery:${recoveryRequest.action}`, error);
     response.status(503).json({

@@ -83,6 +83,50 @@ export type UsAddressParts = {
   isComplete: boolean;
 };
 
+export type StoredUsAddressParts = Pick<
+  UsAddressParts,
+  'streetAddress' | 'addressLine2' | 'city' | 'state' | 'postalCode'
+>;
+
+export function serializeUsAddress(parts: StoredUsAddressParts) {
+  return [
+    parts.streetAddress.trim(),
+    parts.addressLine2.trim(),
+    `${parts.city.trim()}, ${normalizeUsState(parts.state)} ${parts.postalCode.trim()}`.trim(),
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+export function parseStoredUsAddress(value: string): StoredUsAddressParts {
+  const lines = value
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+  const locationLine = lines.at(-1) || '';
+  const location = locationLine.match(
+    /^(.+?),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/i,
+  );
+
+  if (location) {
+    return {
+      streetAddress: lines[0] || '',
+      addressLine2: lines.slice(1, -1).join(', '),
+      city: location[1].trim(),
+      state: normalizeUsState(location[2]),
+      postalCode: location[3],
+    };
+  }
+
+  return {
+    streetAddress: lines[0] || '',
+    addressLine2: lines.length > 2 ? lines.slice(1, -1).join(', ') : '',
+    city: lines.length > 1 ? lines.at(-1) || '' : '',
+    state: '',
+    postalCode: '',
+  };
+}
+
 const componentValue = (components: GoogleAddressComponent[], preferred: 'long' | 'short', ...types: string[]) => {
   const match = components.find(entry => types.some(type => entry.types?.includes(type)));
   if (!match) return '';

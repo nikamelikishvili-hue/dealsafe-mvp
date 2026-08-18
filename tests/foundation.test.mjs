@@ -1,14 +1,29 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
+import ts from 'typescript';
+import { inlineEnglishTranslationCalls } from '../server/launchLocaleTransform.mjs';
 import clientFailureHandler from '../api/security/client-failure.mjs';
 import cspReportHandler from '../api/security/csp-report.mjs';
 import runtimeRejectionHandler from '../api/security/runtime-rejection.mjs';
 import webVitalHandler from '../api/security/web-vital.mjs';
 import healthHandler from '../api/health.mjs';
+import dealQrHandler from '../api/deal-qr.mjs';
+import loginHandler from '../api/auth/login.mjs';
+import logoutHandler from '../api/auth/logout.mjs';
+import mfaHandler from '../api/auth/mfa.mjs';
+import passwordHandler from '../api/auth/password.mjs';
+import recoverHandler from '../api/auth/recover.mjs';
+import refreshHandler from '../api/auth/refresh.mjs';
+import signupHandler from '../api/auth/signup.mjs';
+import {
+  readBoundedJson as readBoundedReportingJson,
+  validateReportingRequest,
+} from '../server/reportingRequestBoundary.mjs';
 import {
   buildOperationalSnapshot,
   classifyOperationalRecord,
@@ -39,6 +54,9 @@ import {
   classifyLegacyIdentifierLine,
   evaluateLegacyIdentifierInventory,
 } from '../server/legacyIdentifierPolicy.mjs';
+import { evaluateDatabaseBaseline } from '../scripts/verify-database-baseline.mjs';
+import { validateDatabaseOwnershipInventory } from '../scripts/validate-database-ownership-inventory.mjs';
+import { apiRoutePolicy, evaluateApiMutationOriginPolicy } from '../server/apiMutationOriginPolicy.mjs';
 
 const root = new URL('../', import.meta.url);
 const rootPath = fileURLToPath(root);
@@ -49,6 +67,7 @@ const authRequest = (body = {}, headers = {}) => ({
   headers: {
     origin: 'https://dealivra.test',
     host: 'dealivra.test',
+    'content-type': 'application/json',
     ...headers,
   },
   body,
@@ -73,6 +92,10 @@ const createResponse = () => ({
     return this;
   },
   json(value) {
+    this.payload = value;
+    return this;
+  },
+  send(value) {
     this.payload = value;
     return this;
   },
@@ -173,6 +196,9 @@ test('Vercel configuration includes the minimum browser security headers', () =>
     'referrer-policy',
     'permissions-policy',
     'reporting-endpoints',
+    'cross-origin-opener-policy',
+    'cross-origin-resource-policy',
+    'origin-agent-cluster',
     'x-permitted-cross-domain-policies',
   ]) {
     assert.ok(values.has(required), `Missing ${required}`);
@@ -195,12 +221,26 @@ test('Vercel configuration includes the minimum browser security headers', () =>
   const scriptPolicy = csp.match(/script-src[^;]*/)?.[0] ?? '';
   assert.equal(scriptPolicy.includes("'unsafe-inline'"), false);
   assert.equal(values.get('reporting-endpoints'), 'csp-endpoint="/api/security/csp-report"');
+  assert.equal(values.get('cross-origin-opener-policy'), 'same-origin-allow-popups');
+  assert.equal(values.get('cross-origin-resource-policy'), 'same-origin');
+  assert.equal(values.get('origin-agent-cluster'), '?1');
   assert.equal(values.get('x-permitted-cross-domain-policies'), 'none');
 
   const html = readText('index.html');
-  const inlineScripts = [...html.matchAll(/<script(?:\s+[^>]*)?>([\s\S]*?)<\/script>/g)]
-    .map(match => match[1])
-    .filter(Boolean);
+  const inlineScripts = [];
+  const normalizedHtml = html.toLowerCase();
+  let scriptCursor = 0;
+  while (scriptCursor < html.length) {
+    const openingTagStart = normalizedHtml.indexOf('<script', scriptCursor);
+    if (openingTagStart < 0) break;
+    const openingTagEnd = normalizedHtml.indexOf('>', openingTagStart + 7);
+    assert.notEqual(openingTagEnd, -1, 'Every script opening tag must be complete');
+    const closingTagStart = normalizedHtml.indexOf('</script>', openingTagEnd + 1);
+    assert.notEqual(closingTagStart, -1, 'Every script opening tag must have a closing tag');
+    const source = html.slice(openingTagEnd + 1, closingTagStart);
+    if (source) inlineScripts.push(source);
+    scriptCursor = closingTagStart + '</script>'.length;
+  }
   for (const source of inlineScripts) {
     const hash = createHash('sha256').update(source).digest('base64');
     assert.ok(scriptPolicy.includes(`'sha256-${hash}'`), 'Every inline script must have a CSP hash');
@@ -242,6 +282,73 @@ test('CSP report endpoint fails safely for invalid request shapes', async () => 
   );
   assert.equal(oversizedResponse.statusCode, 413);
   assert.equal(oversizedResponse.headers.get('cache-control'), 'no-store, max-age=0');
+});
+
+test('CSP report streams stop at the byte boundary before full allocation', async () => {
+  let declaredPulls = 0;
+  const declaredResponse = createResponse();
+  await cspReportHandler({
+    method: 'POST',
+    headers: {
+      'content-type': 'application/csp-report',
+      'content-length': '16385',
+    },
+    async *[Symbol.asyncIterator]() {
+      declaredPulls += 1;
+      yield '{}';
+    },
+  }, declaredResponse);
+  assert.equal(declaredResponse.statusCode, 413);
+  assert.equal(declaredPulls, 0);
+
+  let streamedPulls = 0;
+  const streamedResponse = createResponse();
+  await cspReportHandler({
+    method: 'POST',
+    headers: { 'content-type': 'application/reports+json' },
+    async *[Symbol.asyncIterator]() {
+      streamedPulls += 1;
+      yield Buffer.alloc(16_384, 0x20);
+      streamedPulls += 1;
+      yield 'x';
+      streamedPulls += 1;
+      yield 'must-not-be-read';
+    },
+  }, streamedResponse);
+  assert.equal(streamedResponse.statusCode, 413);
+  assert.equal(streamedPulls, 2);
+
+  const exactPayload = {
+    'csp-report': {
+      'effective-directive': 'script-src',
+      padding: '',
+    },
+  };
+  const emptyLength = Buffer.byteLength(JSON.stringify(exactPayload));
+  exactPayload['csp-report'].padding = 'a'.repeat(16_384 - emptyLength);
+  const exactBody = JSON.stringify(exactPayload);
+  assert.equal(Buffer.byteLength(exactBody), 16_384);
+
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = value => warnings.push(String(value));
+  try {
+    const exactResponse = createResponse();
+    await cspReportHandler({
+      method: 'POST',
+      headers: { 'content-type': 'application/csp-report' },
+      async *[Symbol.asyncIterator]() {
+        yield Buffer.from(exactBody.slice(0, 8_192));
+        yield Buffer.from(exactBody.slice(8_192));
+      },
+    }, exactResponse);
+    assert.equal(exactResponse.statusCode, 204);
+    assert.equal(exactResponse.ended, true);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.length, 1);
+  assert.doesNotMatch(warnings[0], /padding|a{20}/);
 });
 
 test('CSP report endpoint records only bounded privacy-safe diagnostics', async () => {
@@ -293,14 +400,37 @@ test('CSP report endpoint records only bounded privacy-safe diagnostics', async 
 
   const legacyLog = JSON.parse(warnings[0]);
   assert.equal(legacyLog.schema, 'dealivra.csp-violation.v1');
-  assert.equal(legacyLog.document_url, 'https://dealivra.com/deals/:id');
-  assert.equal(legacyLog.blocked_url, 'https://evil.example/payload.js');
-  assert.equal(legacyLog.source_url, 'https://dealivra.com/assets/app.js');
+  assert.equal(legacyLog.document_url, 'https://dealivra.com/:page');
+  assert.equal(legacyLog.blocked_url, 'https://evil.example/:page');
+  assert.equal(legacyLog.source_url, 'https://dealivra.com/assets/:asset');
   assert.equal(legacyLog.effective_directive, 'script-src-elem');
 
   const modernLog = JSON.parse(warnings[1]);
-  assert.equal(modernLog.document_url, 'https://dealivra.com/account/:id');
+  assert.equal(modernLog.document_url, 'https://dealivra.com/:page');
   assert.equal(modernLog.blocked_url, 'inline');
+
+  const shortSecretWarnings = [];
+  console.warn = value => shortSecretWarnings.push(String(value));
+  try {
+    const response = createResponse();
+    await cspReportHandler(cspRequest({
+      'csp-report': {
+        'document-uri': 'https://dealivra.com/recover/abc123?token=private',
+        'blocked-uri': 'https://cdn.example/customer/nika/photo.png',
+        'source-file': 'https://dealivra.com/api/private-case-id',
+        'effective-directive': 'script-src',
+      },
+    }), response);
+    assert.equal(response.statusCode, 204);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(shortSecretWarnings.length, 1);
+  const shortSecretLog = JSON.parse(shortSecretWarnings[0]);
+  assert.equal(shortSecretLog.document_url, 'https://dealivra.com/:page');
+  assert.equal(shortSecretLog.blocked_url, 'https://cdn.example/:page');
+  assert.equal(shortSecretLog.source_url, 'https://dealivra.com/api/:endpoint');
+  assert.doesNotMatch(shortSecretWarnings[0], /recover|abc123|customer|nika|private-case-id|photo/);
 });
 
 test('private analytics removes query strings before collection', () => {
@@ -369,8 +499,15 @@ test('browser auth keeps the long-lived refresh secret in an HttpOnly cookie', (
   const loginFunction = readText('api/auth/login.mjs');
   const refreshFunction = readText('api/auth/refresh.mjs');
 
-  assert.match(authService, /sessionStorage\.setItem\(sessionStorageKey/);
-  assert.doesNotMatch(authService, /localStorage\.setItem\(/);
+  assert.doesNotMatch(authService, /(?:localStorage|sessionStorage)\.setItem\([^\n]*(?:accessToken|access_token)/);
+  assert.match(authService, /let activeSession: StoredSession \| null = null/);
+  assert.match(authService, /localStorage\.setItem\(sessionHintStorageKey/);
+  assert.match(authService, /writeSessionContinuity\(session\)/);
+  assert.match(authService, /export async function restoreSession\(\)/);
+  assert.match(authService, /now-continuity\.createdAt>sessionAbsoluteTimeoutMs/);
+  assert.match(authService, /sessionStorage\.removeItem\(legacyBrowserSessionStorageKey\)/);
+  assert.doesNotMatch(authService, /JSON\.stringify\(session\)[\s\S]{0,120}(?:localStorage|sessionStorage)\.setItem/);
+  assert.match(authService, /fetchWithDeadline\('\/api\/auth\/refresh'/);
   assert.match(authService, /fetchWithDeadline\('\/api\/auth\/login'/);
   assert.match(authService, /fetchWithDeadline\('\/api\/auth\/refresh'/);
   assert.match(serverAuth, /__Host-dealivra-refresh/);
@@ -391,6 +528,609 @@ test('auth endpoints enforce same-origin POST requests and do not cache response
   assert.match(shared, /no-store, max-age=0/);
   assert.ok(spaRewrite);
   assert.match(spaRewrite.source, /api\//);
+});
+
+test('every authentication handler applies the runtime no-store response contract', async () => {
+  for (const handler of [
+    loginHandler,
+    logoutHandler,
+    mfaHandler,
+    passwordHandler,
+    recoverHandler,
+    refreshHandler,
+    signupHandler,
+  ]) {
+    const response = createResponse();
+    await handler({ method: 'GET', headers: {} }, response);
+    assert.equal(response.statusCode, 405);
+    assert.equal(response.headers.get('allow'), 'POST');
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    assert.equal(response.headers.get('pragma'), 'no-cache');
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  }
+});
+
+test('every authentication handler rejects cross-origin POSTs before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not be called for a rejected origin.');
+  };
+
+  try {
+    for (const handler of [
+      loginHandler,
+      logoutHandler,
+      mfaHandler,
+      passwordHandler,
+      recoverHandler,
+      refreshHandler,
+      signupHandler,
+    ]) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://attacker.test',
+          host: 'dealivra.test',
+          'content-type': 'application/json',
+        },
+        body: {},
+      }, response);
+      assert.equal(response.statusCode, 403);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('authentication handlers reject missing or ambiguous origin metadata before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not be called for unverifiable origin metadata.');
+  };
+  const unsafeHeaders = [
+    { host: 'dealivra.test', 'content-type': 'application/json' },
+    { origin: 'https://dealivra.test', 'content-type': 'application/json' },
+    {
+      origin: 'https://dealivra.test',
+      host: 'dealivra.test',
+      'x-forwarded-host': 'dealivra.test, attacker.test',
+      'content-type': 'application/json',
+    },
+    { origin: 'null', host: 'dealivra.test', 'content-type': 'application/json' },
+    { origin: 'not a URL', host: 'dealivra.test', 'content-type': 'application/json' },
+    {
+      origin: ['https://dealivra.test', 'https://attacker.test'],
+      host: 'dealivra.test',
+      'content-type': 'application/json',
+    },
+  ];
+
+  try {
+    for (const handler of [
+      loginHandler,
+      logoutHandler,
+      mfaHandler,
+      passwordHandler,
+      recoverHandler,
+      refreshHandler,
+      signupHandler,
+    ]) {
+      for (const headers of unsafeHeaders) {
+        const response = createResponse();
+        await handler({ method: 'POST', headers, body: {} }, response);
+        assert.equal(response.statusCode, 403);
+        assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('JSON authentication mutations reject unsupported media before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not be called for an unsupported media type.');
+  };
+
+  try {
+    for (const handler of [
+      loginHandler,
+      logoutHandler,
+      mfaHandler,
+      passwordHandler,
+      recoverHandler,
+      signupHandler,
+    ]) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          'content-type': 'text/plain',
+        },
+        body: '{}',
+      }, response);
+      assert.equal(response.statusCode, 415);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('JSON authentication mutations reject ambiguous Content-Type arrays before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive an ambiguous media type.');
+  };
+
+  try {
+    for (const handler of [
+      loginHandler,
+      logoutHandler,
+      mfaHandler,
+      passwordHandler,
+      recoverHandler,
+      signupHandler,
+    ]) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          'content-type': ['application/json', 'text/plain'],
+        },
+        body: {},
+      }, response);
+      assert.equal(response.statusCode, 415);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('JSON authentication mutations reject oversized bodies before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not be called for an oversized request body.');
+  };
+
+  try {
+    for (const [route, handler] of [
+      ['login', loginHandler],
+      ['logout', logoutHandler],
+      ['mfa', mfaHandler],
+      ['password', passwordHandler],
+      ['recover', recoverHandler],
+      ['signup', signupHandler],
+    ]) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          'content-type': 'application/json',
+          'content-length': '16385',
+        },
+        body: JSON.stringify({ padding: 'x'.repeat(16_385) }),
+      }, response);
+      assert.ok(
+        response.statusCode >= 400 && response.statusCode < 500,
+        `${route} must reject an oversized request before provider access`,
+      );
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('JSON authentication body limits cannot be bypassed with a false Content-Length', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not be called for a falsely declared oversized body.');
+  };
+  const oversizedBodies = [
+    JSON.stringify({ padding: 'x'.repeat(16_385) }),
+    { padding: 'x'.repeat(16_385) },
+  ];
+
+  try {
+    for (const [route, handler] of [
+      ['login', loginHandler],
+      ['logout', logoutHandler],
+      ['mfa', mfaHandler],
+      ['password', passwordHandler],
+      ['recover', recoverHandler],
+      ['signup', signupHandler],
+    ]) {
+      for (const body of oversizedBodies) {
+        const response = createResponse();
+        await handler({
+          method: 'POST',
+          headers: {
+            origin: 'https://dealivra.test',
+            host: 'dealivra.test',
+            'content-type': 'application/json',
+            'content-length': '1',
+          },
+          body,
+        }, response);
+        assert.ok(
+          response.statusCode >= 400 && response.statusCode < 500,
+          `${route} must measure the actual request body instead of trusting Content-Length`,
+        );
+        assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('JSON authentication mutations reject malformed bodies before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not be called for malformed JSON.');
+  };
+
+  try {
+    for (const [route, handler] of [
+      ['login', loginHandler],
+      ['logout', logoutHandler],
+      ['mfa', mfaHandler],
+      ['password', passwordHandler],
+      ['recover', recoverHandler],
+      ['signup', signupHandler],
+    ]) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          'content-type': 'application/json',
+        },
+        body: '{"incomplete":',
+      }, response);
+      assert.ok(
+        response.statusCode >= 400 && response.statusCode < 500,
+        `${route} must reject malformed JSON before provider access`,
+      );
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('authenticated security mutations reject oversized bearer credentials before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive an oversized bearer credential.');
+  };
+  const authorization = `Bearer ${'x'.repeat(8_193)}`;
+  const requests = [
+    [logoutHandler, { scope: 'global' }],
+    [mfaHandler, { action: 'list' }],
+    [passwordHandler, { action: 'recovery', newPassword: 'Valid-password-123!' }],
+  ];
+
+  try {
+    for (const [handler, body] of requests) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          'content-type': 'application/json',
+          authorization,
+        },
+        body,
+      }, response);
+      assert.ok(response.statusCode >= 400 && response.statusCode < 500);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('authenticated security mutations reject ambiguous authorization arrays before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive an ambiguous authorization header.');
+  };
+
+  try {
+    for (const [handler, body] of [
+      [logoutHandler, { scope: 'global' }],
+      [mfaHandler, { action: 'list' }],
+      [passwordHandler, { action: 'recovery', newPassword: 'Valid-password-123!' }],
+    ]) {
+      const response = createResponse();
+      await handler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          'content-type': 'application/json',
+          authorization: ['Bearer first', 'Bearer second'],
+        },
+        body,
+      }, response);
+      assert.ok(response.statusCode >= 400 && response.statusCode < 500);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('authenticated security mutations reject control characters inside bearer credentials', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive a bearer credential containing control characters.');
+  };
+
+  try {
+    for (const authorization of ['Bearer token\r\ninjected', 'Bearer token\tfragment', 'Bearer token fragment']) {
+      for (const [handler, body] of [
+        [logoutHandler, { scope: 'global' }],
+        [mfaHandler, { action: 'list' }],
+        [passwordHandler, { action: 'recovery', newPassword: 'Valid-password-123!' }],
+      ]) {
+        const response = createResponse();
+        await handler({
+          method: 'POST',
+          headers: {
+            origin: 'https://dealivra.test',
+            host: 'dealivra.test',
+            'content-type': 'application/json',
+            authorization,
+          },
+          body,
+        }, response);
+        assert.ok(response.statusCode >= 400 && response.statusCode < 500);
+        assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('authenticated security mutations reject padded or non-ASCII bearer credentials', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive a non-canonical bearer credential.');
+  };
+
+  try {
+    for (const authorization of [
+      `Bearer ${' '.repeat(8_200)}token`,
+      `Bearer token${' '.repeat(8_200)}`,
+      'Bearer töken',
+    ]) {
+      for (const [handler, body] of [
+        [logoutHandler, { scope: 'global' }],
+        [mfaHandler, { action: 'list' }],
+        [passwordHandler, { action: 'recovery', newPassword: 'Valid-password-123!' }],
+      ]) {
+        const response = createResponse();
+        await handler({
+          method: 'POST',
+          headers: {
+            origin: 'https://dealivra.test',
+            host: 'dealivra.test',
+            'content-type': 'application/json',
+            authorization,
+          },
+          body,
+        }, response);
+        assert.ok(response.statusCode >= 400 && response.statusCode < 500);
+        assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('session refresh rejects oversized cookie credentials before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive an oversized refresh credential.');
+  };
+
+  try {
+    for (const token of ['x'.repeat(8_193), `%41`.repeat(8_193)]) {
+      const response = createResponse();
+      await refreshHandler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          cookie: `__Host-dealivra-refresh=${token}`,
+        },
+      }, response);
+      assert.equal(response.statusCode, 401);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+      assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+      assert.match(response.headers.get('set-cookie'), /HttpOnly; Secure; SameSite=Strict/);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('session refresh rejects non-ASCII or control characters before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive a malformed refresh credential.');
+  };
+
+  try {
+    for (const token of ['token%0D%0Ainjected', 'token%09fragment', 't%C3%B6ken']) {
+      const response = createResponse();
+      await refreshHandler({
+        method: 'POST',
+        headers: {
+          origin: 'https://dealivra.test',
+          host: 'dealivra.test',
+          cookie: `__Host-dealivra-refresh=${token}`,
+        },
+      }, response);
+      assert.equal(response.statusCode, 401);
+      assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('session refresh rejects ambiguous duplicate cookie credentials before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive ambiguous refresh credentials.');
+  };
+
+  try {
+    const response = createResponse();
+    await refreshHandler({
+      method: 'POST',
+      headers: {
+        origin: 'https://dealivra.test',
+        host: 'dealivra.test',
+        cookie: '__Host-dealivra-refresh=first; theme=light; __Host-dealivra-refresh=second',
+      },
+    }, response);
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('session refresh rejects oversized cookie headers before parsing or provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive credentials from an oversized Cookie header.');
+  };
+
+  try {
+    const response = createResponse();
+    await refreshHandler({
+      method: 'POST',
+      headers: {
+        origin: 'https://dealivra.test',
+        host: 'dealivra.test',
+        cookie: `noise=${'x'.repeat(16_384)}; __Host-dealivra-refresh=otherwise-valid`,
+      },
+    }, response);
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
+});
+
+test('session refresh rejects ambiguous Cookie header arrays before provider access', async () => {
+  const originalFetch = globalThis.fetch;
+  let providerCalls = 0;
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    throw new Error('Auth provider must not receive a credential from ambiguous Cookie headers.');
+  };
+
+  try {
+    const response = createResponse();
+    await refreshHandler({
+      method: 'POST',
+      headers: {
+        origin: 'https://dealivra.test',
+        host: 'dealivra.test',
+        cookie: [
+          '__Host-dealivra-refresh=first',
+          '__Host-dealivra-refresh=second',
+        ],
+      },
+    }, response);
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(providerCalls, 0);
 });
 
 test('production database hardening is deny-by-default with narrow RPC allowlists', () => {
@@ -493,6 +1233,76 @@ test('auth handlers never return a refresh token to browser JavaScript', async (
   assert.match(response.headers.get('set-cookie'), /Path=\/;/);
   assert.equal(JSON.stringify(response.payload).includes('server-only-refresh-secret'), false);
   assert.equal(response.payload.access_token.startsWith('header.'), true);
+});
+
+test('password login never writes a malformed provider credential or exceeds the cookie budget', async () => {
+  for (const refreshToken of ['x'.repeat(3_801), 'é', 'token\r\ninjected']) {
+    const response = createResponse();
+    await withAuthProvider(async () => new Response(JSON.stringify(
+      authProviderSession(refreshToken),
+    ), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }), () => loginHandler(authRequest({
+      email: 'user@example.com',
+      password: 'ExamplePass123!',
+    }), response));
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.headers.has('set-cookie'), false);
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+  }
+});
+
+test('password login accepts the reviewed refresh cookie boundary without exceeding 4096 bytes', async () => {
+  const response = createResponse();
+  await withAuthProvider(async () => new Response(JSON.stringify(
+    authProviderSession('x'.repeat(3_800)),
+  ), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  }), () => loginHandler(authRequest({
+    email: 'user@example.com',
+    password: 'ExamplePass123!',
+  }), response));
+
+  const cookie = response.headers.get('set-cookie');
+  assert.equal(response.statusCode, 200);
+  assert.ok(cookie);
+  assert.ok(Buffer.byteLength(cookie, 'utf8') <= 4096);
+});
+
+test('password login rejects malformed public session fields from the provider', async () => {
+  const malformedSessions = [
+    { access_token: `token${' '.repeat(2)}fragment` },
+    { access_token: 'töken' },
+    { expires_in: 0 },
+    { expires_in: 604_801 },
+    { user: { id: 'not-a-uuid' } },
+    { user: { email: 'not-an-email' } },
+    { user: { user_metadata: { display_name: 'x'.repeat(101) } } },
+  ];
+
+  for (const override of malformedSessions) {
+    const base = authProviderSession('valid-refresh-token');
+    const response = createResponse();
+    const session = {
+      ...base,
+      ...override,
+      user: override.user ? { ...base.user, ...override.user } : base.user,
+    };
+    await withAuthProvider(async () => new Response(JSON.stringify(session), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }), () => loginHandler(authRequest({
+      email: 'user@example.com',
+      password: 'ExamplePass123!',
+    }), response));
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.headers.has('set-cookie'), false);
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+  }
 });
 
 test('password login with a verified TOTP factor stays pending until AAL2 verification', async () => {
@@ -613,6 +1423,76 @@ test('MFA challenge verification promotes the session and keeps its refresh toke
   assert.equal(JSON.stringify(response.payload).includes('verified-refresh-secret'), false);
 });
 
+test('MFA challenge verification treats a malformed successful provider session as unavailable', async () => {
+  const { default: mfa } = await import('../api/auth/mfa.mjs');
+  const response = createResponse();
+  const factorId = '11111111-1111-4111-8111-111111111111';
+
+  await withAuthProvider(async (url) => {
+    if (String(url).endsWith('/auth/v1/user')) {
+      return new Response(JSON.stringify({
+        id: '00000000-0000-0000-0000-000000000001',
+        factors: [{ id: factorId, factor_type: 'totp', status: 'verified' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (String(url).endsWith(`/factors/${factorId}/challenge`)) {
+      return new Response(JSON.stringify({ id: '22222222-2222-4222-8222-222222222222' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({
+      ...authProviderSession('must-not-be-issued', { aal: 'aal2' }),
+      access_token: 'malformed token',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }, () => mfa(authRequest({
+    action: 'challenge_and_verify',
+    purpose: 'login',
+    factorId,
+    code: '123456',
+  }, { authorization: 'Bearer pending-aal1-token' }), response));
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.payload.error, 'Authenticator security is temporarily unavailable.');
+  assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(JSON.stringify(response.payload).includes('must-not-be-issued'), false);
+});
+
+test('MFA rejects malformed successful provider identifiers before request chaining', async () => {
+  const { default: mfa } = await import('../api/auth/mfa.mjs');
+  const factorId = '11111111-1111-4111-8111-111111111111';
+
+  for (const malformedStage of ['account', 'challenge']) {
+    const response = createResponse();
+    const requested = [];
+    await withAuthProvider(async (url) => {
+      requested.push(String(url));
+      if (String(url).endsWith('/auth/v1/user')) {
+        return new Response(JSON.stringify({
+          id: malformedStage === 'account'
+            ? 'malformed-account-id'
+            : '00000000-0000-4000-8000-000000000001',
+          factors: [{ id: factorId, factor_type: 'totp', status: 'verified' }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ id: 'malformed-challenge-id' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }, () => mfa(authRequest({
+      action: 'challenge_and_verify',
+      purpose: 'login',
+      factorId,
+      code: '123456',
+    }, { authorization: 'Bearer pending-aal1-token' }), response));
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.payload.error, 'Authenticator security is temporarily unavailable.');
+    assert.equal(requested.length, malformedStage === 'account' ? 1 : 2);
+    assert.equal(requested.some(url => url.endsWith(`/factors/${factorId}/verify`)), false);
+  }
+});
+
 test('MFA endpoint validates action inputs before contacting the provider', async () => {
   const { default: mfa } = await import('../api/auth/mfa.mjs');
   const response = createResponse();
@@ -632,6 +1512,111 @@ test('MFA endpoint validates action inputs before contacting the provider', asyn
   assert.equal(response.statusCode, 400);
   assert.equal(providerCalled, false);
   assert.equal(response.payload.error, 'The authenticator request is invalid.');
+});
+
+test('MFA enrollment rejects unsafe successful provider payloads at the server boundary', async () => {
+  const { default: mfa } = await import('../api/auth/mfa.mjs');
+  const safeQrCode = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>';
+  const unsafePayloads = [
+    {
+      id: 'not-a-provider-uuid',
+      type: 'totp',
+      totp: { qr_code: safeQrCode, secret: 'JBSWY3DPEHPK3PXP' },
+    },
+    {
+      id: '11111111-1111-4111-8111-111111111111',
+      type: 'totp',
+      totp: {
+        qr_code: '<svg xmlns="http://www.w3.org/2000/svg"><script>steal()</script></svg>',
+        secret: 'JBSWY3DPEHPK3PXP',
+      },
+    },
+    {
+      id: '11111111-1111-4111-8111-111111111111',
+      type: 'totp',
+      totp: { qr_code: safeQrCode, secret: 'provider-secret-with-invalid-symbol!' },
+    },
+    {
+      id: '11111111-1111-4111-8111-111111111111',
+      type: 'totp',
+      totp: {
+        qr_code: safeQrCode,
+        secret: 'JBSWY3DPEHPK3PXP',
+        uri: 'https://attacker.invalid/totp',
+      },
+    },
+  ];
+
+  for (const providerPayload of unsafePayloads) {
+    const response = createResponse();
+    await withAuthProvider(async () => new Response(JSON.stringify(providerPayload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }), () => mfa(authRequest({
+      action: 'enroll',
+      friendlyName: 'Primary authenticator',
+    }, { authorization: 'Bearer current-session-token' }), response));
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.payload.error, 'Authenticator security is temporarily unavailable.');
+    assert.equal(JSON.stringify(response.payload).includes('JBSWY3DPEHPK3PXP'), false);
+  }
+});
+
+test('MFA factor metadata is bounded before it reaches a browser response', async () => {
+  const { safeMfaFactors } = await import('../server/authShared.mjs');
+  const validId = '11111111-1111-4111-8111-111111111111';
+  const validTimestamp = '2026-08-15T12:00:00.000Z';
+  const factors = safeMfaFactors({
+    factors: [
+      {
+        id: validId,
+        factor_type: 'totp',
+        status: 'verified',
+        friendly_name: '  Primary authenticator  ',
+        created_at: validTimestamp,
+        updated_at: 'not-a-timestamp',
+      },
+      {
+        id: 'not-a-provider-uuid',
+        factor_type: 'totp',
+        status: 'verified',
+        friendly_name: 'Must not reach the browser',
+      },
+      {
+        id: '22222222-2222-4222-8222-222222222222',
+        factor_type: 'totp',
+        status: 'verified',
+        friendly_name: 'Injected\nlabel',
+        created_at: 'x'.repeat(1_000),
+      },
+    ],
+  });
+
+  assert.deepEqual(factors, [
+    {
+      id: validId,
+      factorType: 'totp',
+      friendlyName: 'Primary authenticator',
+      createdAt: validTimestamp,
+      updatedAt: null,
+    },
+    {
+      id: '22222222-2222-4222-8222-222222222222',
+      factorType: 'totp',
+      friendlyName: 'Authenticator app',
+      createdAt: null,
+      updatedAt: null,
+    },
+  ]);
+
+  assert.equal(safeMfaFactors({
+    factors: Array.from({ length: 32 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+      factor_type: 'totp',
+      status: 'verified',
+    })),
+  }).length, 16);
 });
 
 test('privileged MFA removal preserves the two-authenticator floor', async () => {
@@ -946,6 +1931,24 @@ test('password recovery and sign-in preserve bounded provider retry guidance', a
     assert.equal(response.payload.retryAfter, 300);
     assert.match(response.payload.error, /Wait at least one minute/);
   }
+});
+
+test('provider failure diagnostics are fixed-field, control-free, and strictly bounded', async () => {
+  const { authProviderDiagnostic } = await import('../server/authShared.mjs');
+  const diagnostic = authProviderDiagnostic({
+    code: `SENSITIVE_CHANGE_COOLDOWN\u0000${'x'.repeat(400)}`,
+    message: `provider\nmessage ${'y'.repeat(400)}`,
+    details: 'bounded details',
+    hint: 'bounded hint',
+    secret: 'must-not-be-consumed',
+  });
+
+  assert.ok(diagnostic.length <= 1024);
+  assert.match(diagnostic, /^SENSITIVE_CHANGE_COOLDOWN/);
+  assert.doesNotMatch(diagnostic, /[\u0000-\u001f\u007f]/);
+  assert.equal(diagnostic.includes('must-not-be-consumed'), false);
+  assert.equal(authProviderDiagnostic(null), '');
+  assert.equal(authProviderDiagnostic(['message']), '');
 });
 
 test('Auth provider responses are byte-bounded JSON values with a controlled empty exception', async () => {
@@ -1326,6 +2329,26 @@ test('password recovery completion uses the same-origin server boundary and clea
   assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
 });
 
+test('password mutation rejects malformed successful provider identities without clearing the session', async () => {
+  const { default: password } = await import('../api/auth/password.mjs');
+
+  for (const providerPayload of [{}, { id: 'malformed-account-id' }, { id: 'x'.repeat(1_000) }]) {
+    const response = createResponse();
+    await withAuthProvider(async () => new Response(JSON.stringify(providerPayload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }), () => password(authRequest({
+      action: 'recovery',
+      newPassword: 'RecoveredPassword123!',
+    }, { authorization: 'Bearer recovery-access-token' }), response));
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.payload.error, 'Password security is temporarily unavailable. Please try again later.');
+    assert.equal(response.headers.has('set-cookie'), false);
+    assert.equal(JSON.stringify(response.payload).includes('malformed-account-id'), false);
+  }
+});
+
 test('signed-in password changes fail closed until provider current-password verification is approved', async () => {
   const { default: password } = await import('../api/auth/password.mjs');
   const response = createResponse();
@@ -1571,6 +2594,31 @@ test('signup keeps email-confirmation accounts signed out without creating a ref
   assert.equal(submittedBody.data.display_name, 'Test User');
 });
 
+test('signup rejects partial successful provider session material instead of misclassifying confirmation', async () => {
+  const { default: signup } = await import('../api/auth/signup.mjs');
+  const malformedSessions = [
+    { access_token: 'malformed token' },
+    { refresh_token: 'must-not-be-issued' },
+  ];
+
+  for (const providerPayload of malformedSessions) {
+    const response = createResponse();
+    await withAuthProvider(async () => new Response(JSON.stringify(providerPayload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }), () => signup(authRequest({
+      displayName: 'Test User',
+      email: 'user@example.com',
+      password: 'ExamplePass123!',
+    }), response));
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.payload.error, 'Account creation is temporarily unavailable.');
+    assert.equal(response.headers.has('set-cookie'), false);
+    assert.equal(JSON.stringify(response.payload).includes('must-not-be-issued'), false);
+  }
+});
+
 test('refresh rotates the HttpOnly cookie without exposing its secret', async () => {
   const { default: refresh } = await import('../api/auth/refresh.mjs');
   const response = createResponse();
@@ -1763,6 +2811,48 @@ test('privileged MFA recovery request policy rejects secrets and requires recent
   assert.equal(hasRecentTotpAal2('not-a-jwt', now), false);
 });
 
+test('privileged MFA recovery results are action-scoped and reject unexpected provider data', async () => {
+  const {
+    parseRecoveryResult,
+    RecoveryResponseError,
+  } = await import('../server/mfaRecoveryPolicy.mjs');
+  const caseId = '33333333-3333-4333-8333-333333333333';
+  const userId = '22222222-2222-4222-8222-222222222222';
+  const timestamp = '2026-08-15T12:00:00.000Z';
+
+  assert.equal(parseRecoveryResult('open', caseId), caseId);
+  assert.equal(parseRecoveryResult('review', null), null);
+  assert.deepEqual(parseRecoveryResult('my_hold', [{
+    scope: 'mfa',
+    expires_at: timestamp,
+    active: true,
+  }]), [{ scope: 'mfa', expires_at: timestamp, active: true }]);
+  assert.deepEqual(parseRecoveryResult('list', [{
+    case_id: caseId,
+    case_reference: 'SEC-2026-0042',
+    target_user_id: userId,
+    target_display_name: 'Protected member',
+    target_role: 'admin',
+    reason_code: 'lost_all_factors',
+    status: 'open',
+    requested_at: timestamp,
+    identity_verified_at: null,
+    reviewed_at: null,
+    completed_at: null,
+    cooldown_until: null,
+  }]).length, 1);
+
+  for (const [action, payload] of [
+    ['open', 'not-a-case-id'],
+    ['review', { secret: 'must-not-reach-browser' }],
+    ['my_hold', [{ scope: 'mfa', expires_at: timestamp, active: true, token: 'hidden' }]],
+    ['list', [{ secret: 'must-not-reach-browser' }]],
+    ['unknown', null],
+  ]) {
+    assert.throws(() => parseRecoveryResult(action, payload), RecoveryResponseError);
+  }
+});
+
 test('MFA recovery endpoint validates before provider access and rejects password-only operators', async () => {
   const { default: recovery } = await import('../api/security/mfa-recovery.mjs');
   const now = Math.floor(Date.now() / 1000);
@@ -1858,6 +2948,39 @@ test('recent TOTP AAL2 recovery operator reaches only the validated RPC', async 
     p_reason_code: 'lost_all_factors',
     p_evidence_reference: 'IDENTITY-REPROOF-0042',
   });
+});
+
+test('MFA recovery endpoint rejects unexpected successful RPC fields without disclosure', async () => {
+  const { default: recovery } = await import('../api/security/mfa-recovery.mjs');
+  const providerPayload = [{
+    scope: 'mfa',
+    expires_at: '2026-08-15T12:00:00.000Z',
+    active: true,
+    secret: 'must-not-reach-the-browser',
+  }];
+  let providerCalls = 0;
+
+  await withAuthProvider(async (input) => {
+    providerCalls += 1;
+    assert.match(String(input), /\/rest\/v1\/rpc\/get_my_sensitive_change_holds$/);
+    return new Response(JSON.stringify(providerPayload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }, async () => {
+    const response = createResponse();
+    await recovery(authRequest({ action: 'my_hold' }, {
+      authorization: 'Bearer member-session-token',
+    }), response);
+
+    assert.equal(response.statusCode, 503);
+    assert.deepEqual(response.payload, {
+      error: 'The protected recovery workflow is temporarily unavailable.',
+    });
+    assert.equal(JSON.stringify(response.payload).includes(providerPayload[0].secret), false);
+  });
+
+  assert.equal(providerCalls, 1);
 });
 
 test('password-only negative matrix records status-only evidence for every protected surface', async () => {
@@ -2171,7 +3294,7 @@ test('security notification worker is authenticated, idempotent, staged, and pri
   assert.match(worker, /"claim_security_notification_delivery_batch"/);
   assert.match(worker, /admin\.auth\.admin\.getUserById\(job\.target_user_id\)/);
   assert.match(worker, /data\.user\.email_confirmed_at/);
-  assert.match(worker, /https:\/\/api\.resend\.com\/emails/);
+  assert.match(worker, /fetch\("https:\/\/api\.resend\.com\/emails", \{/);
   assert.match(worker, /"Idempotency-Key": `dealivra_security_\$\{job\.notification_id\}`/);
   assert.match(worker, /AbortSignal\.timeout\(10_000\)/);
   assert.match(worker, /readSecurityNotificationProviderJson\(response\)/);
@@ -2292,6 +3415,7 @@ test('ordinary logout revokes only the current session', async () => {
   assert.equal(response.statusCode, 204);
   assert.match(requestedUrl, /\/auth\/v1\/logout\?scope=local$/);
   assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+  assert.equal(response.headers.has('clear-site-data'), false);
 });
 
 test('other-session logout keeps the current refresh cookie', async () => {
@@ -2309,6 +3433,7 @@ test('other-session logout keeps the current refresh cookie', async () => {
   assert.equal(response.statusCode, 204);
   assert.match(requestedUrl, /\/auth\/v1\/logout\?scope=others$/);
   assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(response.headers.has('clear-site-data'), false);
 });
 
 test('global logout clears the current cookie only after provider success', async () => {
@@ -2324,6 +3449,7 @@ test('global logout clears the current cookie only after provider success', asyn
 
   assert.equal(response.statusCode, 204);
   assert.match(response.headers.get('set-cookie'), /Max-Age=0/);
+  assert.equal(response.headers.get('clear-site-data'), '"cache", "cookies", "storage"');
 });
 
 test('invalid logout scopes fail without contacting the provider', async () => {
@@ -2342,6 +3468,7 @@ test('invalid logout scopes fail without contacting the provider', async () => {
   assert.equal(response.payload.error, 'Sign-out scope is invalid.');
   assert.equal(providerCalled, false);
   assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(response.headers.has('clear-site-data'), false);
 });
 
 test('failed other-session revocation never reports success or clears the current cookie', async () => {
@@ -2363,6 +3490,23 @@ test('failed other-session revocation never reports success or clears the curren
   assert.equal(response.statusCode, 503);
   assert.match(response.payload.error, /Could not reach the account service/);
   assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(response.headers.has('clear-site-data'), false);
+});
+
+test('failed global revocation preserves browser data and the current cookie', async () => {
+  const { default: logout } = await import('../api/auth/logout.mjs');
+  const response = createResponse();
+
+  await withAuthProvider(async () => new Response(
+    JSON.stringify({ error_code: 'provider_failure' }),
+    { status: 503, headers: { 'Content-Type': 'application/json' } },
+  ), () => logout(authRequest({ scope: 'global' }, {
+    authorization: 'Bearer current-session-token',
+  }), response));
+
+  assert.equal(response.statusCode, 502);
+  assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(response.headers.has('clear-site-data'), false);
 });
 
 test('server auth rejects privileged keys before contacting the provider', async () => {
@@ -2538,6 +3682,48 @@ test('public health remains liveness-only and never exposes configuration readin
   });
 });
 
+test('deal QR endpoint creates only same-host public Deal Links', async () => {
+  const response = createResponse();
+  await dealQrHandler({
+    method: 'GET',
+    headers: { host: 'dealsafe-mvp-nika13.vercel.app' },
+    query: { deal: 'fc84ca7d' },
+  }, response);
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers.get('content-type'), /^image\/svg\+xml/);
+  assert.match(response.headers.get('content-security-policy'), /sandbox/);
+  assert.match(response.payload, /^<svg/);
+  assert.doesNotMatch(response.payload, /<script/i);
+
+  for (const request of [
+    { method: 'GET', headers: { host: 'dealsafe-mvp-nika13.vercel.app' }, query: { deal: '<script>' } },
+    { method: 'GET', headers: { host: 'attacker.example' }, query: { deal: 'FC84CA7D' } },
+  ]) {
+    const rejected = createResponse();
+    await dealQrHandler(request, rejected);
+    assert.equal(rejected.statusCode, 400);
+    assert.equal(rejected.headers.get('cache-control'), 'no-store, max-age=0');
+  }
+
+  const localPreview = createResponse();
+  await dealQrHandler({
+    method: 'GET',
+    headers: { host: '127.0.0.1:4173' },
+    query: { deal: 'FC84CA7D' },
+  }, localPreview);
+  assert.equal(localPreview.statusCode, 200);
+  assert.match(localPreview.payload, /^<svg/);
+
+  const wrongMethod = createResponse();
+  await dealQrHandler({
+    method: 'POST',
+    headers: { host: 'dealivra.com' },
+    query: { deal: 'FC84CA7D' },
+  }, wrongMethod);
+  assert.equal(wrongMethod.statusCode, 405);
+  assert.equal(wrongMethod.headers.get('allow'), 'GET, HEAD');
+});
+
 test('legacy runtime identifiers are machine-governed migration aliases', async () => {
   const packageJson = readJson('package.json');
   const addressAutocomplete = readText('src/AddressAutocomplete.tsx');
@@ -2588,7 +3774,7 @@ test('legacy runtime identifiers are machine-governed migration aliases', async 
   const { verifyLegacyIdentifiers } = await import('../scripts/verify-legacy-identifiers.mjs');
   const current = verifyLegacyIdentifiers(rootPath);
   assert.equal(current.status, 'passed');
-  assert.equal(current.legacy_occurrences, 157);
+  assert.equal(current.legacy_occurrences, 173);
   assert.equal(current.approved_aliases, 9);
   assert.equal(packageJson.scripts['brand:verify'], 'node scripts/verify-legacy-identifiers.mjs');
   assert.match(packageJson.scripts.verify, /npm run brand:verify/);
@@ -2818,7 +4004,7 @@ test('VIN decoding maps only reviewed NHTSA fields and reuses its bounded memory
   resetVehicleVinCacheForTests();
   globalThis.fetch = async url => {
     providerCalls += 1;
-    assert.match(String(url), /vpic\.nhtsa\.dot\.gov\/api\/vehicles\/DecodeVinValues\//);
+    assert.ok(String(url).startsWith('https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/'));
     assert.match(String(url), /modelyear=2003/);
     return new Response(JSON.stringify({
       Results: [{
@@ -3237,7 +4423,10 @@ test('participant RLS policies evaluate Auth once without changing role semantic
   );
   assert.doesNotMatch(migration, /= auth\.uid\(\)/);
   assert.match(migration, /= \(select auth\.uid\(\)\)/);
-  assert.match(migration, /\(select public\.is_dealsafe_admin\(\)\)/);
+  assert.match(
+    migration,
+    /\(select public\.can_admin_read_deal_evidence\(deal_evidence\.deal_id\)\)/,
+  );
   assert.match(rollbackTests, /DBP-001 governed RLS policy inventory changed/);
   assert.match(rollbackTests, /DBP-001 seller lost RLS read access/);
   assert.match(rollbackTests, /DBP-001 buyer lost RLS read access/);
@@ -3998,6 +5187,207 @@ test('browser route resolver preserves deep links and rejects unknown paths', as
   assert.doesNotMatch(errorBoundary, /\{error\.message\}/);
 });
 
+test('authentication origin checks reject malformed and insecure public origins', async () => {
+  const { default: login } = await import('../api/auth/login.mjs');
+  let providerCalled = false;
+
+  for (const headers of [
+    { origin: 'https://dealivra.test/embedded-path' },
+    { origin: 'http://dealivra.test' },
+    { origin: 'https://dealivra.test', 'x-forwarded-host': 'dealivra.test,attacker.example' },
+    { origin: 'https://dealivra.test', 'x-forwarded-host': 'dealivra.test/path' },
+    { origin: 'https://dealivra.test', 'x-forwarded-host': ' user@dealivra.test' },
+  ]) {
+    const response = createResponse();
+    await withAuthProvider(async () => {
+      providerCalled = true;
+      throw new Error('The provider must not be called.');
+    }, () => login(authRequest({
+      email: 'user@example.com',
+      password: 'ExamplePass123!',
+    }, headers), response));
+
+    assert.equal(response.statusCode, 403);
+  }
+
+  assert.equal(providerCalled, false);
+});
+
+test('JSON mutation endpoints reject unsupported media before provider contact', async () => {
+  const { default: login } = await import('../api/auth/login.mjs');
+  const response = createResponse();
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, () => login(authRequest({
+    email: 'user@example.com',
+    password: 'ExamplePass123!',
+  }, {
+    'content-type': 'text/plain',
+  }), response));
+
+  assert.equal(response.statusCode, 415);
+  assert.equal(response.payload.error, 'Content-Type must be application/json.');
+  assert.equal(providerCalled, false);
+});
+
+test('logout requires JSON media before session revocation', async () => {
+  const { default: logout } = await import('../api/auth/logout.mjs');
+  const response = createResponse();
+  let providerCalled = false;
+
+  await withAuthProvider(async () => {
+    providerCalled = true;
+    throw new Error('The provider must not be called.');
+  }, () => logout(authRequest({ scope: 'global' }, {
+    authorization: 'Bearer access-token',
+    'content-type': 'text/plain',
+  }), response));
+
+  assert.equal(response.statusCode, 415);
+  assert.equal(response.payload.error, 'Content-Type must be application/json.');
+  assert.equal(providerCalled, false);
+});
+
+test('diagnostic request boundary rejects noncanonical origins and media consistently', () => {
+  const validHeaders = {
+    origin: 'https://dealivra.test',
+    host: 'dealivra.test',
+    'content-type': 'application/json; charset=utf-8',
+  };
+  const valid = createResponse();
+  assert.equal(validateReportingRequest({ method: 'POST', headers: validHeaders }, valid), true);
+
+  for (const [headers, expectedStatus] of [
+    [{ ...validHeaders, origin: 'http://dealivra.test' }, 403],
+    [{ ...validHeaders, origin: 'https://user@dealivra.test' }, 403],
+    [{ ...validHeaders, origin: 'https://dealivra.test/path' }, 403],
+    [{ ...validHeaders, host: 'dealivra.test, attacker.test' }, 403],
+    [{ ...validHeaders, 'content-type': 'text/plain' }, 415],
+  ]) {
+    const response = createResponse();
+    assert.equal(validateReportingRequest({ method: 'POST', headers }, response), false);
+    assert.equal(response.statusCode, expectedStatus);
+  }
+});
+
+test('diagnostic request body reader enforces byte limits before and during streaming', async () => {
+  let consumedChunks = 0;
+  const declaredOversize = {
+    headers: { 'content-length': '9' },
+    async *[Symbol.asyncIterator]() {
+      consumedChunks += 1;
+      yield Buffer.from('{}');
+    },
+  };
+  assert.equal(await readBoundedReportingJson(declaredOversize, 8), null);
+  assert.equal(consumedChunks, 0);
+
+  const streamedOversize = {
+    headers: {},
+    async *[Symbol.asyncIterator]() {
+      for (const chunk of ['{"a":', '"1234"', ',"ignored":true}']) {
+        consumedChunks += 1;
+        yield Buffer.from(chunk);
+      }
+    },
+  };
+  consumedChunks = 0;
+  assert.equal(await readBoundedReportingJson(streamedOversize, 8), null);
+  assert.equal(consumedChunks, 2);
+
+  const exactJson = '{"ok":1}';
+  assert.deepEqual(
+    await readBoundedReportingJson({ body: exactJson, headers: {} }, Buffer.byteLength(exactJson)),
+    { ok: 1 },
+  );
+  assert.deepEqual(
+    await readBoundedReportingJson({ body: Buffer.from(exactJson), headers: {} }, Buffer.byteLength(exactJson)),
+    { ok: 1 },
+  );
+});
+
+test('diagnostic request body reader rejects malformed, empty, cyclic, and multibyte overflow payloads', async () => {
+  const cyclic = {};
+  cyclic.self = cyclic;
+
+  for (const request of [
+    { headers: {} },
+    { body: '', headers: {} },
+    { body: '{', headers: {} },
+    { body: cyclic, headers: {} },
+    { body: { value: '😀' }, headers: {} },
+  ]) {
+    assert.equal(await readBoundedReportingJson(request, 8), null);
+  }
+});
+
+test('API mutation origin inventory fails closed for new and weakened routes', () => {
+  const repositorySources = {};
+  for (const route of Object.keys(apiRoutePolicy)) repositorySources[route] = readText(route);
+
+  assert.equal(evaluateApiMutationOriginPolicy(repositorySources).status, 'passed');
+  const unreviewed = evaluateApiMutationOriginPolicy({
+    ...repositorySources,
+    'api/new-mutation.mjs': "request.method !== 'POST'",
+  });
+  assert.deepEqual(unreviewed.findings, [
+    { route: 'api/new-mutation.mjs', issue: 'unreviewed_route' },
+  ]);
+  const weakened = evaluateApiMutationOriginPolicy({
+    ...repositorySources,
+    'api/auth/login.mjs': repositorySources['api/auth/login.mjs'].replaceAll('requireSameOrigin', 'removedOriginGuard'),
+  });
+  assert.ok(weakened.findings.some((finding) => finding.route === 'api/auth/login.mjs'));
+
+  const decoy = evaluateApiMutationOriginPolicy({
+    ...repositorySources,
+    'api/auth/login.mjs': repositorySources['api/auth/login.mjs']
+      .replace('requireSameOrigin(request, response)', 'removedOriginGuard(request, response)')
+      .replace(
+        'export default async function handler',
+        "// requireSameOrigin(request, response)\nconst decoy = 'requireSameOrigin';\nexport default async function handler",
+      ),
+  });
+  assert.ok(
+    decoy.findings.some((finding) => finding.route === 'api/auth/login.mjs'),
+    'comments and string literals must not satisfy a request-boundary control',
+  );
+
+  const topLevelDecoy = evaluateApiMutationOriginPolicy({
+    ...repositorySources,
+    'api/auth/login.mjs': repositorySources['api/auth/login.mjs']
+      .replace('requireSameOrigin(request, response)', 'removedOriginGuard(request, response)')
+      .replace(
+        'export default async function handler',
+        'requireSameOrigin({}, {});\nexport default async function handler',
+      ),
+  });
+  assert.ok(
+    topLevelDecoy.findings.some((finding) => finding.route === 'api/auth/login.mjs'),
+    'a control outside the exported handler must not satisfy the route policy',
+  );
+});
+
+test('public and authenticated mobile navigation can close without pointer input', () => {
+  const app = readText('src/app.tsx');
+  const landing = readText('src/PublicLanding.tsx');
+
+  for (const source of [app, landing]) {
+    assert.match(source, /mobileMenuButtonRef/);
+    assert.match(source, /event\.key\s*!==\s*'Escape'/);
+    assert.match(source, /mobileMenuButtonRef\.current\?\.focus\(\)/);
+    assert.match(source, /window\.innerWidth\s*>\s*860/);
+    assert.match(source, /aria-expanded=\{mobileMenuOpen\}/);
+    assert.match(source, /aria-controls=/);
+  }
+  assert.match(app, /id="application-mobile-navigation"/);
+  assert.match(landing, /id="mobile-navigation"/);
+  assert.match(landing, /Make every private deal <br \/><span>clear from the start\.<\/span>/);
+});
+
 test('public route presentation and metadata are isolated from application state', () => {
   const app = readText('src/app.tsx');
   const publicRoutes = readText('src/PublicRoutePages.tsx');
@@ -4023,7 +5413,7 @@ test('public route presentation and metadata are isolated from application state
   assert.match(publicRoutes, /export function DealLinkError/);
   assert.match(publicRoutes, /noindex,nofollow,noarchive/);
   assert.match(publicRoutes, /link\[rel="canonical"\]/);
-  assert.match(publicRoutes, /https:\/\/dealivra\.com/);
+  assert.match(publicRoutes, /const siteOrigin = 'https:\/\/dealivra\.com';/);
 });
 
 test('account entry and recovery pages are isolated without moving authentication state', () => {
@@ -4035,8 +5425,8 @@ test('account entry and recovery pages are isolated without moving authenticatio
     /import \{ AccountEntryPage, ForgotPassword, ForgotPasswordEntry, ResetPassword, type AuthFormState, type AuthMode \} from '\.\/AccountEntryPages'/,
   );
   assert.match(app, /const submitAuth=async\(e:React\.FormEvent\)=>/);
-  assert.match(app, /await signUp\(authForm\.email,authForm\.password,authForm\.displayName\)/);
-  assert.match(app, /await signIn\(authForm\.email,authForm\.password\)/);
+  assert.match(app, /await signUp\(authForm\.email\.trim\(\),authForm\.password,authForm\.displayName\.trim\(\)\)/);
+  assert.match(app, /await signIn\(authForm\.email\.trim\(\),authForm\.password\)/);
   assert.match(app, /view==='auth'&&!mfaLogin&&<AccountEntryPage/);
   assert.doesNotMatch(app, /function ForgotPassword/);
   assert.doesNotMatch(app, /function ResetPassword/);
@@ -4047,7 +5437,7 @@ test('account entry and recovery pages are isolated without moving authenticatio
   assert.match(accountEntry, /export function ForgotPasswordEntry/);
   assert.match(accountEntry, /export function ForgotPassword/);
   assert.match(accountEntry, /export function ResetPassword/);
-  assert.match(accountEntry, /await requestPasswordReset\(email\)/);
+  assert.match(accountEntry, /await requestPasswordReset\(normalizedEmail\)/);
   assert.match(accountEntry, /await updateRecoveredPassword\(token, password\)/);
   assert.match(accountEntry, /autoComplete=\{isSignup \? 'new-password' : 'current-password'\}/);
   assert.match(accountEntry, /publicInfoPaths\.terms/);
@@ -4062,9 +5452,12 @@ test('account profile and security workspace is isolated without moving session 
 
   assert.match(
     app,
-    /import \{ AccountProfileWorkspace \} from '\.\/AccountProfileWorkspace'/,
+    /import\('\.\/AccountProfileWorkspace'\)/,
   );
-  assert.match(app, /view==='profile'&&session&&<AccountProfileWorkspace/);
+  assert.match(
+    app,
+    /view==='profile'&&session&&<React\.Suspense[\s\S]*<AccountProfileWorkspace/,
+  );
   assert.match(app, /onSessionUpdated=\{setSession\}/);
   assert.match(app, /onSignedOut=\{finishSignedOutSession\}/);
   assert.match(app, /onRequestVerification=\{requestVerification\}/);
@@ -4082,7 +5475,7 @@ test('account profile and security workspace is isolated without moving session 
   assert.match(workspace, /function ProfileOverview/);
   assert.match(workspace, /<AccountMfaSecurity session=\{session\}/);
   assert.match(workspace, /<AccountSessionSecurity session=\{session\}/);
-  assert.match(workspace, /updateAccountName\(session, name\)/);
+  assert.match(workspace, /updateAccountName\(session, normalizedName\)/);
   assert.match(workspace, /updateAccountPassword\(session, currentPassword, password\)/);
   assert.match(workspace, /getTrustPassportSettings\(session\)/);
   assert.match(workspace, /setTrustPassportEnabled\(session, enabled\)/);
@@ -4101,7 +5494,7 @@ test('deal creation presentation is isolated without moving draft persistence ow
   assert.match(app, /createUserDeal\(activeSession,draftForPersistence\(\)\)/);
   assert.match(app, /saveUserDealDraft\(activeSession,draftForPersistence\(\)\)/);
   assert.match(app, /uploadDealPhotos\(activeSession,deal\.id,photos\)/);
-  assert.match(dealFeatures, /URL\.revokeObjectURL\(nextSource\)/);
+  assert.doesNotMatch(dealFeatures, /URL\.createObjectURL\(file\)/);
   assert.doesNotMatch(app, /id="create-step-1"/);
   assert.doesNotMatch(app, /function DealTemplatePicker/);
   assert.doesNotMatch(app, /function CreateDealProgress/);
@@ -4129,7 +5522,7 @@ test('deal workspace shell is isolated without moving transaction orchestration'
   const shell = readText('src/DealWorkspaceShell.tsx');
 
   assert.match(app, /from '\.\/DealWorkspaceShell'/);
-  assert.match(app, /from '\.\/DealWorkspace'/);
+  assert.match(app, /import\('\.\/DealWorkspace'\)/);
   assert.match(app, /<DealWorkspace/);
   assert.match(app, /resolveDealPrimaryAction\(\{/);
   assert.match(workspace, /<DealWorkspaceNavigation/);
@@ -4221,8 +5614,8 @@ test('agreement record summary, history, and PDF rendering are isolated', () => 
   assert.match(records, /getPublicAgreementHistory\(deal\.publicId\)/);
   assert.match(records, /if \(current\) setRecord\(value\)/);
   assert.match(records, /\[deal\.publicId, deal\.agreementVersion\]/);
-  assert.match(records, /role="status"/);
-  assert.match(records, /aria-live="polite"/);
+  assert.match(records, /role=\{error \|\| messageFailed \? 'alert' : 'status'\}/);
+  assert.match(records, /aria-live=\{error \|\| messageFailed \? 'assertive' : 'polite'\}/);
   assert.match(printDocument, /export function AgreementPrintDocument/);
   assert.match(printDocument, /useStoredAgreementDocument\(deal\)/);
   assert.match(printDocument, /record\.content_hash\.toUpperCase\(\)/);
@@ -4261,7 +5654,7 @@ test('seller declaration presentation is isolated without moving publication', (
     /getPublicSellerDeclaration\(deal\.publicId\)/,
   );
   assert.match(declarations, /if \(current\)/);
-  assert.match(declarations, /\[deal\.publicId\]/);
+  assert.match(declarations, /\[deal\.publicId, loadVersion\]/);
   assert.match(
     declarations,
     /These confirmations are recorded when the Deal Link is published\./,
@@ -4296,7 +5689,7 @@ test('participant evidence workspace is isolated with security controls intact',
   assert.match(evidence, /listDealEvidence\(session, deal\.id\)/);
   assert.match(evidence, /uploadDealEvidence\(/);
   assert.match(evidence, /for \(const file of files\)/);
-  assert.match(evidence, /if \(current\) setItems\(next\)/);
+  assert.match(evidence, /if \(request === loadSequenceRef\.current\) setItems\(next\)/);
   assert.match(evidence, /\[deal\.id, session\.accessToken, role\]/);
   assert.match(evidence, /<EvidenceViewer/);
   assert.match(
@@ -4334,7 +5727,7 @@ test('payment and seller payout workspace is isolated with guarded polling', () 
   assert.match(payment, /startStripeConnectOnboarding\(session, deal\.publicId\)/);
   assert.match(payment, /createProtectedCheckout\(session, deal\.id\)/);
   assert.match(payment, /let current = true/);
-  assert.match(payment, /if \(!current\) return/);
+  assert.match(payment, /if \(!current \|\| request !== loadRequest\.current\) return/);
   assert.match(payment, /window\.clearInterval\(timer\)/);
   assert.match(payment, /popup\.opener = null/);
   assert.match(payment, /id="payment-status-panel"/);
@@ -4402,15 +5795,42 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   assert.match(addressAutocomplete, /AutocompleteSessionToken/);
   assert.match(addressAutocomplete, /role="combobox"/);
   assert.match(addressAutocomplete, /role="listbox"/);
-  assert.match(addressAutocomplete, /Google Maps/);
   assert.match(
     addressAutocomplete,
-    /Address suggestions are unavailable\. Enter the address manually\./,
+    /aria-describedby=\{\[describedBy, statusId\]\.filter\(Boolean\)\.join\(' '\)\}/,
+  );
+  assert.match(addressAutocomplete, /aria-busy=\{queryState === 'loading'\}/);
+  assert.match(addressAutocomplete, /const selectionMutationRef = useRef\(false\)/);
+  assert.match(addressAutocomplete, /if \(!library \|\| selectionMutationRef\.current\) return/);
+  assert.match(addressAutocomplete, /const selectionRequest = \+\+requestSequence\.current/);
+  assert.ok((addressAutocomplete.match(/selectionRequest !== requestSequence\.current/g) ?? []).length >= 2);
+  assert.ok((addressAutocomplete.match(/requestSequence\.current \+= 1/g) ?? []).length >= 3);
+  assert.match(addressAutocomplete, /Google Maps/);
+  assert.match(fulfillment, /className="workflow-validation-summary"/);
+  assert.match(fulfillment, /disabled=\{savingAddress\}/);
+  assert.match(fulfillment, /disabled=\{busy\}/);
+  assert.doesNotMatch(fulfillment, /disabled=\{savingAddress \|\| addressIncomplete\}/);
+  assert.match(
+    addressAutocomplete,
+    /Automatic suggestions are temporarily unavailable\. Enter the complete address manually\./,
   );
   assert.match(usAddress, /\^\\d\{5\}\(\?:-\\d\{4\}\)\?\$/);
   assert.match(usAddress, /subpremise/);
   assert.match(fulfillment, /parts\.addressLine2 \|\| current\.addressLine2/);
-  assert.match(fulfillment, /getElementById\('deal-evidence-vault'\)/);
+  assert.match(fulfillment, /copyTextToClipboard\(/);
+  assert.match(
+    fulfillment,
+    /Address could not be copied\. Select and copy it manually\./,
+  );
+  assert.doesNotMatch(fulfillment, /catch\s*\{\s*\}/);
+  const fulfillmentActionButtons = [
+    ...fulfillment.matchAll(/<button\b[^>]*\bonClick=\{[^>]*>/gs),
+  ];
+  assert.ok(fulfillmentActionButtons.length > 0);
+  for (const [button] of fulfillmentActionButtons) {
+    assert.match(button, /\btype="button"/);
+  }
+  assert.match(fulfillment, /focusPageDestination\('deal-evidence-vault'\)/);
   assert.match(
     fulfillment,
     /This address is used only for this deal and is never shown on the public Deal Link\./,
@@ -4421,10 +5841,508 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   );
 });
 
+test('every button inside a form declares its submission behavior', () => {
+  const files = [
+    'src/AccountEntryPages.tsx',
+    'src/AccountMfaSecurity.tsx',
+    'src/AccountProfileWorkspace.tsx',
+    'src/DealCreationWorkspace.tsx',
+    'src/DealEvidenceWorkspace.tsx',
+    'src/DealFulfillmentWorkspace.tsx',
+    'src/DealPaymentWorkspace.tsx',
+    'src/DealResolutionWorkspace.tsx',
+    'src/DealWorkspaceFeatures.tsx',
+    'src/MfaLoginVerification.tsx',
+    'src/SupportCaseCenter.tsx',
+  ];
+  const missing = [];
+
+  for (const file of files) {
+    const source = readText(file);
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const visit = (node, formDepth = 0) => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      const tagName = opening?.tagName.getText(sourceFile);
+      const nextFormDepth = formDepth + (tagName === 'form' ? 1 : 0);
+      if (tagName === 'button' && nextFormDepth > 0) {
+        const hasType = opening.attributes.properties.some(
+          attribute =>
+            ts.isJsxAttribute(attribute)
+            && attribute.name.getText(sourceFile) === 'type',
+        );
+        if (!hasType) {
+          const location = sourceFile.getLineAndCharacterOfPosition(
+            opening.getStart(sourceFile),
+          );
+          missing.push(`${file}:${location.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, child => visit(child, nextFormDepth));
+    };
+    visit(sourceFile);
+  }
+
+  assert.deepEqual(missing, []);
+});
+
+test('every button outside a form declares an interactive behavior', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const missing = [];
+
+  for (const file of files) {
+    const source = readText(file);
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const visit = (node, formDepth = 0) => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      const tagName = opening?.tagName.getText(sourceFile);
+      const nextFormDepth = formDepth + (tagName === 'form' ? 1 : 0);
+      if (tagName === 'button' && nextFormDepth === 0) {
+        const attributes = new Set(
+          opening.attributes.properties
+            .filter(ts.isJsxAttribute)
+            .map(attribute => attribute.name.getText(sourceFile)),
+        );
+        if (!attributes.has('onClick') && !attributes.has('disabled')) {
+          const location = sourceFile.getLineAndCharacterOfPosition(
+            opening.getStart(sourceFile),
+          );
+          missing.push(`${file}:${location.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, child => visit(child, nextFormDepth));
+    };
+    visit(sourceFile);
+  }
+
+  assert.deepEqual(missing, []);
+});
+
+test('every button exposes an accessible name', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const unnamed = [];
+
+  const hasReadableChild = node => {
+    if (ts.isJsxText(node)) return node.getText().trim().length > 0;
+    if (ts.isJsxExpression(node)) return Boolean(node.expression);
+    if (ts.isJsxElement(node)) return node.children.some(hasReadableChild);
+    return false;
+  };
+
+  for (const file of files) {
+    const source = readText(file);
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const visit = node => {
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(sourceFile) === 'button') {
+        const attributes = new Set(
+          node.openingElement.attributes.properties
+            .filter(ts.isJsxAttribute)
+            .map(attribute => attribute.name.getText(sourceFile)),
+        );
+        if (
+          !attributes.has('aria-label') &&
+          !attributes.has('aria-labelledby') &&
+          !attributes.has('title') &&
+          !node.children.some(hasReadableChild)
+        ) {
+          const location = sourceFile.getLineAndCharacterOfPosition(
+            node.openingElement.getStart(sourceFile),
+          );
+          unnamed.push(`${file}:${location.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sourceFile);
+  }
+
+  assert.deepEqual(unnamed, []);
+});
+
+test('every form control has an accessible name', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const unnamed = [];
+
+  for (const file of files) {
+    const source = readText(file);
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const visit = (node, labelDepth = 0) => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      const tagName = opening?.tagName.getText(sourceFile);
+      const nextLabelDepth = labelDepth + (tagName === 'label' ? 1 : 0);
+      if (['input', 'select', 'textarea'].includes(tagName) && nextLabelDepth === 0) {
+        const attributes = new Map(
+          opening.attributes.properties
+            .filter(ts.isJsxAttribute)
+            .map(attribute => [attribute.name.getText(sourceFile), attribute]),
+        );
+        const type = attributes.get('type')?.initializer?.getText(sourceFile);
+        const id = attributes.get('id')?.initializer?.getText(sourceFile);
+        const hasExplicitLabel =
+          typeof id === 'string' && source.includes(`htmlFor=${id}`);
+        const hasAccessibleName =
+          attributes.has('aria-label')
+          || attributes.has('aria-labelledby')
+          || hasExplicitLabel;
+        if (type !== '"hidden"' && !hasAccessibleName) {
+          const location = sourceFile.getLineAndCharacterOfPosition(
+            opening.getStart(sourceFile),
+          );
+          unnamed.push(`${file}:${location.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, child => visit(child, nextLabelDepth));
+    };
+    visit(sourceFile);
+  }
+
+  assert.deepEqual(unnamed, []);
+});
+
+test('browser copy actions use the governed clipboard fallback', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(
+      entry =>
+        entry.isFile()
+        && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))
+        && entry.name !== 'clipboard.ts',
+    )
+    .map(entry => `src/${entry.name}`);
+  const bypasses = files.filter(file => /navigator\.clipboard/.test(readText(file)));
+  const clipboard = readText('src/clipboard.ts');
+
+  assert.deepEqual(bypasses, []);
+  assert.match(clipboard, /navigator\.clipboard\?\.writeText/);
+  assert.match(clipboard, /document\.execCommand\('copy'\)/);
+  assert.match(readText('src/DealWorkspaceFeatures.tsx'), /copyTextToClipboard/);
+  assert.match(readText('src/AgreementRecordSummary.tsx'), /copyTextToClipboard/);
+});
+
+test('critical confirmations use one keyboard-safe application dialog', () => {
+  const dialog = readText('src/ConfirmActionDialog.tsx');
+  const criticalFiles = [
+    'src/AdministrationWorkspace.tsx',
+    'src/DealFulfillmentWorkspace.tsx',
+    'src/DealResolutionWorkspace.tsx',
+    'src/DealWorkspaceFeatures.tsx',
+  ];
+
+  assert.match(dialog, /role="alertdialog"/);
+  assert.match(dialog, /aria-modal="true"/);
+  assert.match(dialog, /event\.key === 'Escape'/);
+  assert.match(dialog, /previousFocusRef\.current\?\.focus\(\)/);
+  assert.match(dialog, /event\.key !== 'Tab'/);
+  for (const file of criticalFiles) {
+    const source = readText(file);
+    assert.doesNotMatch(source, /(?:window\.)?confirm\s*\(/);
+    assert.match(source, /useConfirmAction/);
+  }
+});
+
+test('application connectivity state is visible and privacy safe', () => {
+  const app = readText('src/app.tsx');
+  const banner = readText('src/NetworkStatusBanner.tsx');
+
+  assert.match(app, /<NetworkStatusBanner \/>/);
+  assert.match(banner, /window\.addEventListener\('offline', offline\)/);
+  assert.match(banner, /window\.addEventListener\('online', online\)/);
+  assert.match(banner, /role="status"/);
+  assert.match(banner, /aria-live="assertive"/);
+  assert.match(banner, /window\.clearTimeout\(clearTimer\.current\)/);
+  assert.doesNotMatch(banner, /fetch\(|sendBeacon|localStorage|sessionStorage/);
+});
+
+test('heavy authenticated workspaces load only when requested', () => {
+  const app = readText('src/app.tsx');
+
+  for (const moduleName of [
+    'AccountProfileWorkspace',
+    'AdministrationWorkspace',
+    'DealWorkspace',
+  ]) {
+    assert.doesNotMatch(
+      app,
+      new RegExp(`import \\{ ${moduleName} \\} from`),
+      `${moduleName} returned to the initial application bundle`,
+    );
+    assert.match(app, new RegExp(`React\\.lazy\\(\\(\\) =>[\\s\\S]*import\\('\\./${moduleName}'\\)`));
+  }
+  assert.ok((app.match(/<React\.Suspense fallback=\{<RouteLoading\/>\}>/g) || []).length >= 3);
+});
+
+test('account entry prevents duplicate authentication requests', () => {
+  const app = readText('src/app.tsx');
+  const entry = readText('src/AccountEntryPages.tsx');
+
+  assert.match(app, /const \[authSubmitting,setAuthSubmitting\]=useState\(false\)/);
+  assert.match(app, /const authSubmittingRef=useRef\(false\)/);
+  assert.match(app, /if\(authSubmittingRef\.current\)return/);
+  assert.match(app, /authSubmittingRef\.current=true/);
+  assert.match(app, /setAuthSubmitting\(true\)/);
+  assert.match(app, /finally\{authSubmittingRef\.current=false;setAuthSubmitting\(false\)\}/);
+  assert.match(app, /submitting=\{authSubmitting\}/);
+  assert.match(entry, /aria-busy=\{submitting\}/);
+  assert.match(entry, /disabled=\{submitting\}/);
+  assert.match(entry, /checked=\{acceptedPolicies\}/);
+  assert.match(entry, /required/);
+  assert.match(entry, /'Creating account…'/);
+  assert.match(entry, /'Signing in…'/);
+});
+
+test('password recovery and MFA verification are single-flight actions', () => {
+  const entry = readText('src/AccountEntryPages.tsx');
+  const mfa = readText('src/MfaLoginVerification.tsx');
+
+  assert.match(entry, /const sendingRef = useRef\(false\)/);
+  assert.match(entry, /if \(sendingRef\.current\) return/);
+  assert.match(entry, /sendingRef\.current = true/);
+  assert.match(entry, /sendingRef\.current = false/);
+  assert.match(entry, /const updatingRef = useRef\(false\)/);
+  assert.match(entry, /if \(updatingRef\.current\) return/);
+  assert.match(entry, /aria-busy=\{updating\}/);
+  assert.match(entry, /disabled=\{updating\}/);
+  assert.match(mfa, /const busyRef=useRef\(false\)/);
+  assert.match(mfa, /if\(busyRef\.current\)return/);
+  assert.match(mfa, /busyRef\.current=true/);
+  assert.match(mfa, /busyRef\.current=false/);
+  assert.match(mfa, /aria-busy=\{busy\}/);
+});
+
+test('privileged account mutations reject same-tick duplicate actions', () => {
+  const profile = readText('src/AccountProfileWorkspace.tsx');
+  const factors = readText('src/AccountMfaSecurity.tsx');
+  const sessions = readText('src/AccountSessionSecurity.tsx');
+
+  assert.match(profile, /const savingNameRef = useRef\(false\)/);
+  assert.match(profile, /if \(savingNameRef\.current\) return/);
+  assert.match(profile, /const savingPasswordRef = useRef\(false\)/);
+  assert.match(profile, /if \(savingPasswordRef\.current\) return/);
+  assert.match(profile, /aria-busy=\{savingPassword\}/);
+  assert.match(factors, /const busyRef=useRef\(false\)/);
+  assert.ok((factors.match(/if\(busyRef\.current\)return/g) || []).length >= 4);
+  assert.ok((factors.match(/busyRef\.current=false/g) || []).length >= 4);
+  assert.match(sessions, /const busyRef=useRef\(false\)/);
+  assert.ok((sessions.match(/if\(busyRef\.current\)return/g) || []).length >= 2);
+  assert.ok((sessions.match(/busyRef\.current=false/g) || []).length >= 2);
+});
+
+test('install-app prompt reports its real outcome and cannot run twice', () => {
+  const app = readText('src/app.tsx');
+
+  assert.match(app, /const \[installPrompt,setInstallPrompt\]=useState/);
+  assert.match(app, /const installingRef=useRef\(false\)/);
+  assert.match(app, /if\(installingRef\.current\)return/);
+  assert.match(app, /await installPrompt\.userChoice/);
+  assert.match(app, /setInstallPrompt\(null\)/);
+  assert.match(app, /disabled=\{installing\}/);
+  assert.match(app, /role="status" aria-live="polite"/);
+  assert.match(app, /Your browser could not start installation/);
+});
+
+test('compact mobile navigation and demo actions retain full touch targets', () => {
+  const globalStyles = readText('src/global-redesign.css');
+  const workspaceStyles = readText('src/workspace-redesign.css');
+
+  assert.match(
+    globalStyles,
+    /\.site-header \.mobile-menu-toggle\{width:44px;height:44px/,
+  );
+  assert.match(
+    globalStyles,
+    /\.mobile-menu a,\.mobile-menu button\{min-height:44px/,
+  );
+  assert.match(
+    workspaceStyles,
+    /\.preview-next button\{min-width:44px;min-height:44px/,
+  );
+});
+
+test('secondary account and recovery actions retain full touch targets', () => {
+  const globalStyles = readText('src/global-redesign.css');
+  const workspaceStyles = readText('src/workspace-redesign.css');
+  const recoveryStyles = readText('src/recovery.css');
+  const baseStyles = readText('src/styles.css');
+  const reviewStyles = readText('src/create-review.css');
+
+  assert.match(globalStyles, /\.app>footer nav a\{min-height:44px/);
+  assert.match(globalStyles, /\.site-nav a,\.site-nav button,\.site-header \.account button\{\s*min-height:44px/);
+  assert.match(globalStyles, /\.password-field button\{[^}]*width:44px;height:44px/);
+  assert.match(workspaceStyles, /\.create-draft-recovery button\{[^}]*min-height:44px/);
+  assert.match(recoveryStyles, /\.forgot-entry button\{min-height:44px/);
+  assert.match(baseStyles, /\.switch-auth\{width:100%;min-height:44px/);
+  assert.match(reviewStyles, /\.draft-review-save button\{min-height:44px/);
+});
+
+test('dense workspace controls retain full touch targets', () => {
+  const catalogSearch = readText('src/catalog-search.css');
+  const smartCatalog = readText('src/smart-catalog.css');
+  const agreementExport = readText('src/agreement-export.css');
+  const workspace = readText('src/workspace-redesign.css');
+  const support = readText('src/support-case.css');
+  const sessions = readText('src/session-security.css');
+
+  assert.match(catalogSearch, /\.catalog-clear-filters\{\s*min-height:44px/);
+  assert.match(smartCatalog, /\.catalog-category-toggle\{\s*width:100%;\s*min-height:44px/);
+  assert.match(agreementExport, /\.agreement-export-actions button\{min-height:44px/);
+  assert.match(agreementExport, /\.agreement-document-toolbar button\{min-height:44px/);
+  assert.match(workspace, /\.deal-workspace-bar \.back\{min-height:44px/);
+  assert.match(workspace, /\.deal-workspace-bar nav button\{min-height:44px/);
+  assert.match(workspace, /\.create-validation-summary li button\{width:100%;min-height:44px/);
+  assert.match(support, /\.icon-button\{width:44px;height:44px/);
+  assert.match(sessions, /\.session-confirmation button\{min-height:44px/);
+});
+
+test('account recovery progress and guidance are announced accessibly', () => {
+  const accountEntry = readText('src/AccountEntryPages.tsx');
+  const feedback = readText('src/FeedbackMessage.tsx');
+
+  assert.match(accountEntry, /autoComplete="email"/);
+  assert.ok((accountEntry.match(/<FeedbackMessage/g) || []).length >= 3);
+  assert.match(feedback, /role=\{urgent \? 'alert' : 'status'\}/);
+  assert.match(feedback, /aria-live=\{urgent \? 'assertive' : 'polite'\}/);
+  assert.ok((accountEntry.match(/aria-describedby=\{[^\n]*recovery-password-requirements/g) || []).length >= 2);
+  assert.match(accountEntry, /id="recovery-password-requirements"/);
+});
+
+test('dynamic account and deal feedback is announced without stealing focus', () => {
+  const account = readText('src/AccountProfileWorkspace.tsx');
+  const payment = readText('src/DealPaymentWorkspace.tsx');
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+  const publicRoutes = readText('src/PublicRoutePages.tsx');
+
+  assert.doesNotMatch(account, /message \? <div className="notice">/);
+  assert.match(account, /role="status" aria-live="polite"/);
+  assert.match(payment, /payment\?\.failure_message[\s\S]*role="alert"/);
+  assert.match(fulfillment, /shipping-readiness-status" role="status" aria-live="polite"/);
+  assert.match(fulfillment, /readinessError[\s\S]*className="notice" role="alert"/);
+  assert.doesNotMatch(features, /\{message && <div className="notice">/);
+  assert.doesNotMatch(features, /\{error && <div className="notice">/);
+  assert.match(publicRoutes, /DealLinkError[\s\S]*className="notice" role="alert"/);
+});
+
+test('payment redirects reject same-tick duplicate financial actions', () => {
+  const payment = readText('src/DealPaymentWorkspace.tsx');
+
+  assert.match(payment, /const actionInFlight = useRef\(false\)/);
+  assert.ok(
+    (payment.match(/if \(actionInFlight\.current\) return;/g) || []).length >= 2,
+  );
+  assert.ok(
+    (payment.match(/actionInFlight\.current = true;/g) || []).length >= 2,
+  );
+  assert.ok(
+    (payment.match(/actionInFlight\.current = false;/g) || []).length >= 2,
+  );
+});
+
+test('fulfillment mutations reject same-tick duplicate submissions', () => {
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(fulfillment, /const saveInFlight = useRef\(false\)/);
+  assert.match(fulfillment, /const mutationInFlight = useRef\(false\)/);
+  assert.ok(
+    (fulfillment.match(/const actionInFlight = useRef\(false\)/g) || [])
+      .length >= 2,
+  );
+  assert.ok(
+    (fulfillment.match(/if \(actionInFlight\.current\) return;/g) || [])
+      .length >= 4,
+  );
+  assert.ok(
+    (fulfillment.match(/mutationInFlight\.current = true;/g) || []).length >=
+      3,
+  );
+  assert.match(fulfillment, /disabled=\{!inspectionRecorded \|\| shipmentBusy\}/);
+  assert.match(fulfillment, /className="primary inspection-save"[\s\S]*disabled=\{saving\}/);
+  assert.match(fulfillment, /inspection-\$\{firstIncomplete\?\.key\}/);
+  assert.doesNotMatch(fulfillment, /disabled=\{!complete \|\| saving\}/);
+  assert.ok((fulfillment.match(/aria-busy=/g) || []).length >= 8);
+  assert.match(fulfillment, /shipmentBusy \? 'Saving shipment…'/);
+  assert.match(fulfillment, /shipmentBusy \? 'Confirming delivery…'/);
+});
+
+test('deal communications, offers, and publication are single-flight', () => {
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.ok(
+    (features.match(/const requestInFlight = useRef\(false\)/g) || []).length >=
+      2,
+  );
+  assert.match(features, /const mutationInFlight = useRef\(false\)/);
+  assert.ok(
+    (features.match(/requestInFlight\.current = true;/g) || []).length >= 4,
+  );
+  assert.ok(
+    (features.match(/requestInFlight\.current = false;/g) || []).length >= 4,
+  );
+  assert.match(features, /if \(busy \|\| mutationInFlight\.current\) return/);
+});
+
+test('form-adjacent workspace actions declare their button behavior', () => {
+  const actionSurfaces = [
+    'src/AccountProfileWorkspace.tsx',
+    'src/DealCreationWorkspace.tsx',
+    'src/DealPaymentWorkspace.tsx',
+    'src/EvidenceLifecycleCenter.tsx',
+    'src/PublicRoutePages.tsx',
+  ];
+
+  for (const file of actionSurfaces) {
+    assert.doesNotMatch(
+      readText(file),
+      /<button(?![^>]*\btype=)[^>]*>/,
+      `${file} contains a button with implicit submit behavior`,
+    );
+  }
+});
+
 test('participant resolution and private deal chat are isolated safely', () => {
   const app = readText('src/app.tsx');
   const workspace = readText('src/DealWorkspace.tsx');
   const resolution = readText('src/DealResolutionWorkspace.tsx');
+  const chatStyles = readText('src/chat.css');
 
   assert.match(workspace, /from '\.\/DealResolutionWorkspace'/);
   assert.match(workspace, /<RatingPanel deal=\{deal\}/);
@@ -4444,20 +6362,37 @@ test('participant resolution and private deal chat are isolated safely', () => {
   assert.match(resolution, /export function DealSafetyActions/);
   assert.match(resolution, /export function ReportDealPanel/);
   assert.match(resolution, /export function DealChat/);
-  assert.match(resolution, /submitRating\(session, deal\.id, stars, comment\)/);
-  assert.match(resolution, /cancelDeal\(session, deal\.id, reason\)/);
-  assert.match(resolution, /openDealDispute\(session, deal\.id, reason\)/);
+  assert.match(resolution, /submitRating\(session, deal\.id, stars, comment\.trim\(\)\)/);
+  assert.match(resolution, /cancelDeal\(session, deal\.id, normalizedReason\)/);
+  assert.match(resolution, /openDealDispute\(session, deal\.id, normalizedReason\)/);
   assert.match(
     resolution,
-    /reportPublicDeal\(session, deal\.publicId, category, details\)/,
+    /reportPublicDeal\(session, deal\.publicId, category, normalizedDetails\)/,
   );
   assert.match(resolution, /getDealMessages\(session, deal\.id\)/);
-  assert.match(resolution, /sendDealMessage\(session, deal\.id, body\)/);
+  assert.match(resolution, /sendDealMessage\(session, deal\.id, body\.trim\(\)\)/);
   assert.match(resolution, /let current = true/);
   assert.match(resolution, /request !== requestRef\.current/);
   assert.match(resolution, /window\.clearInterval\(timer\)/);
   assert.match(resolution, /aria-controls="deal-chat-panel"/);
+  assert.match(resolution, /role="region"/);
+  assert.match(resolution, /aria-labelledby="deal-chat-title"/);
+  assert.match(resolution, /id="deal-chat-title"/);
   assert.match(resolution, /aria-live="polite"/);
+  assert.match(resolution, /<X aria-hidden="true" size=\{19\} \/>/);
+  assert.match(resolution, /if \(event\.key === 'Escape'\)/);
+  assert.match(resolution, /launcherRef\.current\?\.focus\(\)/);
+  assert.match(resolution, /composerRef\.current\?\.focus\(\)/);
+  assert.match(resolution, /document\.addEventListener\('pointerdown', closeFromOutside\)/);
+  assert.doesNotMatch(resolution, /onMouseEnter=\{\(\) => setChatOpen\(true\)\}/);
+  assert.doesNotMatch(resolution, /onMouseLeave=\{\(\) => setChatOpen\(false\)\}/);
+  assert.match(chatStyles, /\.view-deal \.deal-chat-float/);
+  assert.match(
+    chatStyles,
+    /bottom:calc\(92px \+ env\(safe-area-inset-bottom\)\)/,
+  );
+  assert.match(chatStyles, /max-height:calc\(100dvh - 174px/);
+  assert.match(chatStyles, /overscroll-behavior:contain/);
   assert.doesNotMatch(
     resolution,
     /resolveAdminDisputeFinancial|resolveAdminDispute|setAdminDealVisibility|createProtectedCheckout|createDealShipment|confirmShipmentDelivery|uploadDealEvidence|acceptPublicDeal|publishUserDealDraft|signIn|signUp/,
@@ -4471,9 +6406,9 @@ test('administration operations are isolated behind the central access gate', ()
   assert.match(app, /getAdminAccess\(session\)/);
   assert.match(
     app,
-    /view==='admin'&&session&&isAdmin&&<AdministrationWorkspace session=\{session\}/,
+    /view==='admin'&&session&&isAdmin&&<React\.Suspense[\s\S]*<AdministrationWorkspace session=\{session\}/,
   );
-  assert.match(app, /from '\.\/AdministrationWorkspace'/);
+  assert.match(app, /import\('\.\/AdministrationWorkspace'\)/);
   assert.doesNotMatch(
     app,
     /function AdminCatalogCenter|function AdminEvidenceReview|function AdminRevenueCenter|function AdminDisputeCenter|function AdminReportCenter/,
@@ -4503,7 +6438,8 @@ test('administration operations are isolated behind the central access gate', ()
     administration,
     /Buyer and seller resolutions perform the confirmed Stripe refund or release\. Closing a dispute moves no funds\./,
   );
-  assert.match(administration, /if \(!confirm\(t\(prompt\)\)\) return/);
+  assert.match(administration, /await confirmAction\(\{/);
+  assert.match(administration, /title: t\('Confirm dispute decision'\)/);
   assert.doesNotMatch(
     administration,
     /getAdminAccess|signIn|signUp|acceptPublicDeal|publishUserDealDraft|createProtectedCheckout|createDealShipment|uploadDealEvidence/,
@@ -4515,7 +6451,10 @@ test('deal workspace composition is isolated while central transaction ownership
   const workspace = readText('src/DealWorkspace.tsx');
   const features = readText('src/DealWorkspaceFeatures.tsx');
 
-  assert.match(app, /import \{ DealWorkspace \} from '\.\/DealWorkspace'/);
+  assert.match(
+    app,
+    /const DealWorkspace = React\.lazy\(\(\) =>[\s\S]*import\('\.\/DealWorkspace'\)/,
+  );
   assert.equal(
     (app.match(/<DealWorkspace\b/g) || []).length,
     1,
@@ -5377,8 +7316,9 @@ test('the third ARC-004 boundary validates every browser payment success respons
   assert.match(schemas, /dealivra\.payment\.response-rejection\.v1/);
   assert.match(schemas, /amounts_do_not_balance/);
   assert.match(schemas, /event_timestamp_order_invalid/);
-  assert.match(schemas, /https:\/\/checkout\.stripe\.com/);
-  assert.match(schemas, /https:\/\/connect\.stripe\.com/);
+  assert.match(schemas, /parsed\.origin !== expectedOrigin/);
+  assert.match(schemas, /'onboarding_url_invalid'/);
+  assert.match(schemas, /'checkout_url_invalid'/);
   assert.match(schemas, /PaymentResponseValidationError/);
   assert.doesNotMatch(schemas, /console\.error\([^)]*value/);
 });
@@ -9419,6 +11359,7 @@ test('runtime rejection intake is same-origin, staged, and privacy safe', async 
 test('every runtime schema uses the governed rejection transport', () => {
   const reporter = readText('src/services/runtimeRejectionReporter.ts');
   const endpoint = readText('api/security/runtime-rejection.mjs');
+  const requestBoundary = readText('server/reportingRequestBoundary.mjs');
   const schemaFiles = [
     'accountActivityBoundarySchemas.ts',
     'accountActivityRuntimeSchemas.ts',
@@ -9464,11 +11405,15 @@ test('every runtime schema uses the governed rejection transport', () => {
   assert.match(reporter, /signatureCooldownMs = 30_000/);
   assert.match(reporter, /sendBoundedDiagnostic\(/);
   assert.match(reporter, /\/api\/security\/runtime-rejection/);
+  assert.match(reporter, /boundary=\$\{event\.boundary\} issue=\$\{event\.issue\}/);
+  assert.doesNotMatch(reporter, /console\.error\([^)]*,\s*event\)/);
   assert.doesNotMatch(reporter, /location\.(?:href|pathname|search|hash)/);
   assert.match(endpoint, /DEALIVRA_RUNTIME_REJECTION_MODE/);
   assert.match(endpoint, /mode === 'staged'/);
   assert.match(endpoint, /mode !== 'enforced'/);
   assert.match(endpoint, /maximumBodyBytes = 1_024/);
+  assert.match(endpoint, /validateReportingRequest/);
+  assert.match(requestBoundary, /readBoundedJson/);
   assert.match(endpoint, /Object\.keys\(value\)\.length !== 4/);
   assert.match(endpoint, /dealivra\.runtime-rejection-monitor\.v1/);
   assert.doesNotMatch(endpoint, /x-forwarded-for/i);
@@ -9496,6 +11441,18 @@ test('client failure reporter accepts only fixed non-sensitive categories', asyn
       schema: 'dealivra.client-failure.v1',
       boundary: 'browser_runtime',
       issue: 'unhandled_promise_rejection',
+    },
+  );
+  assert.deepEqual(
+    reporter.normalizeClientFailure({
+      schema: 'dealivra.client-failure.v1',
+      boundary: 'address_autocomplete',
+      issue: 'suggestion_request_failed',
+    }),
+    {
+      schema: 'dealivra.client-failure.v1',
+      boundary: 'address_autocomplete',
+      issue: 'suggestion_request_failed',
     },
   );
   for (const invalid of [
@@ -9655,6 +11612,7 @@ test('render and bootstrap failures use the governed recovery boundary', () => {
   const main = readText('src/main.tsx');
   const reporter = readText('src/services/clientFailureReporter.ts');
   const endpoint = readText('api/security/client-failure.mjs');
+  const requestBoundary = readText('server/reportingRequestBoundary.mjs');
 
   assert.match(boundary, /reportClientFailure\(\{/);
   assert.match(boundary, /boundary: 'application_render'/);
@@ -9678,6 +11636,8 @@ test('render and bootstrap failures use the governed recovery boundary', () => {
   assert.doesNotMatch(reporter, /location\.(?:href|pathname|search|hash)/);
   assert.match(endpoint, /DEALIVRA_CLIENT_FAILURE_MODE/);
   assert.match(endpoint, /maximumBodyBytes = 512/);
+  assert.match(endpoint, /validateReportingRequest/);
+  assert.match(requestBoundary, /hasCanonicalSameOrigin/);
   assert.match(endpoint, /Object\.keys\(value\)\.length !== 4/);
   assert.match(endpoint, /dealivra\.client-failure-monitor\.v1/);
   assert.doesNotMatch(endpoint, /x-forwarded-for|user-agent|\breferer\b/i);
@@ -9806,6 +11766,7 @@ test('current Vercel service failures use the governed server reporter', () => {
 test('privacy-safe Web Vitals use fixed quality buckets only', async () => {
   const reporter = readText('src/services/webVitalReporter.ts');
   const endpoint = readText('api/security/web-vital.mjs');
+  const requestBoundary = readText('server/reportingRequestBoundary.mjs');
   const main = readText('src/main.tsx');
   const warnings = [];
   const originalInfo = console.info;
@@ -9925,9 +11886,57 @@ test('privacy-safe Web Vitals use fixed quality buckets only', async () => {
   );
   assert.match(endpoint, /DEALIVRA_WEB_VITAL_MODE/);
   assert.match(endpoint, /maximumBodyBytes = 512/);
+  assert.match(endpoint, /readBoundedJson/);
+  assert.match(requestBoundary, /contentType !== 'application\/json'/);
   assert.match(endpoint, /Object\.keys\(value\)\.length !== 5/);
   assert.doesNotMatch(endpoint, /x-forwarded-for|user-agent|\breferer\b/i);
   assert.match(main, /startWebVitalMonitoring\(\)/);
+});
+
+test('health and browser reporting responses always carry the no-store security contract', async () => {
+  const assertHardened = response => {
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    assert.equal(response.headers.get('pragma'), 'no-cache');
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  };
+  const reportingRequest = {
+    method: 'GET',
+    headers: {
+      origin: 'https://dealivra.test',
+      host: 'dealivra.test',
+      'content-type': 'application/json',
+    },
+    body: {},
+  };
+
+  for (const handler of [
+    runtimeRejectionHandler,
+    clientFailureHandler,
+    webVitalHandler,
+  ]) {
+    const response = createResponse();
+    await handler(reportingRequest, response);
+    assert.equal(response.statusCode, 405);
+    assert.equal(response.headers.get('allow'), 'POST');
+    assertHardened(response);
+  }
+
+  const cspResponse = createResponse();
+  await cspReportHandler({
+    method: 'GET',
+    headers: { 'content-type': 'application/csp-report' },
+    body: {},
+  }, cspResponse);
+  assert.equal(cspResponse.statusCode, 405);
+  assert.equal(cspResponse.headers.get('allow'), 'POST');
+  assertHardened(cspResponse);
+
+  for (const method of ['GET', 'HEAD', 'POST']) {
+    const response = createResponse();
+    healthHandler({ method, headers: {} }, response);
+    assert.equal(response.statusCode, method === 'POST' ? 405 : 200);
+    assertHardened(response);
+  }
 });
 
 test('production builds enforce explicit JavaScript and CSS budgets', () => {
@@ -9940,8 +11949,29 @@ test('production builds enforce explicit JavaScript and CSS budgets', () => {
   );
   assert.match(packageJson.scripts.build, /npm run performance:budgets$/);
   assert.match(budget, /maximumJavaScriptChunkBytes: 400_000/);
+  assert.match(budget, /maximumInitialApplicationBytes: 160_000/);
+  assert.match(budget, /\^app-\[A-Za-z0-9_-\]\+\\\.js\$/);
+  assert.match(budget, /Expected exactly one initial application chunk/);
   assert.match(budget, /maximumCssChunkBytes: 200_000/);
-  assert.match(budget, /maximumTotalJavaScriptBytes: 825_000/);
+  assert.match(budget, /maximumTotalJavaScriptBytes: 820_000/);
+  assert.match(budget, /maximumConfiguredBuildOverheadBytes: 3_000/);
+  assert.match(budget, /VITE_SUPABASE_URL/);
+  assert.match(budget, /VITE_SUPABASE_PUBLISHABLE_KEY/);
+  assert.match(budget, /VITE_GOOGLE_MAPS_API_KEY/);
+  assert.match(
+    budget,
+    /applicationJavaScriptBytes = totalJavaScriptBytes - publicConfigurationBytes/,
+  );
+  assert.match(
+    budget,
+    /budgets\.maximumTotalJavaScriptBytes \+ configuredBuildOverheadBytes/,
+  );
+  assert.match(budget, /public_configuration_bytes: publicConfigurationBytes/);
+  assert.match(budget, /application_javascript_bytes: applicationJavaScriptBytes/);
+  assert.match(
+    budget,
+    /configured_build_overhead_allowance_bytes: configuredBuildOverheadBytes/,
+  );
   assert.match(budget, /maximumTotalCssBytes: 290_000/);
   assert.match(budget, /throw new Error\(`Build performance budget exceeded:/);
 });
@@ -10311,6 +12341,155 @@ test('sample and local fallback deal identifiers satisfy every public boundary',
   assert.doesNotMatch(`${main}\n${demoRepository}`, /DV-/);
 });
 
+test('global session revocation uses the governed accessible confirmation dialog', () => {
+  const sessionSecurity = readText('src/AccountSessionSecurity.tsx');
+
+  assert.match(sessionSecurity, /useConfirmAction\(\)/);
+  assert.match(sessionSecurity, /tone:'danger'/);
+  assert.match(sessionSecurity, /if\(confirmed\)await signOutAll\(\)/);
+  assert.match(sessionSecurity, /\{confirmDialog\}/);
+  assert.doesNotMatch(sessionSecurity, /className="session-confirmation"/);
+});
+
+test('MFA removal can be cancelled by keyboard and restores the initiating control', () => {
+  const accountMfa = readText('src/AccountMfaSecurity.tsx');
+
+  assert.match(accountMfa, /removalTriggerRef=useRef<HTMLButtonElement\|null>\(null\)/);
+  assert.match(accountMfa, /removalTriggerRef\.current=trigger/);
+  assert.match(accountMfa, /event\.key!==['"]Escape['"]/);
+  assert.match(accountMfa, /window\.requestAnimationFrame\(\(\)=>removalTriggerRef\.current\?\.focus\(\)\)/);
+});
+
+test('account password changes expose field-specific validation and deterministic focus', () => {
+  const accountProfile = readText('src/AccountProfileWorkspace.tsx');
+
+  assert.match(accountProfile, /<FieldError id="account-password-error">/);
+  assert.match(accountProfile, /<FieldError id="account-confirm-password-error">/);
+  assert.match(accountProfile, /aria-describedby=\{passwordError \? 'account-password-requirements account-password-error'/);
+  assert.match(accountProfile, /aria-describedby=\{confirmPasswordError \? 'account-password-requirements account-confirm-password-error'/);
+  assert.match(accountProfile, /New password'[\s\S]*?<input\s+ref=\{passwordRef\}/);
+  assert.match(accountProfile, /passwordRef\.current\?\.focus\(\)/);
+  assert.match(accountProfile, /confirmPasswordRef\.current\?\.focus\(\)/);
+});
+
+test('account display names reject whitespace and expose field-specific recovery', () => {
+  const accountProfile = readText('src/AccountProfileWorkspace.tsx');
+
+  assert.match(accountProfile, /const normalizedName = name\.trim\(\)/);
+  assert.match(accountProfile, /if \(normalizedName\.length < 2\)/);
+  assert.match(accountProfile, /aria-describedby=\{nameError \? 'account-name-error' : undefined\}/);
+  assert.match(accountProfile, /<FieldError id="account-name-error">/);
+  assert.match(accountProfile, /nameRef\.current\?\.focus\(\)/);
+  assert.match(accountProfile, /updateAccountName\(session, normalizedName\)/);
+});
+
+test('support messages reject whitespace and recover focus at the exact invalid field', () => {
+  const supportCenter = readText('src/SupportCaseCenter.tsx');
+
+  assert.match(supportCenter, /const normalizedSubject = subject\.trim\(\)/);
+  assert.match(supportCenter, /const normalizedMessage = message\.trim\(\)/);
+  assert.match(supportCenter, /const normalizedReply = reply\.trim\(\)/);
+  assert.match(supportCenter, /<FieldError id="support-subject-error">/);
+  assert.match(supportCenter, /<FieldError id="support-message-error">/);
+  assert.match(supportCenter, /<FieldError id="support-reply-error">/);
+  assert.match(supportCenter, /subjectRef\.current\?\.focus\(\)/);
+  assert.match(supportCenter, /messageRef\.current\?\.focus\(\)/);
+  assert.match(supportCenter, /replyRef\.current\?\.focus\(\)/);
+  assert.match(supportCenter, /replySupportCase\(session, selected\.public_reference, normalizedReply\)/);
+});
+
+test('agreement verification restores focus to the first invalid field', () => {
+  const verifier = readText('src/AgreementVerificationPage.tsx');
+
+  assert.match(verifier, /ref=\{dealIdRef\}/);
+  assert.match(verifier, /ref=\{codeRef\}/);
+  assert.match(verifier, /if \(cleanId\.length < 4\) dealIdRef\.current\?\.focus\(\)/);
+  assert.match(verifier, /else codeRef\.current\?\.focus\(\)/);
+  assert.match(verifier, /<FieldError id="deal-id-error">/);
+  assert.match(verifier, /<FieldError id="agreement-code-error">/);
+  assert.match(verifier, /if \(validationVisible\) setMessage\(''\)/);
+});
+
+test('account registration rejects weak credentials before calling the provider', () => {
+  const accountEntry = readText('src/AccountEntryPages.tsx');
+  const app = readText('src/app.tsx');
+
+  assert.match(accountEntry, /const normalizedDisplayName = form\.displayName\.trim\(\)/);
+  assert.match(accountEntry, /if \(normalizedDisplayName\.length < 2\)/);
+  assert.match(accountEntry, /<FieldError id="signup-display-name-error">/);
+  assert.match(accountEntry, /<FieldError id="signup-password-error">/);
+  assert.match(accountEntry, /displayNameRef\.current\?\.focus\(\)/);
+  assert.match(accountEntry, /passwordRef\.current\?\.focus\(\)/);
+  assert.match(accountEntry, /onFormChange\(\{ \.\.\.form, displayName: normalizedDisplayName \}\)/);
+  assert.match(accountEntry, /<form onSubmit=\{submitEntry\}/);
+  assert.match(app, /signUp\(authForm\.email\.trim\(\),authForm\.password,authForm\.displayName\.trim\(\)\)/);
+  assert.match(app, /signIn\(authForm\.email\.trim\(\),authForm\.password\)/);
+});
+
+test('deal safety reports validate normalized reasons before confirmation or mutation', () => {
+  const resolution = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(resolution, /const normalizedReason = reason\.trim\(\)/);
+  assert.match(resolution, /if \(normalizedReason\.length < minimumReasonLength\)/);
+  assert.match(resolution, /cancelDeal\(session, deal\.id, normalizedReason\)/);
+  assert.match(resolution, /openDealDispute\(session, deal\.id, normalizedReason\)/);
+  assert.match(resolution, /<FieldError id="deal-safety-reason-error">/);
+  assert.match(resolution, /reasonRef\.current\?\.focus\(\)/);
+  assert.match(resolution, /const normalizedDetails = details\.trim\(\)/);
+  assert.match(resolution, /reportPublicDeal\(session, deal\.publicId, category, normalizedDetails\)/);
+  assert.match(resolution, /<FieldError id="report-details-error">/);
+  assert.match(resolution, /detailsRef\.current\?\.focus\(\)/);
+});
+
+test('deal communications normalize text and announce rating failures assertively', () => {
+  const resolution = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(resolution, /submitRating\(session, deal\.id, stars, comment\.trim\(\)\)/);
+  assert.match(resolution, /sendDealMessage\(session, deal\.id, body\.trim\(\)\)/);
+  assert.match(resolution, /setFailed\(true\)/);
+  assert.match(resolution, /role=\{failed \? 'alert' : 'status'\}/);
+  assert.match(resolution, /aria-live=\{failed \? 'assertive' : 'polite'\}/);
+});
+
+test('deal safety composers move and restore keyboard focus predictably', () => {
+  const resolution = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(resolution, /openForm\('cancel', event\.currentTarget\)/);
+  assert.match(resolution, /openForm\('dispute', event\.currentTarget\)/);
+  assert.match(resolution, /reasonRef\.current\?\.focus\(\)/);
+  assert.match(resolution, /safetyTriggerRef\.current\?\.focus\(\)/);
+  assert.match(resolution, /ref=\{reportTriggerRef\}/);
+  assert.match(resolution, /onClick=\{openReport\}/);
+  assert.match(resolution, /onClick=\{closeReport\}/);
+  assert.match(resolution, /detailsRef\.current\?\.focus\(\)/);
+  assert.match(resolution, /reportTriggerRef\.current\?\.focus\(\)/);
+});
+
+test('sample deals remain inside the local data boundary', () => {
+  const app = readText('src/app.tsx');
+  const agreement = readText('src/AgreementRecordSummary.tsx');
+
+  assert.match(
+    app,
+    /if\(active\.publicId===DEMO_DEAL_PUBLIC_ID\)\{setAcceptanceProtectionState\('ready'\);return\}/,
+  );
+  assert.ok(
+    (agreement.match(/deal\.publicId === DEMO_DEAL_PUBLIC_ID/g) ?? []).length >= 3,
+  );
+  assert.match(
+    agreement,
+    /deal\.publicId === DEMO_DEAL_PUBLIC_ID[\s\S]*setLoading\(false\);[\s\S]*return;/,
+  );
+  assert.match(
+    agreement,
+    /deal\.publicId === DEMO_DEAL_PUBLIC_ID[\s\S]*setFingerprint\('—'\);[\s\S]*return;/,
+  );
+  assert.match(
+    agreement,
+    /deal\.publicId === DEMO_DEAL_PUBLIC_ID[\s\S]*setVersions\(\[\]\);[\s\S]*setLoaded\(true\);[\s\S]*return;/,
+  );
+});
+
 test('served asset manifest is deterministic, bounded, and hash-only', () => {
   const contents = new Map([
     ['assets/app.css', Buffer.from('body{}')],
@@ -10583,6 +12762,11 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
   assert.match(script, /git\(\['status', '--porcelain=v1', '--untracked-files=all'\]\)/);
   assert.match(script, /workflowCommit !== requestedCommit/);
   assert.match(script, /createHash\('sha256'\)/);
+  assert.match(script, /openSync\(path, constants\.O_RDONLY \| noFollow\)/);
+  assert.match(script, /fstatSync\(descriptor\)/);
+  assert.match(script, /readFileSync\(descriptor\)/);
+  assert.match(script, /closeSync\(descriptor\)/);
+  assert.doesNotMatch(script, /lstatSync\(path\)[\s\S]{0,200}readFileSync\(path\)/);
   assert.match(policy, /production_authorization: 'not_granted'/);
   assert.match(policy, /'browser_storage_policy_passed'/);
   assert.match(policy, /'outbound_transport_policy_passed'/);
@@ -10618,7 +12802,7 @@ test('locked dependencies follow the reviewed offline supply-chain policy', () =
   );
   assert.match(
     packageJson.scripts.verify,
-    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run brand:verify && npm run config:verify && npm run format:check && npm run lint && npm run typecheck/,
+    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run security:mutation-origins && npm run brand:verify && npm run config:verify && npm run format:check && npm run lint && npm run typecheck/,
   );
   assert.match(policy, /lockfile\.lockfileVersion !== 3/);
   assert.match(policy, /url\.protocol === 'https:'/);
@@ -11406,6 +13590,22 @@ test('browser diagnostics use one exact bounded best-effort transport', async ()
       body: JSON.stringify(exactEvent),
     },
   );
+  const autocompleteFailure = {
+    schema: 'dealivra.client-failure.v1',
+    boundary: 'address_autocomplete',
+    issue: 'provider_load_failed',
+    occurrence_count: 1,
+  };
+  assert.deepEqual(
+    prepareDiagnosticRequest(
+      '/api/security/client-failure',
+      autocompleteFailure,
+    ),
+    {
+      endpoint: '/api/security/client-failure',
+      body: JSON.stringify(autocompleteFailure),
+    },
+  );
   assert.equal(
     prepareDiagnosticRequest(
       '/api/security/client-failure',
@@ -11497,12 +13697,1718 @@ test('browser storage inventory is deny-by-default and release-gated', async () 
     schema: 'dealivra.browser-storage-policy-result.v1',
     status: 'passed',
     reviewed_files: 4,
-    local_storage_calls: 14,
-    session_storage_calls: 6,
+    local_storage_calls: 18,
+    session_storage_calls: 3,
   });
   assert.equal(
     packageJson.scripts['security:browser-storage'],
     'node scripts/verify-browser-storage-policy.mjs',
   );
   assert.match(packageJson.scripts.verify, /npm run security:browser-storage/);
+});
+
+test('staging database target guard rejects Production and mixed projects', async () => {
+  const { verifyStagingDatabaseTarget } = await import(
+    '../scripts/verify-staging-database-target.mjs'
+  );
+  const valid = {
+    DEALIVRA_DATABASE_ENVIRONMENT: 'staging',
+    DEALIVRA_STAGING_SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst',
+    DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF: 'zyxwvutsrqponmlkjihg',
+    DEALIVRA_STAGING_DATABASE_URL:
+      'postgresql://postgres:secret@db.abcdefghijklmnopqrst.supabase.co/postgres?sslmode=require',
+  };
+
+  assert.deepEqual(verifyStagingDatabaseTarget(valid), {
+    schema: 'dealivra.staging-database-target.v1',
+    status: 'passed',
+    environment: 'staging',
+    project_separation: 'verified',
+    direct_database_host: 'verified',
+    tls: 'required',
+  });
+  assert.throws(
+    () =>
+      verifyStagingDatabaseTarget({
+        ...valid,
+        DEALIVRA_DATABASE_ENVIRONMENT: 'production',
+      }),
+    /must be exactly staging/,
+  );
+  assert.throws(
+    () =>
+      verifyStagingDatabaseTarget({
+        ...valid,
+        DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF:
+          valid.DEALIVRA_STAGING_SUPABASE_PROJECT_REF,
+      }),
+    /must use different Supabase projects/,
+  );
+});
+
+test('database authorization gate is manual-only and covers role isolation', () => {
+  const packageJson = readJson('package.json');
+  const workflow = readText('.github/workflows/staging-database-gate.yml');
+  const migration = readText(
+    'supabase/private_evidence_maintenance_settings_rls.sql',
+  );
+  const privateRegression = readText(
+    'supabase/tests/private_evidence_maintenance_settings_rls_rollback.sql',
+  );
+  const databaseContract = readText(
+    'supabase/tests/database_security_contract_rollback.sql',
+  );
+  const runbook = readText(
+    'docs/production-readiness/74_STAGING_DATABASE_AUTHORIZATION_GATE.md',
+  );
+
+  assert.equal(
+    packageJson.scripts['staging:database-target'],
+    'node scripts/verify-staging-database-target.mjs',
+  );
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /\n\s+push:/);
+  assert.doesNotMatch(workflow, /\n\s+pull_request:/);
+  assert.match(workflow, /environment: staging/);
+  assert.match(workflow, /DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF/);
+  assert.match(workflow, /-name '\*_rollback\.sql'/);
+  assert.match(workflow, /test "\$\{#tests\[@\]\}" -eq 17/);
+  assert.match(workflow, /psql "\$DEALIVRA_STAGING_DATABASE_URL"/);
+  assert.match(workflow, /-X[\s\S]*-v ON_ERROR_STOP=1/);
+  assert.match(migration, /enable row level security/i);
+  assert.match(migration, /revoke all on table[\s\S]*service_role/i);
+  assert.match(privateRegression, /relforcerowsecurity/);
+  assert.match(privateRegression, /function_record\.prosecdef/);
+  assert.match(
+    databaseContract,
+    /namespace\.nspname = 'public'[\s\S]*not class\.relrowsecurity/,
+  );
+  assert.match(
+    databaseContract,
+    /grant_row\.grantee in \('PUBLIC', 'anon', 'authenticated', 'service_role'\)/,
+  );
+  assert.match(runbook, /separate Supabase project for Staging/);
+  assert.match(runbook, /Production, public access, live Supabase resources/);
+});
+
+test('database baseline inventory is timestamped, data-free, and hash-bound', () => {
+  const valid = evaluateDatabaseBaseline([
+    {
+      name: '20260811000000_dealivra_staging_baseline.sql',
+      content: 'create table public.example (id uuid primary key);\n',
+    },
+    {
+      name: '20260811000001_enable_example_rls.sql',
+      content: 'alter table public.example enable row level security;\n',
+    },
+  ]);
+  assert.equal(valid.status, 'passed');
+  assert.equal(valid.migration_count, 2);
+  assert.match(valid.migrations[0].sha256, /^[a-f0-9]{64}$/);
+  assert.throws(
+    () => evaluateDatabaseBaseline([
+      {
+        name: '20260811000000_dealivra_staging_baseline.sql',
+        content: "insert into auth.users (email) values ('person@example.com');",
+      },
+    ]),
+    /Auth user data/,
+  );
+  assert.throws(
+    () => evaluateDatabaseBaseline([
+      {
+        name: '20260811000000_wrong_baseline.sql',
+        content: 'select 1;',
+      },
+    ]),
+    /first migration must be the CLI-generated/,
+  );
+});
+
+test('database baseline proof is manual, Staging-only, and rebuilds locally', () => {
+  const packageJson = readJson('package.json');
+  const workflow = readText('.github/workflows/staging-database-baseline-proof.yml');
+  const runbook = readText(
+    'docs/production-readiness/75_DATABASE_BASELINE_MIGRATION_PLAN.md',
+  );
+
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /\n\s+push:/);
+  assert.doesNotMatch(workflow, /\n\s+pull_request:/);
+  assert.match(workflow, /environment: staging/);
+  assert.match(workflow, /npm run staging:database-target/);
+  assert.match(workflow, /version: 2\.101\.0/);
+  assert.match(workflow, /supabase db pull dealivra_staging_baseline/);
+  assert.match(workflow, /npm run database:baseline:verify/);
+  assert.match(workflow, /supabase db reset --local/);
+  assert.match(workflow, /test "\$\{#tests\[@\]\}" -eq 17/);
+  assert.match(workflow, /supabase db advisors --local/);
+  assert.match(workflow, /retention-days: 7/);
+  assert.equal(
+    packageJson.scripts['database:baseline:verify'],
+    'node scripts/verify-database-baseline.mjs',
+  );
+  assert.match(runbook, /Production is not a baseline source or a test target/);
+  assert.match(runbook, /Never dump Production\s+data/);
+});
+
+test('Staging HTTP matrix is status-only, cross-user, and cleans synthetic Storage', () => {
+  const packageJson = readJson('package.json');
+  const matrix = readText('scripts/run-staging-http-authorization-matrix.mjs');
+  assert.equal(
+    packageJson.scripts['staging:http-authorization'],
+    'node scripts/run-staging-http-authorization-matrix.mjs',
+  );
+  assert.match(matrix, /get_deal_action_plan/);
+  assert.match(matrix, /Data API outsider/);
+  assert.match(matrix, /Data API expired/);
+  assert.match(matrix, /Storage outsider cross-user upload/);
+  assert.match(matrix, /Storage seller own upload/);
+  assert.match(matrix, /Storage buyer own upload/);
+  assert.match(matrix, /method: 'DELETE'/);
+  assert.doesNotMatch(matrix, /results:[\s\S]{0,200}(?:token|subject|dealId|path)/i);
+});
+
+test('database ownership inventory covers every governed object class', () => {
+  const inventorySql = readText('supabase/database_ownership_inventory.sql');
+  const workflow = readText('.github/workflows/staging-database-gate.yml');
+  const records = ['table', 'view', 'function', 'bucket', 'policy', 'grant'].map((kind, index) => ({
+    schema: 'dealivra.database-ownership-object.v1',
+    kind,
+    identity: `public.synthetic_${index}`,
+    owner_role: 'postgres',
+    exposure: kind === 'bucket' ? 'private_object' : 'data_api_candidate',
+    steward: kind === 'grant' || kind === 'policy' ? 'database_security' : 'platform_engineering',
+  }));
+  const result = validateDatabaseOwnershipInventory(records);
+  assert.equal(result.status, 'passed');
+  assert.equal(result.object_count, 6);
+  assert.throws(
+    () => validateDatabaseOwnershipInventory(records.map(record => ({ ...record, owner_role: 'authenticated' }))),
+    /unsafe owner role/,
+  );
+  assert.match(inventorySql, /information_schema\.table_privileges/);
+  assert.match(inventorySql, /information_schema\.routine_privileges/);
+  assert.match(inventorySql, /from storage\.buckets/);
+  assert.match(inventorySql, /from pg_catalog\.pg_policies/);
+  assert.match(workflow, /database_ownership_inventory\.sql/);
+  assert.match(workflow, /database:ownership:validate/);
+});
+
+test('media preview is keyboard-contained and respects dynamic mobile viewports', () => {
+  const workspace = readText('src/DealWorkspaceFeatures.tsx');
+  const styles = readText('src/media-zoom.css');
+
+  assert.match(workspace, /role="dialog"/);
+  assert.match(workspace, /aria-modal="true"/);
+  assert.match(workspace, /document\.body\.style\.overflow = 'hidden'/);
+  assert.match(workspace, /event\.key === 'Escape'/);
+  assert.match(workspace, /event\.key !== 'Tab'/);
+  assert.match(workspace, /previouslyFocused\?\.focus\(\)/);
+  assert.match(workspace, /ref=\{closeButtonRef\}/);
+  assert.match(workspace, /<X aria-hidden="true" size=\{20\} \/>/);
+  assert.match(workspace, /className="media-lightbox-content"/);
+  assert.match(styles, /max-height:\s*90dvh/);
+  assert.match(styles, /env\(safe-area-inset-top\)/);
+  assert.match(styles, /env\(safe-area-inset-right\)/);
+});
+
+test('deal comparison is keyboard-contained and uses the dynamic viewport', () => {
+  const app = readText('src/app.tsx');
+  const styles = readText('src/watchlist.css');
+
+  assert.match(app, /ref=\{dialogRef\} className="compare-dialog"/);
+  assert.match(app, /ref=\{closeButtonRef\}/);
+  assert.match(app, /document\.body\.style\.overflow='hidden'/);
+  assert.match(app, /event\.key==='Escape'/);
+  assert.match(app, /event\.key!=='Tab'/);
+  assert.match(app, /previouslyFocused\?\.focus\(\)/);
+  assert.match(styles, /max-height:calc\(100dvh - 48px\)/);
+  assert.match(styles, /overscroll-behavior:contain/);
+  assert.match(styles, /env\(safe-area-inset-bottom\)/);
+});
+
+test('service worker runtime never intercepts private or mutable requests', async () => {
+  const listeners = new Map();
+  const cacheEntries = new Map();
+  const openedCaches = [];
+  const deletedCaches = [];
+  const fetchedRequests = [];
+  const workerOrigin = 'https://dealivra.example';
+  const cache = {
+    async match(request) {
+      return cacheEntries.get(request.url);
+    },
+    async put(request, response) {
+      cacheEntries.set(request.url, response);
+    },
+  };
+  const context = {
+    URL,
+    Set,
+    Promise,
+    caches: {
+      async open(name) {
+        openedCaches.push(name);
+        return cache;
+      },
+      async keys() {
+        return ['dealivra-static-assets-v3', 'dealivra-shell-v2', 'unrelated-cache'];
+      },
+      async delete(name) {
+        deletedCaches.push(name);
+        return true;
+      },
+    },
+    async fetch(request) {
+      fetchedRequests.push(request.url);
+      return {
+        ok: true,
+        status: 200,
+        type: 'basic',
+        headers: new Headers({ 'content-type': 'text/javascript' }),
+        clone() {
+          return this;
+        },
+      };
+    },
+    self: {
+      location: { origin: workerOrigin },
+      clients: { async claim() {} },
+      async skipWaiting() {},
+      addEventListener(type, handler) {
+        listeners.set(type, handler);
+      },
+    },
+  };
+  vm.runInNewContext(readText('public/sw.js'), context, { filename: 'public/sw.js' });
+
+  assert.deepEqual([...listeners.keys()].sort(), ['activate', 'fetch', 'install']);
+
+  const privateRequests = [
+    { method: 'GET', url: `${workerOrigin}/` },
+    { method: 'GET', url: `${workerOrigin}/?deal=DV7K4M2Q` },
+    { method: 'GET', url: `${workerOrigin}/api/auth/session` },
+    { method: 'GET', url: `${workerOrigin}/assets/app.js?private=1` },
+    { method: 'POST', url: `${workerOrigin}/assets/app.js` },
+    { method: 'GET', url: 'https://cdn.example/assets/app.js' },
+    { method: 'GET', url: `${workerOrigin}/uploads/evidence.jpg` },
+  ];
+  for (const request of privateRequests) {
+    let responsePromise;
+    listeners.get('fetch')({
+      request,
+      respondWith(value) {
+        responsePromise = value;
+      },
+    });
+    assert.equal(responsePromise, undefined, `unexpected interception: ${request.url}`);
+  }
+  assert.deepEqual(openedCaches, []);
+  assert.deepEqual(fetchedRequests, []);
+
+  const assetRequest = { method: 'GET', url: `${workerOrigin}/assets/app.A1b2.js` };
+  let firstAssetResponse;
+  listeners.get('fetch')({
+    request: assetRequest,
+    respondWith(value) {
+      firstAssetResponse = value;
+    },
+  });
+  await firstAssetResponse;
+  assert.deepEqual(fetchedRequests, [assetRequest.url]);
+  assert.equal(cacheEntries.has(assetRequest.url), true);
+
+  let secondAssetResponse;
+  listeners.get('fetch')({
+    request: assetRequest,
+    respondWith(value) {
+      secondAssetResponse = value;
+    },
+  });
+  await secondAssetResponse;
+  assert.deepEqual(fetchedRequests, [assetRequest.url]);
+
+  let activatePromise;
+  listeners.get('activate')({
+    waitUntil(value) {
+      activatePromise = value;
+    },
+  });
+  await activatePromise;
+  assert.deepEqual(deletedCaches, ['dealivra-shell-v2']);
+});
+
+test('global motion preferences suppress nonessential animation and smooth scrolling', () => {
+  const styles = readText('src/global-redesign.css');
+  const navigation = readText('src/accessibleNavigation.ts');
+  const app = readText('src/app.tsx');
+  const landing = readText('src/PublicLanding.tsx');
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+  const workspaceFeatures = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(styles, /@media\(prefers-reduced-motion:reduce\)/);
+  assert.match(styles, /\*,\*::before,\*::after\{[^}]*animation-duration:\.01ms!important/);
+  assert.match(styles, /\*,\*::before,\*::after\{[^}]*animation-iteration-count:1!important/);
+  assert.match(styles, /\*,\*::before,\*::after\{[^}]*transition-duration:\.01ms!important/);
+  assert.match(styles, /html\{scroll-behavior:auto\}/);
+  assert.match(navigation, /prefers-reduced-motion: reduce/);
+  assert.match(navigation, /requested === 'smooth'[\s\S]*return 'auto'/);
+  assert.doesNotMatch(app, /behavior:'smooth'/);
+  assert.doesNotMatch(landing, /behavior: 'smooth'/);
+  assert.doesNotMatch(fulfillment, /behavior: 'smooth'/);
+  assert.doesNotMatch(workspaceFeatures, /behavior: 'smooth'/);
+});
+
+test('home and section navigation moves keyboard focus with the visual viewport', () => {
+  const navigation = readText('src/accessibleNavigation.ts');
+  const app = readText('src/app.tsx');
+  const landing = readText('src/PublicLanding.tsx');
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+  const workspaceFeatures = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(navigation, /document\.getElementById\(id \|\| 'main-content'\)/);
+  assert.match(navigation, /setAttribute\('tabindex', '-1'\)/);
+  assert.match(navigation, /focus\(\{ preventScroll: true \}\)/);
+  assert.match(navigation, /scrollIntoView\(\{ behavior, block: 'start' \}\)/);
+  assert.ok((app.match(/focusPageDestination\(/g) ?? []).length >= 3);
+  assert.match(landing, /focusPageDestination\(id\)/);
+  assert.match(fulfillment, /focusPageDestination\('deal-evidence-vault'\)/);
+  assert.match(workspaceFeatures, /focusPageDestination\('deal-editor'\)/);
+});
+
+test('mobile deal actions use one governed persistent dock', () => {
+  const shell = readText('src/DealWorkspaceShell.tsx');
+  const workspaceStyles = readText('src/workspace-redesign.css');
+  const brandStyles = readText('src/dealivra-brand.css');
+
+  assert.match(shell, /className="deal-primary-dock"/);
+  assert.match(workspaceStyles, /\.deal-primary-dock\{/);
+  assert.match(workspaceStyles, /bottom:calc\(10px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.doesNotMatch(workspaceStyles, /\.mobile-deal-action/);
+  assert.doesNotMatch(brandStyles, /\.mobile-deal-action/);
+});
+
+test('resolution mutations use same-tick single-flight guards', () => {
+  const workspace = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(workspace, /const savingRef = useRef\(false\)/);
+  assert.match(workspace, /if \(savingRef\.current\) return;[\s\S]*savingRef\.current = true/);
+  assert.match(workspace, /if \(!mode \|\| savingRef\.current\) return;[\s\S]*savingRef\.current = true/);
+  assert.match(workspace, /if \(!session \|\| sendingRef\.current\) return/);
+  assert.match(workspace, /if \(normalizedDetails\.length < 10\)/);
+  assert.match(workspace, /if \(!body\.trim\(\) \|\| sendingRef\.current\) return/);
+  assert.match(workspace, /aria-busy=\{sending\}/);
+});
+
+test('support case mutations use same-tick single-flight guards', () => {
+  const workspace = readText('src/SupportCaseCenter.tsx');
+
+  assert.match(workspace, /const savingRef = useRef\(false\)/);
+  assert.match(workspace, /if \(savingRef\.current\) return;[\s\S]*savingRef\.current = true/);
+  assert.match(workspace, /if \(!selected \|\| savingRef\.current\) return;[\s\S]*savingRef\.current = true/);
+  assert.equal((workspace.match(/aria-busy=\{saving\}/g) ?? []).length, 2);
+  assert.match(workspace, /const lifecycleRef = useRef\(0\)/);
+  assert.ok((workspace.match(/lifecycle !== lifecycleRef\.current/g) ?? []).length >= 5);
+  assert.ok((workspace.match(/lifecycle === lifecycleRef\.current/g) ?? []).length >= 2);
+});
+
+test('trust passport visibility is protected against duplicate mutations', () => {
+  const workspace = readText('src/AccountProfileWorkspace.tsx');
+
+  assert.match(workspace, /function TrustPassportControls/);
+  assert.match(workspace, /const savingRef = useRef\(false\)/);
+  assert.match(workspace, /if \(!settings \|\| savingRef\.current\) return;[\s\S]*savingRef\.current = true/);
+  assert.match(workspace, /finally \{[\s\S]*savingRef\.current = false;[\s\S]*setSaving\(false\)/);
+  assert.match(workspace, /aria-busy=\{saving\}/);
+});
+
+test('agreement verification and evidence uploads are single-flight', () => {
+  const verification = readText('src/AgreementVerificationPage.tsx');
+  const evidence = readText('src/DealEvidenceWorkspace.tsx');
+
+  assert.match(verification, /const checkingRef = useRef\(false\)/);
+  assert.match(verification, /if \(checkingRef\.current\) return/);
+  assert.match(verification, /checkingRef\.current = true/);
+  assert.match(evidence, /const busyRef = useRef\(false\)/);
+  assert.match(evidence, /if \(!files\.length \|\| busyRef\.current\) return/);
+  assert.match(evidence, /busyRef\.current = true/);
+  assert.match(evidence, /aria-busy=\{busy\}/);
+});
+
+test('evidence upload keeps native file validation actionable', () => {
+  const evidence = readText('src/DealEvidenceWorkspace.tsx');
+
+  assert.match(evidence, /type="file"[\s\S]*required/);
+  assert.match(evidence, /type="submit" className="primary" disabled=\{busy\}/);
+  assert.doesNotMatch(evidence, /disabled=\{busy \|\| !files\.length\}/);
+  assert.match(evidence, /const form = event\.currentTarget as HTMLFormElement/);
+  assert.match(evidence, /setFiles\(\[\]\);[\s\S]*form\.reset\(\)/);
+});
+
+test('shipment submission keeps native carrier and tracking validation actionable', () => {
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(fulfillment, /required[\s\S]*minLength=\{2\}[\s\S]*value=\{carrier\}/);
+  assert.match(fulfillment, /required[\s\S]*minLength=\{4\}[\s\S]*value=\{tracking\}/);
+  assert.match(fulfillment, /type="submit"[\s\S]*disabled=\{shipmentBusy\}[\s\S]*Mark as shipped/);
+  assert.match(fulfillment, /if \(!readyToShip\) \{[\s\S]*Complete the shipping readiness checklist first/);
+});
+
+test('agreement acceptance keeps every confirmation actionable', () => {
+  const workspace = readText('src/DealWorkspace.tsx');
+
+  assert.match(workspace, /className="agreement-acceptance-form"[\s\S]*onSubmit=/);
+  assert.match(workspace, /type="checkbox"[\s\S]*required/);
+  assert.match(workspace, /required[\s\S]*minLength=\{2\}[\s\S]*value=\{buyer\}/);
+  assert.match(workspace, /type="submit"[\s\S]*disabled=\{accepting\}[\s\S]*Accept these terms/);
+  assert.doesNotMatch(workspace, /disabled=\{!agreementActionReady \|\| accepting\}/);
+});
+
+test('local media previews never place user-selected file URLs into the DOM', () => {
+  const workspace = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(workspace, /const mediaFileKind = \(file: File\)/);
+  assert.match(workspace, /createImageBitmap\(file\)/);
+  assert.match(workspace, /context\.drawImage\(bitmap/);
+  assert.match(workspace, /mediaFileKind\(file\) === null/);
+  assert.doesNotMatch(workspace, /URL\.createObjectURL\(file\)/);
+  assert.doesNotMatch(workspace, /<img src=\{source\} alt=\{alt\} \/>/);
+  assert.doesNotMatch(workspace, /<video[\s\S]{0,160}src=\{source\}[\s\S]{0,160}file/);
+});
+
+test('deal media and editor mutations use same-tick guards', () => {
+  const workspace = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(workspace, /const uploadingRef = useRef\(false\)/);
+  assert.match(workspace, /if \(!files\.length \|\| uploadingRef\.current\) return/);
+  assert.match(workspace, /const removingRef = useRef\(false\)/);
+  assert.match(workspace, /if \(removingRef\.current\) return/);
+  assert.match(workspace, /export function CoverSelector[\s\S]*const savingRef = useRef\(false\)/);
+  assert.match(workspace, /export function DealEditor[\s\S]*if \(savingRef\.current\) return/);
+});
+
+test('administrative dispute and moderation decisions are single-flight', () => {
+  const workspace = readText('src/AdministrationWorkspace.tsx');
+
+  assert.match(workspace, /function AdminDisputeCenter[\s\S]*const savingRef = useRef\(false\)/);
+  assert.match(workspace, /if \(note\.length < 3 \|\| savingRef\.current\) return/);
+  assert.match(workspace, /function AdminReportCenter[\s\S]*const openingDealRef = useRef\(false\)/);
+  assert.match(workspace, /if \(openingDealRef\.current\) return/);
+  assert.ok((workspace.match(/savingRef\.current = true/g) ?? []).length >= 3);
+  assert.ok((workspace.match(/const \[messageFailed, setMessageFailed\] = useState\(false\)/g) ?? []).length >= 2);
+  assert.ok((workspace.match(/role=\{messageFailed \? 'alert' : 'status'\}/g) ?? []).length >= 2);
+  assert.ok((workspace.match(/aria-live=\{messageFailed \? 'assertive' : 'polite'\}/g) ?? []).length >= 2);
+});
+
+test('watchlist, access-code, and renewal mutations are single-flight', () => {
+  const workspace = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(workspace, /export function SaveDealButton[\s\S]*const mutationRef = useRef\(false\)/);
+  assert.match(workspace, /if \(mutationRef\.current\) return/);
+  assert.match(workspace, /export function BuyerAccessCodeManager[\s\S]*const busyRef = useRef\(false\)/);
+  assert.match(workspace, /if \(busyRef\.current\) return;[\s\S]*busyRef\.current = true/);
+  assert.match(workspace, /export function DealRenewalPanel[\s\S]*const savingRef = useRef\(false\)/);
+});
+
+test('watchlist, access-code, and renewal failures use assertive feedback', () => {
+  const workspace = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(workspace, /export function SaveDealButton[\s\S]*const \[messageFailed, setMessageFailed\] = useState\(false\)/);
+  assert.match(workspace, /className=\{`notice \$\{messageFailed \? 'error' : ''\}`\}[\s\S]*role=\{messageFailed \? 'alert' : 'status'\}/);
+  assert.match(workspace, /export function BuyerAccessCodeManager[\s\S]*className="notice error" role="alert"/);
+  assert.match(workspace, /export function DealRenewalPanel[\s\S]*className="notice error" role="alert"/);
+});
+
+test('trust passport success and failure feedback remain semantically distinct', () => {
+  const account = readText('src/AccountProfileWorkspace.tsx');
+  const app = readText('src/app.tsx');
+
+  assert.match(account, /function TrustPassportControls[\s\S]*const \[messageFailed, setMessageFailed\] = useState\(false\)/);
+  assert.match(account, /setMessage\('Passport link copied\.'\);\s+setMessageFailed\(false\)/);
+  assert.match(account, /setMessage\('Could not copy the passport link[\s\S]*setMessageFailed\(true\)/);
+  assert.match(account, /role=\{messageFailed \? 'alert' : 'status'\}/);
+  assert.match(account, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
+  assert.match(app, /const \[verificationMessageFailed,setVerificationMessageFailed\]=useState\(false\)/);
+  assert.match(app, /Could not request verification'\);setVerificationMessageFailed\(true\)/);
+  assert.match(account, /messageFailed=\{verificationMessageFailed\}/);
+});
+
+test('restricted evidence lifecycle actions are mutually single-flight', () => {
+  const workspace = readText('src/EvidenceLifecycleCenter.tsx');
+
+  assert.match(workspace, /const busyRef=useRef\(false\)/);
+  assert.ok((workspace.match(/if\(busyRef\.current\)return/g) ?? []).length >= 2);
+  assert.ok((workspace.match(/busyRef\.current=true/g) ?? []).length >= 2);
+  assert.match(workspace, /aria-busy=\{Boolean\(busy\)\}/);
+  assert.match(workspace, /const loadSequenceRef=useRef\(0\)/);
+  assert.ok((workspace.match(/request===loadSequenceRef\.current/g) ?? []).length >= 3);
+  assert.match(workspace, /const \[messageFailed,setMessageFailed\]=useState\(false\)/);
+  assert.match(workspace, /role=\{messageFailed\?'alert':'status'\}/);
+  assert.match(workspace, /aria-live=\{messageFailed\?'assertive':'polite'\}/);
+});
+
+test('deal evidence list ignores stale deal and session responses', () => {
+  const workspace = readText('src/DealEvidenceWorkspace.tsx');
+  assert.match(workspace, /const loadSequenceRef = useRef\(0\)/);
+  assert.match(workspace, /const request = \+\+loadSequenceRef\.current/);
+  assert.ok((workspace.match(/request === loadSequenceRef\.current/g) ?? []).length >= 2);
+  assert.match(workspace, /loadSequenceRef\.current \+= 1/);
+});
+
+test('TypeScript UI sources do not contain common UTF-8 mojibake sequences', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && /\.tsx?$/.test(entry.name))
+    .map(entry => `src/${entry.name}`);
+  for (const file of files) {
+    assert.doesNotMatch(readText(file), /â€¦|â€”|Â·|â€™|Ã|ðŸ/, file);
+  }
+});
+
+test('buttons rendered directly inside forms declare an explicit type', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const source = readText(file);
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const tagName = node => node.tagName?.getText(sourceFile);
+    const inspect = (node, insideForm = false) => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      const currentTag = opening ? tagName(opening) : null;
+      if (insideForm && currentTag === 'button') {
+        const hasType = opening.attributes.properties.some(property => (
+          ts.isJsxAttribute(property) && property.name.getText(sourceFile) === 'type'
+        ));
+        if (!hasType) {
+          const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+          violations.push(`${file}:${position.line + 1}`);
+        }
+      }
+      const childInsideForm = insideForm || currentTag === 'form';
+      ts.forEachChild(node, child => inspect(child, childInsideForm));
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
+test('rendered media and new-tab links preserve accessible safe defaults', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const inspect = node => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (opening) {
+        const tag = opening.tagName.getText(sourceFile);
+        const attributes = new Map(opening.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => [attribute.name.getText(sourceFile), attribute]));
+        const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+        const location = `${file}:${position.line + 1}`;
+        if (tag === 'img' && !attributes.has('alt')) {
+          violations.push(`${location} image has no alt attribute`);
+        }
+        if (tag === 'video') {
+          if (!attributes.has('controls')) {
+            violations.push(`${location} video has no controls`);
+          }
+          if (!attributes.has('aria-label') && !attributes.has('aria-labelledby')) {
+            violations.push(`${location} video has no accessible name`);
+          }
+        }
+        if (tag === 'a') {
+          const target = attributes.get('target')?.initializer?.getText(sourceFile);
+          const rel = attributes.get('rel')?.initializer?.getText(sourceFile) ?? '';
+          if (target === '"_blank"' && !/noopener|noreferrer/.test(rel)) {
+            violations.push(`${location} new-tab link has no opener isolation`);
+          }
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
+test('native form controls preserve a programmatic accessible name', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const labelTargets = new Set();
+    const controls = [];
+    const attributeMap = opening => new Map(opening.attributes.properties
+      .filter(ts.isJsxAttribute)
+      .map(attribute => [attribute.name.getText(sourceFile), attribute]));
+    const attributeValue = attribute => attribute?.initializer?.getText(sourceFile) ?? '';
+
+    const inspect = (node, insideLabel = false) => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      const tag = opening?.tagName.getText(sourceFile);
+      const attributes = opening ? attributeMap(opening) : new Map();
+      if (tag === 'label' && attributes.has('htmlFor')) {
+        labelTargets.add(attributeValue(attributes.get('htmlFor')));
+      }
+      if (['input', 'select', 'textarea'].includes(tag)) {
+        controls.push({ opening, attributes, insideLabel });
+      }
+      const childInsideLabel = insideLabel || tag === 'label';
+      ts.forEachChild(node, child => inspect(child, childInsideLabel));
+    };
+    inspect(sourceFile);
+
+    for (const { opening, attributes, insideLabel } of controls) {
+      const type = attributeValue(attributes.get('type'));
+      const id = attributeValue(attributes.get('id'));
+      const named = insideLabel
+        || type === '"hidden"'
+        || attributes.has('aria-label')
+        || attributes.has('aria-labelledby')
+        || (id && labelTargets.has(id));
+      if (!named) {
+        const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+        violations.push(`${file}:${position.line + 1}`);
+      }
+    }
+  }
+
+  assert.deepEqual(violations, []);
+});
+
+test('invalid native controls expose linked validation guidance', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const inspect = node => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (opening && ['input', 'select', 'textarea'].includes(opening.tagName.getText(sourceFile))) {
+        const attributes = new Set(opening.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => attribute.name.getText(sourceFile)));
+        if (attributes.has('aria-invalid') && !attributes.has('aria-describedby')) {
+          const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+          violations.push(`${file}:${position.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
+test('credential fields expose password-manager autocomplete semantics', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const inspect = node => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (opening?.tagName.getText(sourceFile) === 'input') {
+        const attributes = new Map(opening.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => [attribute.name.getText(sourceFile), attribute]));
+        const type = attributes.get('type')?.initializer?.getText(sourceFile);
+        if (type === '"email"' || type === '"password"') {
+          const autocomplete = attributes.get('autoComplete')?.initializer?.getText(sourceFile);
+          if (!autocomplete) {
+            const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+            violations.push(`${file}:${position.line + 1}`);
+          }
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
+test('email fields preserve mobile-safe text entry semantics', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const inspect = node => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (opening?.tagName.getText(sourceFile) === 'input') {
+        const attributes = new Map(opening.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => [attribute.name.getText(sourceFile), attribute]));
+        const value = name => attributes.get(name)?.initializer?.getText(sourceFile) ?? '';
+        if (value('type') === '"email"') {
+          const valid = value('autoComplete') === '"email"'
+            && value('autoCapitalize') === '"none"'
+            && value('spellCheck') === '{false}'
+            && value('maxLength') === '{254}';
+          if (!valid) {
+            const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+            violations.push(`${file}:${position.line + 1}`);
+          }
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
+test('credential fields enforce bounded input and explicit mobile keyboard actions', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const inspect = node => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (opening?.tagName.getText(sourceFile) === 'input') {
+        const attributes = new Map(opening.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => [attribute.name.getText(sourceFile), attribute]));
+        const autocomplete = attributes.get('autoComplete')?.initializer?.getText(sourceFile) ?? '';
+        if (/email|current-password|new-password/.test(autocomplete)
+          && (!attributes.has('name') || !attributes.has('maxLength') || !attributes.has('enterKeyHint'))) {
+          const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+          violations.push(`${file}:${position.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
+test('one-time-code fields preserve six-digit mobile input semantics', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const inspect = node => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (opening?.tagName.getText(sourceFile) === 'input') {
+        const attributes = new Map(opening.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => [attribute.name.getText(sourceFile), attribute]));
+        const attributeText = name => attributes.get(name)?.initializer?.getText(sourceFile) ?? '';
+        if (attributeText('autoComplete') === '"one-time-code"') {
+          const valid = attributeText('inputMode') === '"numeric"'
+            && attributeText('pattern') === '"[0-9]{6}"'
+            && attributeText('maxLength') === '{6}';
+          if (!valid) {
+            const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+            violations.push(`${file}:${position.line + 1}`);
+          }
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
+test('US postal-code fields preserve ZIP and ZIP+4 mobile input semantics', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const inspect = node => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (opening?.tagName.getText(sourceFile) === 'input') {
+        const attributes = new Map(opening.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => [attribute.name.getText(sourceFile), attribute]));
+        const attributeText = name => attributes.get(name)?.initializer?.getText(sourceFile) ?? '';
+        if (attributeText('autoComplete') === '"postal-code"') {
+          const valid = attributeText('inputMode') === '"numeric"'
+            && attributeText('pattern') === '"[0-9]{5}(-[0-9]{4})?"'
+            && attributeText('maxLength') === '{10}'
+            && attributes.has('aria-describedby');
+          if (!valid) {
+            const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+            violations.push(`${file}:${position.line + 1}`);
+          }
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
+test('rendered buttons preserve a programmatic accessible name', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const hasTextAlternative = node => {
+      if (ts.isJsxText(node)) return Boolean(node.getText(sourceFile).trim());
+      if (ts.isJsxExpression(node)) {
+        const expression = node.expression;
+        return Boolean(expression)
+          && !ts.isJsxElement(expression)
+          && !ts.isJsxSelfClosingElement(expression);
+      }
+      if (ts.isJsxElement(node)) return node.children.some(hasTextAlternative);
+      return false;
+    };
+    const inspect = node => {
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(sourceFile) === 'button') {
+        const attributes = new Set(node.openingElement.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => attribute.name.getText(sourceFile)));
+        const named = attributes.has('aria-label')
+          || attributes.has('aria-labelledby')
+          || node.children.some(hasTextAlternative);
+        if (!named) {
+          const position = sourceFile.getLineAndCharacterOfPosition(
+            node.openingElement.getStart(sourceFile),
+          );
+          violations.push(`${file}:${position.line + 1}`);
+        }
+      }
+      if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(sourceFile) === 'button') {
+        const attributes = new Set(node.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => attribute.name.getText(sourceFile)));
+        if (!attributes.has('aria-label') && !attributes.has('aria-labelledby')) {
+          const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+          violations.push(`${file}:${position.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
+test('rendered links preserve a programmatic accessible name', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const hasTextAlternative = node => {
+      if (ts.isJsxText(node)) return Boolean(node.getText(sourceFile).trim());
+      if (ts.isJsxExpression(node)) {
+        const expression = node.expression;
+        return Boolean(expression)
+          && !ts.isJsxElement(expression)
+          && !ts.isJsxSelfClosingElement(expression);
+      }
+      if (ts.isJsxElement(node)) return node.children.some(hasTextAlternative);
+      return false;
+    };
+    const inspect = node => {
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(sourceFile) === 'a') {
+        const attributes = new Set(node.openingElement.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => attribute.name.getText(sourceFile)));
+        const named = attributes.has('aria-label')
+          || attributes.has('aria-labelledby')
+          || node.children.some(hasTextAlternative);
+        if (!named) {
+          const position = sourceFile.getLineAndCharacterOfPosition(
+            node.openingElement.getStart(sourceFile),
+          );
+          violations.push(`${file}:${position.line + 1}`);
+        }
+      }
+      if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(sourceFile) === 'a') {
+        const attributes = new Set(node.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => attribute.name.getText(sourceFile)));
+        if (!attributes.has('aria-label') && !attributes.has('aria-labelledby')) {
+          const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+          violations.push(`${file}:${position.line + 1}`);
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
+test('ARIA dialogs preserve modal and naming semantics', () => {
+  const files = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.tsx'))
+    .map(entry => `src/${entry.name}`);
+  const violations = [];
+
+  for (const file of files) {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readText(file),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const inspect = node => {
+      const opening = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (opening) {
+        const attributes = new Map(opening.attributes.properties
+          .filter(ts.isJsxAttribute)
+          .map(attribute => [attribute.name.getText(sourceFile), attribute]));
+        const value = name => attributes.get(name)?.initializer?.getText(sourceFile) ?? '';
+        if (value('role') === '"dialog"') {
+          const modal = value('aria-modal') === '"true"';
+          const named = attributes.has('aria-label') || attributes.has('aria-labelledby');
+          if (!modal || !named) {
+            const position = sourceFile.getLineAndCharacterOfPosition(opening.getStart(sourceFile));
+            violations.push(`${file}:${position.line + 1}`);
+          }
+        }
+      }
+      ts.forEachChild(node, inspect);
+    };
+    inspect(sourceFile);
+  }
+
+  assert.deepEqual(violations, []);
+});
+
+test('application-level deal and verification mutations are same-tick guarded', () => {
+  const app = readText('src/app.tsx');
+
+  assert.match(app, /const createMutationRef=useRef\(false\)/);
+  assert.ok((app.match(/if\(createMutationRef\.current\)return/g) ?? []).length >= 2);
+  assert.match(app, /const acceptMutationRef=useRef\(false\)/);
+  assert.match(app, /acceptMutationRef\.current=true[\s\S]*finally\{acceptMutationRef\.current=false;setAccepting\(false\)\}/);
+  assert.match(app, /const protectionRequired=await getDealAcceptanceProtection\(active\.publicId\)/);
+  assert.match(app, /setAcceptanceProtected\(protectionRequired\);if\(protectionRequired&&!\/\^\[0-9\]\{6\}\$\/\.test\(buyerAccessCode\)\)/);
+  assert.match(app, /protectionRequired[\s\S]*await acceptPublicDeal\(session,active\.publicId,buyer\.trim\(\),buyerAccessCode\)/);
+  assert.match(app, /const verificationMutationRef=useRef\(false\)/);
+  assert.match(app, /verificationMutationRef\.current=true[\s\S]*finally\{verificationMutationRef\.current=false;setVerificationRequesting\(false\)\}/);
+  assert.match(app, /setVerificationRequesting\(true\)/);
+  assert.match(app, /verificationRequesting=\{verificationRequesting\}/);
+  assert.match(app, /accepting=\{accepting\}/);
+  const workspace = readText('src/DealWorkspace.tsx');
+  assert.match(workspace, /type="submit"[\s\S]*disabled=\{accepting\}/);
+  assert.match(workspace, /aria-busy=\{accepting\}/);
+  assert.match(workspace, /accepting \? 'Accepting…' : 'Accept these terms'/);
+  const profile = readText('src/AccountProfileWorkspace.tsx');
+  assert.match(profile, /disabled=\{requesting\}/);
+  assert.match(profile, /aria-busy=\{requesting\}/);
+  assert.match(profile, /requesting \? 'Requesting…' : 'Request verification'/);
+});
+
+test('VIN decoding cannot overwrite a newer identifier selection', () => {
+  const app = readText('src/app.tsx');
+  assert.match(app, /const vehicleVinRequestRef=useRef\(0\)/);
+  assert.match(app, /const vehicleVinActiveRef=useRef\(false\)/);
+  assert.match(app, /const request=\+\+vehicleVinRequestRef\.current/);
+  assert.ok((app.match(/request!==vehicleVinRequestRef\.current/g) ?? []).length >= 2);
+  assert.match(app, /if\(request===vehicleVinRequestRef\.current\)vehicleVinActiveRef\.current=false/);
+  assert.match(app, /onClearVinLookup=\{\(\)=>\{vehicleVinRequestRef\.current\+=1;vehicleVinActiveRef\.current=false/);
+});
+
+test('session-scoped background responses cannot repopulate signed-out state', () => {
+  const app = readText('src/app.tsx');
+  assert.match(app, /let current=true;let renewing=false;const renew=\(\)=>\{if\(renewing\)return/);
+  assert.match(app, /renewing=true;refreshSession\(session\)/);
+  assert.match(app, /\.finally\(\(\)=>\{renewing=false\}\)/);
+  assert.match(app, /refreshSession\(session\)\.then\(next=>\{if\(current\)setSession\(next\)\}\)/);
+  assert.match(app, /const notificationRequestRef=useRef\(0\)/);
+  assert.match(app, /getMyNotifications\(session\)\.then\(items=>\{if\(current&&request===notificationRequestRef\.current\)setNotifications\(items\)\}\)/);
+  assert.match(app, /markAllNotificationsRead\(session\)\.catch\(error=>\{if\(request===notificationRequestRef\.current\)\{setNotifications\(previous\)/);
+  assert.match(app, /getAdminAccess\(session\)\.then\(access=>\{if\(current\)setIsAdmin\(access\)\}\)/);
+  assert.ok((app.match(/return\(\)=>\{current=false/g) ?? []).length >= 3);
+  assert.match(app, /const dealListRequestRef=useRef\(0\)/);
+  assert.match(app, /const savedDealsRequestRef=useRef\(0\)/);
+  assert.ok((app.match(/request===dealListRequestRef\.current/g) ?? []).length >= 3);
+  assert.ok((app.match(/(?:request|savedRequest)===savedDealsRequestRef\.current/g) ?? []).length >= 4);
+});
+
+test('offer loading ignores responses from a previous deal or session', () => {
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+  assert.match(features, /const loadSequenceRef = useRef\(0\)/);
+  assert.match(features, /const request = \+\+loadSequenceRef\.current/);
+  assert.match(features, /if \(request === loadSequenceRef\.current\) \{\s+setOffers\(next\)/);
+  assert.match(features, /loadSequenceRef\.current \+= 1/);
+});
+
+test('profile and notification deal navigation ignore stale responses', () => {
+  const app = readText('src/app.tsx');
+  assert.match(app, /const publicDealRequestRef=useRef\(0\)/);
+  assert.match(app, /const profileRequestRef=useRef\(0\)/);
+  assert.match(app, /const request=\+\+publicDealRequestRef\.current/);
+  assert.match(app, /request!==publicDealRequestRef\.current/);
+  assert.match(app, /request===publicDealRequestRef\.current/);
+  assert.match(app, /const openProfile=async\(\)=>\{if\(!session\)return;const request=\+\+profileRequestRef\.current/);
+  assert.ok((app.match(/request===profileRequestRef\.current/g) ?? []).length >= 2);
+  assert.match(app, /onOpenPublic=\{publicId=>void openPublicDeal\(publicId\)\}/);
+});
+
+test('payment and account security refreshes ignore stale responses', () => {
+  const payment = readText('src/DealPaymentWorkspace.tsx');
+  const sessions = readText('src/AccountSessionSecurity.tsx');
+  const mfa = readText('src/AccountMfaSecurity.tsx');
+
+  assert.match(payment, /const loadRequest = useRef\(0\)/);
+  assert.match(payment, /const request = \+\+loadRequest\.current/);
+  assert.ok((payment.match(/request !== loadRequest\.current/g) ?? []).length >= 2);
+  assert.match(payment, /loadRequest\.current \+= 1/);
+
+  for (const source of [sessions, mfa]) {
+    assert.match(source, /const loadRequestRef=useRef\(0\)/);
+    assert.ok((source.match(/\+\+loadRequestRef\.current/g) ?? []).length >= 2);
+    assert.ok((source.match(/request===loadRequestRef\.current/g) ?? []).length >= 2);
+    assert.match(source, /loadRequestRef\.current\+=1/);
+  }
+});
+
+test('transaction polling renders only the newest completed request', () => {
+  const payment = readText('src/DealPaymentWorkspace.tsx');
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.ok((payment.match(/const loadRequest = useRef\(0\)/g) ?? []).length >= 2);
+  assert.ok((payment.match(/request === loadRequest\.current/g) ?? []).length >= 2);
+  assert.ok((payment.match(/loadRequest\.current \+= 1/g) ?? []).length >= 2);
+
+  assert.ok((features.match(/const loadRequestRef = useRef\(0\)/g) ?? []).length >= 3);
+  assert.ok((features.match(/request === loadRequestRef\.current/g) ?? []).length >= 4);
+  assert.ok((features.match(/loadRequestRef\.current \+= 1/g) ?? []).length >= 3);
+  assert.match(features, /request !== loadRequestRef\.current \|\| !record/);
+  assert.match(payment, /Payment receipt is temporarily unavailable\. Retrying automatically\./);
+  assert.match(payment, /setLoadError\(''\)/);
+  assert.match(payment, /className="notice error" role="alert"/);
+});
+
+test('meeting and watchlist reads fail visibly without exposing false state', () => {
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(fulfillment, /const \[loaded, setLoaded\] = useState\(false\)/);
+  assert.match(fulfillment, /setLoaded\(false\);[\s\S]*getDealMeeting\(session, deal\.id\)/);
+  assert.match(fulfillment, /Could not load meeting details/);
+  assert.match(fulfillment, /!loaded \? \([\s\S]*Loading meeting details/);
+  assert.match(fulfillment, /loadFailed \? \([\s\S]*<AsyncStatePanel[\s\S]*state="error"/);
+  assert.match(fulfillment, /setLoadVersion\(\(?version\)? => version \+ 1\)/);
+  assert.match(fulfillment, /Could not load handoff status/);
+  assert.match(fulfillment, /if \(loadError\) \{[\s\S]*role="alert"[\s\S]*Try again/);
+  assert.match(features, /Could not check whether this deal is saved\. Try again\./);
+  assert.match(features, /Could not load the private participant record\./);
+  assert.match(features, /Could not refresh the deal action plan\./);
+  assert.ok((features.match(/compact-record-error/g) ?? []).length >= 2);
+});
+
+test('agreement history failures remain visible and recoverable', () => {
+  const agreement = readText('src/AgreementRecordSummary.tsx');
+  assert.ok((agreement.match(/const \[loadError, setLoadError\] = useState\(''\)/g) ?? []).length >= 2);
+  assert.match(agreement, /Agreement fingerprint is temporarily unavailable\./);
+  assert.match(agreement, /Agreement history is temporarily unavailable\./);
+  assert.match(agreement, /role="alert"/);
+  assert.ok((agreement.match(/setLoadVersion\(version => version \+ 1\)/g) ?? []).length >= 2);
+  assert.match(agreement, /const \[messageFailed, setMessageFailed\] = useState\(false\)/);
+  assert.match(agreement, /Allow pop-ups to preview the agreement document\./);
+  assert.match(agreement, /role=\{error \|\| messageFailed \? 'alert' : 'status'\}/);
+  assert.match(agreement, /aria-live=\{error \|\| messageFailed \? 'assertive' : 'polite'\}/);
+});
+
+test('completed-deal dispute eligibility fails visibly and can be retried', () => {
+  const resolution = readText('src/DealResolutionWorkspace.tsx');
+  assert.match(resolution, /const \[paymentStateError, setPaymentStateError\] = useState\(''\)/);
+  assert.match(resolution, /Dispute eligibility is temporarily unavailable\./);
+  assert.match(resolution, /setPaymentStateVersion\(version => version \+ 1\)/);
+});
+
+test('public trust checks never turn provider failures into silent approval', () => {
+  const declarations = readText('src/SellerDeclarations.tsx');
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+  assert.match(declarations, /Seller declaration status is temporarily unavailable\./);
+  assert.match(declarations, /setLoadVersion\(version => version \+ 1\)/);
+  assert.match(features, /Safety check temporarily unavailable/);
+  assert.match(features, /Do not treat a missing risk result as approval\./);
+  assert.match(features, /setLoadVersion\(version => version \+ 1\)/);
+});
+
+test('shared UI foundations expose semantic tokens and accessible feedback states', () => {
+  const tokens = readText('src/design-tokens.css');
+  const feedback = readText('src/FeedbackMessage.tsx');
+  const feedbackStyles = readText('src/feedback-message.css');
+  const fieldErrorStyles = readText('src/field-error.css');
+  const asyncStateStyles = readText('src/async-state-panel.css');
+  const entry = readText('src/main.tsx');
+
+  for (const token of [
+    '--color-brand-700',
+    '--color-success-700',
+    '--color-warning-800',
+    '--color-danger-800',
+    '--color-info-800',
+    '--focus-ring',
+    '--touch-target',
+  ]) {
+    assert.match(tokens, new RegExp(`${token}:`));
+  }
+  assert.match(entry, /import '\.\/design-tokens\.css';[\s\S]*import '\.\/styles\.css';/);
+  assert.match(feedback, /role=\{urgent \? 'alert' : 'status'\}/);
+  assert.match(feedback, /aria-live=\{urgent \? 'assertive' : 'polite'\}/);
+  assert.match(feedback, /aria-atomic="true"/);
+  assert.match(feedbackStyles, /var\(--color-danger-800\)/);
+  assert.match(feedbackStyles, /var\(--color-success-700\)/);
+  assert.match(fieldErrorStyles, /var\(--color-danger-800\)/);
+  assert.match(fieldErrorStyles, /var\(--color-danger-border\)/);
+  assert.match(asyncStateStyles, /var\(--color-info-800\)/);
+  assert.match(asyncStateStyles, /var\(--color-danger-100\)/);
+  assert.doesNotMatch(`${fieldErrorStyles}\n${asyncStateStyles}`, /var\(--ds-(?:error|info|border|ink-muted|surface-subtle)/);
+  assert.match(tokens, /:focus-visible/);
+  assert.match(tokens, /@media \(forced-colors: active\)/);
+});
+
+test('every stylesheet custom-property reference has a governed definition', () => {
+  const cssFiles = readdirSync(join(rootPath, 'src'), { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.css'))
+    .map(entry => `src/${entry.name}`);
+  const definitions = new Set();
+  const usages = new Map();
+
+  for (const file of cssFiles) {
+    const source = readText(file);
+    for (const match of source.matchAll(/(--[A-Za-z0-9_-]+)\s*:/g)) {
+      definitions.add(match[1]);
+    }
+    for (const match of source.matchAll(/var\((--[A-Za-z0-9_-]+)/g)) {
+      const files = usages.get(match[1]) ?? new Set();
+      files.add(file);
+      usages.set(match[1], files);
+    }
+  }
+
+  const undefinedReferences = [...usages]
+    .filter(([token]) => !definitions.has(token))
+    .map(([token, files]) => `${token}: ${[...files].join(', ')}`)
+    .sort();
+  assert.deepEqual(undefinedReferences, []);
+});
+
+test('semantic feedback color pairs meet WCAG AA normal-text contrast', () => {
+  const luminance = hex => {
+    const channels = hex.match(/[a-f\d]{2}/gi).map(value => Number.parseInt(value, 16) / 255);
+    const linear = channels.map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+  };
+  const contrast = (foreground, background) => {
+    const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+    return (values[0] + 0.05) / (values[1] + 0.05);
+  };
+  const pairs = [
+    ['2855a5', 'eef5ff'],
+    ['155948', 'e7f8f1'],
+    ['6c4700', 'fff4cf'],
+    ['8f2430', 'fff0f1'],
+  ];
+
+  for (const [foreground, background] of pairs) {
+    assert.ok(contrast(foreground, background) >= 4.5, `${foreground} on ${background}`);
+  }
+});
+
+test('password recovery exposes field-specific errors and deterministic focus recovery', () => {
+  const source = readText('src/AccountEntryPages.tsx');
+  const fieldError = readText('src/FieldError.tsx');
+  const fieldErrorStyles = readText('src/field-error.css');
+  assert.match(source, /aria-invalid=\{Boolean\(passwordError\)\}/);
+  assert.match(source, /recovery-password-error/);
+  assert.match(source, /aria-invalid=\{Boolean\(confirmPasswordError\)\}/);
+  assert.match(source, /recovery-confirm-password-error/);
+  assert.match(source, /passwordRef\.current\?\.focus\(\)/);
+  assert.match(source, /confirmPasswordRef\.current\?\.focus\(\)/);
+  assert.match(fieldError, /role="alert"/);
+  assert.match(fieldError, /aria-hidden="true"/);
+  assert.match(fieldErrorStyles, /\[aria-invalid='true'\]/);
+});
+
+test('account, support, and safety forms keep native validation actions available', () => {
+  const account = readText('src/AccountProfileWorkspace.tsx');
+  const entry = readText('src/AccountEntryPages.tsx');
+  const support = readText('src/SupportCaseCenter.tsx');
+  const resolution = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(account, /id="account-confirm-password"/);
+  assert.match(account, /confirmPasswordRef\.current\?\.focus\(\)/);
+  assert.doesNotMatch(account, /savingPassword \|\| !currentPassword/);
+  assert.doesNotMatch(entry, /submitting \|\| \(isSignup && !acceptedPolicies\)/);
+  assert.doesNotMatch(support, /saving \|\| reply\.trim\(\)\.length < 10/);
+  assert.doesNotMatch(resolution, /sending \|\| details\.trim\(\)\.length < 10/);
+});
+
+test('MFA forms keep native code validation actionable', () => {
+  const accountMfa = readText('src/AccountMfaSecurity.tsx');
+  const loginMfa = readText('src/MfaLoginVerification.tsx');
+
+  assert.match(accountMfa, /deviceNameRef\.current\?\.focus\(\)/);
+  assert.doesNotMatch(accountMfa, /disabled=\{Boolean\(busy\)\|\|code\.length!==6\}/);
+  assert.doesNotMatch(accountMfa, /disabled=\{Boolean\(busy\)\|\|removeCode\.length!==6\}/);
+  assert.doesNotMatch(loginMfa, /disabled=\{busy\|\|code\.length!==6\}/);
+});
+
+test('shared async state exposes accurate loading and retry semantics', () => {
+  const panel = readText('src/AsyncStatePanel.tsx');
+  const styles = readText('src/async-state-panel.css');
+  const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+  assert.match(panel, /role=\{urgent \? 'alert' : 'status'\}/);
+  assert.match(panel, /aria-busy=\{state === 'loading'/);
+  assert.match(panel, /type="button"/);
+  assert.match(styles, /min-height: var\(--touch-target\)/);
+  assert.match(styles, /prefers-reduced-motion: reduce/);
+  assert.ok((fulfillment.match(/<AsyncStatePanel/g) || []).length >= 2);
+  assert.match(fulfillment, /setLoadVersion\(\(?version\)? => version \+ 1\)/);
+});
+
+test('account security reads fail closed with an explicit retry path', () => {
+  const sessions = readText('src/AccountSessionSecurity.tsx');
+  const mfa = readText('src/AccountMfaSecurity.tsx');
+
+  for (const source of [sessions, mfa]) {
+    assert.match(source, /const \[loadError,setLoadError\]=useState\(''\)/);
+    assert.match(source, /<AsyncStatePanel state="error"/);
+    assert.match(source, /actionLabel="Retry securely"/);
+  }
+  assert.match(sessions, /\{!loadError&&<div className="session-security-actions">/);
+  assert.match(mfa, /!loading&&!loadError&&!enrollment/);
+});
+
+test('public trust passport exposes recoverable routing and accessible reputation data', () => {
+  const source = readText('src/app.tsx');
+
+  assert.match(source, /function PublicTrustPassportPage\(\{/);
+  assert.match(source, /state=\{message\?'error':'loading'\}/);
+  assert.match(source, /onRetry=\{\(\)=>setRouteRevision\(revision=>revision\+1\)\}/);
+  assert.match(source, /aria-label=\{`\$\{rating\.stars\} out of 5 stars`\}/);
+  assert.match(source, /className="passport-avatar" aria-hidden="true"/);
+  assert.match(source, /type="button" onClick=\{onBack\}/);
+});
+
+test('dashboard data failures stay distinct from valid empty states', () => {
+  const source = readText('src/app.tsx');
+  const styles = readText('src/dashboard.css');
+
+  assert.match(source, /const \[dashboardError,setDashboardError\]=useState\(''\)/);
+  assert.match(source, /title="Refresh failed"/);
+  assert.match(source, /Showing saved data\./);
+  assert.match(source, /setDashboardRevision\(revision=>revision\+1\)/);
+  assert.match(source, /Promise\.all\(\[listUserDeals\(session\),getMySavedDeals\(session\)\]\)/);
+  assert.doesNotMatch(source, /listUserDeals\(session\)[\s\S]{0,240}catch\(\(\)=>\{if\(request===dealListRequestRef\.current\)setDeals\(\[\]\)\}\)/);
+  assert.match(styles, /\.dashboard-data-states/);
+});
+
+test('English launch locale inlining is AST-scoped and preserves dynamic behavior', () => {
+  const source = `
+    import { t } from './i18n';
+    const staticCopy = t('Static copy');
+    const templateCopy = t(\`Template copy\`);
+    const conditionalCopy = t(enabled ? 'Enabled copy' : 'Disabled copy');
+    const mixedConditional = t(enabled ? 'Safe copy' : dynamicKey);
+    const dynamicCopy = t(dynamicKey);
+    const memberCopy = translator.t('Member copy');
+    const quotedExample = "t('Inside a string')";
+    // t('Inside a comment')
+  `;
+  const transformed = inlineEnglishTranslationCalls(source, 'sample.ts');
+
+  assert.match(transformed, /const staticCopy = 'Static copy';/);
+  assert.match(transformed, /const templateCopy = `Template copy`;/);
+  assert.match(transformed, /const conditionalCopy = \(enabled \? 'Enabled copy' : 'Disabled copy'\);/);
+  assert.match(transformed, /const mixedConditional = \(enabled \? 'Safe copy' : dynamicKey\);/);
+  assert.match(transformed, /const dynamicCopy = \(dynamicKey\);/);
+  assert.match(transformed, /translator\.t\('Member copy'\)/);
+  assert.match(transformed, /"t\('Inside a string'\)"/);
+  assert.match(transformed, /\/\/ t\('Inside a comment'\)/);
+  assert.equal(
+    inlineEnglishTranslationCalls("const copy = t('No import');", 'sample.ts'),
+    "const copy = t('No import');",
+  );
+});
+
+test('shipping navigation readiness exposes loading, failure, and bounded retry states', () => {
+  const app = readText('src/app.tsx');
+  const shell = readText('src/DealWorkspaceShell.tsx');
+
+  assert.match(shell, /status: 'loading' \| 'ready' \| 'error'/);
+  assert.match(shell, /label: 'Retry shipping check'/);
+  assert.match(shell, /kind: 'retry-shipping'/);
+  assert.match(app, /\{status:'loading',ready:items\[dealId\]\?\.ready\?\?false\}/);
+  assert.match(app, /\{status:'error',ready:items\[dealId\]\?\.ready\?\?false\}/);
+  assert.match(app, /dealPrimaryAction\.kind==='retry-shipping'/);
+  assert.match(app, /setEvidenceRevision\(revision=>revision\+1\)/);
+  assert.doesNotMatch(app, /catch\(\(\)=>\{if\(current\)setShippingReadinessByDeal\(items=>\(\{\.\.\.items,\[dealId\]:\{loaded:true,ready:false\}\}\)\)\}\)/);
+});
+
+test('deal action plan exposes initial loading, stale failure, and manual retry states', () => {
+  const source = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(source, /import \{ AsyncStatePanel \} from '\.\/AsyncStatePanel'/);
+  assert.match(source, /const \[loading, setLoading\] = useState\(true\)/);
+  assert.match(source, /const \[loadRevision, setLoadRevision\] = useState\(0\)/);
+  assert.match(source, /title=\{loadError \? 'Deal progress unavailable' : 'Loading deal progress'\}/);
+  assert.match(source, /Showing the previously loaded milestones\. Retry before relying on the next step\./);
+  assert.match(source, /setLoadRevision\(\(?revision\)? => revision \+ 1\)/);
+  assert.match(source, /role="status" aria-live="polite"/);
+  assert.doesNotMatch(source, /if \(!plan\) \{[\s\S]{0,400}return loadError \?/);
+});
+
+test('notification reads preserve stale activity and expose retryable failures', () => {
+  const source = readText('src/app.tsx');
+
+  assert.match(source, /const \[notificationsError,setNotificationsError\]=useState\(''\)/);
+  assert.match(source, /title="Activity unavailable"/);
+  assert.match(source, /Showing previously loaded activity\./);
+  assert.match(source, /onRetry=\{\(\)=>setNotificationsRevision\(revision=>revision\+1\)\}/);
+  assert.match(source, /setNotifications\(previous\)/);
+  assert.doesNotMatch(source, /getMyNotifications\(session\)[\s\S]{0,240}catch\(\(\)=>\{if\(current&&request===notificationRequestRef\.current\)setNotifications\(\[\]\)\}\)/);
+  assert.match(source, /aria-haspopup="true" aria-expanded=\{expanded\} aria-controls="notification-menu"/);
+  assert.match(source, /role="region" aria-labelledby="notification-menu-title"/);
+  assert.match(source, /id="notification-menu-title"/);
+  assert.match(source, /event\.key==='Escape'[\s\S]*close\(true\)/);
+  assert.match(source, /document\.addEventListener\('pointerdown',onPointerDown\)/);
+  assert.match(source, /toggleRef\.current\?\.focus\(\)/);
+  assert.match(source, /unread>99\?'99\+':unread/);
+});
+
+test('profile loading fails closed before account security controls render', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/AccountProfileWorkspace.tsx');
+
+  assert.match(app, /const \[profileLoading,setProfileLoading\]=useState\(false\)/);
+  assert.match(app, /setProfileLoading\(true\);setAuthMessage\(''\);setView\('profile'\)/);
+  assert.match(app, /finally\{if\(request===profileRequestRef\.current\)setProfileLoading\(false\)\}/);
+  assert.match(app, /onRetryProfile=\{\(\)=>void openProfile\(\)\}/);
+  assert.match(workspace, /if \(!profile\) \{/);
+  assert.match(workspace, /title=\{loading \? 'Loading profile…' : 'Profile unavailable'\}/);
+  assert.match(workspace, /onAction=\{loading \? undefined : onRetry\}/);
+});
+
+test('public Deal Link failures preserve the route and expose a bounded retry', () => {
+  const app = readText('src/app.tsx');
+  const pages = readText('src/PublicRoutePages.tsx');
+  const styles = readText('src/styles.css');
+
+  assert.match(app, /updateBrowserAddress\(`\/\?deal=\$\{encodeURIComponent\(publicId\)\}`\)/);
+  assert.match(app, /setAuthMessage\(''\);\s*setView\('route-loading'\)/);
+  assert.match(app, /setAuthMessage\(error instanceof Error\?error\.message:'Deal Link unavailable'\);setView\('link-error'\)/);
+  assert.match(app, /onRetry=\{\(\)=>setRouteRevision\(revision=>revision\+1\)\}/);
+  assert.match(pages, /className="deal-link-error-actions"/);
+  assert.match(pages, /onClick=\{onRetry\}>\{t\('Try again'\)\}/);
+  assert.match(styles, /\.deal-link-error-actions button\{min-height:44px\}/);
+});
+
+test('buyer-code protection reads fail closed across seller and buyer flows', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+
+  assert.match(app, /const \[acceptanceProtectionState,setAcceptanceProtectionState\]=useState<'idle'\|'loading'\|'ready'\|'error'>\('idle'\)/);
+  assert.match(app, /setAcceptanceProtectionState\('loading'\);getDealAcceptanceProtection/);
+  assert.match(app, /setAcceptanceProtectionState\('error'\)/);
+  assert.match(app, /isDemoActive\|\|acceptanceProtectionState==='ready'/);
+  assert.match(app, /Checking acceptance security before you share this link\./);
+  assert.match(app, /onRetryProtection=\{\(\)=>setAcceptanceProtectionRevision\(revision=>revision\+1\)\}/);
+  assert.match(workspace, /title=\{acceptanceProtectionState === 'error' \? 'Acceptance protection unavailable'/);
+  assert.match(workspace, /acceptanceProtectionState === 'ready' &&\s+acceptanceProtected/);
+});
+
+test('deal inquiry role checks fail closed and expose a retry path', () => {
+  const source = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(source, /const \[accessChecking, setAccessChecking\] = useState\(Boolean\(session\)\)/);
+  assert.match(source, /setSellerAccess\(false\);\s*setAccessFailed\(true\)/);
+  assert.match(source, /Could not verify your deal access\./);
+  assert.match(source, /onClick=\{\(\) => void verifySellerAccess\(\)\}/);
+  assert.match(source, /!accessChecking && !accessFailed && items\.length === 0/);
+});
+
+test('shipping reads do not render false empty states while loading or failed', () => {
+  const source = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(source, /const \[shipmentLoading, setShipmentLoading\] = useState<boolean \| null>\(true\)/);
+  assert.match(source, /const \[deliveryLoading, setDeliveryLoading\] = useState<boolean \| null>\(true\)/);
+  assert.match(source, /deliveryLoading === null && \([\s\S]{0,160}title="Unavailable"/);
+  assert.match(source, /onAction=\{loadDelivery\}/);
+  assert.match(source, /shipmentLoading === null && \([\s\S]{0,160}title="Unavailable"/);
+  assert.match(source, /onAction=\{loadShipment\}/);
+  assert.match(source, /deliveryLoading === false && deal\.viewerRole === 'buyer'/);
+  assert.match(source, /shipmentLoading === false && \(shipment \?/);
+});
+
+test('deal safety action failures use urgent accessible feedback', () => {
+  const source = readText('src/DealResolutionWorkspace.tsx');
+
+  assert.match(source, /const \[messageFailed, setMessageFailed\] = useState\(false\)/);
+  assert.match(source, /catch \(error\) \{\s+setMessageFailed\(true\)/);
+  assert.match(source, /role=\{messageFailed \? 'alert' : 'status'\}/);
+  assert.match(source, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
+});
+
+test('meeting action failures use urgent accessible feedback', () => {
+  const source = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(source, /const \[actionFailed, setActionFailed\] = useState\(false\)/);
+  assert.match(source, /setActionFailed\(false\);\s+try \{\s+await proposeMeeting/);
+  assert.match(source, /setActionFailed\(false\);\s+try \{\s+await confirmMeeting/);
+  assert.match(source, /role=\{actionFailed \? 'alert' : 'status'\}/);
+  assert.match(source, /aria-live=\{actionFailed \? 'assertive' : 'polite'\}/);
+});
+
+test('inspection and handoff failures use urgent accessible feedback', () => {
+  const source = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(source, /const \[saveFailed, setSaveFailed\] = useState\(false\)/);
+  assert.match(source, /setSaveFailed\(true\);\s+setMessage\('Complete every inspection check/);
+  assert.match(source, /role=\{saveFailed \? 'alert' : 'status'\}/);
+  assert.match(source, /setBusy\('arrive'\);\s+setMessage\(''\);\s+setActionFailed\(false\)/);
+  assert.match(source, /setBusy\('pin'\);\s+setMessage\(''\);\s+setActionFailed\(false\)/);
+  assert.match(source, /setBusy\('finish'\);\s+setMessage\(''\);\s+setActionFailed\(false\)/);
+  assert.match(source, /role=\{actionFailed \? 'alert' : 'status'\}[\s\S]{0,120}aria-live=\{actionFailed \? 'assertive' : 'polite'\}/);
+});
+
+test('shipping workflow failures use urgent accessible feedback', () => {
+  const source = readText('src/DealFulfillmentWorkspace.tsx');
+
+  assert.match(source, /const \[messageFailed, setMessageFailed\] = useState\(false\)/);
+  assert.match(source, /setShipmentLoading\(null\)/);
+  assert.match(source, /setDeliveryLoading\(null\)/);
+  assert.match(source, /setMessageFailed\(true\);\s+setMessage\('Complete the shipping readiness checklist first/);
+  assert.match(source, /role=\{messageFailed \? 'alert' : 'status'\}/);
+  assert.match(source, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
+});
+
+test('evidence and payment failures use urgent accessible feedback', () => {
+  const evidence = readText('src/DealEvidenceWorkspace.tsx');
+  const payment = readText('src/DealPaymentWorkspace.tsx');
+
+  assert.match(evidence, /const \[messageFailed, setMessageFailed\] = useState\(false\)/);
+  assert.match(evidence, /role=\{messageFailed \? 'alert' : 'status'\}/);
+  assert.match(evidence, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
+  assert.match(payment, /\{message && \(\s+<div className="notice" role="alert" aria-live="assertive">/);
+  assert.doesNotMatch(payment, /\{message && \(\s+<div className="notice" role="status" aria-live="polite">/);
+  assert.ok((payment.match(/className="notice error" role="alert"/g) ?? []).length >= 2);
+  assert.match(payment, /className="notice error no-print"\s+role="alert"/);
+});
+
+test('password recovery normalizes email and restores invalid-field focus', () => {
+  const source = readText('src/AccountEntryPages.tsx');
+
+  assert.match(source, /const normalizedEmail = email\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(source, /setEmailError\('Enter your account email\.'\)/);
+  assert.match(source, /emailRef\.current\?\.focus\(\)/);
+  assert.match(source, /await requestPasswordReset\(normalizedEmail\)/);
+  assert.match(source, /aria-describedby=\{emailError \? 'forgot-password-email-error' : undefined\}/);
+  assert.match(source, /<FieldError id="forgot-password-email-error">/);
+});
+
+test('inquiry and offer failures preserve stale data and announce urgently', () => {
+  const source = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(source, /setMessage\('Could not load questions'\)/);
+  assert.match(source, /setMessage\('Could not refresh offers\. Showing the last known list\.'\)/);
+  assert.ok((source.match(/const loadFailedRef = useRef\(false\)/g) ?? []).length >= 2);
+  assert.match(source, /if \(loadFailedRef\.current\) \{\s+loadFailedRef\.current = false;\s+setMessage\(''\);\s+setMessageFailed\(false\)/);
+  assert.match(source, /role=\{messageFailed \? 'alert' : 'status'\}/);
+  assert.match(source, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
+  assert.match(source, /setMessageFailed\(false\);\s+try \{\s+await askDealQuestion/);
+  assert.match(source, /setMessageFailed\(false\);\s+try \{\s+await makeDealOffer/);
+});
+
+test('draft and media mutation failures use urgent accessible feedback', () => {
+  const source = readText('src/DealWorkspaceFeatures.tsx');
+
+  assert.match(source, /setMessageFailed\(true\);\s+setMessage\('Confirm all declarations before publishing\.'\)/);
+  assert.match(source, /setMessageFailed\(true\);\s+setMessage\(`\$\{unsupported\.name\}/);
+  assert.match(source, /await deleteDealMedia[\s\S]{0,240}catch \(error\) \{\s+setMessageFailed\(true\)/);
+  assert.match(source, /await reorderDealMedia[\s\S]{0,240}catch \(error\) \{\s+setMessageFailed\(true\)/);
+  assert.match(source, /await updatePublishedDeal[\s\S]{0,500}catch \(error\) \{\s+setMessageFailed\(true\)/);
+});
+
+test('receipt, invitation, and VIN failures are announced urgently', () => {
+  const features = readText('src/DealWorkspaceFeatures.tsx');
+  const creation = readText('src/DealCreationWorkspace.tsx');
+
+  assert.match(features, /const \[shareFailed, setShareFailed\] = useState\(false\)/);
+  assert.match(features, /role=\{shareFailed \? 'alert' : 'status'\}/);
+  assert.match(features, /const \[noticeFailed, setNoticeFailed\] = useState\(false\)/);
+  assert.match(features, /role=\{noticeFailed \? 'alert' : 'status'\}/);
+  assert.match(features, /Some receipt details could not be loaded\. Refresh before saving a final copy\./);
+  assert.match(features, /\{receiptMessage && \(\s+<div className="notice error" role="alert" aria-live="assertive">/);
+  assert.match(creation, /role=\{vehicleVinLookup\.status === 'error' \? 'alert' : 'status'\}/);
+  assert.match(creation, /aria-live=\{vehicleVinLookup\.status === 'error' \? 'assertive' : 'polite'\}/);
+});
+
+test('published and acceptance failures use urgent accessible feedback', () => {
+  const app = readText('src/app.tsx');
+  const workspace = readText('src/DealWorkspace.tsx');
+
+  assert.match(app, /const \[noticeFailed,setNoticeFailed\]=useState\(false\)/);
+  assert.match(app, /role=\{noticeFailed\?'alert':'status'\}/);
+  assert.match(app, /published-access-message notice error" role="alert"/);
+  assert.match(app, /creation-error notice" role="alert"/);
+  assert.match(workspace, /authMessage && \([\s\S]*className="notice error" role="alert"/);
+});
+
+test('support detail failures return to a recoverable case list', () => {
+  const source = readText('src/SupportCaseCenter.tsx');
+
+  assert.match(
+    source,
+    /catch \(error\) \{\s+if \(request !== requestRef\.current\) return;\s+setSelectedReference\(''\);\s+setFeedback\(/,
+  );
+  assert.match(
+    source,
+    /if \(!detail\) \{\s+setSelectedReference\(''\);\s+setSelected\(null\);\s+setFeedback\(/,
+  );
+  assert.match(source, /Your reply was sent, but the refreshed support case is unavailable\./);
 });

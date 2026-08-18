@@ -9,6 +9,7 @@ import {
   prepareResponse,
   publicSession,
   readJsonBody,
+  requireJsonContentType,
   requirePost,
   requireSameOrigin,
   respondAuthRateLimited,
@@ -19,7 +20,7 @@ import {
 
 export default async function handler(request, response) {
   prepareResponse(response);
-  if (!requirePost(request, response) || !requireSameOrigin(request, response)) return;
+  if (!requirePost(request, response) || !requireSameOrigin(request, response) || !requireJsonContentType(request, response)) return;
 
   const body = readJsonBody(request);
   const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
@@ -36,6 +37,9 @@ export default async function handler(request, response) {
     }, request);
     const data = await authPayload(upstream);
     const session = publicSession(data);
+    if (upstream.ok && (!session || !data.refresh_token)) {
+      throw new Error('Authentication provider response was rejected.');
+    }
     if (!upstream.ok || !session || !data.refresh_token) {
       const code = authProviderCode(data);
       logAuthRejection('login', upstream.status, code);

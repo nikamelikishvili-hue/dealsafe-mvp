@@ -1,0 +1,23 @@
+.field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+  color: var(--color-danger-800);
+  font-size: 0.84rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.field-error svg {
+  flex: 0 0 auto;
+  margin-top: 0.08rem;
+}
+
+[aria-invalid='true'] {
+  border-color: var(--color-danger-border) !important;
+}
+
+[aria-invalid='true']:focus-visible {
+  outline-color: var(--color-danger-800);
+}

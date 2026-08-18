@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
+import { focusPageDestination } from './accessibleNavigation';
 
 export type LandingDestination =
   | 'create'
@@ -42,11 +43,7 @@ type PublicLandingProps = {
 };
 
 const scrollToSection = (id?: string) => {
-  if (!id) {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    return;
-  }
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  focusPageDestination(id);
 };
 
 const isPlainNavigation = (event: MouseEvent<HTMLAnchorElement>) =>
@@ -120,10 +117,11 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
         </nav>
         <div className="header-actions">
           <div className="account">
-            <button onClick={() => launch('signin')}>Sign in</button>
-            <button className="header-signup" onClick={() => launch('signup')}>Create account</button>
+            <button type="button" onClick={() => launch('signin')}>Sign in</button>
+            <button type="button" className="header-signup" onClick={() => launch('signup')}>Create account</button>
           </div>
           <button
+            type="button"
             ref={mobileMenuButtonRef}
             className="mobile-menu-toggle"
             aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
@@ -142,15 +140,15 @@ export function PublicLanding({ onLaunch }: PublicLandingProps) {
       <a href="/#protection" onClick={event => followSectionLink(event, 'protection')}>Protection</a>
       <a href="/fees" onClick={event => { if (!isPlainNavigation(event)) return; event.preventDefault(); launch('fees'); }}>Fees</a>
       <a href="/disputes" onClick={event => { if (!isPlainNavigation(event)) return; event.preventDefault(); launch('disputes'); }}>Disputes</a>
-      <button className="mobile-signin" onClick={() => launch('signin')}>Sign in</button>
-      <button className="mobile-signup" onClick={() => launch('signup')}>Create account</button>
+      <button type="button" className="mobile-signin" onClick={() => launch('signin')}>Sign in</button>
+      <button type="button" className="mobile-signup" onClick={() => launch('signup')}>Create account</button>
     </nav>}
 
     <main id="main-content" tabIndex={-1}>
       <section className="global-hero">
         <div className="global-hero-copy">
           <p className="global-kicker"><ShieldCheck size={17} />One Deal Room from agreement to handoff</p>
-          <h1>Make every private deal<br /><span>clear from the start.</span></h1>
+          <h1>Make every private deal <br /><span>clear from the start.</span></h1>
           <p className="global-lede">Agree on the terms, follow the payment status, and keep delivery evidence together in one private transaction record.</p>
           <div className="global-hero-actions">
             <button type="button" className="global-primary" onClick={() => launch('create')}><Plus size={18} />Start a deal<ArrowRight size={18} /></button>

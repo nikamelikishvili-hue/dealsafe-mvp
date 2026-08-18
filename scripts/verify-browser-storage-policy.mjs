@@ -29,22 +29,26 @@ const reviewedStorageSites = new Map([
     ],
   }],
   ['src/main.tsx', {
-    localStorage: 1,
+    localStorage: 2,
     sessionStorage: 1,
     required: [
       "localStorage.removeItem('dealsafe_session')",
-      "sessionStorage.getItem('dealivra_session_v2')",
+      "sessionStorage.removeItem('dealivra_session_v2')",
+      "localStorage.getItem('dealivra_session_hint_v1')",
     ],
   }],
   ['src/services/supabaseRest.ts', {
-    localStorage: 3,
-    sessionStorage: 5,
+    localStorage: 6,
+    sessionStorage: 2,
     required: [
-      "sessionStorageKey = 'dealivra_session_v2'",
-      'sessionStorage.setItem(sessionStorageKey',
+      "legacyBrowserSessionStorageKey = 'dealivra_session_v2'",
+      "sessionHintStorageKey = 'dealivra_session_hint_v1'",
+      'let activeSession: StoredSession | null = null',
+      'localStorage.setItem(sessionHintStorageKey',
+      'sessionStorage.removeItem(legacyBrowserSessionStorageKey)',
       'localStorage.removeItem(legacySessionStorageKey)',
     ],
-    forbidden: ['localStorage.setItem(', 'localStorage.getItem('],
+    forbidden: ['sessionStorage.setItem(', 'localStorage.setItem(legacySessionStorageKey'],
   }],
 ]);
 
