@@ -7,6 +7,7 @@ import {
   prepareResponse,
   readJsonBody,
   requestOrigin,
+  requireJsonContentType,
   requirePost,
   requireSameOrigin,
   respondAuthRateLimited,
@@ -19,7 +20,7 @@ const recoveryAccepted = {
 
 export default async function handler(request, response) {
   prepareResponse(response);
-  if (!requirePost(request, response) || !requireSameOrigin(request, response)) return;
+  if (!requirePost(request, response) || !requireSameOrigin(request, response) || !requireJsonContentType(request, response)) return;
 
   const body = readJsonBody(request);
   const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';

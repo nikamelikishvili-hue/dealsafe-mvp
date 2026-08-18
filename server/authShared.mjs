@@ -14,12 +14,25 @@ const refreshCookieName = '__Host-dealivra-refresh';
 // and no Domain attribute is present.
 const refreshCookiePath = '/';
 const refreshMaxAgeSeconds = 8 * 60 * 60;
+const maxRefreshCookieValueLength = 3800;
 const maxJsonBodyBytes = 16_384;
 const authProviderTimeoutMs = 10_000;
+const visibleAsciiCredentialPattern = /^[\x21-\x7e]+$/;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const safeDisplayTextPattern = /^[^\u0000-\u001f\u007f]{1,80}$/;
+
+function providerTimestamp(value) {
+  return typeof value === 'string'
+    && value.length >= 20
+    && value.length <= 40
+    && Number.isFinite(Date.parse(value))
+    ? value
+    : null;
+}
 
 function header(request, name) {
   const value = request.headers?.[name] ?? request.headers?.[name.toLowerCase()];
-  return Array.isArray(value) ? value[0] : value;
+  return Array.isArray(value) ? (value.length === 1 ? value[0] : undefined) : value;
 }
 
 export function requestOrigin(request) {
@@ -157,12 +170,22 @@ export function requirePost(request, response) {
   return false;
 }
 
+export function requireJsonContentType(request, response) {
+  const contentType = String(header(request, 'content-type') || '')
+    .split(';', 1)[0]
+    .trim()
+    .toLowerCase();
+  if (contentType === 'application/json') return true;
+  response.status(415).json({ error: 'Content-Type must be application/json.' });
+  return false;
+}
+
 export function requireSameOrigin(
   request,
   response,
   crossOriginMessage = 'Cross-origin authentication is not allowed.',
 ) {
-  const origin = header(request, 'origin');
+  const origin = requestOrigin(request);
   const forwardedHost = header(request, 'x-forwarded-host');
   const host = forwardedHost || header(request, 'host');
   if (!origin || !host) {
@@ -171,7 +194,16 @@ export function requireSameOrigin(
   }
 
   try {
-    if (new URL(origin).host !== host) {
+    if (
+      typeof host !== 'string'
+      || host.length > 255
+      || host !== host.trim()
+      || host.includes(',')
+      || host.includes('/')
+      || host.includes('\\')
+      || new URL(`https://${host}`).host !== host
+      || new URL(origin).host !== host
+    ) {
       response.status(403).json({ error: crossOriginMessage });
       return false;
     }
@@ -209,24 +241,37 @@ export function readJsonBody(request) {
 
 export function readRefreshToken(request) {
   const cookie = header(request, 'cookie') || '';
+  if (typeof cookie !== 'string' || cookie.length > 16_384) return null;
+  let encodedToken = null;
   for (const part of cookie.split(';')) {
     const [name, ...value] = part.trim().split('=');
     if (name === refreshCookieName) {
-      try {
-        return decodeURIComponent(value.join('='));
-      } catch {
-        return null;
-      }
+      if (encodedToken !== null) return null;
+      encodedToken = value.join('=');
     }
   }
-  return null;
+  if (!encodedToken || encodedToken.length > maxRefreshCookieValueLength) return null;
+  try {
+    const token = decodeURIComponent(encodedToken);
+    return token
+      && token.length <= maxRefreshCookieValueLength
+      && visibleAsciiCredentialPattern.test(token)
+      ? token
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export function readBearerToken(request) {
   const authorization = header(request, 'authorization');
-  if (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')) return null;
-  const token = authorization.slice(7).trim();
-  return token && token.length <= 8192 ? token : null;
+  if (
+    typeof authorization !== 'string'
+    || authorization.length > 8199
+    || !authorization.startsWith('Bearer ')
+  ) return null;
+  const token = authorization.slice(7);
+  return token && visibleAsciiCredentialPattern.test(token) ? token : null;
 }
 
 export function isStrongPassword(password) {
@@ -263,15 +308,18 @@ export function safeMfaFactors(user) {
       && factor.status === 'verified'
       && factor.factor_type === 'totp'
       && typeof factor.id === 'string'
+      && uuidPattern.test(factor.id)
     ))
+    .slice(0, 16)
     .map((factor) => ({
       id: factor.id,
       factorType: 'totp',
-      friendlyName: typeof factor.friendly_name === 'string' && factor.friendly_name.trim()
-        ? factor.friendly_name.trim().slice(0, 80)
+      friendlyName: typeof factor.friendly_name === 'string'
+        && safeDisplayTextPattern.test(factor.friendly_name.trim())
+        ? factor.friendly_name.trim()
         : 'Authenticator app',
-      createdAt: typeof factor.created_at === 'string' ? factor.created_at : null,
-      updatedAt: typeof factor.updated_at === 'string' ? factor.updated_at : null,
+      createdAt: providerTimestamp(factor.created_at),
+      updatedAt: providerTimestamp(factor.updated_at),
     }));
 }
 
@@ -281,9 +329,19 @@ export function hasVerifiedMfaFactor(user) {
 }
 
 export function setRefreshCookie(response, refreshToken) {
+  if (
+    typeof refreshToken !== 'string'
+    || !visibleAsciiCredentialPattern.test(refreshToken)
+  ) {
+    throw new Error('Authentication provider returned an invalid refresh credential.');
+  }
+  const encodedToken = encodeURIComponent(refreshToken);
+  if (encodedToken.length > maxRefreshCookieValueLength) {
+    throw new Error('Authentication provider returned an invalid refresh credential.');
+  }
   response.setHeader(
     'Set-Cookie',
-    `${refreshCookieName}=${encodeURIComponent(refreshToken)}; Path=${refreshCookiePath}; Max-Age=${refreshMaxAgeSeconds}; HttpOnly; Secure; SameSite=Strict; Priority=High`,
+    `${refreshCookieName}=${encodedToken}; Path=${refreshCookiePath}; Max-Age=${refreshMaxAgeSeconds}; HttpOnly; Secure; SameSite=Strict; Priority=High`,
   );
 }
 
@@ -400,6 +458,16 @@ export function authProviderCode(data) {
   return /^[a-z0-9_]{1,64}$/.test(value) ? value : 'unknown';
 }
 
+export function authProviderDiagnostic(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return '';
+  return [data.code, data.message, data.details, data.hint]
+    .filter((value) => typeof value === 'string')
+    .map((value) => value.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 256))
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 1024);
+}
+
 export function isAuthProviderRateLimited(upstream, data) {
   const code = authProviderCode(data);
   return upstream?.status === 429
@@ -442,16 +510,37 @@ export function logAuthRejection(operation, status, code) {
 }
 
 export function publicSession(data) {
-  if (!data.access_token || !data.user?.id || !data.user?.email) return null;
+  const accessToken = data?.access_token;
+  const expiresIn = data?.expires_in;
+  const userId = data?.user?.id;
+  const email = data?.user?.email;
+  const emailConfirmedAt = data?.user?.email_confirmed_at;
+  const displayName = data?.user?.user_metadata?.display_name;
+  if (
+    typeof accessToken !== 'string'
+    || accessToken.length > 8192
+    || !visibleAsciiCredentialPattern.test(accessToken)
+    || !Number.isInteger(expiresIn)
+    || expiresIn < 1
+    || expiresIn > 604_800
+    || typeof userId !== 'string'
+    || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(userId)
+    || typeof email !== 'string'
+    || email.length > 320
+    || !/^[\x21-\x7e]+$/.test(email)
+    || !email.includes('@')
+    || (emailConfirmedAt != null && (typeof emailConfirmedAt !== 'string' || emailConfirmedAt.length > 64))
+    || (displayName != null && (typeof displayName !== 'string' || displayName.length > 100))
+  ) return null;
   return {
-    access_token: data.access_token,
-    expires_in: data.expires_in,
+    access_token: accessToken,
+    expires_in: expiresIn,
     user: {
-      id: data.user.id,
-      email: data.user.email,
-      email_confirmed_at: data.user.email_confirmed_at || null,
+      id: userId,
+      email,
+      email_confirmed_at: emailConfirmedAt || null,
       user_metadata: {
-        display_name: data.user.user_metadata?.display_name || null,
+        display_name: displayName || null,
       },
     },
   };

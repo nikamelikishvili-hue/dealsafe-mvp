@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './mfa-step-up.css';
+import { copyTextToClipboard } from './clipboard';
 import {
   CheckCircle2,
   Copy,
   KeyRound,
   Plus,
-  RefreshCw,
   ShieldCheck,
   Trash2,
   X,
@@ -21,6 +21,7 @@ import {
   type MfaStatus,
   type StoredSession,
 } from './services/supabaseRest';
+import { AsyncStatePanel } from './AsyncStatePanel';
 
 function formatFactorDate(value:string|null){
   if(!value)return 'Enrollment date unavailable';
@@ -42,32 +43,43 @@ export function AccountMfaSecurity({
   const [code,setCode]=useState('');
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState<'enroll'|'verify'|'cancel'|'remove'|''>('');
+  const busyRef=useRef(false);
+  const deviceNameRef=useRef<HTMLInputElement>(null);
+  const removalTriggerRef=useRef<HTMLButtonElement|null>(null);
+  const loadRequestRef=useRef(0);
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
+  const [loadError,setLoadError]=useState('');
   const [confirmRemove,setConfirmRemove]=useState<string|null>(null);
   const [removeVerificationFactorId,setRemoveVerificationFactorId]=useState('');
   const [removeCode,setRemoveCode]=useState('');
 
   const loadStatus=async(activeSession=session)=>{
+    const request=++loadRequestRef.current;
     setLoading(true);
-    setError('');
+    setLoadError('');
     try{
-      setStatus(await getMfaStatus(activeSession));
+      const result=await getMfaStatus(activeSession);
+      if(request!==loadRequestRef.current)return;
+      setStatus(result);
     }catch(loadError){
-      setError(loadError instanceof Error?loadError.message:'Could not load authenticator security.');
+      if(request!==loadRequestRef.current)return;
+      setLoadError(loadError instanceof Error?loadError.message:'Could not load authenticator security.');
     }finally{
-      setLoading(false);
+      if(request===loadRequestRef.current)setLoading(false);
     }
   };
 
   useEffect(()=>{
     let active=true;
+    const request=++loadRequestRef.current;
     setLoading(true);
+    setLoadError('');
     getMfaStatus(session)
-      .then(result=>{if(active)setStatus(result)})
-      .catch(loadError=>{if(active)setError(loadError instanceof Error?loadError.message:'Could not load authenticator security.')})
-      .finally(()=>{if(active)setLoading(false)});
-    return()=>{active=false};
+      .then(result=>{if(active&&request===loadRequestRef.current)setStatus(result)})
+      .catch(loadError=>{if(active&&request===loadRequestRef.current)setLoadError(loadError instanceof Error?loadError.message:'Could not load authenticator security.')})
+      .finally(()=>{if(active&&request===loadRequestRef.current)setLoading(false)});
+    return()=>{active=false;loadRequestRef.current+=1};
   },[session.user.id,session.accessToken]);
 
   const qrCodeUrl=useMemo(()=>enrollment
@@ -75,6 +87,13 @@ export function AccountMfaSecurity({
     :'',[enrollment]);
 
   const beginEnrollment=async()=>{
+    if(busyRef.current)return;
+    if(friendlyName.trim().length<2){
+      setError('Enter a device name.');
+      deviceNameRef.current?.focus();
+      return;
+    }
+    busyRef.current=true;
     setBusy('enroll');
     setMessage('');
     setError('');
@@ -84,6 +103,7 @@ export function AccountMfaSecurity({
     }catch(actionError){
       setError(actionError instanceof Error?actionError.message:'Authenticator setup could not start.');
     }finally{
+      busyRef.current=false;
       setBusy('');
     }
   };
@@ -91,6 +111,8 @@ export function AccountMfaSecurity({
   const verifyEnrollment=async(event:React.FormEvent)=>{
     event.preventDefault();
     if(!enrollment)return;
+    if(busyRef.current)return;
+    busyRef.current=true;
     setBusy('verify');
     setMessage('');
     setError('');
@@ -104,12 +126,15 @@ export function AccountMfaSecurity({
     }catch(actionError){
       setError(actionError instanceof Error?actionError.message:'The authenticator code was not accepted.');
     }finally{
+      busyRef.current=false;
       setBusy('');
     }
   };
 
   const cancelEnrollment=async()=>{
     if(!enrollment){setEnrollment(null);return}
+    if(busyRef.current)return;
+    busyRef.current=true;
     setBusy('cancel');
     setError('');
     try{
@@ -121,11 +146,12 @@ export function AccountMfaSecurity({
     }catch(actionError){
       setError(actionError instanceof Error?actionError.message:'The unfinished authenticator setup could not be removed.');
     }finally{
+      busyRef.current=false;
       setBusy('');
     }
   };
 
-  const beginFactorRemoval=(factorId:string)=>{
+  const beginFactorRemoval=(factorId:string,trigger:HTMLButtonElement)=>{
     const verificationFactor=status?.factors.find(factor=>factor.id!==factorId)
       ??status?.factors.find(factor=>factor.id===factorId);
     if(!verificationFactor){
@@ -134,6 +160,7 @@ export function AccountMfaSecurity({
     }
     setMessage('');
     setError('');
+    removalTriggerRef.current=trigger;
     setConfirmRemove(factorId);
     setRemoveVerificationFactorId(verificationFactor.id);
     setRemoveCode('');
@@ -144,11 +171,14 @@ export function AccountMfaSecurity({
     setConfirmRemove(null);
     setRemoveVerificationFactorId('');
     setRemoveCode('');
+    window.requestAnimationFrame(()=>removalTriggerRef.current?.focus());
   };
 
   const removeFactor=async(event:React.FormEvent)=>{
     event.preventDefault();
     if(!confirmRemove||!removeVerificationFactorId||removeCode.length!==6)return;
+    if(busyRef.current)return;
+    busyRef.current=true;
     setBusy('remove');
     setMessage('');
     setError('');
@@ -169,6 +199,7 @@ export function AccountMfaSecurity({
     }catch(actionError){
       setError(actionError instanceof Error?actionError.message:'Authenticator method could not be removed.');
     }finally{
+      busyRef.current=false;
       setBusy('');
     }
   };
@@ -176,7 +207,7 @@ export function AccountMfaSecurity({
   const copySecret=async()=>{
     if(!enrollment)return;
     try{
-      await navigator.clipboard.writeText(enrollment.secret);
+      await copyTextToClipboard(enrollment.secret);
       setMessage('Setup key copied. Keep it private and remove it from your clipboard after setup.');
     }catch{
       setError('Could not copy the setup key. Select and copy it manually.');
@@ -204,20 +235,22 @@ export function AccountMfaSecurity({
       </span>
     </header>
 
-    {loading?<div className="mfa-loading" role="status"><RefreshCw className="is-spinning" aria-hidden="true"/>Checking authenticator protection…</div>:null}
+    {loading?<AsyncStatePanel state="loading" title="Checking authenticator protection…" message="Verifying your enrolled methods securely."/>:null}
 
-    {!loading&&status?.unsupportedVerifiedFactor?<div className="mfa-feedback error" role="alert">
+    {!loading&&loadError?<AsyncStatePanel state="error" title="Authenticator status unavailable" message={loadError} actionLabel="Retry securely" onAction={()=>loadStatus()}/>:null}
+
+    {!loading&&!loadError&&status?.unsupportedVerifiedFactor?<div className="mfa-feedback error" role="alert">
       This account has a verified sign-in method that Dealivra cannot manage here. Contact support without sharing any verification code or setup key.
     </div>:null}
 
-    {!loading&&status?.factors.length?<ul className="mfa-factor-list">
+    {!loading&&!loadError&&status?.factors.length?<ul className="mfa-factor-list">
       {status.factors.map(factor=><li key={factor.id}>
         <span className="mfa-factor-icon"><KeyRound aria-hidden="true"/></span>
         <span><strong>{factor.friendlyName}</strong><small>Authenticator app · Added {formatFactorDate(factor.createdAt)}</small></span>
         <b>{status.assuranceLevel==='aal2'?'Verified this session':'Verification required'}</b>
         <button
           type="button"
-          onClick={()=>beginFactorRemoval(factor.id)}
+          onClick={event=>beginFactorRemoval(factor.id,event.currentTarget)}
           disabled={Boolean(busy)||factorFloorReached}
           aria-label={`Remove ${factor.friendlyName}`}
           title={factorFloorReached?'Add and verify another authenticator before removing this one.':undefined}
@@ -227,20 +260,20 @@ export function AccountMfaSecurity({
       </li>)}
     </ul>:null}
 
-    {!loading&&factorFloorReached?<div className="mfa-feedback protected" role="status">
+    {!loading&&!loadError&&factorFloorReached?<div className="mfa-feedback protected" role="status">
       This privileged account must keep at least {status?.minimumVerifiedFactors} verified authenticators. Add a replacement before removing one.
     </div>:null}
 
-    {!loading&&!enrollment&&!status?.unsupportedVerifiedFactor?<div className="mfa-enroll-start">
+    {!loading&&!loadError&&!enrollment&&!status?.unsupportedVerifiedFactor?<div className="mfa-enroll-start">
       <div>
         <strong>{protectedByMfa?'Add a backup authenticator':'Protect this account'}</strong>
         <span>{protectedByMfa?'A second enrolled device reduces account-recovery risk.':'Use any standards-based TOTP authenticator app.'}</span>
       </div>
       <label>
         <span>Device name</span>
-        <input value={friendlyName} minLength={2} maxLength={48} onChange={event=>setFriendlyName(event.target.value)} autoComplete="off"/>
+        <input ref={deviceNameRef} value={friendlyName} minLength={2} maxLength={48} disabled={Boolean(busy)} onChange={event=>setFriendlyName(event.target.value)} autoComplete="off"/>
       </label>
-      <button type="button" className="mfa-primary" onClick={beginEnrollment} disabled={Boolean(busy)||friendlyName.trim().length<2}>
+      <button type="button" className="mfa-primary" onClick={beginEnrollment} disabled={Boolean(busy)}>
         <Plus aria-hidden="true"/>{busy==='enroll'?'Starting…':protectedByMfa?'Add authenticator':'Set up authenticator'}
       </button>
     </div>:null}
@@ -261,9 +294,9 @@ export function AccountMfaSecurity({
           <details>
             <summary>Can’t scan the QR code?</summary>
             <p>Enter this setup key manually. Treat it like a password.</p>
-            <div className="mfa-secret"><code>{enrollment.secret}</code><button type="button" onClick={copySecret}><Copy/>Copy</button></div>
+            <div className="mfa-secret"><code>{enrollment.secret}</code><button type="button" onClick={copySecret} disabled={Boolean(busy)}><Copy/>Copy</button></div>
           </details>
-          <form onSubmit={verifyEnrollment}>
+          <form onSubmit={verifyEnrollment} aria-busy={busy==='verify'}>
             <label>Six-digit code
               <input
                 required
@@ -273,10 +306,11 @@ export function AccountMfaSecurity({
                 maxLength={6}
                 placeholder="000000"
                 value={code}
+                disabled={Boolean(busy)}
                 onChange={event=>setCode(event.target.value.replace(/\D/g,'').slice(0,6))}
               />
             </label>
-            <button className="mfa-primary" disabled={Boolean(busy)||code.length!==6}>
+            <button type="submit" className="mfa-primary" disabled={Boolean(busy)}>
               <ShieldCheck aria-hidden="true"/>{busy==='verify'?'Verifying…':'Enable protection'}
             </button>
           </form>
@@ -295,6 +329,12 @@ export function AccountMfaSecurity({
       aria-labelledby="mfa-remove-title"
       aria-describedby="mfa-remove-description"
       onSubmit={removeFactor}
+      onKeyDown={event=>{
+        if(event.key!=='Escape'||busy)return;
+        event.preventDefault();
+        cancelFactorRemoval();
+      }}
+      aria-busy={busy==='remove'}
     >
       <div className="mfa-remove-copy">
         <p className="eyebrow">SENSITIVE CHANGE</p>
@@ -334,7 +374,7 @@ export function AccountMfaSecurity({
       </div>
       <div className="mfa-remove-actions">
         <button type="button" onClick={cancelFactorRemoval} disabled={Boolean(busy)}>Keep authenticator</button>
-        <button type="submit" className="confirm-danger" disabled={Boolean(busy)||removeCode.length!==6}>
+        <button type="submit" className="confirm-danger" disabled={Boolean(busy)}>
           <ShieldCheck aria-hidden="true"/>{busy==='remove'?'Verifying and removing…':'Verify and remove'}
         </button>
       </div>

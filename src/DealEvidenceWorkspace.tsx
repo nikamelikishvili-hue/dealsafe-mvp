@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { BadgeCheck, LockKeyhole, Package, ShieldCheck } from 'lucide-react';
 import { evidenceInputAccept } from '../supabase/functions/_shared/evidence-policy';
 import type { Deal } from './domain';
@@ -57,45 +57,45 @@ export function DealEvidenceWorkspace({
   const [items, setItems] = useState<DealEvidence[]>([]);
   const [selected, setSelected] = useState<DealEvidence | null>(null);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const loadSequenceRef = useRef(0);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
 
   const load = async () => {
+    const request = ++loadSequenceRef.current;
     try {
-      setItems(await listDealEvidence(session, deal.id));
+      const next = await listDealEvidence(session, deal.id);
+      if (request === loadSequenceRef.current) setItems(next);
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : 'Could not load evidence',
-      );
+      if (request === loadSequenceRef.current) {
+        setMessageFailed(true);
+        setMessage(
+          error instanceof Error ? error.message : 'Could not load evidence',
+        );
+      }
     }
   };
 
   useEffect(() => {
-    let current = true;
     setEvidenceType(
       role === 'seller' ? 'seller_packing_video' : 'buyer_unboxing_video',
     );
     setFiles([]);
     setSelected(null);
     setMessage('');
-    listDealEvidence(session, deal.id)
-      .then(next => {
-        if (current) setItems(next);
-      })
-      .catch(error => {
-        if (current) {
-          setMessage(
-            error instanceof Error ? error.message : 'Could not load evidence',
-          );
-        }
-      });
+    setMessageFailed(false);
+    void load();
     return () => {
-      current = false;
+      loadSequenceRef.current += 1;
     };
   }, [deal.id, session.accessToken, role]);
 
   const upload = async (event: FormEvent) => {
     event.preventDefault();
-    if (!files.length) return;
+    const form = event.currentTarget as HTMLFormElement;
+    if (!files.length || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setMessage('');
     try {
@@ -109,16 +109,19 @@ export function DealEvidenceWorkspace({
         );
       }
       setFiles([]);
+      form.reset();
       await load();
       onChanged?.();
       setMessage(
         'Security scan passed. Evidence was saved privately to this deal record.',
       );
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not upload evidence',
       );
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -165,7 +168,7 @@ export function DealEvidenceWorkspace({
           </span>
         </div>
       </div>
-      <form className="evidence-form" onSubmit={upload}>
+      <form className="evidence-form" onSubmit={upload} aria-busy={busy}>
         <label>
           {t('Evidence type')}
           <select
@@ -186,11 +189,11 @@ export function DealEvidenceWorkspace({
           {t('Choose photos or video')}
           <input
             type="file"
+            required
             accept={acceptedFiles}
             multiple
             onChange={event => {
               setFiles(Array.from(event.target.files || []));
-              event.currentTarget.value = '';
             }}
           />
           <small>
@@ -212,7 +215,7 @@ export function DealEvidenceWorkspace({
             ))}
           </div>
         )}
-        <button className="primary" disabled={busy || !files.length}>
+        <button type="submit" className="primary" disabled={busy}>
           {busy ? t('Scanning and saving…') : t('Scan and save evidence')}
         </button>
       </form>
@@ -223,7 +226,11 @@ export function DealEvidenceWorkspace({
         )}
       </p>
       {message && (
-        <div className="notice" role="status" aria-live="polite">
+        <div
+          className="notice"
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
           {t(message)}
         </div>
       )}

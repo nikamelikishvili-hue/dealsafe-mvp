@@ -90,29 +90,51 @@ export function SellerDeclarationChecklist({
 export function PublicSellerDeclaration({ deal }: { deal: Deal }) {
   const [record, setRecord] = useState<SellerDeclarationRecord | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [loadVersion, setLoadVersion] = useState(0);
 
   useEffect(() => {
     let current = true;
     setLoaded(false);
+    setLoadError('');
     getPublicSellerDeclaration(deal.publicId)
       .then(value => {
         if (current) {
           setRecord(value);
           setLoaded(true);
+          setLoadError('');
         }
       })
       .catch(() => {
         if (current) {
           setRecord(null);
           setLoaded(true);
+          setLoadError('Seller declaration status is temporarily unavailable.');
         }
       });
     return () => {
       current = false;
     };
-  }, [deal.publicId]);
+  }, [deal.publicId, loadVersion]);
 
-  if (!loaded || !record) return null;
+  if (!loaded) return null;
+  if (loadError) {
+    return (
+      <section className="seller-declaration-status missing no-print">
+        <div className="notice" role="alert">
+          <span>{t(loadError)}</span>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setLoadVersion(version => version + 1)}
+          >
+            {t('Try again')}
+          </button>
+        </div>
+      </section>
+    );
+  }
+  if (!record) return null;
 
   if (!record.attested) {
     return (

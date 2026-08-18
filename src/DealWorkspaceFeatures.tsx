@@ -38,8 +38,13 @@ import {
   Smartphone,
   Trash2,
   Truck,
+  X,
   ZoomIn,
 } from 'lucide-react';
+import { focusPageDestination } from './accessibleNavigation';
+import { copyTextToClipboard } from './clipboard';
+import { AsyncStatePanel } from './AsyncStatePanel';
+import { useConfirmAction } from './ConfirmActionDialog';
 import { DEMO_DEAL_PUBLIC_ID } from './services/demoRepository';
 import type { Deal, DealDraft } from './domain';
 import {
@@ -333,7 +338,9 @@ export function SaveDealButton({
 }) {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(Boolean(session));
+  const mutationRef = useRef(false);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -345,9 +352,19 @@ export function SaveDealButton({
     setLoading(true);
     void isDealSaved(session, deal.publicId)
       .then((value) => {
-        if (current) setSaved(value);
+        if (current) {
+          setSaved(value);
+          setMessage('');
+          setMessageFailed(false);
+        }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (current) {
+          setSaved(false);
+          setMessage('Could not check whether this deal is saved. Try again.');
+          setMessageFailed(true);
+        }
+      })
       .finally(() => {
         if (current) setLoading(false);
       });
@@ -361,8 +378,11 @@ export function SaveDealButton({
       onSignIn();
       return;
     }
+    if (mutationRef.current) return;
+    mutationRef.current = true;
     setLoading(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const next = await setDealSaved(session, deal.publicId, !saved);
       setSaved(next);
@@ -371,12 +391,15 @@ export function SaveDealButton({
           ? 'Deal Link saved to your Watchlist.'
           : 'Deal Link removed from your Watchlist.',
       );
+      setMessageFailed(false);
       onChanged();
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : 'Could not update saved deal',
       );
+      setMessageFailed(true);
     } finally {
+      mutationRef.current = false;
       setLoading(false);
     }
   };
@@ -411,7 +434,15 @@ export function SaveDealButton({
             : 'Sign in to save',
         )}
       </button>
-      {message && <div className="notice">{t(message)}</div>}
+      {message && (
+        <div
+          className={`notice ${messageFailed ? 'error' : ''}`}
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
+          {t(message)}
+        </div>
+      )}
     </section>
   );
 }
@@ -463,26 +494,31 @@ export function TimelinePanel({
 }) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [error, setError] = useState('');
+  const loadRequestRef = useRef(0);
 
   useEffect(() => {
     let active = true;
-    const load = () =>
+    const load = () => {
+      const request = ++loadRequestRef.current;
+      return (
       getDealTimeline(session, deal.id)
         .then((items) => {
-          if (active) {
+          if (active && request === loadRequestRef.current) {
             setEvents(items);
             setError('');
           }
         })
         .catch((loadError) => {
-          if (active) {
+          if (active && request === loadRequestRef.current) {
             setError(
               loadError instanceof Error
                 ? loadError.message
                 : 'Could not load timeline',
             );
           }
-        });
+        })
+      );
+    };
     void load();
     const timer = window.setInterval(load, 15_000);
     const visible = () => {
@@ -491,6 +527,7 @@ export function TimelinePanel({
     document.addEventListener('visibilitychange', visible);
     return () => {
       active = false;
+      loadRequestRef.current += 1;
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', visible);
     };
@@ -520,7 +557,7 @@ export function TimelinePanel({
           url: `${location.origin}/?deal=${deal.publicId}`,
         });
       } else {
-        await navigator.clipboard.writeText(history);
+        await copyTextToClipboard(history);
       }
     } catch (shareError) {
       if (shareError instanceof Error && shareError.name !== 'AbortError') {
@@ -556,7 +593,7 @@ export function TimelinePanel({
           </button>
         </div>
       </div>
-      {error && <div className="notice">{t(error)}</div>}
+      {error && <div className="notice" role="alert">{t(error)}</div>}
       <div className="timeline-list">
         {events.length ? (
           events.map((event) => (
@@ -596,9 +633,15 @@ export function CompletionReceipt({
 }) {
   const [completedAt, setCompletedAt] = useState('');
   const [payment, setPayment] = useState<DealPaymentRecord | null>(null);
+  const [receiptMessage, setReceiptMessage] = useState('');
+  const [shareMessage, setShareMessage] = useState('');
+  const [shareFailed, setShareFailed] = useState(false);
 
   useEffect(() => {
     let current = true;
+    setCompletedAt('');
+    setPayment(null);
+    setReceiptMessage('');
     void Promise.allSettled([
       getDealTimeline(session, deal.id),
       getDealPaymentRecord(session, deal.id),
@@ -614,6 +657,14 @@ export function CompletionReceipt({
       if (paymentResult.status === 'fulfilled') {
         setPayment(paymentResult.value);
       }
+      if (
+        timelineResult.status === 'rejected' ||
+        paymentResult.status === 'rejected'
+      ) {
+        setReceiptMessage(
+          'Some receipt details could not be loaded. Refresh before saving a final copy.',
+        );
+      }
     });
     return () => {
       current = false;
@@ -622,16 +673,25 @@ export function CompletionReceipt({
 
   const link = `${location.origin}/?deal=${deal.publicId}`;
   const share = async () => {
-    if (navigator.share) {
-      await navigator
-        .share({
+    setShareMessage('');
+    setShareFailed(false);
+    try {
+      if (navigator.share) {
+        await navigator.share({
           title: `Dealivra · ${t('Deal completed')}`,
           text: `${deal.title} · ${deal.publicId}`,
           url: link,
-        })
-        .catch(() => {});
-    } else {
-      await navigator.clipboard?.writeText(link);
+        });
+      } else {
+        await copyTextToClipboard(link);
+        setShareMessage('Deal Link copied.');
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      setShareMessage(
+        'Could not share this receipt. Copy the Deal Link manually.',
+      );
+      setShareFailed(true);
     }
   };
 
@@ -726,12 +786,27 @@ export function CompletionReceipt({
           'Use your browser’s print screen to save a PDF copy. The live Deal Link remains the current record.',
         )}
       </p>
+      {receiptMessage && (
+        <div className="notice error" role="alert" aria-live="assertive">
+          {t(receiptMessage)}
+        </div>
+      )}
+      {shareMessage && (
+        <div
+          className={`notice ${shareFailed ? 'error' : ''}`}
+          role={shareFailed ? 'alert' : 'status'}
+          aria-live={shareFailed ? 'assertive' : 'polite'}
+        >
+          {t(shareMessage)}
+        </div>
+      )}
     </section>
   );
 }
 
 export function BuyerInvitePanel({ deal }: { deal: Deal }) {
   const [notice, setNotice] = useState('');
+  const [noticeFailed, setNoticeFailed] = useState(false);
   const noticeTimer = useRef<number | undefined>(undefined);
   const link = `${location.origin}/?deal=${deal.publicId}`;
   const message = `${t('Review agreement')}: ${deal.title} · ${dealPrice(
@@ -742,25 +817,27 @@ export function BuyerInvitePanel({ deal }: { deal: Deal }) {
     () => () => window.clearTimeout(noticeTimer.current),
     [],
   );
-  const flash = (text: string) => {
+  const flash = (text: string, failed = false) => {
     setNotice(text);
+    setNoticeFailed(failed);
     window.clearTimeout(noticeTimer.current);
     noticeTimer.current = window.setTimeout(() => setNotice(''), 2200);
   };
-  const copyText = async (text: string) => {
+  const copy = async () => {
     try {
-      await navigator.clipboard?.writeText(text);
+      await copyTextToClipboard(link);
+      flash('Deal Link copied.');
     } catch {
-      // The browser share fallback still lets the user continue.
+      flash('Could not copy automatically. Select the Deal Link and copy it.', true);
     }
   };
-  const copy = async () => {
-    await copyText(link);
-    flash('Deal Link copied.');
-  };
   const sms = async () => {
-    await copyText(message);
-    flash('Message copied. Paste it into SMS if needed.');
+    try {
+      await copyTextToClipboard(message);
+      flash('Message copied. Paste it into SMS if needed.');
+    } catch {
+      flash('SMS is opening. Copy the invitation manually if the message is empty.');
+    }
     window.location.href = /Android/i.test(navigator.userAgent)
       ? `sms:?body=${encodeURIComponent(message)}`
       : 'sms:';
@@ -775,8 +852,12 @@ export function BuyerInvitePanel({ deal }: { deal: Deal }) {
       });
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return;
-      await copyText(message);
-      flash('Sharing is not available. Message copied.');
+      try {
+        await copyTextToClipboard(message);
+        flash('Sharing is not available. Message copied.');
+      } catch {
+        flash('Sharing and automatic copy are unavailable. Copy the invitation manually.', true);
+      }
     }
   };
 
@@ -842,7 +923,11 @@ export function BuyerInvitePanel({ deal }: { deal: Deal }) {
         </button>
       </div>
       {notice && (
-        <div className="notice" role="status">
+        <div
+          className={`notice ${noticeFailed ? 'error' : ''}`}
+          role={noticeFailed ? 'alert' : 'status'}
+          aria-live={noticeFailed ? 'assertive' : 'polite'}
+        >
           {t(notice)}
         </div>
       )}
@@ -864,15 +949,18 @@ export function BuyerAccessCodeManager({
   const [code, setCode] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | undefined>(undefined);
+  const { confirmAction, confirmDialog } = useConfirmAction();
 
   useEffect(
     () => () => window.clearTimeout(copiedTimer.current),
     [],
   );
   const generate = async () => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setMessage('');
     setCode('');
@@ -888,11 +976,25 @@ export function BuyerAccessCodeManager({
           : 'Could not update buyer access',
       );
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
   const disable = async () => {
-    if (busy || !confirm(t('Turn off buyer code protection?'))) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
+    const confirmed = await confirmAction({
+      title: t('Turn off buyer code protection?'),
+      description: t(
+        'Anyone with the Deal Link will be able to open and accept the agreement without the private code.',
+      ),
+      confirmLabel: t('Turn off code'),
+      tone: 'danger',
+    });
+    if (!confirmed) {
+      busyRef.current = false;
+      return;
+    }
     setBusy(true);
     setMessage('');
     try {
@@ -906,18 +1008,26 @@ export function BuyerAccessCodeManager({
           : 'Could not update buyer access',
       );
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
   const copy = async () => {
     if (!code) return;
-    await navigator.clipboard?.writeText(code);
-    setCopied(true);
-    window.clearTimeout(copiedTimer.current);
-    copiedTimer.current = window.setTimeout(() => setCopied(false), 1800);
+    try {
+      await copyTextToClipboard(code);
+      setMessage('');
+      setCopied(true);
+      window.clearTimeout(copiedTimer.current);
+      copiedTimer.current = window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+      setMessage('Buyer access code could not be copied. Select and copy it manually.');
+    }
   };
 
   return (
+    <>
     <section
       className={`buyer-access-manager no-print ${enabled ? 'enabled' : ''}`}
     >
@@ -979,8 +1089,10 @@ export function BuyerAccessCodeManager({
           </button>
         )}
       </div>
-      {message && <div className="notice">{t(message)}</div>}
+      {message && <div className="notice error" role="alert">{t(message)}</div>}
     </section>
+    {confirmDialog}
+    </>
   );
 }
 
@@ -1063,12 +1175,14 @@ export function DealRenewalPanel({
   const expired = isDealExpired(deal);
   const [days, setDays] = useState(7);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [message, setMessage] = useState('');
   const [newExpiry, setNewExpiry] = useState('');
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (saving) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setMessage('');
     setNewExpiry('');
@@ -1079,6 +1193,7 @@ export function DealRenewalPanel({
     } catch {
       setMessage('Could not renew Deal Link');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -1111,7 +1226,7 @@ export function DealRenewalPanel({
             <option value={30}>{t('30 days')}</option>
           </select>
         </label>
-        <button className="primary" disabled={saving}>
+        <button type="submit" className="primary" disabled={saving}>
           {t(saving ? 'Updating…' : expired ? 'Renew link' : 'Extend offer')}
         </button>
       </form>
@@ -1122,7 +1237,7 @@ export function DealRenewalPanel({
           {formatDateTime(newExpiry)}
         </div>
       )}
-      {message && <div className="notice">{t(message)}</div>}
+      {message && <div className="notice error" role="alert">{t(message)}</div>}
     </section>
   );
 }
@@ -1145,6 +1260,7 @@ export function DealRiskCheck({ deal }: { deal: Deal }) {
   const [assessment, setAssessment] = useState<RiskAssessment | null>(null);
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
+  const [loadVersion, setLoadVersion] = useState(0);
 
   useEffect(() => {
     let current = true;
@@ -1163,9 +1279,27 @@ export function DealRiskCheck({ deal }: { deal: Deal }) {
     return () => {
       current = false;
     };
-  }, [deal.publicId]);
+  }, [deal.publicId, loadVersion]);
 
-  if (!isSupabaseConfigured || unavailable) return null;
+  if (!isSupabaseConfigured) return null;
+  if (unavailable) {
+    return (
+      <section className="risk-check unavailable">
+        <ShieldAlert aria-hidden="true" />
+        <div>
+          <b>{t('Safety check temporarily unavailable')}</b>
+          <span>{t('Do not treat a missing risk result as approval. Try again before proceeding.')}</span>
+        </div>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => setLoadVersion(version => version + 1)}
+        >
+          {t('Try again')}
+        </button>
+      </section>
+    );
+  }
   if (loading) {
     return (
       <section className="risk-check loading">
@@ -1240,23 +1374,35 @@ export function DealParticipantsCard({
   const [participants, setParticipants] = useState<DealParticipants | null>(
     null,
   );
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     let current = true;
     setParticipants(null);
+    setLoadError('');
     void getDealParticipants(session, deal.id)
       .then((record) => {
         if (!current || !record) return;
         setParticipants(record);
+        setLoadError('');
         onLoaded(record);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (current) setLoadError('Could not load the private participant record.');
+      });
     return () => {
       current = false;
     };
   }, [deal.id, deal.status, session.accessToken]);
 
-  if (!participants) return null;
+  if (!participants) {
+    return loadError ? (
+      <section className="participants-card compact-record-error notice" role="alert">
+        <ShieldAlert aria-hidden="true" />
+        <span>{t(loadError)}</span>
+      </section>
+    ) : null;
+  }
   const verification = (
     status: DealParticipants['seller_verification'],
   ) =>
@@ -1342,26 +1488,56 @@ export function DealActionPlanCard({
   onSync: (plan: DealActionPlan) => void;
 }) {
   const [plan, setPlan] = useState<DealActionPlan | null>(null);
+  const loadRequestRef = useRef(0);
+  const [loadError, setLoadError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadRevision, setLoadRevision] = useState(0);
 
   useEffect(() => {
     let current = true;
-    const load = () =>
+    const load = () => {
+      const request = ++loadRequestRef.current;
+      setLoading(true);
+      return (
       getDealActionPlan(session, deal.id)
         .then((record) => {
-          if (!current || !record) return;
+          if (!current || request !== loadRequestRef.current || !record) return;
           setPlan(record);
+          setLoadError('');
           onSync(record);
         })
-        .catch(() => {});
+        .catch(() => {
+          if (current && request === loadRequestRef.current) {
+            setLoadError('Could not refresh the deal action plan.');
+          }
+        })
+        .finally(() => {
+          if (current && request === loadRequestRef.current) setLoading(false);
+        })
+      );
+    };
     void load();
     const timer = window.setInterval(load, 12_000);
     return () => {
       current = false;
+      loadRequestRef.current += 1;
       window.clearInterval(timer);
     };
-  }, [deal.id, deal.status, deal.viewerRole, session.accessToken]);
+  }, [deal.id, deal.status, deal.viewerRole, session.accessToken, loadRevision]);
 
-  if (!plan) return null;
+  if (!plan) {
+    return (
+      <section className="deal-action-plan-card compact-record-error no-print">
+        <AsyncStatePanel
+          state={loadError ? 'error' : 'loading'}
+          title={loadError ? 'Deal progress unavailable' : 'Loading deal progress'}
+          message={loadError || 'Checking the latest shared milestones.'}
+          actionLabel="Retry progress"
+          onAction={loadError ? () => setLoadRevision((revision) => revision + 1) : undefined}
+        />
+      </section>
+    );
+  }
   const completed = plan.deal_status === 'completed';
   const handoffReady =
     deal.deliveryMethod === 'Meet in person'
@@ -1395,6 +1571,20 @@ export function DealActionPlanCard({
 
   return (
     <section id="deal-action-plan" className="deal-action-plan no-print">
+      {loadError && (
+        <AsyncStatePanel
+          state="error"
+          title="Deal progress could not refresh"
+          message="Showing the previously loaded milestones. Retry before relying on the next step."
+          actionLabel="Retry progress"
+          onAction={() => setLoadRevision((revision) => revision + 1)}
+        />
+      )}
+      {loading && !loadError && (
+        <div className="sr-only" role="status" aria-live="polite">
+          {t('Refreshing deal progress')}
+        </div>
+      )}
       <div className="action-plan-heading">
         <div className="action-plan-title">
           <span className="workflow-icon">
@@ -1569,29 +1759,6 @@ export function AgreementExpiredNotice() {
   );
 }
 
-async function copyTextToClipboard(value: string) {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(value);
-      return;
-    } catch {
-      // Fall through to the browser selection fallback.
-    }
-  }
-  const field = document.createElement('textarea');
-  field.value = value;
-  field.setAttribute('readonly', '');
-  field.style.position = 'fixed';
-  field.style.opacity = '0';
-  field.style.pointerEvents = 'none';
-  document.body.appendChild(field);
-  field.select();
-  field.setSelectionRange(0, value.length);
-  const copied = document.execCommand('copy');
-  field.remove();
-  if (!copied) throw new Error('copy-failed');
-}
-
 export function DealCopyLinkButton({ deal }: { deal: Deal }) {
   const [state, setState] = useState<
     'idle' | 'copying' | 'copied' | 'error'
@@ -1647,31 +1814,8 @@ export function DealCopyLinkButton({ deal }: { deal: Deal }) {
 
 export function DealQrCode({ deal }: { deal: Deal }) {
   const [open, setOpen] = useState(false);
-  const [image, setImage] = useState('');
-  const url = `${location.origin}/?deal=${deal.publicId}`;
-
-  useEffect(() => {
-    if (!open || image) return;
-    let current = true;
-    void import('qrcode')
-      .then(({ default: QRCode }) =>
-        QRCode.toDataURL(url, {
-          width: 360,
-          margin: 2,
-          errorCorrectionLevel: 'M',
-          color: { dark: '#15221d', light: '#ffffff' },
-        }),
-      )
-      .then((result) => {
-        if (current) setImage(result);
-      })
-      .catch(() => {
-        if (current) setImage('');
-      });
-    return () => {
-      current = false;
-    };
-  }, [open, image, url]);
+  const [imageState, setImageState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const image = `/api/deal-qr?deal=${encodeURIComponent(deal.publicId)}`;
 
   return (
     <div className="deal-qr">
@@ -1685,12 +1829,15 @@ export function DealQrCode({ deal }: { deal: Deal }) {
       </button>
       {open && (
         <div className="qr-panel no-print">
-          {image ? (
+          <img
+            src={image}
+            alt={`${t('QR code for deal')} ${deal.publicId}`}
+            hidden={imageState !== 'ready'}
+            onLoad={() => setImageState('ready')}
+            onError={() => setImageState('error')}
+          />
+          {imageState === 'ready' ? (
             <>
-              <img
-                src={image}
-                alt={`${t('QR code for deal')} ${deal.publicId}`}
-              />
               <p>{t('Scan to open this Deal Link on another phone.')}</p>
               <a
                 className="secondary"
@@ -1700,21 +1847,21 @@ export function DealQrCode({ deal }: { deal: Deal }) {
                 {t('Download QR')}
               </a>
             </>
+          ) : imageState === 'error' ? (
+            <p role="alert">{t('QR code could not be prepared. Try again.')}</p>
           ) : (
-            <p>{t('Preparing QR Code…')}</p>
+            <p role="status">{t('Preparing QR Code…')}</p>
           )}
         </div>
       )}
-      {image && (
-        <div className="print-qr">
-          <img src={image} alt={t('Deal Link QR code')} />
-          <div>
-            <b>{t('Live Deal Link')}</b>
-            <small>{t('Scan to open the current Dealivra record.')}</small>
-            <span>{deal.publicId}</span>
-          </div>
+      <div className="print-qr">
+        <img src={image} alt={t('Deal Link QR code')} />
+        <div>
+          <b>{t('Live Deal Link')}</b>
+          <small>{t('Scan to open the current Dealivra record.')}</small>
+          <span>{deal.publicId}</span>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -1732,30 +1879,80 @@ export function DealInquiries({
   const [question, setQuestion] = useState('');
   const [replies, setReplies] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [busy, setBusy] = useState('');
+  const requestInFlight = useRef(false);
+  const loadRequestRef = useRef(0);
+  const loadFailedRef = useRef(false);
   const [sellerAccess, setSellerAccess] = useState(
     deal.viewerRole === 'seller',
   );
+  const [accessChecking, setAccessChecking] = useState(Boolean(session));
+  const [accessFailed, setAccessFailed] = useState(false);
   const isSeller = sellerAccess;
   const expired = isDealExpired(deal);
 
   const load = useCallback(async () => {
     if (!session) return;
+    const request = ++loadRequestRef.current;
     try {
-      setItems(await getDealInquiries(session, deal.id));
+      const next = await getDealInquiries(session, deal.id);
+      if (request === loadRequestRef.current) {
+        setItems(next);
+        if (loadFailedRef.current) {
+          loadFailedRef.current = false;
+          setMessage('');
+          setMessageFailed(false);
+        }
+      }
     } catch {
-      setMessage('Could not load questions');
+      if (request === loadRequestRef.current) {
+        loadFailedRef.current = true;
+        setMessageFailed(true);
+        setMessage('Could not load questions');
+      }
+    }
+  }, [deal.id, session?.accessToken]);
+
+  const verifySellerAccess = useCallback(async () => {
+    if (!session) {
+      setSellerAccess(false);
+      setAccessChecking(false);
+      setAccessFailed(false);
+      return;
+    }
+    setAccessChecking(true);
+    setAccessFailed(false);
+    try {
+      const value = await isCurrentUserDealSeller(session, deal.id);
+      setSellerAccess(value);
+    } catch {
+      // Fail closed until the current user's role can be verified.
+      setSellerAccess(false);
+      setAccessFailed(true);
+    } finally {
+      setAccessChecking(false);
     }
   }, [deal.id, session?.accessToken]);
 
   useEffect(() => {
     let current = true;
-    setSellerAccess(deal.viewerRole === 'seller');
-    if (session) {
-      void isCurrentUserDealSeller(session, deal.id).then((value) => {
-        if (current) setSellerAccess(value);
-      });
+    if (!session) {
+      setSellerAccess(false);
+      setAccessChecking(false);
+      setAccessFailed(false);
+      return () => { current = false; };
     }
+    setAccessChecking(true);
+    setAccessFailed(false);
+    void isCurrentUserDealSeller(session, deal.id)
+      .then(value => { if (current) setSellerAccess(value); })
+      .catch(() => {
+        if (!current) return;
+        setSellerAccess(false);
+        setAccessFailed(true);
+      })
+      .finally(() => { if (current) setAccessChecking(false); });
     return () => {
       current = false;
     };
@@ -1767,24 +1964,37 @@ export function DealInquiries({
     }
     void load();
     const timer = window.setInterval(() => void load(), 15_000);
-    return () => window.clearInterval(timer);
+    return () => {
+      loadRequestRef.current += 1;
+      window.clearInterval(timer);
+    };
   }, [load, session?.accessToken]);
 
   const ask = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!session || question.trim().length < 5 || busy) return;
+    if (
+      !session ||
+      question.trim().length < 5 ||
+      busy ||
+      requestInFlight.current
+    )
+      return;
+    requestInFlight.current = true;
     setBusy('ask');
     setMessage('');
+    setMessageFailed(false);
     try {
       await askDealQuestion(session, deal.publicId, question);
       setQuestion('');
       setMessage('Question sent.');
       await load();
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not send question',
       );
     } finally {
+      requestInFlight.current = false;
       setBusy('');
     }
   };
@@ -1794,19 +2004,23 @@ export function DealInquiries({
   ) => {
     event.preventDefault();
     const text = replies[inquiry.id]?.trim() || '';
-    if (!session || text.length < 2 || busy) return;
+    if (!session || text.length < 2 || busy || requestInFlight.current) return;
+    requestInFlight.current = true;
     setBusy(inquiry.id);
     setMessage('');
+    setMessageFailed(false);
     try {
       await replyDealInquiry(session, inquiry.id, text);
       setReplies((current) => ({ ...current, [inquiry.id]: '' }));
       setMessage('Reply sent.');
       await load();
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not send reply',
       );
     } finally {
+      requestInFlight.current = false;
       setBusy('');
     }
   };
@@ -1830,6 +2044,18 @@ export function DealInquiries({
             {t('Sign in')}
           </button>
         </div>
+      ) : accessChecking ? (
+        <div className="inquiry-empty" role="status" aria-live="polite">
+          <Clock3 size={17} aria-hidden="true" />
+          {t('Checking your deal access…')}
+        </div>
+      ) : accessFailed ? (
+        <div className="notice" role="alert" aria-live="assertive">
+          <span>{t('Could not verify your deal access.')}</span>
+          <button type="button" className="secondary" onClick={() => void verifySellerAccess()}>
+            {t('Try again')}
+          </button>
+        </div>
       ) : (
         !isSeller &&
         !expired && (
@@ -1844,20 +2070,20 @@ export function DealInquiries({
                 onChange={(event) => setQuestion(event.target.value)}
               />
             </label>
-            <button className="primary" disabled={busy === 'ask'}>
+            <button type="submit" className="primary" disabled={busy === 'ask'}>
               <Send size={17} />
               {t('Ask question')}
             </button>
           </form>
         )
       )}
-      {session && items.length === 0 && (
+      {session && !accessChecking && !accessFailed && items.length === 0 && (
         <div className="inquiry-empty">
           <MessageCircle size={17} />
           {t('No questions yet.')}
         </div>
       )}
-      <div className="inquiry-list">
+      {!accessChecking && !accessFailed && <div className="inquiry-list">
         {items.map((inquiry) => (
           <article className="inquiry-card" key={inquiry.id}>
             <div className="inquiry-question">
@@ -1899,6 +2125,7 @@ export function DealInquiries({
                   />
                 </label>
                 <button
+                  type="submit"
                   className="primary"
                   disabled={busy === inquiry.id}
                 >
@@ -1914,9 +2141,13 @@ export function DealInquiries({
             )}
           </article>
         ))}
-      </div>
+      </div>}
       {message && (
-        <div className="notice" role="status">
+        <div
+          className="notice"
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
           {t(message)}
         </div>
       )}
@@ -1941,21 +2172,50 @@ export function OfferPanel({
   const [amount, setAmount] = useState('');
   const [name, setName] = useState(session.user.displayName);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [busy, setBusy] = useState('');
+  const requestInFlight = useRef(false);
+  const loadSequenceRef = useRef(0);
+  const loadFailedRef = useRef(false);
 
   const load = useCallback(
-    () => getDealOffers(session, deal.id).then(setOffers).catch(() => {}),
+    async () => {
+      const request = ++loadSequenceRef.current;
+      try {
+        const next = await getDealOffers(session, deal.id);
+        if (request === loadSequenceRef.current) {
+          setOffers(next);
+          if (loadFailedRef.current) {
+            loadFailedRef.current = false;
+            setMessage('');
+            setMessageFailed(false);
+          }
+        }
+      } catch {
+        // Keep the last known offer list when a background refresh fails.
+        if (request === loadSequenceRef.current) {
+          loadFailedRef.current = true;
+          setMessageFailed(true);
+          setMessage('Could not refresh offers. Showing the last known list.');
+        }
+      }
+    },
     [deal.id, session.accessToken],
   );
   useEffect(() => {
     void load();
+    return () => {
+      loadSequenceRef.current += 1;
+    };
   }, [load]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (busy) return;
+    if (busy || requestInFlight.current) return;
+    requestInFlight.current = true;
     setBusy('submit');
     setMessage('');
+    setMessageFailed(false);
     try {
       await makeDealOffer(
         session,
@@ -1967,17 +2227,21 @@ export function OfferPanel({
       setMessage('Your offer was sent to the seller.');
       await load();
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not send offer',
       );
     } finally {
+      requestInFlight.current = false;
       setBusy('');
     }
   };
   const respond = async (offer: DealOffer, accept: boolean) => {
-    if (busy) return;
+    if (busy || requestInFlight.current) return;
+    requestInFlight.current = true;
     setBusy(offer.id);
     setMessage('');
+    setMessageFailed(false);
     try {
       await respondToOffer(session, offer.id, accept);
       setMessage(
@@ -1988,10 +2252,12 @@ export function OfferPanel({
       await load();
       if (accept) onAccepted(offer.amount_cents);
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not respond',
       );
     } finally {
+      requestInFlight.current = false;
       setBusy('');
     }
   };
@@ -2028,7 +2294,7 @@ export function OfferPanel({
               onChange={(event) => setName(event.target.value)}
             />
           </label>
-          <button className="primary" disabled={Boolean(busy)}>
+          <button type="submit" className="primary" disabled={Boolean(busy)}>
             {t('Send offer')}
           </button>
         </form>
@@ -2075,7 +2341,11 @@ export function OfferPanel({
         ))}
       </div>
       {message && (
-        <div className="notice" role="status">
+        <div
+          className="notice"
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
           {t(message)}
         </div>
       )}
@@ -2090,8 +2360,22 @@ export function OfferPanel({
 
 const isVideoSource = (source: string) =>
   /\.(mp4|webm)(?:$|\?)/i.test(source);
-const isVideoFile = (file: File) =>
-  file.type.startsWith('video/') || /\.(mp4|webm)$/i.test(file.name);
+const acceptedImageTypes = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+]);
+const acceptedVideoTypes = new Set(['video/mp4', 'video/webm']);
+const mediaFileKind = (file: File): 'image' | 'video' | null => {
+  const type = file.type.toLowerCase();
+  if (acceptedImageTypes.has(type)) return 'image';
+  if (acceptedVideoTypes.has(type)) return 'video';
+  if (!type && /\.(jpe?g|png|webp|heic)$/i.test(file.name)) return 'image';
+  if (!type && /\.(mp4|webm)$/i.test(file.name)) return 'video';
+  return null;
+};
+const isVideoFile = (file: File) => mediaFileKind(file) === 'video';
 
 export function MediaPreview({
   source,
@@ -2125,13 +2409,51 @@ function MediaLightbox({
   alt: string;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
-    const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), a[href], video[controls], [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      if (focusable.length === 0) {
+        event.preventDefault();
+        closeButtonRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
-    window.addEventListener('keydown', close);
-    return () => window.removeEventListener('keydown', close);
-  }, [onClose]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
+    };
+  }, []);
   return (
     <div
       className="media-lightbox"
@@ -2141,20 +2463,22 @@ function MediaLightbox({
       }}
     >
       <div
+        ref={dialogRef}
         className="media-lightbox-dialog"
         role="dialog"
         aria-modal="true"
         aria-label={alt}
       >
         <button
+          ref={closeButtonRef}
           type="button"
           className="media-lightbox-close"
           onClick={onClose}
           aria-label={t('Close image preview')}
         >
-          ×
+          <X aria-hidden="true" size={20} />
         </button>
-        <img src={source} alt={alt} />
+        <img className="media-lightbox-content" src={source} alt={alt} />
       </div>
     </div>
   );
@@ -2273,24 +2597,67 @@ export function FilePreview({
   file: File;
   alt: string;
 }) {
-  const [source, setSource] = useState('');
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const kind = mediaFileKind(file);
+  const [imageState, setImageState] = useState<'loading' | 'ready' | 'error'>(
+    kind === 'image' ? 'loading' : 'ready',
+  );
   useEffect(() => {
-    const nextSource = URL.createObjectURL(file);
-    setSource(nextSource);
-    return () => URL.revokeObjectURL(nextSource);
-  }, [file]);
-  if (!source) return null;
-  return isVideoFile(file) ? (
-    <video
-      src={source}
-      controls
-      muted
-      playsInline
-      preload="metadata"
-      aria-label={alt}
-    />
-  ) : (
-    <img src={source} alt={alt} />
+    if (kind !== 'image') return;
+    if (typeof createImageBitmap !== 'function') {
+      setImageState('error');
+      return;
+    }
+    let active = true;
+    setImageState('loading');
+    void createImageBitmap(file).then((bitmap) => {
+      if (!active) {
+        bitmap.close();
+        return;
+      }
+      const canvas = canvasRef.current;
+      const context = canvas?.getContext('2d');
+      if (!canvas || !context) {
+        bitmap.close();
+        setImageState('error');
+        return;
+      }
+      const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      setImageState('ready');
+    }).catch(() => {
+      if (active) setImageState('error');
+    });
+    return () => {
+      active = false;
+    };
+  }, [file, kind]);
+  if (kind === 'image') {
+    return (
+      <div className="local-media-preview">
+        <canvas
+          ref={canvasRef}
+          role="img"
+          aria-label={alt}
+          hidden={imageState !== 'ready'}
+        />
+        {imageState !== 'ready' && (
+          <span role="status">
+            <ImagePlus aria-hidden="true" />
+            {t(imageState === 'error' ? 'Preview unavailable' : 'Preparing preview…')}
+          </span>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="local-media-preview video-file-selected" role="status">
+      <PackageCheck aria-hidden="true" />
+      <span>{t('Video selected')}</span>
+    </div>
   );
 }
 
@@ -2326,7 +2693,9 @@ export function SavedDraftPanel({
   });
   const [edit, setEdit] = useState<DealDraft>(makeEdit);
   const [busy, setBusy] = useState(false);
+  const mutationInFlight = useRef(false);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [declarations, setDeclarations] = useState<SellerDeclarations>(
     emptySellerDeclarations,
   );
@@ -2343,13 +2712,16 @@ export function SavedDraftPanel({
         (event.nativeEvent as SubmitEvent)
           .submitter as HTMLButtonElement | null
       )?.value || 'save';
-    if (busy) return;
+    if (busy || mutationInFlight.current) return;
     if (action === 'publish' && !declarationsComplete) {
+      setMessageFailed(true);
       setMessage('Confirm all declarations before publishing.');
       return;
     }
+    mutationInFlight.current = true;
     setBusy(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const updated =
         action === 'publish'
@@ -2360,10 +2732,12 @@ export function SavedDraftPanel({
         action === 'publish' ? 'Deal Link published.' : 'Draft saved.',
       );
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not update draft',
       );
     } finally {
+      mutationInFlight.current = false;
       setBusy(false);
     }
   };
@@ -2498,9 +2872,10 @@ export function SavedDraftPanel({
             {t('Confirm all declarations before publishing.')}
           </small>
         )}
-        {message && <div className="notice">{t(message)}</div>}
+        {message && <div className="notice" role={messageFailed ? 'alert' : 'status'} aria-live={messageFailed ? 'assertive' : 'polite'}>{t(message)}</div>}
         <div className="saved-draft-actions">
           <button
+            type="submit"
             className="secondary"
             name="action"
             value="save"
@@ -2509,6 +2884,7 @@ export function SavedDraftPanel({
             {t(busy ? 'Saving…' : 'Save changes')}
           </button>
           <button
+            type="submit"
             className="primary"
             name="action"
             value="publish"
@@ -2534,12 +2910,21 @@ export function PhotoManager({
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const uploadingRef = useRef(false);
   const remaining = Math.max(0, 6 - (deal.mediaUrls?.length || 0));
   const hasVideo = (deal.mediaUrls || []).some(isVideoSource);
 
   const choose = (selected: File[]) => {
     setMessage('');
+    setMessageFailed(false);
+    const unsupported = selected.find((file) => mediaFileKind(file) === null);
+    if (unsupported) {
+      setMessageFailed(true);
+      setMessage(`${unsupported.name} ${t('is not a supported media file.')}`);
+      return;
+    }
     const combined = [...files, ...selected]
       .filter(
         (file, index, all) =>
@@ -2554,6 +2939,7 @@ export function PhotoManager({
       (file) => file.size > (isVideoFile(file) ? 25 : 20) * 1024 * 1024,
     );
     if (invalid || videos.length + (hasVideo ? 1 : 0) > 1) {
+      setMessageFailed(true);
       setMessage(
         invalid
           ? `${invalid.name} ${t('is too large.')}`
@@ -2564,9 +2950,11 @@ export function PhotoManager({
     setFiles(combined);
   };
   const upload = async () => {
-    if (!files.length || uploading) return;
+    if (!files.length || uploadingRef.current) return;
+    uploadingRef.current = true;
     setUploading(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const urls = await uploadDealPhotos(
         session,
@@ -2578,10 +2966,12 @@ export function PhotoManager({
       setFiles([]);
       setMessage('Media added successfully.');
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not upload media',
       );
     } finally {
+      uploadingRef.current = false;
       setUploading(false);
     }
   };
@@ -2634,6 +3024,7 @@ export function PhotoManager({
           type="button"
           className="primary"
           disabled={uploading}
+          aria-busy={uploading}
           onClick={() => void upload()}
         >
           {uploading
@@ -2643,7 +3034,7 @@ export function PhotoManager({
               )}`}
         </button>
       )}
-      {message && <div className="notice">{t(message)}</div>}
+      {message && <div className="notice" role={messageFailed ? 'alert' : 'status'} aria-live={messageFailed ? 'assertive' : 'polite'}>{t(message)}</div>}
     </section>
   );
 }
@@ -2658,31 +3049,49 @@ export function ExistingMediaManager({
   onRemoved: (url: string) => void;
 }) {
   const [removing, setRemoving] = useState('');
+  const removingRef = useRef(false);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [previewSource, setPreviewSource] = useState<string | null>(null);
+  const { confirmAction, confirmDialog } = useConfirmAction();
 
   const remove = async (url: string) => {
-    if (removing || !confirm(t('Remove this photo or video from the Deal Link?'))) {
+    if (removingRef.current) return;
+    removingRef.current = true;
+    const confirmed = await confirmAction({
+      title: t('Remove this media?'),
+      description: t(
+        'This photo or video will no longer appear on the Deal Link. This action cannot be undone.',
+      ),
+      confirmLabel: t('Remove media'),
+      tone: 'danger',
+    });
+    if (!confirmed) {
+      removingRef.current = false;
       return;
     }
     setRemoving(url);
     setMessage('');
+    setMessageFailed(false);
     try {
       await deleteDealMedia(session, deal.id, url);
       onRemoved(url);
       setMessage('Media removed.');
       if (previewSource === url) setPreviewSource(null);
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not remove media',
       );
     } finally {
+      removingRef.current = false;
       setRemoving('');
     }
   };
 
   if (!deal.mediaUrls?.length) return null;
   return (
+    <>
     <section className="existing-media no-print">
       <div>
         <p className="eyebrow">{t('Published media')}</p>
@@ -2708,7 +3117,7 @@ export function ExistingMediaManager({
           </article>
         ))}
       </div>
-      {message && <div className="notice">{t(message)}</div>}
+      {message && <div className="notice" role={messageFailed ? 'alert' : 'status'} aria-live={messageFailed ? 'assertive' : 'polite'}>{t(message)}</div>}
       {previewSource && (
         <MediaLightbox
           source={previewSource}
@@ -2717,6 +3126,8 @@ export function ExistingMediaManager({
         />
       )}
     </section>
+    {confirmDialog}
+    </>
   );
 }
 
@@ -2732,24 +3143,30 @@ export function CoverSelector({
   const urls = deal.mediaUrls || [];
   const [selected, setSelected] = useState(urls[0] || '');
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   useEffect(() => setSelected(urls[0] || ''), [urls[0]]);
   if (urls.length < 2) return null;
   const save = async () => {
-    if (saving) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     const ordered = [selected, ...urls.filter((url) => url !== selected)];
     setSaving(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       await reorderDealMedia(session, deal.id, ordered);
       onReordered(ordered);
       setMessage('Cover media updated.');
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not update cover',
       );
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -2791,11 +3208,12 @@ export function CoverSelector({
         type="button"
         className="primary"
         disabled={saving || selected === urls[0]}
+        aria-busy={saving}
         onClick={() => void save()}
       >
         {t(saving ? 'Saving…' : 'Set as cover')}
       </button>
-      {message && <div className="notice">{t(message)}</div>}
+      {message && <div className="notice" role={messageFailed ? 'alert' : 'status'} aria-live={messageFailed ? 'assertive' : 'polite'}>{t(message)}</div>}
     </section>
   );
 }
@@ -2814,7 +3232,9 @@ export function DealEditor({
   const sectionRef = useRef<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [edit, setEdit] = useState<DealDraft>({
     title: deal.title,
     description: deal.description,
@@ -2829,19 +3249,16 @@ export function DealEditor({
   useEffect(() => {
     if (!openRequestedAt) return;
     setOpen(true);
-    window.requestAnimationFrame(() =>
-      sectionRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      }),
-    );
+    window.requestAnimationFrame(() => focusPageDestination('deal-editor'));
   }, [openRequestedAt]);
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (saving) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const version = await updatePublishedDeal(
         session,
@@ -2860,10 +3277,12 @@ export function DealEditor({
       setMessage(`${t('Changes published as agreement version')} ${version}.`);
       setOpen(false);
     } catch (error) {
+      setMessageFailed(true);
       setMessage(
         error instanceof Error ? error.message : 'Could not update deal',
       );
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -2974,12 +3393,12 @@ export function DealEditor({
               <option value="Ship to buyer">{t('Ship to buyer')}</option>
             </select>
           </label>
-          <button className="primary full" disabled={saving}>
+          <button type="submit" className="primary full" disabled={saving}>
             {t(saving ? 'Publishing…' : 'Publish changes')}
           </button>
         </form>
       )}
-      {message && <div className="notice">{t(message)}</div>}
+      {message && <div className="notice" role={messageFailed ? 'alert' : 'status'} aria-live={messageFailed ? 'assertive' : 'polite'}>{t(message)}</div>}
     </section>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   BadgeCheck,
   Check,
@@ -11,6 +11,9 @@ import {
 } from 'lucide-react';
 import { AccountMfaSecurity } from './AccountMfaSecurity';
 import { AccountSessionSecurity } from './AccountSessionSecurity';
+import { AsyncStatePanel } from './AsyncStatePanel';
+import { copyTextToClipboard } from './clipboard';
+import { FieldError } from './FieldError';
 import { supportCasesEnabled } from './featureFlags';
 import { getAppLanguage, t } from './i18n';
 import { SupportCaseCenter } from './SupportCaseCenter';
@@ -28,11 +31,15 @@ function SecurityCenter({
   email,
   status,
   message,
+  messageFailed,
+  requesting,
   onRequest,
 }: {
   email: string;
   status: ProfileSummary['verification_status'];
   message: string;
+  messageFailed: boolean;
+  requesting: boolean;
   onRequest: () => void;
 }) {
   return (
@@ -59,8 +66,8 @@ function SecurityCenter({
             <span>{t(status.replace('_', ' '))}</span>
           </div>
           {status === 'not_started' ? (
-            <button className="secondary" onClick={onRequest}>
-              {t('Request verification')}
+            <button type="button" className="secondary" onClick={onRequest} disabled={requesting} aria-busy={requesting}>
+              {t(requesting ? 'Requesting…' : 'Request verification')}
             </button>
           ) : null}
         </article>
@@ -79,7 +86,15 @@ function SecurityCenter({
           )}
         </div>
       ) : null}
-      {message ? <div className="notice">{t(message)}</div> : null}
+      {message ? (
+        <div
+          className={`notice ${messageFailed ? 'error' : ''}`}
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
+          {t(message)}
+        </div>
+      ) : null}
       <p className="security-warning">
         <LockKeyhole aria-hidden="true" />{' '}
         {t(
@@ -106,34 +121,64 @@ function AccountSettings({
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [nameMessage, setNameMessage] = useState('');
+  const [nameError, setNameError] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const [savingName, setSavingName] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const savingNameRef = useRef(false);
+  const savingPasswordRef = useRef(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => setName(displayName), [displayName]);
 
   const saveName = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (savingNameRef.current) return;
+    const normalizedName = name.trim();
     setNameMessage('');
+    setNameError('');
+    if (normalizedName.length < 2) {
+      setNameError('Enter a display name with at least 2 characters.');
+      window.requestAnimationFrame(() => nameRef.current?.focus());
+      return;
+    }
+    savingNameRef.current = true;
     setSavingName(true);
     try {
-      await updateAccountName(session, name);
-      onNameUpdated(name.trim());
+      await updateAccountName(session, normalizedName);
+      setName(normalizedName);
+      onNameUpdated(normalizedName);
       setNameMessage('Your display name was updated.');
     } catch (error) {
-      setNameMessage(error instanceof Error ? error.message : 'Could not update name');
+      setNameError(error instanceof Error ? error.message : 'Could not update name');
+      window.requestAnimationFrame(() => nameRef.current?.focus());
     } finally {
+      savingNameRef.current = false;
       setSavingName(false);
     }
   };
 
   const savePassword = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (savingPasswordRef.current) return;
     setPasswordMessage('');
-    if (password !== confirmPassword) {
-      setPasswordMessage('Passwords do not match.');
+    setPasswordError('');
+    setConfirmPasswordError('');
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/.test(password)) {
+      setPasswordError('Use 12+ characters with uppercase, lowercase, a number, and a symbol.');
+      window.requestAnimationFrame(() => passwordRef.current?.focus());
       return;
     }
+    if (password !== confirmPassword) {
+      setConfirmPasswordError('Passwords do not match.');
+      window.requestAnimationFrame(() => confirmPasswordRef.current?.focus());
+      return;
+    }
+    savingPasswordRef.current = true;
     setSavingPassword(true);
     try {
       await updateAccountPassword(session, currentPassword, password);
@@ -144,6 +189,7 @@ function AccountSettings({
     } catch (error) {
       setPasswordMessage(error instanceof Error ? error.message : 'Could not update password');
     } finally {
+      savingPasswordRef.current = false;
       setSavingPassword(false);
     }
   };
@@ -158,30 +204,39 @@ function AccountSettings({
         </div>
       </div>
       <div className="settings-grid">
-        <form onSubmit={saveName}>
+        <form onSubmit={saveName} aria-busy={savingName}>
           <h3>{t('Public display name')}</h3>
           <p>{t('This name appears on your profile and Deal Links.')}</p>
           <label>
             {t('Your name')}
             <input
+              ref={nameRef}
               required
               minLength={2}
               maxLength={80}
               autoComplete="name"
+              aria-invalid={Boolean(nameError)}
+              aria-describedby={nameError ? 'account-name-error' : undefined}
+              disabled={savingName}
               value={name}
-              onChange={event => setName(event.target.value)}
+              onChange={event => {
+                setName(event.target.value);
+                if (nameError) setNameError('');
+                if (nameMessage) setNameMessage('');
+              }}
             />
+            {nameError ? <FieldError id="account-name-error">{nameError}</FieldError> : null}
           </label>
           {nameMessage ? (
             <div className="notice" role="status">
               {t(nameMessage)}
             </div>
           ) : null}
-          <button className="primary" disabled={savingName || name.trim() === displayName}>
+          <button type="submit" className="primary" disabled={savingName || name.trim() === displayName}>
             {t(savingName ? 'Saving…' : 'Save name')}
           </button>
         </form>
-        <form onSubmit={savePassword}>
+        <form onSubmit={savePassword} aria-busy={savingPassword}>
           <h3>{t('Change password')}</h3>
           <p>
             {t(
@@ -192,9 +247,12 @@ function AccountSettings({
             {t('Current password')}
             <input
               required
+              name="current"
               maxLength={256}
               autoComplete="current-password"
+              enterKeyHint="next"
               type="password"
+              disabled={savingPassword}
               value={currentPassword}
               onChange={event => setCurrentPassword(event.target.value)}
             />
@@ -202,35 +260,60 @@ function AccountSettings({
           <label>
             {t('New password')}
             <input
+              ref={passwordRef}
               required
+              name="new"
               minLength={12}
               maxLength={256}
               autoComplete="new-password"
+              enterKeyHint="next"
               type="password"
+              aria-invalid={Boolean(passwordError)}
+              aria-describedby={passwordError ? 'account-password-requirements account-password-error' : 'account-password-requirements'}
+              disabled={savingPassword}
               value={password}
-              onChange={event => setPassword(event.target.value)}
+              onChange={event => {
+                setPassword(event.target.value);
+                if (passwordError) setPasswordError('');
+              }}
             />
+            {passwordError ? <FieldError id="account-password-error">{passwordError}</FieldError> : null}
           </label>
           <label>
             {t('Confirm password')}
             <input
+              ref={confirmPasswordRef}
+              id="account-confirm-password"
               required
+              name="confirm"
               minLength={12}
               maxLength={256}
               autoComplete="new-password"
+              enterKeyHint="done"
               type="password"
+              aria-invalid={Boolean(confirmPasswordError)}
+              aria-describedby={confirmPasswordError ? 'account-password-requirements account-confirm-password-error' : 'account-password-requirements'}
+              disabled={savingPassword}
               value={confirmPassword}
-              onChange={event => setConfirmPassword(event.target.value)}
+              onChange={event => {
+                setConfirmPassword(event.target.value);
+                if (confirmPasswordError) setConfirmPasswordError('');
+              }}
             />
+            {confirmPasswordError ? <FieldError id="account-confirm-password-error">{confirmPasswordError}</FieldError> : null}
           </label>
+          <small id="account-password-requirements">
+            {t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}
+          </small>
           {passwordMessage ? (
             <div className="notice" role="alert">
               {t(passwordMessage)}
             </div>
           ) : null}
           <button
+            type="submit"
             className="primary"
-            disabled={savingPassword || !currentPassword || !password || !confirmPassword}
+            disabled={savingPassword}
           >
             {t(savingPassword ? 'Updating…' : 'Update password')}
           </button>
@@ -243,11 +326,14 @@ function AccountSettings({
 function TrustPassportControls({ session }: { session: StoredSession }) {
   const [settings, setSettings] = useState<TrustPassportSettings | null>(null);
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     let active = true;
     setMessage('');
+    setMessageFailed(false);
     getTrustPassportSettings(session)
       .then(result => {
         if (active) setSettings(result);
@@ -255,6 +341,7 @@ function TrustPassportControls({ session }: { session: StoredSession }) {
       .catch(error => {
         if (active) {
           setMessage(error instanceof Error ? error.message : 'Could not load passport settings');
+          setMessageFailed(true);
         }
       });
     return () => {
@@ -265,26 +352,32 @@ function TrustPassportControls({ session }: { session: StoredSession }) {
   const publicUrl = settings ? `${location.origin}/?trust=${settings.public_id}` : '';
 
   const toggle = async () => {
-    if (!settings) return;
+    if (!settings || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       const enabled = !settings.enabled;
       const publicId = await setTrustPassportEnabled(session, enabled);
       setSettings({ public_id: publicId, enabled });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not update passport settings');
+      setMessageFailed(true);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(publicUrl);
+      await copyTextToClipboard(publicUrl);
       setMessage('Passport link copied.');
+      setMessageFailed(false);
     } catch {
       setMessage('Could not copy the passport link. Copy it from the address shown above.');
+      setMessageFailed(true);
     }
   };
 
@@ -298,6 +391,7 @@ function TrustPassportControls({ session }: { session: StoredSession }) {
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
       setMessage('Could not share the passport link. Copy it instead.');
+      setMessageFailed(true);
     }
   };
 
@@ -323,8 +417,10 @@ function TrustPassportControls({ session }: { session: StoredSession }) {
               </small>
             </span>
             <button
+              type="button"
               className={settings.enabled ? 'secondary' : 'primary'}
               disabled={saving}
+              aria-busy={saving}
               onClick={toggle}
             >
               {t(settings.enabled ? 'Disable public passport' : 'Enable public passport')}
@@ -332,11 +428,11 @@ function TrustPassportControls({ session }: { session: StoredSession }) {
           </div>
           {settings.enabled ? (
             <div className="passport-actions">
-              <button className="secondary" onClick={copy}>
+              <button type="button" className="secondary" onClick={copy}>
                 <Copy size={17} aria-hidden="true" />
                 {t('Copy passport link')}
               </button>
-              <button className="primary" onClick={share}>
+              <button type="button" className="primary" onClick={share}>
                 <Share2 size={17} aria-hidden="true" />
                 {t('Share passport')}
               </button>
@@ -344,9 +440,17 @@ function TrustPassportControls({ session }: { session: StoredSession }) {
           ) : null}
         </>
       ) : !message ? (
-        <div className="notice">{t('Loading passport…')}</div>
+        <div className="notice" role="status" aria-live="polite">{t('Loading passport…')}</div>
       ) : null}
-      {message ? <div className="notice">{t(message)}</div> : null}
+      {message ? (
+        <div
+          className={`notice ${messageFailed ? 'error' : ''}`}
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
+          {t(message)}
+        </div>
+      ) : null}
       <p className="passport-private">
         <LockKeyhole size={17} aria-hidden="true" />
         {t('Your email, phone, addresses, and identity documents are never shown.')}
@@ -359,21 +463,25 @@ function ProfileOverview({
   profile,
   displayName,
   message,
+  loading,
+  onRetry,
   onBack,
 }: {
   profile: ProfileSummary | null;
   displayName: string;
   message: string;
+  loading: boolean;
+  onRetry: () => void;
   onBack: () => void;
 }) {
   return (
     <section className="profile-page">
-      <button className="back" onClick={onBack}>
+      <button type="button" className="back" onClick={onBack}>
         ← {t('Dashboard')}
       </button>
       <p className="eyebrow">{t('Trust profile')}</p>
       <h1>{profile?.display_name || displayName}</h1>
-      {message ? <div className="notice">{t(message)}</div> : null}
+      {!profile ? <AsyncStatePanel state={loading ? 'loading' : 'error'} title={loading ? 'Loading profile…' : 'Profile unavailable'} message={loading ? 'Checking your latest account and trust information.' : message || 'Your profile could not be loaded.'} actionLabel="Retry" onAction={loading ? undefined : onRetry} /> : null}
       {profile ? (
         <>
           <div className="profile-stats">
@@ -442,11 +550,15 @@ export function AccountProfileWorkspace({
   displayName,
   message,
   verificationMessage,
+  verificationMessageFailed,
+  verificationRequesting,
   onRequestVerification,
   onSessionUpdated,
   onSignedOut,
   onNameUpdated,
   onPasswordUpdated,
+  profileLoading,
+  onRetryProfile,
   onBack,
 }: {
   session: StoredSession;
@@ -455,13 +567,20 @@ export function AccountProfileWorkspace({
   displayName: string;
   message: string;
   verificationMessage: string;
+  verificationMessageFailed: boolean;
+  verificationRequesting: boolean;
   onRequestVerification: () => void;
   onSessionUpdated: (session: StoredSession) => void;
   onSignedOut: () => void;
   onNameUpdated: (name: string) => void;
   onPasswordUpdated: () => void;
+  profileLoading: boolean;
+  onRetryProfile: () => void;
   onBack: () => void;
 }) {
+  if (!profile) {
+    return <ProfileOverview profile={null} displayName={displayName} message={message} loading={profileLoading} onRetry={onRetryProfile} onBack={onBack} />;
+  }
   return (
     <>
       {profile ? (
@@ -469,6 +588,8 @@ export function AccountProfileWorkspace({
           email={email}
           status={profile.verification_status}
           message={verificationMessage}
+          messageFailed={verificationMessageFailed}
+          requesting={verificationRequesting}
           onRequest={onRequestVerification}
         />
       ) : null}
@@ -488,6 +609,8 @@ export function AccountProfileWorkspace({
         profile={profile}
         displayName={displayName}
         message={message}
+        loading={profileLoading}
+        onRetry={onRetryProfile}
         onBack={onBack}
       />
     </>

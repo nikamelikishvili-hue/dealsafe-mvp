@@ -15,6 +15,11 @@ export type ClientFailureEvent =
       schema: 'dealivra.client-failure.v1';
       boundary: 'browser_runtime';
       issue: 'window_error' | 'unhandled_promise_rejection';
+    }
+  | {
+      schema: 'dealivra.client-failure.v1';
+      boundary: 'address_autocomplete';
+      issue: 'provider_load_failed' | 'suggestion_request_failed' | 'place_details_failed';
     };
 
 const allowedPairs = new Set([
@@ -23,6 +28,9 @@ const allowedPairs = new Set([
   'application_bootstrap:localization_initialization_failed',
   'browser_runtime:window_error',
   'browser_runtime:unhandled_promise_rejection',
+  'address_autocomplete:provider_load_failed',
+  'address_autocomplete:suggestion_request_failed',
+  'address_autocomplete:place_details_failed',
 ]);
 const signatureCooldownMs = 30_000;
 const maximumTransportsPerMinute = 10;

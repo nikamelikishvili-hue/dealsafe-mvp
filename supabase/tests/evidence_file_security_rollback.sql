@@ -288,7 +288,12 @@ begin
   perform set_config('request.jwt.claim.sub', target_admin_id::text, true);
   perform set_config(
     'request.jwt.claims',
-    jsonb_build_object('sub', target_admin_id, 'role', 'authenticated')::text,
+    jsonb_build_object(
+      'sub', target_admin_id,
+      'role', 'authenticated',
+      'aal', 'aal2',
+      'amr', jsonb_build_array(jsonb_build_object('method', 'totp'))
+    )::text,
     true
   );
   select exists (

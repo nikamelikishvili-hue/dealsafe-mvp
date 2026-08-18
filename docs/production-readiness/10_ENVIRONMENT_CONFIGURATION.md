@@ -164,6 +164,19 @@ alignment, or capability state to unauthenticated visitors.
   passes, and successful changes force a fresh sign-in. Password values must
   not appear in any release evidence.
 
+## Isolated Staging database gate
+
+Database migrations and cross-user authorization tests require a protected
+GitHub environment named `staging`. Configure the two non-secret project
+references `DEALIVRA_STAGING_SUPABASE_PROJECT_REF` and
+`DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF`, plus the encrypted secret
+`DEALIVRA_STAGING_DATABASE_URL`. The guard requires different project
+references and an exact direct database host owned by Staging. This workflow
+must remain manual-only and must never point at Production.
+
+See [74_STAGING_DATABASE_AUTHORIZATION_GATE.md](74_STAGING_DATABASE_AUTHORIZATION_GATE.md)
+for activation, evidence, and rollback requirements.
+
 ## Change procedure
 
 1. Select the intended environment and confirm it does not point to another environment's data or provider account.

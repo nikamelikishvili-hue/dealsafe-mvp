@@ -12,8 +12,11 @@ import {
   Send,
   ShieldCheck,
   Star,
+  X,
 } from 'lucide-react';
+import { useConfirmAction } from './ConfirmActionDialog';
 import type { Deal } from './domain';
+import { FieldError } from './FieldError';
 import { getAppLanguage, t } from './i18n';
 import {
   cancelDeal,
@@ -40,19 +43,25 @@ export function RatingPanel({ deal, session }: RatingPanelProps) {
   const [stars, setStars] = useState(5);
   const [comment, setComment] = useState('');
   const [message, setMessage] = useState('');
+  const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (saving) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setMessage('');
+    setFailed(false);
     try {
-      await submitRating(session, deal.id, stars, comment);
+      await submitRating(session, deal.id, stars, comment.trim());
       setMessage('Thank you. Your rating was saved.');
     } catch (error) {
+      setFailed(true);
       setMessage(error instanceof Error ? error.message : 'Could not save rating');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -91,7 +100,7 @@ export function RatingPanel({ deal, session }: RatingPanelProps) {
           </button>
         </form>
         {message && (
-          <div className="notice" role="status" aria-live="polite">
+          <div className="notice" role={failed ? 'alert' : 'status'} aria-live={failed ? 'assertive' : 'polite'}>
             {t(message)}
           </div>
         )}
@@ -113,62 +122,119 @@ export function DealSafetyActions({
 }: DealSafetyActionsProps) {
   const [mode, setMode] = useState<'cancel' | 'dispute' | null>(null);
   const [reason, setReason] = useState('');
+  const [reasonError, setReasonError] = useState('');
   const [message, setMessage] = useState('');
+  const [messageFailed, setMessageFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [paymentState, setPaymentState] =
     useState<ProtectedPaymentState | null>(null);
+  const [paymentStateError, setPaymentStateError] = useState('');
+  const [paymentStateVersion, setPaymentStateVersion] = useState(0);
+  const { confirmAction, confirmDialog } = useConfirmAction();
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const safetyTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (deal.status !== 'completed') {
       setPaymentState(null);
+      setPaymentStateError('');
       return;
     }
     let current = true;
+    setPaymentStateError('');
     void getProtectedPaymentStatus(session, deal.id)
       .then((payment) => {
-        if (current) setPaymentState(payment.status);
+        if (current) {
+          setPaymentState(payment.status);
+          setPaymentStateError('');
+        }
       })
       .catch(() => {
-        if (current) setPaymentState(null);
+        if (current) {
+          setPaymentState(null);
+          setPaymentStateError(
+            'Payment status could not be checked. Dispute eligibility is temporarily unavailable.',
+          );
+        }
       });
     return () => {
       current = false;
     };
-  }, [deal.id, deal.status, session.accessToken]);
+  }, [deal.id, deal.status, session.accessToken, paymentStateVersion]);
 
   const closeForm = () => {
     if (saving) return;
     setMode(null);
     setReason('');
+    setReasonError('');
+    window.requestAnimationFrame(() => safetyTriggerRef.current?.focus());
+  };
+
+  const openForm = (
+    nextMode: 'cancel' | 'dispute',
+    trigger: HTMLButtonElement,
+  ) => {
+    safetyTriggerRef.current = trigger;
+    setReasonError('');
+    setMessage('');
+    setMessageFailed(false);
+    setMode(nextMode);
+    window.requestAnimationFrame(() => reasonRef.current?.focus());
   };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!mode || saving) return;
+    if (!mode || savingRef.current) return;
+    const normalizedReason = reason.trim();
+    const minimumReasonLength = mode === 'cancel' ? 5 : 10;
+    setReasonError('');
+    if (normalizedReason.length < minimumReasonLength) {
+      setReasonError(
+        mode === 'cancel'
+          ? 'Enter a cancellation reason with at least 5 characters.'
+          : 'Describe the problem with at least 10 characters.',
+      );
+      window.requestAnimationFrame(() => reasonRef.current?.focus());
+      return;
+    }
+    savingRef.current = true;
 
-    const confirmed =
-      mode === 'cancel'
-        ? confirm(t('Cancel this deal? This action cannot be undone.'))
-        : confirm(t('Open a dispute and pause this deal?'));
-    if (!confirmed) return;
+    const confirmed = await confirmAction({
+      title: t(mode === 'cancel' ? 'Cancel this deal?' : 'Open a dispute?'),
+      description: t(
+        mode === 'cancel'
+          ? 'This action cannot be undone. The cancellation reason will remain in the private deal history.'
+          : 'The deal and handoff will be paused while the report is reviewed.',
+      ),
+      confirmLabel: t(mode === 'cancel' ? 'Cancel deal' : 'Open dispute'),
+      tone: 'danger',
+    });
+    if (!confirmed) {
+      savingRef.current = false;
+      return;
+    }
 
     setSaving(true);
     setMessage('');
+    setMessageFailed(false);
     try {
       if (mode === 'cancel') {
-        await cancelDeal(session, deal.id, reason);
+        await cancelDeal(session, deal.id, normalizedReason);
         onStatus('cancelled');
         setMessage('Deal cancelled.');
       } else {
-        await openDealDispute(session, deal.id, reason);
+        await openDealDispute(session, deal.id, normalizedReason);
         onStatus('disputed');
         setMessage('Problem reported. The deal is now disputed.');
       }
       setMode(null);
       setReason('');
     } catch (error) {
+      setMessageFailed(true);
       setMessage(error instanceof Error ? error.message : 'Action failed');
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -203,6 +269,7 @@ export function DealSafetyActions({
       ].includes(paymentState));
 
   return (
+    <>
     <section className="deal-safety-actions">
       <div>
         <p className="eyebrow">{t('Safety controls')}</p>
@@ -215,7 +282,7 @@ export function DealSafetyActions({
             className="secondary danger"
             type="button"
             disabled={saving}
-            onClick={() => setMode('cancel')}
+            onClick={(event) => openForm('cancel', event.currentTarget)}
           >
             {t('Cancel deal')}
           </button>
@@ -225,28 +292,47 @@ export function DealSafetyActions({
             className="secondary"
             type="button"
             disabled={saving}
-            onClick={() => setMode('dispute')}
+            onClick={(event) => openForm('dispute', event.currentTarget)}
           >
             {t('Report a problem')}
           </button>
         )}
       </div>
+      {paymentStateError && (
+        <div className="notice" role="alert">
+          <span>{t(paymentStateError)}</span>
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setPaymentStateVersion(version => version + 1)}
+          >
+            {t('Try again')}
+          </button>
+        </div>
+      )}
       {mode && (
         <form onSubmit={submit}>
           <label>
             {t(mode === 'cancel' ? 'Why are you cancelling?' : 'Describe the problem')}
             <textarea
+              ref={reasonRef}
               required
               minLength={mode === 'cancel' ? 5 : 10}
               maxLength={500}
+              aria-invalid={Boolean(reasonError)}
+              aria-describedby={reasonError ? 'deal-safety-reason-error' : undefined}
               value={reason}
-              onChange={(event) => setReason(event.target.value)}
+              onChange={(event) => {
+                setReason(event.target.value);
+                if (reasonError) setReasonError('');
+              }}
               placeholder={t(
                 mode === 'cancel'
                   ? 'Example: Item is no longer available'
                   : 'Include what happened and what outcome you expect',
               )}
             />
+            {reasonError ? <FieldError id="deal-safety-reason-error">{reasonError}</FieldError> : null}
           </label>
           <div>
             <button
@@ -270,11 +356,17 @@ export function DealSafetyActions({
         </form>
       )}
       {message && (
-        <div className="notice" role="status" aria-live="polite">
+        <div
+          className="notice"
+          role={messageFailed ? 'alert' : 'status'}
+          aria-live={messageFailed ? 'assertive' : 'polite'}
+        >
           {t(message)}
         </div>
       )}
     </section>
+    {confirmDialog}
+    </>
   );
 }
 
@@ -292,22 +384,47 @@ export function ReportDealPanel({
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState('Suspected fraud');
   const [details, setDetails] = useState('');
+  const [detailsError, setDetailsError] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [submitted, setSubmitted] = useState(false);
+  const detailsRef = useRef<HTMLTextAreaElement>(null);
+  const reportTriggerRef = useRef<HTMLButtonElement>(null);
+
+  const openReport = () => {
+    setDetailsError('');
+    setOpen(true);
+    window.requestAnimationFrame(() => detailsRef.current?.focus());
+  };
+
+  const closeReport = () => {
+    setOpen(false);
+    setDetailsError('');
+    window.requestAnimationFrame(() => reportTriggerRef.current?.focus());
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!session || sending || details.trim().length < 10) return;
+    if (!session || sendingRef.current) return;
+    const normalizedDetails = details.trim();
+    setDetailsError('');
+    if (normalizedDetails.length < 10) {
+      setDetailsError('Describe what you noticed with at least 10 characters.');
+      window.requestAnimationFrame(() => detailsRef.current?.focus());
+      return;
+    }
+    sendingRef.current = true;
     setSending(true);
     setMessage('');
     try {
-      await reportPublicDeal(session, deal.publicId, category, details);
+      await reportPublicDeal(session, deal.publicId, category, normalizedDetails);
       setSubmitted(true);
       setOpen(false);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not submit report');
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };
@@ -338,9 +455,10 @@ export function ReportDealPanel({
         <>
           {!open ? (
             <button
+              ref={reportTriggerRef}
               className="secondary danger"
               type="button"
-              onClick={() => setOpen(true)}
+              onClick={openReport}
             >
               <Flag size={16} />
               {t('Report suspicious deal')}
@@ -367,16 +485,23 @@ export function ReportDealPanel({
               <label>
                 {t('Details')}
                 <textarea
+                  ref={detailsRef}
                   required
                   minLength={10}
                   maxLength={1000}
+                  aria-invalid={Boolean(detailsError)}
+                  aria-describedby={detailsError ? 'report-details-count report-details-error' : 'report-details-count'}
                   value={details}
-                  onChange={(event) => setDetails(event.target.value)}
+                  onChange={(event) => {
+                    setDetails(event.target.value);
+                    if (detailsError) setDetailsError('');
+                  }}
                   placeholder={t(
                     'Describe what you noticed without sharing passwords or financial information.',
                   )}
                 />
-                <small>{details.trim().length}/1000</small>
+                <small id="report-details-count">{details.trim().length}/1000</small>
+                {detailsError ? <FieldError id="report-details-error">{detailsError}</FieldError> : null}
               </label>
               {message && (
                 <div className="notice" role="alert">
@@ -388,14 +513,14 @@ export function ReportDealPanel({
                   type="button"
                   className="secondary"
                   disabled={sending}
-                  onClick={() => setOpen(false)}
+                  onClick={closeReport}
                 >
                   {t('Go back')}
                 </button>
                 <button
                   className="primary"
                   type="submit"
-                  disabled={sending || details.trim().length < 10}
+                  disabled={sending}
                 >
                   {t(sending ? 'Sending…' : 'Submit report')}
                 </button>
@@ -430,6 +555,10 @@ export function DealChat({ deal, session }: DealChatProps) {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  const launcherRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const openRef = useRef(false);
   const loadedRef = useRef(false);
   const lastSeenRef = useRef<string | undefined>(undefined);
@@ -444,6 +573,13 @@ export function DealChat({ deal, session }: DealChatProps) {
       setUnread(0);
       const latest = messages[messages.length - 1]?.created_at;
       if (latest) lastSeenRef.current = latest;
+    }
+  };
+
+  const closeChat = (restoreFocus = false) => {
+    setChatOpen(false);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => launcherRef.current?.focus());
     }
   };
 
@@ -496,22 +632,35 @@ export function DealChat({ deal, session }: DealChatProps) {
 
   useEffect(() => {
     if (!open) return;
+    window.requestAnimationFrame(() => composerRef.current?.focus());
     void load();
     const timer = window.setInterval(() => void load(), 10_000);
+    const closeFromOutside = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !panelRef.current?.contains(event.target) &&
+        !launcherRef.current?.contains(event.target)
+      ) {
+        closeChat(false);
+      }
+    };
+    document.addEventListener('pointerdown', closeFromOutside);
     return () => {
       window.clearInterval(timer);
+      document.removeEventListener('pointerdown', closeFromOutside);
       requestRef.current += 1;
     };
   }, [load, open]);
 
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!body.trim() || sending) return;
+    if (!body.trim() || sendingRef.current) return;
+    sendingRef.current = true;
     const context = contextRef.current;
     setSending(true);
     setError('');
     try {
-      await sendDealMessage(session, deal.id, body);
+      await sendDealMessage(session, deal.id, body.trim());
       if (context !== contextRef.current) return;
       setBody('');
       await load();
@@ -523,6 +672,7 @@ export function DealChat({ deal, session }: DealChatProps) {
           : 'Could not send message',
       );
     } finally {
+      sendingRef.current = false;
       if (context === contextRef.current) setSending(false);
     }
   };
@@ -530,10 +680,9 @@ export function DealChat({ deal, session }: DealChatProps) {
   return (
     <div
       className={`deal-chat-float ${open ? 'open' : ''}`}
-      onMouseEnter={() => setChatOpen(true)}
-      onMouseLeave={() => setChatOpen(false)}
     >
       <button
+        ref={launcherRef}
         type="button"
         className="deal-chat-launcher"
         aria-expanded={open}
@@ -549,23 +698,31 @@ export function DealChat({ deal, session }: DealChatProps) {
       </button>
       {open && (
         <section
+          ref={panelRef}
           id="deal-chat-panel"
           className="deal-chat deal-chat-panel no-print"
-          aria-label={t('Deal chat')}
+          role="region"
+          aria-labelledby="deal-chat-title"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              closeChat(true);
+            }
+          }}
         >
           <div className="chat-heading">
             <MessageCircle />
             <div>
               <p className="eyebrow">{t('Private conversation')}</p>
-              <h2>{t('Deal chat')}</h2>
+              <h2 id="deal-chat-title">{t('Deal chat')}</h2>
             </div>
             <button
               type="button"
               className="chat-close"
               aria-label={t('Close chat')}
-              onClick={() => setChatOpen(false)}
+              onClick={() => closeChat(true)}
             >
-              ×
+              <X aria-hidden="true" size={19} />
             </button>
           </div>
           <div className="chat-messages" aria-live="polite">
@@ -590,7 +747,9 @@ export function DealChat({ deal, session }: DealChatProps) {
           )}
           <form onSubmit={send}>
             <textarea
+              ref={composerRef}
               required
+              aria-label={t('Deal chat message')}
               maxLength={1000}
               value={body}
               onChange={(event) => setBody(event.target.value)}
@@ -600,6 +759,7 @@ export function DealChat({ deal, session }: DealChatProps) {
               className="primary"
               type="submit"
               disabled={!body.trim() || sending}
+              aria-busy={sending}
             >
               <Send size={17} />
               {t(sending ? 'Sending…' : 'Send')}

@@ -1,0 +1,68 @@
+:root {
+  color-scheme: light;
+  font-family: 'DM Sans', sans-serif;
+  font-synthesis: none;
+  --color-brand-700: #1765dd;
+  --color-brand-600: #2778f5;
+  --color-brand-500: #55a5ff;
+  --color-accent-700: #176f51;
+  --color-accent-600: #0f6b4b;
+  --color-ink-950: #06111f;
+  --color-ink-900: #101c2b;
+  --color-ink-700: #3f4f63;
+  --color-ink-600: #5a687b;
+  --color-surface-canvas: #f4f7fb;
+  --color-surface-card: #ffffff;
+  --color-surface-subtle: #f7f9fc;
+  --color-border-default: #dbe4ef;
+  --color-border-strong: #b8c7da;
+  --color-success-700: #155948;
+  --color-success-100: #e7f8f1;
+  --color-success-border: #9bd8c2;
+  --color-warning-800: #6c4700;
+  --color-warning-100: #fff4cf;
+  --color-warning-border: #e8cc71;
+  --color-danger-800: #8f2430;
+  --color-danger-100: #fff0f1;
+  --color-danger-border: #efb6bc;
+  --color-info-800: #2855a5;
+  --color-info-100: #eef5ff;
+  --color-info-border: #bdd3f5;
+  --focus-ring: 0 0 0 3px rgb(39 120 245 / 28%);
+  --shadow-action: 0 8px 22px rgb(23 101 221 / 22%);
+  --radius-control: 0.7rem;
+  --radius-card: 1rem;
+  --touch-target: 2.75rem;
+  /* Compatibility aliases. New shared UI uses the semantic tokens above. */
+  --green: var(--color-accent-700);
+  --ink: var(--color-ink-900);
+  --line: var(--color-border-default);
+  --cream: var(--color-surface-subtle);
+  --ds-navy: var(--color-ink-950);
+  --ds-navy-soft: #0b1d35;
+  --ds-blue: var(--color-brand-600);
+  --ds-blue-bright: var(--color-brand-500);
+  --ds-violet: #6959f7;
+  --ds-surface: var(--color-surface-canvas);
+  --ds-card: var(--color-surface-card);
+  --ds-line: var(--color-border-default);
+  --ds-muted: var(--color-ink-600);
+  --ds-ink: var(--color-ink-900);
+}
+
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-700);
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
+}
+
+:where(button, input, textarea, select):disabled {
+  cursor: not-allowed;
+}
+
+@media (forced-colors: active) {
+  :where(a, button, input, textarea, select, [tabindex]):focus-visible {
+    outline: 3px solid Highlight;
+    box-shadow: none;
+  }
+}

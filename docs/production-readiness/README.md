@@ -82,6 +82,33 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [71_BROWSER_STORAGE_INVENTORY.md](71_BROWSER_STORAGE_INVENTORY.md) | Deny-by-default release inventory for persistent and tab-scoped browser storage |
 | [72_STATIC_ANALYSIS_AND_SBOM_GOVERNANCE.md](72_STATIC_ANALYSIS_AND_SBOM_GOVERNANCE.md) | CodeQL SAST, deterministic CycloneDX inventory, scoped ownership, finding SLAs, exceptions, and release evidence |
 | [73_SERVED_ASSET_INTEGRITY.md](73_SERVED_ASSET_INTEGRITY.md) | Commit-bound deployed-asset manifest, exact-host byte verification, protected Preview handling, and activation gates |
+| [74_STAGING_DATABASE_AUTHORIZATION_GATE.md](74_STAGING_DATABASE_AUTHORIZATION_GATE.md) | Isolated Staging Supabase target guard, database-wide authorization contract, private-table RLS remediation, and rollout evidence |
+| [75_DATABASE_BASELINE_MIGRATION_PLAN.md](75_DATABASE_BASELINE_MIGRATION_PLAN.md) | CLI-generated baseline inventory, local rebuild proof, target isolation, and migration activation gates |
+| [76_STAGING_HTTP_AUTHORIZATION_MATRIX.md](76_STAGING_HTTP_AUTHORIZATION_MATRIX.md) | Status-only hosted Data API and Storage authorization matrix using short-lived synthetic Staging sessions |
+| [77_DATABASE_OWNERSHIP_INVENTORY.md](77_DATABASE_OWNERSHIP_INVENTORY.md) | Machine-readable database owner, exposure, and steward inventory with exact Staging validation |
+| [78_SEMANTIC_UI_FOUNDATIONS.md](78_SEMANTIC_UI_FOUNDATIONS.md) | Semantic design tokens, accessible feedback states, contrast gates, focus behavior, and incremental migration boundary |
+| [79_ACCESSIBLE_FORM_VALIDATION.md](79_ACCESSIBLE_FORM_VALIDATION.md) | Field-level error semantics, descriptive relationships, focus recovery, and password-recovery validation |
+| [80_ASYNC_STATE_RECOVERY.md](80_ASYNC_STATE_RECOVERY.md) | Shared loading, error, empty, retry, reduced-motion, and mobile action behavior |
+| [81_ACCOUNT_SECURITY_RECOVERY.md](81_ACCOUNT_SECURITY_RECOVERY.md) | Fail-closed signed-in device and authenticator read recovery |
+| [82_TRUST_PASSPORT_ROUTE_RECOVERY.md](82_TRUST_PASSPORT_ROUTE_RECOVERY.md) | Recoverable public trust route and accessible reputation semantics |
+| [83_DASHBOARD_DATA_RECOVERY.md](83_DASHBOARD_DATA_RECOVERY.md) | Distinct Deal/Watchlist loading, stale-data, failure, empty, and retry behavior |
+| [84_ENGLISH_LAUNCH_BUNDLE_OPTIMIZATION.md](84_ENGLISH_LAUNCH_BUNDLE_OPTIMIZATION.md) | AST-scoped English launch literal inlining and localization reactivation gate |
+| [85_NOTIFICATION_DATA_RECOVERY.md](85_NOTIFICATION_DATA_RECOVERY.md) | Recoverable activity loading, stale-data preservation, and optimistic mutation rollback |
+| [86_PROFILE_DATA_RECOVERY.md](86_PROFILE_DATA_RECOVERY.md) | Fail-closed profile loading before protected account controls and bounded retry |
+| [87_PUBLIC_DEAL_ROUTE_RECOVERY.md](87_PUBLIC_DEAL_ROUTE_RECOVERY.md) | Canonical public Deal deep-link loading, failure, retry, and mobile recovery actions |
+| [88_ACCEPTANCE_PROTECTION_RECOVERY.md](88_ACCEPTANCE_PROTECTION_RECOVERY.md) | Fail-closed buyer-code status reads across seller sharing and buyer acceptance |
+| [89_ENGLISH_IDENTITY_TRANSFORM_HEADROOM.md](89_ENGLISH_IDENTITY_TRANSFORM_HEADROOM.md) | AST-scoped identity-call inlining, bundle headroom evidence, and localization activation gate |
+| [90_SHIPPING_READINESS_RECOVERY.md](90_SHIPPING_READINESS_RECOVERY.md) | Fail-closed seller shipping readiness with distinct loading, failure, stale-value, and retry behavior |
+| [91_DEAL_ACTION_PLAN_RECOVERY.md](91_DEAL_ACTION_PLAN_RECOVERY.md) | Accessible live Deal progress loading, stale-data failure, polling, and retry behavior |
+| [92_AUTH_ORIGIN_CANONICALIZATION.md](92_AUTH_ORIGIN_CANONICALIZATION.md) | Canonical HTTPS Origin and single-host validation before same-origin Auth provider calls |
+| [93_API_MUTATION_ORIGIN_INVENTORY.md](93_API_MUTATION_ORIGIN_INVENTORY.md) | Fail-closed method/origin classification for every application API route |
+| [94_JSON_MUTATION_MEDIA_BOUNDARY.md](94_JSON_MUTATION_MEDIA_BOUNDARY.md) | Shared application/json enforcement before body parsing or provider contact |
+| [95_REPORTING_REQUEST_BOUNDARY.md](95_REPORTING_REQUEST_BOUNDARY.md) | One canonical request, origin, media, size, response, and metadata boundary for diagnostic intake |
+| [96_LOGOUT_JSON_BOUNDARY.md](96_LOGOUT_JSON_BOUNDARY.md) | Correct logout scope classification and reject unsupported media before session revocation |
+| [97_BROWSER_ISOLATION_HEADERS.md](97_BROWSER_ISOLATION_HEADERS.md) | Same-origin resource isolation, origin agent clustering, popup compatibility, and rollback gate |
+| [98_GLOBAL_LOGOUT_BROWSER_CLEAR.md](98_GLOBAL_LOGOUT_BROWSER_CLEAR.md) | Provider-confirmed global logout clears residual browser cache, cookies, and origin storage |
+| [99_RELEASE_READINESS_SNAPSHOT.md](99_RELEASE_READINESS_SNAPSHOT.md) | Exact-candidate go/no-go decision, protected-beta blockers, real-money blockers, evidence ownership, and activation boundary |
+| [100_REPOSITORY_SECURITY_CONTROL_AUDIT.md](100_REPOSITORY_SECURITY_CONTROL_AUDIT.md) | Read-only branch-protection, approval, CodeQL, and dependency-alert audit with exact release-remediation gates |
 
 ## Authority and change control
 

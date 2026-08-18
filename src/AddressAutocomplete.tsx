@@ -1,6 +1,7 @@
 import { LoaderCircle, MapPin, Search, X } from 'lucide-react';
 import { type ChangeEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
 import { parseGoogleUsAddress, type UsAddressParts } from './usAddress';
+import { reportClientFailure } from './services/clientFailureReporter';
 
 type PlaceResult = {
   displayName?: string;
@@ -59,12 +60,33 @@ function loadGoogleMaps(apiKey: string) {
 
   mapsLoader = new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>('script[data-dealivra-google-maps]');
-    const finish = () =>
-      window.google?.maps?.importLibrary ? resolve() : reject(new Error('Google Maps did not load'));
+    let settled = false;
+    const timeout = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('Google Maps did not load'));
+    }, 12_000);
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      window.google?.maps?.importLibrary
+        ? resolve()
+        : reject(new Error('Google Maps did not load'));
+    };
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      reject(new Error('Google Maps did not load'));
+    };
 
     if (existing) {
       existing.addEventListener('load', finish, { once: true });
-      existing.addEventListener('error', () => reject(new Error('Google Maps did not load')), { once: true });
+      existing.addEventListener('error', fail, { once: true });
+      window.setTimeout(() => {
+        if (window.google?.maps?.importLibrary) finish();
+      }, 0);
       return;
     }
 
@@ -85,11 +107,11 @@ function loadGoogleMaps(apiKey: string) {
       region: 'US',
       callback: '__dealivraGoogleMapsReady',
     })}`;
-    script.onerror = () => {
-      mapsLoader = null;
-      reject(new Error('Google Maps did not load'));
-    };
+    script.onerror = fail;
     document.head.appendChild(script);
+  }).catch((error) => {
+    mapsLoader = null;
+    throw error;
   });
 
   return mapsLoader;
@@ -100,7 +122,7 @@ export type AddressParts = Pick<
   'streetAddress' | 'addressLine2' | 'city' | 'state' | 'postalCode' | 'country'
 >;
 
-type QueryState = 'idle' | 'loading' | 'ready' | 'empty' | 'failed';
+type QueryState = 'idle' | 'loading' | 'ready' | 'empty' | 'unavailable' | 'failed';
 
 export function AddressAutocomplete({
   value,
@@ -108,22 +130,31 @@ export function AddressAutocomplete({
   placeholder,
   onAddressParts,
   streetAddressOnly = false,
+  inputId,
+  invalid = false,
+  describedBy,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   onAddressParts?: (parts: AddressParts) => void;
   streetAddressOnly?: boolean;
+  inputId?: string;
+  invalid?: boolean;
+  describedBy?: string;
 }) {
   const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
   const listboxId = useId();
+  const statusId = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const requestSequence = useRef(0);
+  const selectionMutationRef = useRef(false);
   const sessionTokenRef = useRef<unknown>(null);
   const libraryRef = useRef<PlaceLibrary | null>(null);
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [suggestions, setSuggestions] = useState<PlacePrediction[]>([]);
-  const [queryState, setQueryState] = useState<QueryState>(apiKey ? 'idle' : 'failed');
+  const [queryState, setQueryState] = useState<QueryState>(apiKey ? 'idle' : 'unavailable');
   const [selectionMessage, setSelectionMessage] = useState('');
 
   useEffect(() => {
@@ -138,7 +169,14 @@ export function AddressAutocomplete({
         setQueryState('idle');
       })
       .catch(() => {
-        if (active) setQueryState('failed');
+        if (active) {
+          setQueryState('failed');
+          reportClientFailure({
+            schema: 'dealivra.client-failure.v1',
+            boundary: 'address_autocomplete',
+            issue: 'provider_load_failed',
+          });
+        }
       });
     return () => {
       active = false;
@@ -150,6 +188,7 @@ export function AddressAutocomplete({
     const query = value.trim();
     if (!library) return;
     if (query.length < 3 || !focused) {
+      requestSequence.current += 1;
       setSuggestions([]);
       setActiveIndex(-1);
       setQueryState('idle');
@@ -183,6 +222,11 @@ export function AddressAutocomplete({
         setSuggestions([]);
         setActiveIndex(-1);
         setQueryState('failed');
+        reportClientFailure({
+          schema: 'dealivra.client-failure.v1',
+          boundary: 'address_autocomplete',
+          issue: 'suggestion_request_failed',
+        });
       }
     }, 250);
 
@@ -191,13 +235,16 @@ export function AddressAutocomplete({
 
   const selectPrediction = async (prediction: PlacePrediction) => {
     const library = libraryRef.current;
-    if (!library) return;
+    if (!library || selectionMutationRef.current) return;
+    selectionMutationRef.current = true;
+    const selectionRequest = ++requestSequence.current;
     setQueryState('loading');
     try {
       const place = prediction.toPlace();
       await place.fetchFields({
         fields: ['displayName', 'formattedAddress', 'addressComponents'],
       });
+      if (selectionRequest !== requestSequence.current) return;
       const parsed = parseGoogleUsAddress(
         place.addressComponents || [],
         place.formattedAddress || place.displayName || '',
@@ -217,12 +264,21 @@ export function AddressAutocomplete({
       );
       sessionTokenRef.current = new library.AutocompleteSessionToken();
     } catch {
+      if (selectionRequest !== requestSequence.current) return;
       setQueryState('failed');
       setSelectionMessage('We could not read that suggestion. Enter the address manually.');
+      reportClientFailure({
+        schema: 'dealivra.client-failure.v1',
+        boundary: 'address_autocomplete',
+        issue: 'place_details_failed',
+      });
+    } finally {
+      selectionMutationRef.current = false;
     }
   };
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    requestSequence.current += 1;
     onChange(event.target.value);
     setSelectionMessage('');
   };
@@ -254,8 +310,10 @@ export function AddressAutocomplete({
       ? 'Searching U.S. addresses…'
       : queryState === 'empty'
         ? 'No exact match found. You can continue entering the address manually.'
+        : queryState === 'unavailable'
+          ? 'Automatic suggestions are not configured. Enter the complete address manually.'
         : queryState === 'failed'
-          ? 'Address suggestions are unavailable. Enter the address manually.'
+          ? 'Automatic suggestions are temporarily unavailable. Enter the complete address manually.'
           : selectionMessage;
 
   return (
@@ -263,13 +321,21 @@ export function AddressAutocomplete({
       <div className="address-autocomplete-control">
         <Search aria-hidden="true" size={19} />
         <input
+          id={inputId}
+          ref={inputRef}
           required
           role="combobox"
+          aria-label={placeholder}
           aria-autocomplete="list"
+          aria-haspopup="listbox"
           aria-controls={listboxId}
+          aria-describedby={[describedBy, statusId].filter(Boolean).join(' ')}
+          aria-invalid={invalid || undefined}
+          aria-busy={queryState === 'loading'}
           aria-expanded={focused && suggestions.length > 0}
           aria-activedescendant={activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}
           autoComplete={streetAddressOnly ? 'address-line1' : 'street-address'}
+          maxLength={200}
           placeholder={placeholder}
           value={value}
           onChange={handleChange}
@@ -286,10 +352,12 @@ export function AddressAutocomplete({
             aria-label="Clear street address"
             onMouseDown={event => event.preventDefault()}
             onClick={() => {
+              requestSequence.current += 1;
               onChange('');
               setSuggestions([]);
               setActiveIndex(-1);
               setSelectionMessage('');
+              window.requestAnimationFrame(() => inputRef.current?.focus());
             }}
           >
             <X aria-hidden="true" size={18} />
@@ -334,9 +402,14 @@ export function AddressAutocomplete({
       )}
 
       <small
-        className={queryState === 'failed' ? 'address-autocomplete-status warning' : 'address-autocomplete-status'}
-        role="status"
-        aria-live="polite"
+        id={statusId}
+        className={
+          queryState === 'failed' || queryState === 'unavailable'
+            ? 'address-autocomplete-status warning'
+            : 'address-autocomplete-status'
+        }
+        role={queryState === 'failed' ? 'alert' : 'status'}
+        aria-live={queryState === 'failed' ? 'assertive' : 'polite'}
       >
         {statusMessage}
       </small>

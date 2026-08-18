@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Copy, Download, FileCheck2, ShieldCheck, X } from 'lucide-react';
+import { copyTextToClipboard } from './clipboard';
 import { t } from './i18n';
 import {
   loadDealEvidenceViewer,
@@ -116,7 +117,7 @@ export function EvidenceViewer({
   const copyHash = async () => {
     if (!viewer) return;
     try {
-      await navigator.clipboard.writeText(viewer.sha256);
+      await copyTextToClipboard(viewer.sha256);
       setCopied(true);
       if (copyResetTimer.current !== null) window.clearTimeout(copyResetTimer.current);
       copyResetTimer.current = window.setTimeout(() => {

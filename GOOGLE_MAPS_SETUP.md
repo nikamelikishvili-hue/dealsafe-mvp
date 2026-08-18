@@ -34,6 +34,11 @@ state, ZIP code, and apartment/suite/unit manually.
 5. Save and redeploy; changing an environment variable does not update an
    already-built deployment.
 
+A build report showing `VITE_GOOGLE_MAPS_API_KEY` as configured proves only
+that a non-empty browser key was included. It does **not** prove that billing,
+Maps JavaScript API, Places API (New), HTTP referrer restrictions, or quota are
+correct. Keep those provider controls in the hosted acceptance check below.
+
 Never commit the API key or paste it into documentation, issue comments,
 screenshots, or pull-request logs.
 
@@ -53,3 +58,8 @@ On both the meeting and shipping forms:
 If suggestions do not appear but manual entry works, check the browser console
 and Google Cloud metrics for an origin restriction, disabled Places API (New),
 quota, or billing error. Do not weaken key restrictions as a workaround.
+
+For a protected Preview failure, first compare the exact Preview hostname in
+the browser with the key's Website restriction. Add only the reviewed hostname
+pattern, wait for the provider configuration to propagate, and redeploy the
+same reviewed commit. Never use `*.vercel.app/*` or an unrestricted browser key.

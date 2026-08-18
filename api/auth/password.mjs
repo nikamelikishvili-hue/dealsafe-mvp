@@ -9,11 +9,14 @@ import {
   prepareResponse,
   readBearerToken,
   readJsonBody,
+  requireJsonContentType,
   requirePost,
   requireSameOrigin,
   respondAuthRateLimited,
   supabaseAuthRequest,
 } from '../../server/authShared.mjs';
+
+const accountIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
 function currentPasswordMode() {
   const mode = (process.env.DEALIVRA_CURRENT_PASSWORD_MODE || 'staged')
@@ -27,7 +30,7 @@ function currentPasswordMode() {
 
 export default async function handler(request, response) {
   prepareResponse(response);
-  if (!requirePost(request, response) || !requireSameOrigin(request, response)) return;
+  if (!requirePost(request, response) || !requireSameOrigin(request, response) || !requireJsonContentType(request, response)) return;
 
   const body = readJsonBody(request);
   const action = typeof body?.action === 'string' ? body.action : '';
@@ -66,6 +69,9 @@ export default async function handler(request, response) {
       }),
     }, request);
     const data = await authPayload(upstream);
+    if (upstream.ok && !accountIdPattern.test(typeof data?.id === 'string' ? data.id : '')) {
+      throw new Error('Authentication provider response was rejected.');
+    }
     if (!upstream.ok || !data?.id) {
       const code = authProviderCode(data);
       logAuthRejection(`password:${action}`, upstream.status, code);

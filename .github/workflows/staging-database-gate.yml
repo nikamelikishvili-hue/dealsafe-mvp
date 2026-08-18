@@ -1,0 +1,80 @@
+name: Staging database authorization gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Confirm the isolated database target
+        required: true
+        type: choice
+        options:
+          - staging
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-database-authorization-gate
+  cancel-in-progress: false
+
+jobs:
+  authorization-gate:
+    name: Staging RLS and cross-user authorization
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    env:
+      DEALIVRA_DATABASE_ENVIRONMENT: ${{ inputs.target }}
+      DEALIVRA_STAGING_SUPABASE_PROJECT_REF: ${{ vars.DEALIVRA_STAGING_SUPABASE_PROJECT_REF }}
+      DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF }}
+      DEALIVRA_STAGING_DATABASE_URL: ${{ secrets.DEALIVRA_STAGING_DATABASE_URL }}
+    steps:
+      - name: Check out the reviewed commit
+        uses: actions/checkout@v4
+
+      - name: Use the pinned Node.js release
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+
+      - name: Reject Production or mixed database targets
+        run: npm run staging:database-target
+
+      - name: Show the PostgreSQL client version
+        run: psql --version
+
+      - name: Apply the reviewed private-table RLS migration to Staging
+        run: psql "$DEALIVRA_STAGING_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/private_evidence_maintenance_settings_rls.sql
+
+      - name: Verify the exact rollback-suite inventory
+        shell: bash
+        run: |
+          mapfile -t tests < <(find supabase/tests -maxdepth 1 -type f -name '*_rollback.sql' -printf '%f\n' | sort)
+          printf '%s\n' "${tests[@]}"
+          test "${#tests[@]}" -eq 17
+
+      - name: Verify every database authorization and integrity boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r test_file; do
+            echo "Running ${test_file}"
+            psql "$DEALIVRA_STAGING_DATABASE_URL" \
+              -X \
+              -v ON_ERROR_STOP=1 \
+              -f "$test_file"
+          done < <(find supabase/tests -maxdepth 1 -type f -name '*_rollback.sql' | sort)
+
+      - name: Verify complete database ownership and stewardship
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$DEALIVRA_STAGING_DATABASE_URL" \
+            -X \
+            -v ON_ERROR_STOP=1 \
+            -f supabase/database_ownership_inventory.sql \
+            | npm run --silent database:ownership:validate

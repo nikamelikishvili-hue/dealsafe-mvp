@@ -1,5 +1,7 @@
-import { useState, type FormEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { Check, Eye, EyeOff } from 'lucide-react';
+import { FeedbackMessage } from './FeedbackMessage';
+import { FieldError } from './FieldError';
 import { t } from './i18n';
 import { publicInfoPaths, type PublicInfoView } from './navigation';
 import { requestPasswordReset, updateRecoveredPassword } from './services/supabaseRest';
@@ -22,6 +24,7 @@ type AccountEntryPageProps = {
   acceptedPolicies: boolean;
   onAcceptedPoliciesChange: (accepted: boolean) => void;
   message: string;
+  submitting: boolean;
   pendingCreateAction: PendingCreateAction;
   returnToCreate: boolean;
   onBack: () => void;
@@ -38,18 +41,34 @@ export function ForgotPasswordEntry({ onOpen }: { onOpen: () => void }) {
 export function ForgotPassword({ onBack }: { onBack: () => void }) {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
+  const [failed, setFailed] = useState(false);
+  const [emailError, setEmailError] = useState('');
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  const emailRef = useRef<HTMLInputElement>(null);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (sendingRef.current) return;
+    const normalizedEmail = email.trim().toLowerCase();
+    setEmailError('');
+    if (!normalizedEmail) {
+      setEmailError('Enter your account email.');
+      window.requestAnimationFrame(() => emailRef.current?.focus());
+      return;
+    }
+    sendingRef.current = true;
     setSending(true);
     setMessage('');
+    setFailed(false);
     try {
-      await requestPasswordReset(email);
+      await requestPasswordReset(normalizedEmail);
       setMessage('If an account exists for this email, a password reset link has been sent.');
     } catch (error) {
+      setFailed(true);
       setMessage(error instanceof Error ? error.message : 'Could not send reset email');
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };
@@ -59,18 +78,32 @@ export function ForgotPassword({ onBack }: { onBack: () => void }) {
     <p className="eyebrow">{t('Account recovery')}</p>
     <h1>{t('Reset your password')}</h1>
     <p>{t('Enter your account email. For privacy, the result will not reveal whether an account exists.')}</p>
-    <form onSubmit={submit}>
+    <form onSubmit={submit} aria-busy={sending}>
       <label>
         {t('Email')}
         <input
+          ref={emailRef}
           required
           type="email"
+          name="email"
+          maxLength={254}
+          autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
+          enterKeyHint="send"
+          disabled={sending}
+          aria-invalid={Boolean(emailError)}
+          aria-describedby={emailError ? 'forgot-password-email-error' : undefined}
           value={email}
-          onChange={event => setEmail(event.target.value)}
+          onChange={event => {
+            setEmail(event.target.value);
+            if (emailError) setEmailError('');
+          }}
           placeholder="you@example.com"
         />
+        {emailError && <FieldError id="forgot-password-email-error">{emailError}</FieldError>}
       </label>
-      {message && <div className="notice">{t(message)}</div>}
+      {message && <FeedbackMessage tone={failed ? 'error' : 'info'}>{t(message)}</FeedbackMessage>}
       <button type="submit" className="primary full" disabled={sending}>
         {t(sending ? 'Sending…' : 'Send reset link')}
       </button>
@@ -82,14 +115,31 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
+  const [updating, setUpdating] = useState(false);
+  const updatingRef = useRef(false);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const confirmPasswordRef = useRef<HTMLInputElement>(null);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (updatingRef.current) return;
     setMessage('');
-    if (password !== confirmPassword) {
-      setMessage('Passwords do not match.');
+    setPasswordError('');
+    setConfirmPasswordError('');
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/.test(password)) {
+      setPasswordError('Use 12+ characters with uppercase, lowercase, a number, and a symbol.');
+      requestAnimationFrame(() => passwordRef.current?.focus());
       return;
     }
+    if (password !== confirmPassword) {
+      setConfirmPasswordError('Passwords do not match.');
+      requestAnimationFrame(() => confirmPasswordRef.current?.focus());
+      return;
+    }
+    updatingRef.current = true;
+    setUpdating(true);
     try {
       await updateRecoveredPassword(token, password);
       history.replaceState(null, '', location.pathname);
@@ -97,38 +147,69 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
       setTimeout(onDone, 1000);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not update password');
+    } finally {
+      updatingRef.current = false;
+      setUpdating(false);
     }
   };
 
   return <section className="recovery-page">
     <p className="eyebrow">{t('Secure recovery')}</p>
     <h1>{t('Choose a new password')}</h1>
-    <form onSubmit={submit}>
+    <form onSubmit={submit} aria-busy={updating}>
       <label>
         {t('New password')}
         <input
+          ref={passwordRef}
           required
+          name="new"
           minLength={12}
+          maxLength={256}
           autoComplete="new-password"
           type="password"
+          enterKeyHint="next"
+          aria-invalid={Boolean(passwordError)}
+          aria-describedby={passwordError ? 'recovery-password-requirements recovery-password-error' : 'recovery-password-requirements'}
+          disabled={updating}
           value={password}
-          onChange={event => setPassword(event.target.value)}
+          onChange={event => {
+            setPassword(event.target.value);
+            if (passwordError) setPasswordError('');
+          }}
         />
+        {passwordError && <FieldError id="recovery-password-error">{passwordError}</FieldError>}
       </label>
       <label>
         {t('Confirm password')}
         <input
+          ref={confirmPasswordRef}
           required
+          name="confirm"
           minLength={12}
+          maxLength={256}
           autoComplete="new-password"
           type="password"
+          enterKeyHint="done"
+          aria-invalid={Boolean(confirmPasswordError)}
+          aria-describedby={confirmPasswordError ? 'recovery-password-requirements recovery-confirm-password-error' : 'recovery-password-requirements'}
+          disabled={updating}
           value={confirmPassword}
-          onChange={event => setConfirmPassword(event.target.value)}
+          onChange={event => {
+            setConfirmPassword(event.target.value);
+            if (confirmPasswordError) setConfirmPasswordError('');
+          }}
         />
+        {confirmPasswordError && <FieldError id="recovery-confirm-password-error">{confirmPasswordError}</FieldError>}
       </label>
-      <small>{t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}</small>
-      {message && <div className="notice">{t(message)}</div>}
-      <button type="submit" className="primary full">{t('Update password')}</button>
+      <small id="recovery-password-requirements">{t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}</small>
+      {message && (
+        <FeedbackMessage tone={message === 'Password updated. You can now sign in.' ? 'success' : 'error'}>
+          {t(message)}
+        </FeedbackMessage>
+      )}
+      <button type="submit" className="primary full" disabled={updating}>
+        {t(updating ? 'Updating password…' : 'Update password')}
+      </button>
     </form>
   </section>;
 }
@@ -143,6 +224,7 @@ export function AccountEntryPage({
   acceptedPolicies,
   onAcceptedPoliciesChange,
   message,
+  submitting,
   pendingCreateAction,
   returnToCreate,
   onBack,
@@ -157,6 +239,38 @@ export function AccountEntryPage({
     ? pendingCreateAction === 'save' ? 'Create account & save' : 'Create account & publish'
     : pendingCreateAction === 'save' ? 'Sign in & save' : 'Sign in & publish';
   const isSignup = mode === 'signup';
+  const [displayNameError, setDisplayNameError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const displayNameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setDisplayNameError('');
+    setPasswordError('');
+  }, [mode]);
+
+  const submitEntry = (event: FormEvent<HTMLFormElement>) => {
+    if (!isSignup) {
+      onSubmit(event);
+      return;
+    }
+    event.preventDefault();
+    const normalizedDisplayName = form.displayName.trim();
+    setDisplayNameError('');
+    setPasswordError('');
+    if (normalizedDisplayName.length < 2) {
+      setDisplayNameError('Enter your name with at least 2 characters.');
+      window.requestAnimationFrame(() => displayNameRef.current?.focus());
+      return;
+    }
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/.test(form.password)) {
+      setPasswordError('Use 12+ characters with uppercase, lowercase, a number, and a symbol.');
+      window.requestAnimationFrame(() => passwordRef.current?.focus());
+      return;
+    }
+    onFormChange({ ...form, displayName: normalizedDisplayName });
+    onSubmit(event);
+  };
 
   const openInfo = (event: MouseEvent<HTMLAnchorElement>, view: PublicInfoView) => {
     event.preventDefault();
@@ -165,7 +279,7 @@ export function AccountEntryPage({
   };
 
   return <section className="form-wrap auth-wrap">
-    <button type="button" className="back" onClick={onBack}>← {t(returnToCreate ? 'Back to draft' : 'Back')}</button>
+    <button type="button" className="back" disabled={submitting} onClick={onBack}>← {t(returnToCreate ? 'Back to draft' : 'Back')}</button>
     <p className="eyebrow">
       {pendingCreateAction ? 'FINAL STEP · ACCOUNT' : isSignup ? 'START YOUR PRIVATE DEAL' : 'DEALIVRA ACCOUNT'}
     </p>
@@ -199,25 +313,39 @@ export function AccountEntryPage({
       </li>
     </ol>}
 
-    <form onSubmit={onSubmit}>
+    <form onSubmit={submitEntry} aria-busy={submitting}>
       {isSignup && <label>
         {t('Your name')}
         <input
+          ref={displayNameRef}
           required
+          disabled={submitting}
           minLength={2}
           maxLength={80}
           autoComplete="name"
+          aria-invalid={Boolean(displayNameError)}
+          aria-describedby={displayNameError ? 'signup-display-name-error' : undefined}
           placeholder="Alex Morgan"
           value={form.displayName}
-          onChange={event => onFormChange({ ...form, displayName: event.target.value })}
+          onChange={event => {
+            onFormChange({ ...form, displayName: event.target.value });
+            if (displayNameError) setDisplayNameError('');
+          }}
         />
+        {displayNameError && <FieldError id="signup-display-name-error">{displayNameError}</FieldError>}
       </label>}
       <label>
         {t('Email')}
         <input
           required
+          disabled={submitting}
           type="email"
+          name="email"
+          maxLength={254}
           autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
+          enterKeyHint="next"
           placeholder="you@example.com"
           value={form.email}
           onChange={event => onFormChange({ ...form, email: event.target.value })}
@@ -227,27 +355,40 @@ export function AccountEntryPage({
         {t('Password')}
         <span className="password-field">
           <input
+            ref={passwordRef}
             required
+            disabled={submitting}
+            name="password"
             minLength={isSignup ? 12 : 1}
+            maxLength={256}
             type={passwordVisible ? 'text' : 'password'}
             autoComplete={isSignup ? 'new-password' : 'current-password'}
+            enterKeyHint="done"
+            aria-invalid={isSignup && Boolean(passwordError)}
+            aria-describedby={isSignup ? (passwordError ? 'signup-password-requirements signup-password-error' : 'signup-password-requirements') : undefined}
             placeholder={t(isSignup ? '12+ characters' : 'Your password')}
             value={form.password}
-            onChange={event => onFormChange({ ...form, password: event.target.value })}
+            onChange={event => {
+              onFormChange({ ...form, password: event.target.value });
+              if (passwordError) setPasswordError('');
+            }}
           />
           <button
             type="button"
+            disabled={submitting}
             aria-label={t(passwordVisible ? 'Hide password' : 'Show password')}
             onClick={onTogglePassword}
           >
             {passwordVisible ? <EyeOff /> : <Eye />}
           </button>
         </span>
-        {isSignup && <small>{t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}</small>}
+        {isSignup && <small id="signup-password-requirements">{t('Use 12+ characters with uppercase, lowercase, a number, and a symbol.')}</small>}
+        {isSignup && passwordError && <FieldError id="signup-password-error">{passwordError}</FieldError>}
       </label>
       {isSignup && <label className="policy-consent">
         <input
           required
+          disabled={submitting}
           type="checkbox"
           checked={acceptedPolicies}
           onChange={event => onAcceptedPoliciesChange(event.target.checked)}
@@ -259,11 +400,21 @@ export function AccountEntryPage({
           <a href={publicInfoPaths.privacy} onClick={event => openInfo(event, 'privacy')}>Privacy notice</a>.
         </span>
       </label>}
-      {message && <div className="notice" role="status">{t(message)}</div>}
-      <button type="submit" className="primary full" disabled={isSignup && !acceptedPolicies}>
-        {t(pendingCreateAction ? pendingAuthAction : isSignup ? 'Create account & continue' : 'Sign in')}
+      {message && <FeedbackMessage tone="error">{t(message)}</FeedbackMessage>}
+      <button type="submit" className="primary full" disabled={submitting}>
+        {t(
+          submitting
+            ? isSignup
+              ? 'Creating account…'
+              : 'Signing in…'
+            : pendingCreateAction
+              ? pendingAuthAction
+              : isSignup
+                ? 'Create account & continue'
+                : 'Sign in',
+        )}
       </button>
-      <button type="button" className="switch-auth" onClick={onSwitchMode}>
+      <button type="button" className="switch-auth" disabled={submitting} onClick={onSwitchMode}>
         {t(isSignup ? 'Already have an account? Sign in' : 'New to Dealivra? Create account')}
       </button>
     </form>

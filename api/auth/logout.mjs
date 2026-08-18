@@ -6,7 +6,9 @@ import {
   logAuthFailure,
   logAuthRejection,
   prepareResponse,
+  readBearerToken,
   readJsonBody,
+  requireJsonContentType,
   requirePost,
   requireSameOrigin,
   respondAuthRateLimited,
@@ -15,7 +17,7 @@ import {
 
 export default async function handler(request, response) {
   prepareResponse(response);
-  if (!requirePost(request, response) || !requireSameOrigin(request, response)) return;
+  if (!requirePost(request, response) || !requireSameOrigin(request, response) || !requireJsonContentType(request, response)) return;
 
   const body = readJsonBody(request);
   const scope = body?.scope ?? 'local';
@@ -23,10 +25,9 @@ export default async function handler(request, response) {
     response.status(400).json({ error: 'Sign-out scope is invalid.' });
     return;
   }
-  const authorization = request.headers?.authorization;
-  const hasAccessToken = typeof authorization === 'string' && authorization.startsWith('Bearer ');
+  const accessToken = readBearerToken(request);
 
-  if (!hasAccessToken) {
+  if (!accessToken) {
     if (scope === 'local') {
       clearRefreshCookie(response);
       response.status(204).end();
@@ -39,7 +40,7 @@ export default async function handler(request, response) {
   try {
     const upstream = await supabaseAuthRequest(`logout?scope=${scope}`, {
       method: 'POST',
-      headers: { Authorization: authorization },
+      headers: { Authorization: `Bearer ${accessToken}` },
       body: '{}',
     }, request);
     const data = await authPayload(upstream);
@@ -70,11 +71,14 @@ export default async function handler(request, response) {
       return;
     }
     // A local sign-out still clears the browser-only refresh cookie. The
-    // short-lived access JWT is removed from sessionStorage by the client.
+    // short-lived access JWT is removed from module memory by the client.
   }
 
   if (scope === 'local' || scope === 'global') {
     clearRefreshCookie(response);
+  }
+  if (scope === 'global') {
+    response.setHeader('Clear-Site-Data', '"cache", "cookies", "storage"');
   }
 
   response.status(204).end();

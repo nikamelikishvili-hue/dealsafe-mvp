@@ -66,7 +66,9 @@ export function reportRuntimeRejection(value: unknown): void {
 
   // This local diagnostic intentionally contains the same three allowlisted
   // dimensions as the transport and never includes the rejected payload.
-  console.error('[dealivra-runtime-rejection]', event);
+  console.error(
+    `[dealivra-runtime-rejection] ${event.schema} boundary=${event.boundary} issue=${event.issue}`,
+  );
 
   if (
     import.meta.env?.PROD !== true

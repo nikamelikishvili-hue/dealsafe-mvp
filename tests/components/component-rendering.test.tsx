@@ -14,10 +14,70 @@ Object.defineProperty(globalThis, 'document', {
 
 const { AccountEntryPage, ForgotPasswordEntry } = await import('../../src/AccountEntryPages');
 const { AddressAutocomplete } = await import('../../src/AddressAutocomplete');
+const { formatCsvCell } = await import('../../src/AdministrationWorkspace');
 const { BrandLogo } = await import('../../src/BrandLogo');
-const { isUsPostalCode, normalizeUsState, parseGoogleUsAddress } = await import('../../src/usAddress');
+const { FeedbackMessage } = await import('../../src/FeedbackMessage');
+const { FieldError } = await import('../../src/FieldError');
+const { AsyncStatePanel } = await import('../../src/AsyncStatePanel');
+const { MfaLoginVerification } = await import('../../src/MfaLoginVerification');
+const { DEAL_ACTION_TARGET_IDS, resolveDealPrimaryAction } = await import('../../src/DealWorkspaceShell');
+const { isUsPostalCode, normalizeUsState, parseGoogleUsAddress, parseStoredUsAddress, serializeUsAddress } =
+  await import('../../src/usAddress');
 
 const noop = () => {};
+
+const baseDeal = {
+  id: 'deal-1',
+  publicId: 'PUBLIC01',
+  title: 'Test item',
+  description: 'Test description',
+  priceCents: 10000,
+  currency: 'USD' as const,
+  condition: 'Good' as const,
+  deliveryMethod: 'Ship to buyer' as const,
+  status: 'accepted' as const,
+  sellerName: 'Seller',
+  sellerVerification: 'verified' as const,
+  agreementVersion: 1,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  viewerRole: 'buyer' as const,
+};
+
+test('every primary deal action resolves to a governed workspace target', () => {
+  const scenarios = [
+    { deal: { ...baseDeal, status: 'draft' as const, viewerRole: 'seller' as const } },
+    { deal: { ...baseDeal, status: 'published' as const, viewerRole: 'buyer' as const } },
+    { deal: { ...baseDeal, status: 'published' as const, viewerRole: 'seller' as const } },
+    { deal: { ...baseDeal, deliveryMethod: 'Meet in person' as const } },
+    { deal: { ...baseDeal, status: 'completed' as const } },
+    { deal: { ...baseDeal, status: 'disputed' as const } },
+    { deal: { ...baseDeal, status: 'cancelled' as const } },
+    { deal: { ...baseDeal, viewerRole: 'seller' as const }, paymentReady: false },
+    {
+      deal: { ...baseDeal, viewerRole: 'seller' as const },
+      actionPlan: { delivery_address_ready: true, shipment_status: null, inspection_recorded: false },
+      shippingReadiness: { status: 'ready' as const, ready: true },
+    },
+    {
+      deal: { ...baseDeal, viewerRole: 'seller' as const },
+      shippingReadiness: { status: 'error' as const, ready: false },
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const action = resolveDealPrimaryAction({
+      deal: scenario.deal,
+      demoCompleted: false,
+      expired: false,
+      agreementActionReady: false,
+      signedIn: true,
+      paymentReady: scenario.paymentReady ?? true,
+      actionPlan: scenario.actionPlan,
+      shippingReadiness: scenario.shippingReadiness,
+    });
+    assert.ok(DEAL_ACTION_TARGET_IDS.includes(action.targetId));
+  }
+});
 
 test('address entry always renders a usable manual line-one fallback', () => {
   const markup = renderToStaticMarkup(
@@ -25,13 +85,24 @@ test('address entry always renders a usable manual line-one fallback', () => {
   );
 
   assert.match(markup, /autoComplete="address-line1"/);
+  assert.match(markup, /maxLength="200"/);
   assert.match(markup, /placeholder="Street address"/);
   assert.match(markup, /value="15900 N Bay"/);
   assert.match(markup, /role="combobox"/);
   assert.match(markup, /aria-autocomplete="list"/);
+  assert.match(markup, /aria-haspopup="listbox"/);
+  assert.match(markup, /aria-describedby="[^"]+"/);
+  assert.match(markup, /aria-busy="false"/);
   assert.match(markup, /aria-label="Clear street address"/);
   assert.match(markup, /role="status"/);
-  assert.match(markup, /Address suggestions are unavailable\. Enter the address manually\./);
+  assert.match(markup, /Automatic suggestions are not configured\. Enter the complete address manually\./);
+});
+
+test('administrator CSV cells neutralize spreadsheet formulas and quote data', () => {
+  assert.equal(formatCsvCell('=HYPERLINK("https://example.test")'), `"'=HYPERLINK(""https://example.test"")"`);
+  assert.equal(formatCsvCell('  @SUM(1,2)'), `"'  @SUM(1,2)"`);
+  assert.equal(formatCsvCell('Buyer "One"'), `"Buyer ""One"""`);
+  assert.equal(formatCsvCell(null), '""');
 });
 
 test('Google address parts populate a complete US delivery address including unit and ZIP+4', () => {
@@ -70,6 +141,25 @@ test('US address helpers accept full state names and reject incomplete ZIP codes
   assert.equal(isUsPostalCode('1000'), false);
 });
 
+test('stored delivery addresses preserve address line two, state, and ZIP+4', () => {
+  const stored = serializeUsAddress({
+    streetAddress: '15900 North Bay Road',
+    addressLine2: 'Apartment 7B',
+    city: 'Miami Beach',
+    state: 'Florida',
+    postalCode: '33141-2140',
+  });
+
+  assert.equal(stored, '15900 North Bay Road\nApartment 7B\nMiami Beach, FL 33141-2140');
+  assert.deepEqual(parseStoredUsAddress(stored), {
+    streetAddress: '15900 North Bay Road',
+    addressLine2: 'Apartment 7B',
+    city: 'Miami Beach',
+    state: 'FL',
+    postalCode: '33141-2140',
+  });
+});
+
 test('sign-in form preserves password-manager semantics and explicit button behavior', () => {
   const markup = renderToStaticMarkup(
     <AccountEntryPage
@@ -92,6 +182,12 @@ test('sign-in form preserves password-manager semantics and explicit button beha
 
   assert.match(markup, /autoComplete="email"/);
   assert.match(markup, /autoComplete="current-password"/);
+  assert.match(markup, /type="email"[^>]*name="email"/);
+  assert.match(markup, /type="email"[^>]*maxLength="254"/);
+  assert.match(markup, /autoCapitalize="none" spellCheck="false"/);
+  assert.match(markup, /enterKeyHint="next"/);
+  assert.match(markup, /type="password"[^>]*name="password"/);
+  assert.match(markup, /maxLength="256" type="password"/);
   assert.match(markup, /aria-label="Show password"/);
   assert.match(markup, /<button type="submit" class="primary full">Sign in<\/button>/);
   assert.doesNotMatch(markup, /type="checkbox"/);
@@ -118,13 +214,16 @@ test('sign-up form keeps consent and policy links visible before submission', ()
   );
 
   assert.match(markup, /autoComplete="new-password"/);
-  assert.match(markup, /type="checkbox"/);
+  assert.match(markup, /type="email"[^>]*name="email"/);
+  assert.match(markup, /type="email"[^>]*maxLength="254"/);
+  assert.match(markup, /autoCapitalize="none" spellCheck="false"/);
+  assert.match(markup, /enterKeyHint="next"/);
+  assert.match(markup, /type="password"[^>]*name="password"/);
+  assert.match(markup, /maxLength="256" type="password"/);
+  assert.match(markup, /<input required="" type="checkbox"\/>/);
   assert.match(markup, /href="\/terms"/);
   assert.match(markup, /href="\/privacy"/);
-  assert.match(
-    markup,
-    /<button type="submit" class="primary full" disabled="">Create account &amp; continue<\/button>/,
-  );
+  assert.match(markup, /<button type="submit" class="primary full">Create account &amp; continue<\/button>/);
 });
 
 test('critical secondary actions cannot accidentally submit an account form', () => {
@@ -132,9 +231,80 @@ test('critical secondary actions cannot accidentally submit an account form', ()
   assert.equal(markup, '<div class="forgot-entry"><button type="button">Forgot password?</button></div>');
 });
 
+test('MFA sign-in keeps the validation action available for an incomplete code', () => {
+  const markup = renderToStaticMarkup(
+    <MfaLoginVerification
+      challenge={{
+        mfaRequired: true,
+        pendingAccessToken: 'pending-token',
+        expiresAt: Date.now() + 60_000,
+        factors: [
+          {
+            id: 'factor-1',
+            factorType: 'totp',
+            friendlyName: 'Primary authenticator',
+            createdAt: null,
+            updatedAt: null,
+          },
+        ],
+      }}
+      onVerified={noop}
+      onCancel={noop}
+    />,
+  );
+
+  assert.match(markup, /required=""/);
+  assert.match(markup, /pattern="\[0-9\]\{6\}"/);
+  assert.match(markup, /<button type="submit" class="primary full">/);
+});
+
 test('brand lockup exposes one stable accessible name', () => {
   const markup = renderToStaticMarkup(<BrandLogo />);
   assert.match(markup, /aria-label="Dealivra"/);
   assert.match(markup, /aria-hidden="true"/);
   assert.match(markup, />Dealivra<\/span>/);
+});
+
+test('shared feedback uses polite status semantics for non-destructive outcomes', () => {
+  const markup = renderToStaticMarkup(<FeedbackMessage tone="success">Password updated.</FeedbackMessage>);
+
+  assert.match(markup, /class="feedback-message success"/);
+  assert.match(markup, /role="status"/);
+  assert.match(markup, /aria-live="polite"/);
+  assert.match(markup, /aria-atomic="true"/);
+  assert.match(markup, /aria-hidden="true"/);
+});
+
+test('shared feedback announces blocking errors assertively without exposing the icon', () => {
+  const markup = renderToStaticMarkup(
+    <FeedbackMessage tone="error">The request could not be completed.</FeedbackMessage>,
+  );
+
+  assert.match(markup, /class="feedback-message error"/);
+  assert.match(markup, /role="alert"/);
+  assert.match(markup, /aria-live="assertive"/);
+  assert.match(markup, /The request could not be completed\./);
+});
+
+test('field errors are linked, assertive, and keep decorative icons hidden', () => {
+  const markup = renderToStaticMarkup(<FieldError id="email-error">Enter a valid email.</FieldError>);
+  assert.match(markup, /id="email-error"/);
+  assert.match(markup, /class="field-error"/);
+  assert.match(markup, /role="alert"/);
+  assert.match(markup, /aria-hidden="true"/);
+  assert.match(markup, /Enter a valid email\./);
+});
+
+test('loading and retry states expose accurate live-region and button semantics', () => {
+  const loading = renderToStaticMarkup(<AsyncStatePanel state="loading" title="Loading meeting details…" />);
+  assert.match(loading, /role="status"/);
+  assert.match(loading, /aria-live="polite"/);
+  assert.match(loading, /aria-busy="true"/);
+  assert.doesNotMatch(loading, /<button/);
+
+  const error = renderToStaticMarkup(<AsyncStatePanel state="error" title="Meeting unavailable" onAction={noop} />);
+  assert.match(error, /role="alert"/);
+  assert.match(error, /aria-live="assertive"/);
+  assert.match(error, /<button type="button"/);
+  assert.match(error, />Try again</);
 });

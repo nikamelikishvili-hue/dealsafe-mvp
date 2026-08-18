@@ -162,8 +162,7 @@
 .deal-workspace-bar nav .deal-action-link,
 .deal-primary-dock button,
 .create-action-dock button,
-.create-review-dock button,
-.mobile-deal-action button{
+.create-review-dock button{
   background:linear-gradient(135deg,#08a996,#1f72bd);
   box-shadow:0 10px 24px rgba(4,145,132,.2);
 }

@@ -81,7 +81,7 @@ begin
       and policy.policyname =
         'participants and case admins read safe evidence'
       and position(
-        'SELECT is_dealsafe_admin() AS is_dealsafe_admin'
+        'SELECT can_admin_read_deal_evidence(deal_evidence.deal_id) AS can_admin_read_deal_evidence'
         in coalesce(policy.qual, '')
       ) > 0
   ) then

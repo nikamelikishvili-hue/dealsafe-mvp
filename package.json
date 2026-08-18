@@ -16,11 +16,17 @@
     "dependency:policy": "node scripts/verify-dependency-policy.mjs",
     "security:browser-storage": "node scripts/verify-browser-storage-policy.mjs",
     "security:transport": "node scripts/verify-outbound-transport-policy.mjs",
+    "security:mutation-origins": "node scripts/verify-api-mutation-origin-policy.mjs",
     "brand:verify": "node scripts/verify-legacy-identifiers.mjs",
     "config:verify": "node scripts/verify-runtime-configuration.mjs --contract",
     "config:check": "node scripts/verify-runtime-configuration.mjs",
+    "staging:database-target": "node scripts/verify-staging-database-target.mjs",
+    "database:baseline:status": "node scripts/verify-database-baseline.mjs --allow-missing",
+    "database:baseline:verify": "node scripts/verify-database-baseline.mjs",
     "security:secrets": "node scripts/scan-repository-secrets.mjs",
     "security:mfa-matrix": "node scripts/run-mfa-password-only-matrix.mjs",
+    "staging:http-authorization": "node scripts/run-staging-http-authorization-matrix.mjs",
+    "database:ownership:validate": "node scripts/validate-database-ownership-inventory.mjs",
     "performance:budgets": "node scripts/verify-build-budgets.mjs",
     "build": "npm run config:check && tsc -b && vite build --configLoader native && npm run release:served-manifest && npm run performance:budgets",
     "preview": "vite preview --configLoader native",
@@ -31,7 +37,7 @@
     "release:served-manifest": "node scripts/create-served-asset-manifest.mjs",
     "release:served-verify": "node scripts/verify-served-assets.mjs",
     "release:evidence": "node scripts/create-release-evidence.mjs",
-    "verify": "npm run catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run brand:verify && npm run config:verify && npm run format:check && npm run lint && npm run typecheck && npm test && npm run incident:drill && npm run security:secrets && npm run build && npm run smoke:preview"
+    "verify": "npm run catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run security:mutation-origins && npm run brand:verify && npm run config:verify && npm run format:check && npm run lint && npm run typecheck && npm test && npm run incident:drill && npm run security:secrets && npm run build && npm run smoke:preview"
   },
   "dependencies": {
     "lucide-react": "1.25.0",

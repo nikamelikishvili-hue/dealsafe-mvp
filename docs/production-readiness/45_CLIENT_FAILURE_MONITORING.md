@@ -30,6 +30,11 @@ Global browser errors and unhandled promise rejections report fixed
 `browser_runtime` categories. The handlers do not receive or forward the event
 payload.
 
+The U.S. address autocomplete reports only whether the Google Places provider
+failed to load, a suggestion request failed, or selected place details could
+not be read. The typed address, selected result, API response, URL, and API key
+are never attached. Manual address entry remains available after every failure.
+
 ## Browser contract
 
 `src/services/clientFailureReporter.ts` accepts exactly one of:
@@ -41,6 +46,9 @@ payload.
 | `application_bootstrap` | `localization_initialization_failed` |
 | `browser_runtime` | `window_error` |
 | `browser_runtime` | `unhandled_promise_rejection` |
+| `address_autocomplete` | `provider_load_failed` |
+| `address_autocomplete` | `suggestion_request_failed` |
+| `address_autocomplete` | `place_details_failed` |
 
 The schema is fixed to `dealivra.client-failure.v1`. Unknown combinations and
 excess fields are rejected. Transport is restricted to production-mode builds,
@@ -53,7 +61,7 @@ customer operation.
 `POST /api/security/client-failure` requires exact same-origin JSON and accepts
 at most 512 bytes. Missing `DEALIVRA_CLIENT_FAILURE_MODE` defaults to `staged`,
 returns `204`, and records nothing. Invalid mode returns `503`. Exact
-`enforced` mode accepts only the five reviewed category pairs plus a count from
+`enforced` mode accepts only the eight reviewed category pairs plus a count from
 1 through 100.
 
 The complete structured record is:

@@ -15,12 +15,135 @@ const proofMethods = new Set([
 ]);
 const reviewDecisions = new Set(['approve', 'reject']);
 const sensitiveChangeScopes = new Set(['payout', 'email', 'mfa']);
+const applicationRoles = new Set(['member', 'support', 'compliance', 'admin']);
+const recoveryStatuses = new Set([
+  'open',
+  'identity_verified',
+  'approved',
+  'rejected',
+  'completed',
+  'cancelled',
+]);
+const recoveryCaseKeys = new Set([
+  'case_id',
+  'case_reference',
+  'target_user_id',
+  'target_display_name',
+  'target_role',
+  'reason_code',
+  'status',
+  'requested_at',
+  'identity_verified_at',
+  'reviewed_at',
+  'completed_at',
+  'cooldown_until',
+]);
+const holdKeys = new Set(['scope', 'expires_at', 'active']);
 
 export class RecoveryRequestError extends Error {
   constructor(message = 'The recovery request is invalid.') {
     super(message);
     this.name = 'RecoveryRequestError';
   }
+}
+
+export class RecoveryResponseError extends Error {
+  constructor() {
+    super('The protected recovery provider response is invalid.');
+    this.name = 'RecoveryResponseError';
+  }
+}
+
+function responseRecord(value, keys) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new RecoveryResponseError();
+  }
+  const actualKeys = Object.keys(value);
+  if (actualKeys.length !== keys.size || actualKeys.some(key => !keys.has(key))) {
+    throw new RecoveryResponseError();
+  }
+  return value;
+}
+
+function responseUuid(value) {
+  if (typeof value !== 'string' || !uuidPattern.test(value)) throw new RecoveryResponseError();
+  return value.toLowerCase();
+}
+
+function responseText(value, minimum, maximum) {
+  if (
+    typeof value !== 'string'
+    || value !== value.trim()
+    || value.length < minimum
+    || value.length > maximum
+    || /[\u0000-\u001f\u007f]/.test(value)
+  ) throw new RecoveryResponseError();
+  return value;
+}
+
+function responseTimestamp(value, nullable = true) {
+  if (nullable && value === null) return null;
+  const timestamp = responseText(value, 20, 40);
+  if (!Number.isFinite(Date.parse(timestamp))) throw new RecoveryResponseError();
+  return timestamp;
+}
+
+function responseRows(value, maximum) {
+  if (!Array.isArray(value) || value.length > maximum) throw new RecoveryResponseError();
+  return value;
+}
+
+export function parseRecoveryResult(action, value) {
+  if (action === 'open') return responseUuid(value);
+  if (['record_identity_proof', 'review', 'assert_change_allowed'].includes(action)) {
+    if (value !== null) throw new RecoveryResponseError();
+    return null;
+  }
+  if (action === 'my_hold') {
+    return responseRows(value, 3).map((row) => {
+      const source = responseRecord(row, holdKeys);
+      const scope = responseText(source.scope, 3, 16);
+      if (!sensitiveChangeScopes.has(scope) || typeof source.active !== 'boolean') {
+        throw new RecoveryResponseError();
+      }
+      return {
+        scope,
+        expires_at: responseTimestamp(source.expires_at, false),
+        active: source.active,
+      };
+    });
+  }
+  if (action === 'list') {
+    return responseRows(value, 100).map((row) => {
+      const source = responseRecord(row, recoveryCaseKeys);
+      const targetRole = responseText(source.target_role, 5, 16);
+      const reasonCode = responseText(source.reason_code, 4, 48);
+      const status = responseText(source.status, 4, 32);
+      if (
+        !applicationRoles.has(targetRole)
+        || !recoveryReasons.has(reasonCode)
+        || !recoveryStatuses.has(status)
+      ) throw new RecoveryResponseError();
+      const targetDisplayName = source.target_display_name === null
+        ? null
+        : responseText(source.target_display_name, 1, 80);
+      return {
+        case_id: responseUuid(source.case_id),
+        case_reference: responseText(source.case_reference, 8, 64),
+        target_user_id: responseUuid(source.target_user_id),
+        target_display_name: targetDisplayName,
+        target_role: targetRole,
+        reason_code: reasonCode,
+        status,
+        requested_at: responseTimestamp(source.requested_at, false),
+        identity_verified_at: responseTimestamp(source.identity_verified_at),
+        reviewed_at: responseTimestamp(source.reviewed_at),
+        completed_at: responseTimestamp(source.completed_at),
+        cooldown_until: responseTimestamp(source.cooldown_until),
+      };
+    });
+  }
+  throw new RecoveryResponseError();
 }
 
 function requiredString(value, minimum, maximum) {

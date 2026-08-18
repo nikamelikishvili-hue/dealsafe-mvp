@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import {
   BadgeCheck,
   Clock3,
@@ -7,6 +7,7 @@ import {
   ShieldAlert,
   X,
 } from 'lucide-react';
+import { FieldError } from './FieldError';
 import { getAppLanguage, t } from './i18n';
 import {
   verifyAgreementRecord,
@@ -24,6 +25,9 @@ function AgreementVerifier() {
   );
   const [message, setMessage] = useState('');
   const [checking, setChecking] = useState(false);
+  const checkingRef = useRef(false);
+  const dealIdRef = useRef<HTMLInputElement>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
   const cleanId = dealId.replace(/^deal\s+/i, '').trim();
   const cleanCode = code.replace(/\s/g, '').trim();
   const validationVisible = message === 'Review the highlighted fields.';
@@ -33,12 +37,18 @@ function AgreementVerifier() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (checkingRef.current) return;
     setMessage('');
     setResult(null);
     if (cleanId.length < 4 || !/^[a-f0-9]{64}$/i.test(cleanCode)) {
       setMessage('Review the highlighted fields.');
+      window.requestAnimationFrame(() => {
+        if (cleanId.length < 4) dealIdRef.current?.focus();
+        else codeRef.current?.focus();
+      });
       return;
     }
+    checkingRef.current = true;
     setChecking(true);
     try {
       const match = await verifyAgreementRecord(cleanId, cleanCode);
@@ -50,6 +60,7 @@ function AgreementVerifier() {
           : 'Agreement verification is unavailable',
       );
     } finally {
+      checkingRef.current = false;
       setChecking(false);
     }
   };
@@ -68,29 +79,31 @@ function AgreementVerifier() {
         <label>
           {t('Deal ID')}
           <input
+            ref={dealIdRef}
             required
             minLength={4}
             maxLength={30}
             autoCapitalize="characters"
             spellCheck={false}
             value={dealId}
-            onChange={event => setDealId(event.target.value.toUpperCase())}
+            onChange={event => {
+              setDealId(event.target.value.toUpperCase());
+              if (validationVisible) setMessage('');
+            }}
             placeholder="1089BDF0"
             aria-invalid={dealIdInvalid}
             aria-describedby={dealIdInvalid ? 'deal-id-error' : undefined}
           />
           {dealIdInvalid && (
-            <small
-              id="deal-id-error"
-              className="agreement-verifier-field-error"
-            >
+            <FieldError id="deal-id-error">
               {t('Enter at least 4 characters from the Deal ID.')}
-            </small>
+            </FieldError>
           )}
         </label>
         <label>
           {t('Agreement code')}
           <input
+            ref={codeRef}
             className="agreement-verifier-code"
             required
             minLength={64}
@@ -99,18 +112,18 @@ function AgreementVerifier() {
             autoComplete="off"
             spellCheck={false}
             value={code}
-            onChange={event => setCode(event.target.value)}
+            onChange={event => {
+              setCode(event.target.value);
+              if (validationVisible) setMessage('');
+            }}
             placeholder="SHA-256"
             aria-invalid={codeInvalid}
             aria-describedby={codeInvalid ? 'agreement-code-error' : undefined}
           />
           {codeInvalid && (
-            <small
-              id="agreement-code-error"
-              className="agreement-verifier-field-error"
-            >
+            <FieldError id="agreement-code-error">
               {t('Enter the full 64-character SHA-256 code.')}
-            </small>
+            </FieldError>
           )}
         </label>
         <button type="submit" className="primary" disabled={checking}>

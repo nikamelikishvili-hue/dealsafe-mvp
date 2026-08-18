@@ -29,7 +29,7 @@
 .agreement-export-meta span{display:flex;gap:5px;color:#687c92;font-size:11px}
 .agreement-export-meta b{color:#334d69}
 .agreement-export-actions{display:grid;gap:8px}
-.agreement-export-actions button{min-height:42px;justify-content:center;white-space:nowrap}
+.agreement-export-actions button{min-height:44px;justify-content:center;white-space:nowrap}
 .agreement-export-actions button:disabled{cursor:not-allowed;filter:saturate(.35);opacity:.58}
 .agreement-export>.notice{grid-column:2/-1;margin:0}
 .agreement-export>.agreement-record-error{border-color:#efc8c5;color:#8c302a;background:#fff5f4}
@@ -333,7 +333,7 @@
 .agreement-document-toolbar>div svg{width:16px;height:16px}
 .agreement-document-toolbar strong{font-size:13px}
 .agreement-document-toolbar small{overflow:hidden;color:#718298;font-size:9px;text-overflow:ellipsis;white-space:nowrap}
-.agreement-document-toolbar button{min-height:40px;justify-content:center;white-space:nowrap}
+.agreement-document-toolbar button{min-height:44px;justify-content:center;white-space:nowrap}
 .agreement-document-mode .agreement-print-footer{position:static;margin-top:18px}
 .agreement-document-mode .agreement-print-page{display:none}
 
