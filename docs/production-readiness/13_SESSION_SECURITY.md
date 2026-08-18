@@ -75,7 +75,9 @@ Before SEC-002 can be marked complete:
 1. Add cross-device end-to-end tests proving a revoked device cannot perform a
    sensitive action before its original JWT expiry.
 2. Add a security notification when other or all devices are signed out.
-3. Define support evidence and recovery steps for suspected account takeover.
+3. Execute and review the suspected-account-takeover procedure defined in
+   [101_ACCOUNT_TAKEOVER_RESPONSE.md](101_ACCOUNT_TAKEOVER_RESPONSE.md). The
+   repository runbook is complete; isolated Staging rehearsal evidence remains.
 
 Production access protection and real-money disablement remain in force while
 these release gates are open.

@@ -4341,6 +4341,25 @@ test('session security UI separates current, other, and global sign-out actions'
   assert.match(sessionStandard, /SEC-002 remains open until the required two-device negative authorization test/);
 });
 
+test('account takeover response is fail-closed, non-secret, and rehearsal-gated', () => {
+  const standard = readText('docs/production-readiness/101_ACCOUNT_TAKEOVER_RESPONSE.md');
+  const sessionStandard = readText('docs/production-readiness/13_SESSION_SECURITY.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+  const backlog = readText('docs/production-readiness/08_IMPLEMENTATION_BACKLOG.md');
+
+  assert.match(standard, /Revoke \*\*all\*\* provider sessions/);
+  assert.match(standard, /A password change alone\s+is not session containment/);
+  assert.match(standard, /Email access alone[\s\S]*are not\s+sufficient/);
+  assert.match(standard, /72-hour hold/);
+  assert.match(standard, /device A and device B start with distinct valid sessions/);
+  assert.match(standard, /Data API, Storage, and a protected Edge Function/);
+  assert.match(standard, /never capture\s+bearer tokens or cookies/);
+  assert.match(standard, /SEC-002 remains open/);
+  assert.match(sessionStandard, /101_ACCOUNT_TAKEOVER_RESPONSE\.md/);
+  assert.match(readinessIndex, /101_ACCOUNT_TAKEOVER_RESPONSE\.md/);
+  assert.match(backlog, /suspected-account-takeover runbook exist/);
+});
+
 test('active-session lookup is minimal, owner-bound, and service-only for arbitrary identifiers', () => {
   const validation = readText('supabase/active_session_validation.sql');
 

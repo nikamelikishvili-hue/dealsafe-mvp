@@ -59,7 +59,7 @@ This backlog turns the production specification into controlled delivery work. P
 | ID | Priority | Work | Acceptance |
 |---|---|---|---|
 | SEC-001 | P0 | **Repository complete; hosted acceptance pending:** the rotating refresh secret is held only in a Secure, HttpOnly, SameSite=Strict host cookie; the access token is module-memory only; persistent browser storage contains a bounded non-secret continuity hint and removes legacy sessions | XSS cannot directly read the long-lived session secret; protected Preview reload/rotation and security review remain |
-| SEC-002 | P0 | Add session inventory, revocation, expiry, and logout-all | Revoked sessions lose access immediately |
+| SEC-002 | P0 | **In progress locally:** private session inventory, scoped/global revocation, immediate active-session enforcement, and a suspected-account-takeover runbook exist; isolated two-device denial and verified notification-delivery evidence remain | Revoked sessions lose access immediately |
 | SEC-003 | P0 | Add user MFA and require phishing-resistant MFA for privileged roles where supported | Enrollment/recovery/step-up tests pass |
 | SEC-004 | P0 | Add strict CSP, HSTS plan, frame, MIME, referrer, and permissions headers | Automated header tests pass per environment |
 | SEC-005 | P0 | **In progress locally:** same-origin Auth mutations require a canonical HTTPS Origin and one validated exact host; remaining non-Auth mutation inventory and hosted enforcement proof remain | Cross-origin abuse tests fail safely |

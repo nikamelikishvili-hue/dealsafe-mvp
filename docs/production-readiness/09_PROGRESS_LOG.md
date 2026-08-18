@@ -5039,3 +5039,15 @@ promote Production, restore public access, or change a live Supabase resource.
 - Protected Preview role/state, keyboard, and mobile acceptance remains the
   external UX-003 release gate. Production aliases, public access, live Supabase
   resources, and real payments were not changed.
+# 2026-08-18 — SEC-002 account-takeover response boundary
+
+- Audited the existing private session inventory, local/other/global provider
+  revocation, immediate Data API/Storage/Edge session enforcement, and recovery
+  notification foundation.
+- Added a fail-closed suspected-account-takeover runbook covering severity,
+  privacy-safe intake, global containment, independent identity re-proofing,
+  immutable evidence, 72-hour sensitive-change holds, restoration, and exact
+  two-device Staging rehearsal evidence.
+- Kept SEC-002 open: hosted cross-device denial and verified notification
+  delivery remain required. No live Supabase resource, Production access, or
+  real-payment configuration changed.
