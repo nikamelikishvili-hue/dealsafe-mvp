@@ -5004,3 +5004,31 @@ promote Production, restore public access, or change a live Supabase resource.
   staging identity and configuration are absent.
 - Production aliases, public access, live Supabase resources, real payments,
   and privileged enforcement were not changed.
+
+## Shared validation-summary foundation — 2026-08-18
+
+- Replaced the separate Deal creation and fulfillment validation-summary
+  implementations with one typed `ValidationSummary` primitive while retaining
+  the established prominent and compact visual treatments.
+- The shared primitive provides one assertive, labelled error region, a
+  programmatically focusable summary, and field-specific navigation for Deal
+  creation, meeting, and shipping workflows.
+- Added rendered-component coverage for alert semantics, summary focus, linked
+  actions, heading hierarchy, and decorative-icon isolation. Updated the
+  fulfillment architecture test to govern the shared boundary instead of the
+  retired local implementation.
+- Passed formatting, lint, strict TypeScript, all 384 foundation tests, all 17
+  rendered-component tests, the production build, served-asset generation,
+  performance budgets, and production-preview smoke. Application JavaScript is
+  819,951 bytes against the fixed 820,000-byte ceiling.
+- The change is signed with the reviewed Dealivra release key on
+  `agent/shared-validation-summary` and is based on the merged `main` release
+  commit `2621fcd55cdbe6381f58fedf1164b1acf997f3c8`.
+
+### Activation boundary
+
+This local review branch does not alter Production, public access, Vercel
+aliases or configuration, Supabase resources, customer records, or payment
+capabilities. GitHub publication remains pending because the stored GitHub CLI
+credential is expired and outbound Git transport is unavailable in this
+execution environment.

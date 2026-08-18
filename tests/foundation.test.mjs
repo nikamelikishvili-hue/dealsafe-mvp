@@ -5749,6 +5749,7 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   const app = readText('src/app.tsx');
   const workspace = readText('src/DealWorkspace.tsx');
   const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+  const validationSummary = readText('src/ValidationSummary.tsx');
 
   assert.match(workspace, /from '\.\/DealFulfillmentWorkspace'/);
   assert.match(workspace, /<ShippingPanel/);
@@ -5806,7 +5807,12 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   assert.ok((addressAutocomplete.match(/selectionRequest !== requestSequence\.current/g) ?? []).length >= 2);
   assert.ok((addressAutocomplete.match(/requestSequence\.current \+= 1/g) ?? []).length >= 3);
   assert.match(addressAutocomplete, /Google Maps/);
-  assert.match(fulfillment, /className="workflow-validation-summary"/);
+  assert.match(fulfillment, /from '\.\/ValidationSummary'/);
+  assert.match(fulfillment, /<ValidationSummary/);
+  assert.match(validationSummary, /className = 'workflow-validation-summary'/);
+  assert.match(validationSummary, /role="alert"/);
+  assert.match(validationSummary, /aria-live="assertive"/);
+  assert.match(validationSummary, /document\.getElementById\(fieldId\)\?\.focus\(\)/);
   assert.match(fulfillment, /disabled=\{savingAddress\}/);
   assert.match(fulfillment, /disabled=\{busy\}/);
   assert.doesNotMatch(fulfillment, /disabled=\{savingAddress \|\| addressIncomplete\}/);

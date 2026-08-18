@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { ShieldAlert } from 'lucide-react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 Object.defineProperty(globalThis, 'document', {
@@ -19,6 +20,7 @@ const { BrandLogo } = await import('../../src/BrandLogo');
 const { FeedbackMessage } = await import('../../src/FeedbackMessage');
 const { FieldError } = await import('../../src/FieldError');
 const { AsyncStatePanel } = await import('../../src/AsyncStatePanel');
+const { ValidationSummary } = await import('../../src/ValidationSummary');
 const { MfaLoginVerification } = await import('../../src/MfaLoginVerification');
 const { DEAL_ACTION_TARGET_IDS, resolveDealPrimaryAction } = await import('../../src/DealWorkspaceShell');
 const { isUsPostalCode, normalizeUsState, parseGoogleUsAddress, parseStoredUsAddress, serializeUsAddress } =
@@ -307,4 +309,46 @@ test('loading and retry states expose accurate live-region and button semantics'
   assert.match(error, /aria-live="assertive"/);
   assert.match(error, /<button type="button"/);
   assert.match(error, />Try again</);
+});
+
+test('validation summaries announce errors and link each item to a focus action', () => {
+  const markup = renderToStaticMarkup(
+    <ValidationSummary
+      id="shipping-validation-summary"
+      title="Check the delivery address"
+      errors={[
+        { fieldId: 'shipping-state', message: 'Select a state.' },
+        { fieldId: 'shipping-postal-code', message: 'Enter a valid ZIP code.' },
+      ]}
+    />,
+  );
+
+  assert.match(markup, /id="shipping-validation-summary"/);
+  assert.match(markup, /role="alert"/);
+  assert.match(markup, /aria-live="assertive"/);
+  assert.match(markup, /aria-atomic="true"/);
+  assert.match(markup, /aria-labelledby="shipping-validation-summary-title"/);
+  assert.match(markup, /tabindex="-1"/);
+  assert.match(markup, /<button type="button">Select a state\.<\/button>/);
+  assert.match(markup, /<button type="button">Enter a valid ZIP code\.<\/button>/);
+});
+
+test('prominent validation summaries keep decorative icons hidden', () => {
+  const markup = renderToStaticMarkup(
+    <ValidationSummary
+      id="create-validation-summary"
+      className="create-validation-summary"
+      title="Check 1 detail before continuing"
+      errors={[{ fieldId: 'item-title', message: 'Enter an item title.' }]}
+      eyebrow="Needs attention"
+      message="Choose an item below to jump directly to the field."
+      headingLevel={2}
+      icon={<ShieldAlert />}
+    />,
+  );
+
+  assert.match(markup, /class="create-validation-icon" aria-hidden="true"/);
+  assert.match(markup, /<h2 id="create-validation-summary-title"/);
+  assert.match(markup, /Needs attention/);
+  assert.match(markup, /Enter an item title\./);
 });
