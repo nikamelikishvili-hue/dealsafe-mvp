@@ -1,6 +1,6 @@
 # Dealivra release-readiness snapshot
 
-Status date: 2026-08-15
+Status date: 2026-08-18
 
 ## Decision
 
@@ -13,36 +13,47 @@ This decision is intentionally stricter than a successful build or visual
 review. A release becomes eligible only when the environment-specific evidence
 below is complete for the exact candidate commit.
 
-## Review-stack evidence available
+## Review-candidate evidence available
 
-- The stack through Draft PR `#181` passes dependency and catalog governance,
-  formatting, lint, TypeScript, 354 foundation tests, 13 component tests, the
-  incident drill, secret scanning, production build, performance budgets, and
-  Preview smoke.
-- The stack-head Vercel Preview reached `READY`; GitHub verification and Vercel
-  checks passed, and the pull request is cleanly mergeable.
-- A 390 by 844 unauthenticated browser review found no horizontal overflow,
-  duplicate IDs, missing image alternatives, or console warnings and errors.
-  Mobile navigation and the exact Home action reached their intended targets.
-- The hosted build measured 834,703 JavaScript bytes against the fixed
-  835,000-byte ceiling. Only 297 bytes of hosted headroom remain, so another
-  customer-facing JavaScript change requires a measured offset or approved
-  chunking improvement.
-- Browser/server Supabase public configuration aligned in Preview and the
-  optional Google Maps integration was configured. No secret value was read or
-  recorded during verification.
+- Merged `main` remains `2621fcd55cdbe6381f58fedf1164b1acf997f3c8`.
+  Nothing in this review changed `main`, Production, public access, hosted
+  Supabase resources, customer records, or payment configuration.
+- Draft PR `#232` at signed commit
+  `d46bb1541c4c3923cce62476ec59013273248e2d` is cleanly mergeable. Its required
+  verification, CodeQL analysis, Vercel deployment, and Vercel review checks
+  passed; served-asset verification is correctly skipped for the protected
+  Preview deployment event.
+- The consolidated branch `agent/p0-reviewed-release-candidate` combines the
+  canonical customer routes, single Deal Workspace action, shared accessible
+  validation summaries, SEC-002 takeover response, and Node 24 artifact action.
+  Its signed integration head before this documentation-only snapshot is
+  `a9a384db5032eaf6533e1abb3634a2b418296207`.
+- The consolidated branch passes catalog, dependency, SBOM, browser-storage,
+  outbound-transport, API-origin, brand, runtime-configuration, formatting,
+  lint, TypeScript, 385 foundation, and 17 component checks plus the incident
+  drill, secret scan, production build, deterministic served-asset manifest,
+  performance budgets, and Preview smoke.
+- The integrated production build contains 820,555 JavaScript bytes against the
+  fixed 821,000-byte ceiling, 285,554 CSS bytes, and 28 served assets totaling
+  1,112,006 bytes. The initial application JavaScript is 133,804 bytes.
+- Local browser acceptance covered Home plus canonical sign-in, sign-up,
+  password recovery, create, public Deal, and Trust Passport routes. Hosted
+  protected-Preview role/state, keyboard, mobile, and provider acceptance is
+  still required against the final exact PR head.
 
-These results prove the reviewed source and Preview artifact behave as tested.
-They do not replace Staging authorization, operational, legal, or financial
-approval.
+These results prove the consolidated repository candidate passes the local
+release gate and that PR `#232` passed its hosted review. They do not yet prove
+that the consolidated candidate's exact hosted artifact, Staging authorization,
+operational response, legal terms, or financial controls are ready.
 
 ## External private-beta blockers
 
 All items below must be closed against one isolated Staging release candidate:
 
-1. Merge the documented stacked pull requests in order, rerunning required
-   checks after each base changes, then bind the final commit to deterministic
-   release and served-asset manifests.
+1. Open the consolidated review branch as one Draft pull request, require every
+   protected GitHub and Vercel check on its exact signed head, resolve review
+   findings, and bind the final approved commit to deterministic release and
+   served-asset manifests before merge.
 2. Run the database-wide authorization and hosted HTTP/Storage matrices with
    short-lived synthetic seller, buyer, outsider, support, and administrator
    identities. Record cross-account denial and rollback evidence without using
@@ -92,7 +103,7 @@ run again.
 
 ### Activation boundary
 
-This snapshot is documentation only. It does not merge the Draft stack, promote
-Production, restore public access, apply staged SQL, change hosted
-configuration, touch live Supabase resources or customer records, or enable
-real payments.
+This snapshot is documentation only. It does not create or merge the Draft pull
+request, promote Production, restore public access, apply staged SQL, change
+hosted configuration, touch live Supabase resources or customer records, or
+enable real payments.

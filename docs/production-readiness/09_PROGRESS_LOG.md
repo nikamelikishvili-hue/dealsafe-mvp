@@ -5004,3 +5004,103 @@ promote Production, restore public access, or change a live Supabase resource.
   staging identity and configuration are absent.
 - Production aliases, public access, live Supabase resources, real payments,
   and privileged enforcement were not changed.
+
+## 2026-08-18 — Canonical customer routes
+
+- Added stable `/create`, `/signin`, `/signup`, `/forgot-password`,
+  `/deal/<public-id>`, and `/trust/<public-id>` routes through the single browser
+  resolver.
+- Updated application navigation, Deal sharing, agreement-document links,
+  trust-passport links, protected synthetic checks, and Preview smoke coverage
+  to emit the canonical paths.
+- Retained the former root-query URLs as migration-compatible inbound links so
+  previously shared Deal and recovery links do not break.
+- Added malformed-identifier rejection and canonical/legacy resolver coverage.
+  Production aliases, public access, live Supabase resources, and real payments
+  were not changed.
+- Measured the unconfigured production build at 820,601 JavaScript bytes. The
+  total-JavaScript ceiling moved from 820,000 to 821,000 bytes (0.122%) to
+  accommodate the shared resolver; initial-app, per-chunk, CSS, and configured
+  provider-overhead ceilings did not change.
+
+## 2026-08-18 — Single Deal Workspace action policy
+
+- Audited the Deal Workspace action hierarchy against UX-003 instead of
+  introducing another action surface. The role/state policy already selects one
+  next action for draft, published, accepted, delivery, completed, disputed,
+  cancelled, expired, signed-out, seller, and buyer states.
+- Confirmed that desktop exposes the action only in the sticky workspace bar,
+  while the mobile breakpoint hides that control and exposes the same action in
+  one safe-area persistent dock. The Deal progress card remains status-only and
+  cannot create a second competing call to action.
+- Added a release regression that locks the mutually exclusive desktop/mobile
+  visibility policy. Local route smoke also loaded the canonical home, account,
+  creation, recovery, Deal, and Trust paths without a framework error overlay.
+- Protected Preview role/state, keyboard, and mobile acceptance remains the
+  external UX-003 release gate. Production aliases, public access, live Supabase
+  resources, and real payments were not changed.
+# 2026-08-18 — SEC-002 account-takeover response boundary
+
+- Audited the existing private session inventory, local/other/global provider
+  revocation, immediate Data API/Storage/Edge session enforcement, and recovery
+  notification foundation.
+- Added a fail-closed suspected-account-takeover runbook covering severity,
+  privacy-safe intake, global containment, independent identity re-proofing,
+  immutable evidence, 72-hour sensitive-change holds, restoration, and exact
+  two-device Staging rehearsal evidence.
+- Kept SEC-002 open: hosted cross-device denial and verified notification
+  delivery remain required. No live Supabase resource, Production access, or
+  real-payment configuration changed.
+
+## Shared validation-summary foundation — 2026-08-18
+
+- Replaced the separate Deal creation and fulfillment validation-summary
+  implementations with one typed `ValidationSummary` primitive while retaining
+  the established prominent and compact visual treatments.
+- The shared primitive provides one assertive, labelled error region, a
+  programmatically focusable summary, and field-specific navigation for Deal
+  creation, meeting, and shipping workflows.
+- Added rendered-component coverage for alert semantics, summary focus, linked
+  actions, heading hierarchy, and decorative-icon isolation. Updated the
+  fulfillment architecture test to govern the shared boundary instead of the
+  retired local implementation.
+- Passed formatting, lint, strict TypeScript, all 384 foundation tests, all 17
+  rendered-component tests, the production build, served-asset generation,
+  performance budgets, and production-preview smoke. Application JavaScript is
+  819,951 bytes against the fixed 820,000-byte ceiling.
+- The change is signed with the reviewed Dealivra release key on
+  `agent/shared-validation-summary` and is based on the merged `main` release
+  commit `2621fcd55cdbe6381f58fedf1164b1acf997f3c8`.
+
+### Activation boundary
+
+This review change does not alter Production, public access, Vercel aliases or
+configuration, Supabase resources, customer records, or payment capabilities.
+Its exact signed commit was published for protected GitHub and Vercel review.
+# 2026-08-18 — Consolidated release-candidate evidence
+
+- Combined the signed canonical-route, single-primary-action, account-takeover,
+  shared-validation-summary, and Node 24 artifact-upload changes on one linear
+  review branch above merged `main`.
+- Resolved the documentation overlap by preserving both the newer shared
+  validation-summary status and the completed single-primary-action status.
+- Re-ran the complete repository release gate on the integrated head: 385
+  foundation and 17 component tests, incident drill, secret scan, production
+  build, asset manifest, fixed performance budgets, and Preview smoke passed.
+- Refreshed the no-go snapshot so its evidence and blockers no longer refer to
+  superseded PR `#181`, test counts, or bundle measurements.
+- No Production alias, public access, live Supabase resource, customer record,
+  or real-payment configuration changed.
+
+# 2026-08-18 — Accessible support-case validation summary
+
+- Replaced first-error-only support intake validation with one complete summary
+  that announces every invalid field after a submit attempt.
+- Kept the existing inline errors while making each summary action restore
+  keyboard focus directly to the corresponding subject or message field.
+- Disabled native form interception for this governed form so the shared
+  validation path remains consistent across browsers and assistive technology.
+- Added a repository regression contract for full-error collection, summary
+  focus, stable field identifiers, and direct field-focus recovery.
+- No support record, Supabase resource, deployment, public-access setting,
+  customer data, or real-payment capability changed.

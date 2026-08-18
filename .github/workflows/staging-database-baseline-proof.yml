@@ -103,7 +103,7 @@ jobs:
         run: supabase db advisors --local
 
       - name: Upload only the verified baseline
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: dealivra-staging-baseline-${{ github.sha }}
           path: supabase/migrations/*.sql

@@ -104,7 +104,7 @@ const checks = [
   ...[
     ['public_home', '/'],
     ['terms_route', '/terms'],
-    ['sign_in_entry', '/?start=signin'],
+    ['sign_in_entry', '/signin'],
   ].map(([name, path]) => ({
     name,
     path,

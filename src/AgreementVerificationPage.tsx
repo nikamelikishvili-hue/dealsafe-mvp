@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { FieldError } from './FieldError';
 import { getAppLanguage, t } from './i18n';
+import { dealPath } from './navigation';
 import {
   verifyAgreementRecord,
   type AgreementVerificationResult,
@@ -154,7 +155,7 @@ function AgreementVerifier() {
                 {t('Version')} {result.version} ·{' '}
                 {formatDateTime(result.created_at)}
               </span>
-              <a href={`/?deal=${encodeURIComponent(result.public_id)}`}>
+              <a href={dealPath(result.public_id)}>
                 {t('Open Deal Link')} →
               </a>
             </div>

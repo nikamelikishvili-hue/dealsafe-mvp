@@ -15,6 +15,7 @@ import {
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { focusPageDestination } from './accessibleNavigation';
 import { AsyncStatePanel } from './AsyncStatePanel';
+import { ValidationSummary, type ValidationSummaryItem } from './ValidationSummary';
 import { copyTextToClipboard } from './clipboard';
 import { useConfirmAction } from './ConfirmActionDialog';
 import type { Deal } from './domain';
@@ -51,42 +52,7 @@ import {
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString(getAppLanguage());
 
-type ValidationError = { fieldId: string; message: string };
-
-function WorkflowValidationSummary({
-  id,
-  title,
-  errors,
-}: {
-  id: string;
-  title: string;
-  errors: ValidationError[];
-}) {
-  return (
-    <div
-      id={id}
-      className="workflow-validation-summary"
-      role="alert"
-      tabIndex={-1}
-    >
-      <div>
-        <h3>{t(title)}</h3>
-        <ul>
-          {errors.map((error) => (
-            <li key={error.fieldId}>
-              <button
-                type="button"
-                onClick={() => document.getElementById(error.fieldId)?.focus()}
-              >
-                {t(error.message)}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
+type ValidationError = ValidationSummaryItem;
 
 export function MeetingPanel({
   deal,
@@ -302,7 +268,7 @@ export function MeetingPanel({
           noValidate
         >
           {validationVisible && meetingErrors.length > 0 && (
-            <WorkflowValidationSummary
+            <ValidationSummary
               id="meeting-validation-summary"
               title="Complete the meeting details"
               errors={meetingErrors}
@@ -1278,7 +1244,7 @@ export function ShippingPanel({
             noValidate
           >
             {addressValidationVisible && addressErrors.length > 0 && (
-              <WorkflowValidationSummary
+              <ValidationSummary
                 id="shipping-validation-summary"
                 title="Complete the delivery address"
                 errors={addressErrors}

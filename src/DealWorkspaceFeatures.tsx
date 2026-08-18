@@ -54,6 +54,7 @@ import {
   toMinorUnits,
 } from './currency';
 import { getAppLanguage, t } from './i18n';
+import { dealPath } from './navigation';
 import {
   askDealQuestion,
   configureBuyerAccessCode,
@@ -554,7 +555,7 @@ export function TimelinePanel({
         await navigator.share({
           title: `Dealivra · ${deal.publicId}`,
           text: history,
-          url: `${location.origin}/?deal=${deal.publicId}`,
+          url: `${location.origin}${dealPath(deal.publicId)}`,
         });
       } else {
         await copyTextToClipboard(history);
@@ -671,7 +672,7 @@ export function CompletionReceipt({
     };
   }, [deal.id, session.accessToken]);
 
-  const link = `${location.origin}/?deal=${deal.publicId}`;
+  const link = `${location.origin}${dealPath(deal.publicId)}`;
   const share = async () => {
     setShareMessage('');
     setShareFailed(false);
@@ -808,7 +809,7 @@ export function BuyerInvitePanel({ deal }: { deal: Deal }) {
   const [notice, setNotice] = useState('');
   const [noticeFailed, setNoticeFailed] = useState(false);
   const noticeTimer = useRef<number | undefined>(undefined);
-  const link = `${location.origin}/?deal=${deal.publicId}`;
+  const link = `${location.origin}${dealPath(deal.publicId)}`;
   const message = `${t('Review agreement')}: ${deal.title} · ${dealPrice(
     deal,
   )} · ${link}`;
@@ -1772,7 +1773,7 @@ export function DealCopyLinkButton({ deal }: { deal: Deal }) {
   const copy = async () => {
     setState('copying');
     try {
-      await copyTextToClipboard(`${location.origin}/?deal=${deal.publicId}`);
+      await copyTextToClipboard(`${location.origin}${dealPath(deal.publicId)}`);
       setState('copied');
     } catch {
       setState('error');

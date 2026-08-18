@@ -42,7 +42,7 @@ import { NetworkStatusBanner } from './NetworkStatusBanner';
 import { filterCatalogDeals, mergeCatalogSearchParams, readCatalogSearchState } from './catalogSearch';
 import { OTHER_CATALOG_VALUE, buildDealCatalogIdentity, buildSmartCatalogTitle, emptySmartCatalogSelection, matchCatalogValue, sanitizeSmartCatalogSelection, vehicleCatalog, vehicleYears, type SmartCatalogSelection } from './smartCatalog';
 import { decodeVehicleVin } from './services/catalogService';
-import { isPublicInfoView, publicInfoPaths, resolveBrowserRoute, verifyPath, type PublicInfoView } from './navigation';
+import { authPath, createPath, dealPath, forgotPasswordPath, isPublicInfoView, publicInfoPaths, resolveBrowserRoute, verifyPath, type PublicInfoView } from './navigation';
 import { applyPageMetadata, DealLinkError, getPageMetadata, NotFoundPage, PublicInfoPage, RouteLoading } from './PublicRoutePages';
 import { AccountEntryPage, ForgotPassword, ForgotPasswordEntry, ResetPassword, type AuthFormState, type AuthMode } from './AccountEntryPages';
 import { AsyncStatePanel } from './AsyncStatePanel';
@@ -281,7 +281,7 @@ function PublishedDealSuccess({deal,warning,session,acceptanceProtected,acceptan
   const [accessMessage,setAccessMessage]=useState('');
   const [accessBusy,setAccessBusy]=useState(false);
   const noticeTimer=useRef<number|undefined>(undefined);
-  const link=`${location.origin}/?deal=${deal.publicId}`;
+  const link=`${location.origin}${dealPath(deal.publicId)}`;
   const message=`Review this Dealivra agreement: ${deal.title} · ${dealPrice(deal)} · ${link}`;
   useEffect(()=>()=>window.clearTimeout(noticeTimer.current),[]);
   const flash=(text:string,failed=false)=>{window.clearTimeout(noticeTimer.current);setNotice(text);setNoticeFailed(failed);noticeTimer.current=window.setTimeout(()=>setNotice(''),2200)};
@@ -1073,7 +1073,7 @@ export function App() {
     history[replace?'replaceState':'pushState']({},'',destination);
   };
   const openAuthRoute=(mode:'signin'|'signup',returnView:View)=>{
-    updateBrowserAddress(`/?start=${mode}`);
+    updateBrowserAddress(authPath(mode));
     setAuthMode(mode);
     setReturnAfterAuth(returnView);
     setAuthMessage('');
@@ -1090,7 +1090,7 @@ export function App() {
   const open=(d:Deal)=>{setActive(d);setView('deal')};
   const openPublicDeal=async(publicId:string)=>{
     const request=++publicDealRequestRef.current;
-    updateBrowserAddress(`/?deal=${encodeURIComponent(publicId)}`);
+    updateBrowserAddress(dealPath(publicId));
     setAuthMessage('');
     setView('route-loading');
     try{
@@ -1104,20 +1104,20 @@ export function App() {
   };
   const agreementConfirmed=Object.values(agreementChecks).every(Boolean);
   const accept=async()=>{if(!active||!buyer.trim()||!agreementConfirmed||acceptMutationRef.current)return;if(active.publicId===DEMO_DEAL_PUBLIC_ID&&!session){setDemoCompleted(true);setAuthMessage('');window.requestAnimationFrame(()=>window.requestAnimationFrame(scrollToAgreement));return}if(isDealExpired(active)){setAuthMessage('This Deal Link can no longer be accepted.');return}if(!session){openAuthRoute('signin','deal');setAuthMessage('Sign in or create an account to accept this deal.');return}acceptMutationRef.current=true;setAccepting(true);try{const protectionRequired=await getDealAcceptanceProtection(active.publicId);setAcceptanceProtected(protectionRequired);if(protectionRequired&&!/^[0-9]{6}$/.test(buyerAccessCode)){setAuthMessage('Enter the 6-digit buyer code.');return}await acceptPublicDeal(session,active.publicId,buyer.trim(),buyerAccessCode);const deal={...active,status:'accepted' as const,buyerName:buyer.trim(),buyerVerification:'not_started' as const,viewerRole:'buyer' as const};setActive(deal);setAcceptanceProtected(false);setDeals(x=>x.map(d=>d.id===deal.id?deal:d))}catch(error){setAuthMessage(error instanceof Error?error.message:'Could not accept this deal')}finally{acceptMutationRef.current=false;setAccepting(false)}};
-  const openCreate=()=>{updateBrowserAddress('/?start=create');setAuthMessage('');if(session||!isCreateDraftMeaningful(draft,dealTemplate))resetCreateFlow();setView('create')};
-  const openDemo=async()=>{const sample=deals.find(deal=>deal.publicId===DEMO_DEAL_PUBLIC_ID)||(await demoRepository.list())[0];if(!sample)return;updateBrowserAddress(`/?deal=${encodeURIComponent(sample.publicId)}`);setAuthMessage('');setBuyer('');setAgreementChecks({item:false,price:false,handoff:false});setDemoCompleted(false);setActive({...sample,viewerRole:'visitor'});setView('deal');window.scrollTo({top:0,behavior:motionSafeScrollBehavior('smooth')})};
+  const openCreate=()=>{updateBrowserAddress(createPath);setAuthMessage('');if(session||!isCreateDraftMeaningful(draft,dealTemplate))resetCreateFlow();setView('create')};
+  const openDemo=async()=>{const sample=deals.find(deal=>deal.publicId===DEMO_DEAL_PUBLIC_ID)||(await demoRepository.list())[0];if(!sample)return;updateBrowserAddress(dealPath(sample.publicId));setAuthMessage('');setBuyer('');setAgreementChecks({item:false,price:false,handoff:false});setDemoCompleted(false);setActive({...sample,viewerRole:'visitor'});setView('deal');window.scrollTo({top:0,behavior:motionSafeScrollBehavior('smooth')})};
   const finishAuthentication=async(nextSession:StoredSession)=>{
     setMfaLogin(null);
     setSession(nextSession);
     if(returnAfterAuth==='create'&&pendingCreateAction){
       const action=pendingCreateAction;
       setPendingCreateAction(null);
-      updateBrowserAddress('/?start=create',true);
+      updateBrowserAddress(createPath,true);
       setView('create');
       await (action==='publish'?publishDraft(nextSession):saveDraftForSession(nextSession));
       return;
     }
-    updateBrowserAddress(returnAfterAuth==='deal'&&active?`/?deal=${encodeURIComponent(active.publicId)}`:returnAfterAuth==='create'?'/?start=create':'/',true);
+    updateBrowserAddress(returnAfterAuth==='deal'&&active?dealPath(active.publicId):returnAfterAuth==='create'?createPath:'/',true);
     setView(returnAfterAuth);
   };
   const submitAuth=async(e:React.FormEvent)=>{e.preventDefault();if(authSubmittingRef.current)return;authSubmittingRef.current=true;setAuthSubmitting(true);setAuthMessage('');try{if(authMode==='signup'){const result=await signUp(authForm.email.trim(),authForm.password,authForm.displayName.trim());if(result.session)await finishAuthentication(result.session);else setAuthMessage('Check your email to confirm your account, then return to this tab and sign in. Your completed draft will stay here.')}else{const result=await signIn(authForm.email.trim(),authForm.password);if('mfaRequired' in result){setMfaLogin(result);setAuthForm(current=>({...current,password:''}));return}await finishAuthentication(result)}}catch(error){setAuthMessage(error instanceof Error?error.message:'Something went wrong')}finally{authSubmittingRef.current=false;setAuthSubmitting(false)}};
@@ -1238,7 +1238,7 @@ export function App() {
       {!user&&<><button type="button" className="mobile-signin" onClick={()=>openAuthRoute('signin','home')}>{t('Sign in')}</button><button type="button" className="mobile-signup" onClick={()=>openAuthRoute('signup','home')}>{t('Create account')}</button></>}
     </nav>}
     <main id="main-content" tabIndex={-1}>
-      {view==='auth'&&authMode==='signin'&&<ForgotPasswordEntry onOpen={()=>{updateBrowserAddress('/?start=forgot');setView('forgot')}}/>}
+      {view==='auth'&&authMode==='signin'&&<ForgotPasswordEntry onOpen={()=>{updateBrowserAddress(forgotPasswordPath);setView('forgot')}}/>}
       {view==='forgot'&&<ForgotPassword onBack={()=>openAuthRoute('signin','home')}/>}
       {view==='reset'&&recoveryToken&&<ResetPassword token={recoveryToken} onDone={()=>setView('auth')}/>}
       {view==='route-loading'&&<RouteLoading/>}

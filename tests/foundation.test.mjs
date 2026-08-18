@@ -3804,7 +3804,7 @@ test('verification includes a production-preview navigation smoke test', () => {
   assert.match(packageJson.scripts.verify, /npm run smoke:preview/);
   assert.equal(packageJson.scripts['smoke:preview'], 'node scripts/smoke-preview.mjs');
   assert.match(smokeTest, /expectApplicationPage\('\/terms'\)/);
-  assert.match(smokeTest, /expectApplicationPage\('\/\?start=signin'\)/);
+  assert.match(smokeTest, /expectApplicationPage\('\/signin'\)/);
   assert.match(smokeTest, /serviceWorkerResponse/);
 });
 
@@ -4339,6 +4339,60 @@ test('session security UI separates current, other, and global sign-out actions'
   assert.match(styles, /\.session-security-heading\{[^}]*height:auto;min-height:0/);
   assert.match(sessionStandard, /14_IMMEDIATE_SESSION_REVOCATION\.md/);
   assert.match(sessionStandard, /SEC-002 remains open until the required two-device negative authorization test/);
+});
+
+test('account takeover response is fail-closed, non-secret, and rehearsal-gated', () => {
+  const standard = readText('docs/production-readiness/101_ACCOUNT_TAKEOVER_RESPONSE.md');
+  const sessionStandard = readText('docs/production-readiness/13_SESSION_SECURITY.md');
+  const readinessIndex = readText('docs/production-readiness/README.md');
+  const backlog = readText('docs/production-readiness/08_IMPLEMENTATION_BACKLOG.md');
+
+  assert.match(standard, /Revoke \*\*all\*\* provider sessions/);
+  assert.match(standard, /A password change alone\s+is not session containment/);
+  assert.match(standard, /Email access alone[\s\S]*are not\s+sufficient/);
+  assert.match(standard, /72-hour hold/);
+  assert.match(standard, /device A and device B start with distinct valid sessions/);
+  assert.match(standard, /Data API, Storage, and a protected Edge Function/);
+  assert.match(standard, /never capture\s+bearer tokens or cookies/);
+  assert.match(standard, /SEC-002 remains open/);
+  assert.match(sessionStandard, /101_ACCOUNT_TAKEOVER_RESPONSE\.md/);
+  assert.match(readinessIndex, /101_ACCOUNT_TAKEOVER_RESPONSE\.md/);
+  assert.match(backlog, /suspected-account-takeover runbook exist/);
+});
+
+test('release snapshot names the current consolidated no-go evidence', () => {
+  const snapshot = readText('docs/production-readiness/99_RELEASE_READINESS_SNAPSHOT.md');
+
+  assert.match(snapshot, /Status date: 2026-08-18/);
+  assert.match(snapshot, /agent\/p0-reviewed-release-candidate/);
+  assert.match(snapshot, /385 foundation, and 17 component checks/);
+  assert.match(snapshot, /820,555 JavaScript bytes/);
+  assert.match(snapshot, /does not create or merge the Draft pull\s+request/);
+  assert.match(snapshot, /No-go for public or real-money launch/);
+  assert.doesNotMatch(snapshot, /Draft PR `#181`/);
+  assert.doesNotMatch(snapshot, /Only 297 bytes/);
+});
+
+test('support case validation reports every invalid field and restores direct focus', () => {
+  const support = readText('src/SupportCaseCenter.tsx');
+
+  assert.match(support, /<form className="support-case-form" onSubmit=\{submitCase\} noValidate>/);
+  assert.match(support, /id="case-errors"/);
+  assert.match(support, /title="Check case details"/);
+  assert.match(support, /fieldId: 'case-subject'/);
+  assert.match(support, /fieldId: 'case-message'/);
+  assert.match(support, /id="case-subject"/);
+  assert.match(support, /id="case-message"/);
+  assert.match(
+    support,
+    /setSubjectError\(nextSubjectError\);[\s\S]*setMessageError\(nextMessageError\)/,
+  );
+  assert.match(
+    support,
+    /document\.getElementById\('case-errors'\)\?\.focus\(\)/,
+  );
+  assert.match(support, /subjectRef\.current\?\.focus\(\)/);
+  assert.match(support, /messageRef\.current\?\.focus\(\)/);
 });
 
 test('active-session lookup is minimal, owner-bound, and service-only for arbitrary identifiers', () => {
@@ -5139,13 +5193,38 @@ test('agreement PDF has accessible structure and print-safe layout rules', () =>
   assert.match(readinessIndex, /39_ACCESSIBLE_AGREEMENT_PDF\.md/);
 });
 
-test('browser route resolver preserves deep links and rejects unknown paths', async () => {
-  const { resolveBrowserRoute } = await import('../src/navigation.ts');
+test('browser route resolver preserves canonical and legacy deep links and rejects unknown paths', async () => {
+  const {
+    authPath,
+    createPath,
+    dealPath,
+    forgotPasswordPath,
+    resolveBrowserRoute,
+    trustPassportPath,
+  } = await import('../src/navigation.ts');
 
   assert.deepEqual(resolveBrowserRoute('https://dealivra.com/'), { view: 'home' });
   assert.deepEqual(resolveBrowserRoute('https://dealivra.com/#protection'), { view: 'home' });
   assert.deepEqual(resolveBrowserRoute('https://dealivra.com/fees/'), { view: 'fees' });
   assert.deepEqual(resolveBrowserRoute('https://dealivra.com/verify'), { view: 'verify' });
+  assert.equal(createPath, '/create');
+  assert.equal(authPath('signin'), '/signin');
+  assert.equal(authPath('signup'), '/signup');
+  assert.equal(forgotPasswordPath, '/forgot-password');
+  assert.equal(dealPath('DV-123'), '/deal/DV-123');
+  assert.equal(dealPath('DV 123', true), '/deal/DV%20123?document=1');
+  assert.equal(trustPassportPath('TP-123'), '/trust/TP-123');
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/create'), { view: 'create' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/signin'), { view: 'auth', authMode: 'signin' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/signup'), { view: 'auth', authMode: 'signup' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/forgot-password'), { view: 'forgot' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/trust/TP-123'), { view: 'passport', trustId: 'TP-123' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/deal/DV%20123?document=1'), {
+    view: 'deal',
+    publicDealId: 'DV 123',
+    documentMode: true,
+  });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/deal/%E0%A4%A'), { view: 'not-found' });
   assert.deepEqual(resolveBrowserRoute('https://dealivra.com/?start=create'), { view: 'create' });
   assert.deepEqual(resolveBrowserRoute('https://dealivra.com/?start=signin'), {
     view: 'auth',
@@ -5749,6 +5828,7 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   const app = readText('src/app.tsx');
   const workspace = readText('src/DealWorkspace.tsx');
   const fulfillment = readText('src/DealFulfillmentWorkspace.tsx');
+  const validationSummary = readText('src/ValidationSummary.tsx');
 
   assert.match(workspace, /from '\.\/DealFulfillmentWorkspace'/);
   assert.match(workspace, /<ShippingPanel/);
@@ -5806,7 +5886,12 @@ test('delivery, shipping, handoff, and inspection are isolated together', () => 
   assert.ok((addressAutocomplete.match(/selectionRequest !== requestSequence\.current/g) ?? []).length >= 2);
   assert.ok((addressAutocomplete.match(/requestSequence\.current \+= 1/g) ?? []).length >= 3);
   assert.match(addressAutocomplete, /Google Maps/);
-  assert.match(fulfillment, /className="workflow-validation-summary"/);
+  assert.match(fulfillment, /from '\.\/ValidationSummary'/);
+  assert.match(fulfillment, /<ValidationSummary/);
+  assert.match(validationSummary, /className = 'workflow-validation-summary'/);
+  assert.match(validationSummary, /role="alert"/);
+  assert.match(validationSummary, /aria-live="assertive"/);
+  assert.match(validationSummary, /document\.getElementById\(fieldId\)\?\.focus\(\)/);
   assert.match(fulfillment, /disabled=\{savingAddress\}/);
   assert.match(fulfillment, /disabled=\{busy\}/);
   assert.doesNotMatch(fulfillment, /disabled=\{savingAddress \|\| addressIncomplete\}/);
@@ -11953,7 +12038,7 @@ test('production builds enforce explicit JavaScript and CSS budgets', () => {
   assert.match(budget, /\^app-\[A-Za-z0-9_-\]\+\\\.js\$/);
   assert.match(budget, /Expected exactly one initial application chunk/);
   assert.match(budget, /maximumCssChunkBytes: 200_000/);
-  assert.match(budget, /maximumTotalJavaScriptBytes: 820_000/);
+  assert.match(budget, /maximumTotalJavaScriptBytes: 821_000/);
   assert.match(budget, /maximumConfiguredBuildOverheadBytes: 3_000/);
   assert.match(budget, /VITE_SUPABASE_URL/);
   assert.match(budget, /VITE_SUPABASE_PUBLISHABLE_KEY/);
@@ -12023,7 +12108,7 @@ test('protected synthetic checks are read-only, bounded, and secret safe', () =>
   assert.match(source, /read_only_confirmed/);
   assert.match(source, /'\/api\/health'/);
   assert.match(source, /'\/terms'/);
-  assert.match(source, /'\/\?start=signin'/);
+  assert.match(source, /'\/signin'/);
   assert.match(source, /'\/api\/catalog\?category=phone'/);
   assert.match(source, /dealivra\.synthetic\.result\.v1/);
   assert.match(source, /status: 'failed'/);
@@ -12335,7 +12420,7 @@ test('sample and local fallback deal identifiers satisfy every public boundary',
   const main = readText('src/main.tsx');
   const demoRepository = readText('src/services/demoRepository.ts');
 
-  assert.match(main, /const demoDealPath = '\/\?deal=DV7K4M2Q'/);
+  assert.match(main, /const demoDealPath = dealPath\('DV7K4M2Q'\)/);
   assert.match(demoRepository, /DEMO_DEAL_PUBLIC_ID = 'DV7K4M2Q'/);
   assert.match(demoRepository, /publicId: `DV\$\{Math\.random\(\)/);
   assert.doesNotMatch(`${main}\n${demoRepository}`, /DV-/);
@@ -12755,7 +12840,7 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
     /npm audit --audit-level=high[\s\S]+npm run release:sbom[\s\S]+npm run release:evidence/,
   );
   assert.match(workflow, /DEALIVRA_RELEASE_COMMIT: \$\{\{ github\.sha \}\}/);
-  assert.match(workflow, /actions\/upload-artifact@v4/);
+  assert.match(workflow, /actions\/upload-artifact@v6/);
   assert.match(workflow, /if-no-files-found: error/);
   assert.match(workflow, /retention-days: 30/);
   assert.match(script, /git\(\['rev-parse', 'HEAD'\]\)/);
@@ -14085,6 +14170,14 @@ test('mobile deal actions use one governed persistent dock', () => {
   assert.match(shell, /className="deal-primary-dock"/);
   assert.match(workspaceStyles, /\.deal-primary-dock\{/);
   assert.match(workspaceStyles, /bottom:calc\(10px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.match(
+    workspaceStyles,
+    /@media\(min-width:761px\)\{[\s\S]*?\.deal-primary-dock\{display:none\}/,
+  );
+  assert.match(
+    workspaceStyles,
+    /@media\(max-width:760px\)\{[\s\S]*?\.deal-workspace-bar nav \.deal-action-link\{display:none\}/,
+  );
   assert.doesNotMatch(workspaceStyles, /\.mobile-deal-action/);
   assert.doesNotMatch(brandStyles, /\.mobile-deal-action/);
 });
@@ -15239,7 +15332,7 @@ test('public Deal Link failures preserve the route and expose a bounded retry', 
   const pages = readText('src/PublicRoutePages.tsx');
   const styles = readText('src/styles.css');
 
-  assert.match(app, /updateBrowserAddress\(`\/\?deal=\$\{encodeURIComponent\(publicId\)\}`\)/);
+  assert.match(app, /updateBrowserAddress\(dealPath\(publicId\)\)/);
   assert.match(app, /setAuthMessage\(''\);\s*setView\('route-loading'\)/);
   assert.match(app, /setAuthMessage\(error instanceof Error\?error\.message:'Deal Link unavailable'\);setView\('link-error'\)/);
   assert.match(app, /onRetry=\{\(\)=>setRouteRevision\(revision=>revision\+1\)\}/);

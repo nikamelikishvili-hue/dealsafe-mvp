@@ -26,6 +26,7 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
+import { ValidationSummary } from './ValidationSummary';
 import { SmartCatalogFields } from './SmartCatalogFields';
 import { currencyStep } from './currency';
 import type { DealDraft } from './domain';
@@ -389,34 +390,17 @@ function CreateValidationSummary({
   onSelect: (fieldId: string) => void;
 }) {
   return (
-    <section
+    <ValidationSummary
       id="create-validation-summary"
       className="create-validation-summary"
-      role="alert"
-      aria-labelledby="create-validation-title"
-      tabIndex={-1}
-    >
-      <span className="create-validation-icon">
-        <ShieldAlert aria-hidden="true" />
-      </span>
-      <div>
-        <p className="eyebrow">{t('Needs attention')}</p>
-        <h2 id="create-validation-title">
-          {t(errors.length === 1 ? 'Check 1 detail before continuing' : `Check ${errors.length} details before continuing`)}
-        </h2>
-        <p>{t('Choose an item below to jump directly to the field.')}</p>
-        <ul>
-          {errors.map(error => (
-            <li key={error.fieldId}>
-              <button type="button" onClick={() => onSelect(error.fieldId)}>
-                {t(error.message)}
-                <ArrowRight size={15} aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
+      title={errors.length === 1 ? 'Check 1 detail before continuing' : `Check ${errors.length} details before continuing`}
+      errors={errors}
+      eyebrow="Needs attention"
+      message="Choose an item below to jump directly to the field."
+      headingLevel={2}
+      icon={<ShieldAlert />}
+      onSelect={onSelect}
+    />
   );
 }
 
