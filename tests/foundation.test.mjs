@@ -14110,6 +14110,14 @@ test('mobile deal actions use one governed persistent dock', () => {
   assert.match(shell, /className="deal-primary-dock"/);
   assert.match(workspaceStyles, /\.deal-primary-dock\{/);
   assert.match(workspaceStyles, /bottom:calc\(10px \+ env\(safe-area-inset-bottom\)\)/);
+  assert.match(
+    workspaceStyles,
+    /@media\(min-width:761px\)\{[\s\S]*?\.deal-primary-dock\{display:none\}/,
+  );
+  assert.match(
+    workspaceStyles,
+    /@media\(max-width:760px\)\{[\s\S]*?\.deal-workspace-bar nav \.deal-action-link\{display:none\}/,
+  );
   assert.doesNotMatch(workspaceStyles, /\.mobile-deal-action/);
   assert.doesNotMatch(brandStyles, /\.mobile-deal-action/);
 });

@@ -5022,3 +5022,20 @@ promote Production, restore public access, or change a live Supabase resource.
   total-JavaScript ceiling moved from 820,000 to 821,000 bytes (0.122%) to
   accommodate the shared resolver; initial-app, per-chunk, CSS, and configured
   provider-overhead ceilings did not change.
+
+## 2026-08-18 — Single Deal Workspace action policy
+
+- Audited the Deal Workspace action hierarchy against UX-003 instead of
+  introducing another action surface. The role/state policy already selects one
+  next action for draft, published, accepted, delivery, completed, disputed,
+  cancelled, expired, signed-out, seller, and buyer states.
+- Confirmed that desktop exposes the action only in the sticky workspace bar,
+  while the mobile breakpoint hides that control and exposes the same action in
+  one safe-area persistent dock. The Deal progress card remains status-only and
+  cannot create a second competing call to action.
+- Added a release regression that locks the mutually exclusive desktop/mobile
+  visibility policy. Local route smoke also loaded the canonical home, account,
+  creation, recovery, Deal, and Trust paths without a framework error overlay.
+- Protected Preview role/state, keyboard, and mobile acceptance remains the
+  external UX-003 release gate. Production aliases, public access, live Supabase
+  resources, and real payments were not changed.
