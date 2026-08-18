@@ -12755,7 +12755,7 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
     /npm audit --audit-level=high[\s\S]+npm run release:sbom[\s\S]+npm run release:evidence/,
   );
   assert.match(workflow, /DEALIVRA_RELEASE_COMMIT: \$\{\{ github\.sha \}\}/);
-  assert.match(workflow, /actions\/upload-artifact@v4/);
+  assert.match(workflow, /actions\/upload-artifact@v6/);
   assert.match(workflow, /if-no-files-found: error/);
   assert.match(workflow, /retention-days: 30/);
   assert.match(script, /git\(\['rev-parse', 'HEAD'\]\)/);
