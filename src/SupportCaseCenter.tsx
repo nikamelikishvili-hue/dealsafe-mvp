@@ -22,6 +22,10 @@ import {
   type SupportCaseSummary,
 } from './services/supabaseRest';
 import { FieldError } from './FieldError';
+import {
+  ValidationSummary,
+  type ValidationSummaryItem,
+} from './ValidationSummary';
 
 const categoryOptions: Array<{
   value: SupportCaseCategory;
@@ -141,14 +145,20 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
     const normalizedMessage = message.trim();
     setSubjectError('');
     setMessageError('');
-    if (normalizedSubject.length < 5) {
-      setSubjectError('Enter a subject with at least 5 characters.');
-      window.requestAnimationFrame(() => subjectRef.current?.focus());
-      return;
-    }
-    if (normalizedMessage.length < 10) {
-      setMessageError('Enter a message with at least 10 characters.');
-      window.requestAnimationFrame(() => messageRef.current?.focus());
+    const nextSubjectError =
+      normalizedSubject.length < 5
+        ? 'Enter a subject with at least 5 characters.'
+        : '';
+    const nextMessageError =
+      normalizedMessage.length < 10
+        ? 'Enter a message with at least 10 characters.'
+        : '';
+    if (nextSubjectError || nextMessageError) {
+      setSubjectError(nextSubjectError);
+      setMessageError(nextMessageError);
+      window.requestAnimationFrame(() =>
+        document.getElementById('case-errors')?.focus(),
+      );
       return;
     }
     savingRef.current = true;
@@ -243,6 +253,14 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
 
   const activeCase =
     selected && !['resolved', 'closed'].includes(selected.status);
+  const caseValidationErrors: ValidationSummaryItem[] = [
+    ...(subjectError
+      ? [{ fieldId: 'case-subject', message: subjectError }]
+      : []),
+    ...(messageError
+      ? [{ fieldId: 'case-message', message: messageError }]
+      : []),
+  ];
 
   return (
     <section className="support-case-center no-print" aria-labelledby="support-title">
@@ -292,7 +310,7 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
       ) : null}
 
       {creating ? (
-        <form className="support-case-form" onSubmit={submitCase}>
+        <form className="support-case-form" onSubmit={submitCase} noValidate>
           <div className="support-form-title">
             <div>
               <p className="eyebrow">{t('New case')}</p>
@@ -312,6 +330,17 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
               <X aria-hidden="true" />
             </button>
           </div>
+          {caseValidationErrors.length ? (
+            <ValidationSummary
+              id="case-errors"
+              title="Check case details"
+              errors={caseValidationErrors}
+              onSelect={fieldId => {
+                if (fieldId === 'case-subject') subjectRef.current?.focus();
+                if (fieldId === 'case-message') messageRef.current?.focus();
+              }}
+            />
+          ) : null}
           <div className="support-form-grid">
             <label>
               {t('Category')}
@@ -330,6 +359,7 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
             <label>
               {t('Subject')}
               <input
+                id="case-subject"
                 ref={subjectRef}
                 required
                 minLength={5}
@@ -349,6 +379,7 @@ export function SupportCaseCenter({ session }: { session: StoredSession }) {
           <label>
             {t('Message')}
             <textarea
+              id="case-message"
               ref={messageRef}
               required
               minLength={10}

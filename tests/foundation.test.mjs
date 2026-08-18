@@ -4373,6 +4373,28 @@ test('release snapshot names the current consolidated no-go evidence', () => {
   assert.doesNotMatch(snapshot, /Only 297 bytes/);
 });
 
+test('support case validation reports every invalid field and restores direct focus', () => {
+  const support = readText('src/SupportCaseCenter.tsx');
+
+  assert.match(support, /<form className="support-case-form" onSubmit=\{submitCase\} noValidate>/);
+  assert.match(support, /id="case-errors"/);
+  assert.match(support, /title="Check case details"/);
+  assert.match(support, /fieldId: 'case-subject'/);
+  assert.match(support, /fieldId: 'case-message'/);
+  assert.match(support, /id="case-subject"/);
+  assert.match(support, /id="case-message"/);
+  assert.match(
+    support,
+    /setSubjectError\(nextSubjectError\);[\s\S]*setMessageError\(nextMessageError\)/,
+  );
+  assert.match(
+    support,
+    /document\.getElementById\('case-errors'\)\?\.focus\(\)/,
+  );
+  assert.match(support, /subjectRef\.current\?\.focus\(\)/);
+  assert.match(support, /messageRef\.current\?\.focus\(\)/);
+});
+
 test('active-session lookup is minimal, owner-bound, and service-only for arbitrary identifiers', () => {
   const validation = readText('supabase/active_session_validation.sql');
 

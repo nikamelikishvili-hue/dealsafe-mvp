@@ -5091,3 +5091,16 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   superseded PR `#181`, test counts, or bundle measurements.
 - No Production alias, public access, live Supabase resource, customer record,
   or real-payment configuration changed.
+
+# 2026-08-18 — Accessible support-case validation summary
+
+- Replaced first-error-only support intake validation with one complete summary
+  that announces every invalid field after a submit attempt.
+- Kept the existing inline errors while making each summary action restore
+  keyboard focus directly to the corresponding subject or message field.
+- Disabled native form interception for this governed form so the shared
+  validation path remains consistent across browsers and assistive technology.
+- Added a repository regression contract for full-error collection, summary
+  focus, stable field identifiers, and direct field-focus recovery.
+- No support record, Supabase resource, deployment, public-access setting,
+  customer data, or real-payment capability changed.
