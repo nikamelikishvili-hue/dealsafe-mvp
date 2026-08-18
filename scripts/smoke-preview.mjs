@@ -73,7 +73,7 @@ try {
   await waitForPreview();
   const home = await expectApplicationPage('/');
   await expectApplicationPage('/terms');
-  await expectApplicationPage('/?start=signin');
+  await expectApplicationPage('/signin');
 
   const localOrigin = normalizeDeploymentOrigin(
     origin,

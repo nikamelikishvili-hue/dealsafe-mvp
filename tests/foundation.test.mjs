@@ -3804,7 +3804,7 @@ test('verification includes a production-preview navigation smoke test', () => {
   assert.match(packageJson.scripts.verify, /npm run smoke:preview/);
   assert.equal(packageJson.scripts['smoke:preview'], 'node scripts/smoke-preview.mjs');
   assert.match(smokeTest, /expectApplicationPage\('\/terms'\)/);
-  assert.match(smokeTest, /expectApplicationPage\('\/\?start=signin'\)/);
+  assert.match(smokeTest, /expectApplicationPage\('\/signin'\)/);
   assert.match(smokeTest, /serviceWorkerResponse/);
 });
 
@@ -5139,13 +5139,38 @@ test('agreement PDF has accessible structure and print-safe layout rules', () =>
   assert.match(readinessIndex, /39_ACCESSIBLE_AGREEMENT_PDF\.md/);
 });
 
-test('browser route resolver preserves deep links and rejects unknown paths', async () => {
-  const { resolveBrowserRoute } = await import('../src/navigation.ts');
+test('browser route resolver preserves canonical and legacy deep links and rejects unknown paths', async () => {
+  const {
+    authPath,
+    createPath,
+    dealPath,
+    forgotPasswordPath,
+    resolveBrowserRoute,
+    trustPassportPath,
+  } = await import('../src/navigation.ts');
 
   assert.deepEqual(resolveBrowserRoute('https://dealivra.com/'), { view: 'home' });
   assert.deepEqual(resolveBrowserRoute('https://dealivra.com/#protection'), { view: 'home' });
   assert.deepEqual(resolveBrowserRoute('https://dealivra.com/fees/'), { view: 'fees' });
   assert.deepEqual(resolveBrowserRoute('https://dealivra.com/verify'), { view: 'verify' });
+  assert.equal(createPath, '/create');
+  assert.equal(authPath('signin'), '/signin');
+  assert.equal(authPath('signup'), '/signup');
+  assert.equal(forgotPasswordPath, '/forgot-password');
+  assert.equal(dealPath('DV-123'), '/deal/DV-123');
+  assert.equal(dealPath('DV 123', true), '/deal/DV%20123?document=1');
+  assert.equal(trustPassportPath('TP-123'), '/trust/TP-123');
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/create'), { view: 'create' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/signin'), { view: 'auth', authMode: 'signin' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/signup'), { view: 'auth', authMode: 'signup' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/forgot-password'), { view: 'forgot' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/trust/TP-123'), { view: 'passport', trustId: 'TP-123' });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/deal/DV%20123?document=1'), {
+    view: 'deal',
+    publicDealId: 'DV 123',
+    documentMode: true,
+  });
+  assert.deepEqual(resolveBrowserRoute('https://dealivra.com/deal/%E0%A4%A'), { view: 'not-found' });
   assert.deepEqual(resolveBrowserRoute('https://dealivra.com/?start=create'), { view: 'create' });
   assert.deepEqual(resolveBrowserRoute('https://dealivra.com/?start=signin'), {
     view: 'auth',
@@ -11953,7 +11978,7 @@ test('production builds enforce explicit JavaScript and CSS budgets', () => {
   assert.match(budget, /\^app-\[A-Za-z0-9_-\]\+\\\.js\$/);
   assert.match(budget, /Expected exactly one initial application chunk/);
   assert.match(budget, /maximumCssChunkBytes: 200_000/);
-  assert.match(budget, /maximumTotalJavaScriptBytes: 820_000/);
+  assert.match(budget, /maximumTotalJavaScriptBytes: 821_000/);
   assert.match(budget, /maximumConfiguredBuildOverheadBytes: 3_000/);
   assert.match(budget, /VITE_SUPABASE_URL/);
   assert.match(budget, /VITE_SUPABASE_PUBLISHABLE_KEY/);
@@ -12023,7 +12048,7 @@ test('protected synthetic checks are read-only, bounded, and secret safe', () =>
   assert.match(source, /read_only_confirmed/);
   assert.match(source, /'\/api\/health'/);
   assert.match(source, /'\/terms'/);
-  assert.match(source, /'\/\?start=signin'/);
+  assert.match(source, /'\/signin'/);
   assert.match(source, /'\/api\/catalog\?category=phone'/);
   assert.match(source, /dealivra\.synthetic\.result\.v1/);
   assert.match(source, /status: 'failed'/);
@@ -12335,7 +12360,7 @@ test('sample and local fallback deal identifiers satisfy every public boundary',
   const main = readText('src/main.tsx');
   const demoRepository = readText('src/services/demoRepository.ts');
 
-  assert.match(main, /const demoDealPath = '\/\?deal=DV7K4M2Q'/);
+  assert.match(main, /const demoDealPath = dealPath\('DV7K4M2Q'\)/);
   assert.match(demoRepository, /DEMO_DEAL_PUBLIC_ID = 'DV7K4M2Q'/);
   assert.match(demoRepository, /publicId: `DV\$\{Math\.random\(\)/);
   assert.doesNotMatch(`${main}\n${demoRepository}`, /DV-/);
@@ -15239,7 +15264,7 @@ test('public Deal Link failures preserve the route and expose a bounded retry', 
   const pages = readText('src/PublicRoutePages.tsx');
   const styles = readText('src/styles.css');
 
-  assert.match(app, /updateBrowserAddress\(`\/\?deal=\$\{encodeURIComponent\(publicId\)\}`\)/);
+  assert.match(app, /updateBrowserAddress\(dealPath\(publicId\)\)/);
   assert.match(app, /setAuthMessage\(''\);\s*setView\('route-loading'\)/);
   assert.match(app, /setAuthMessage\(error instanceof Error\?error\.message:'Deal Link unavailable'\);setView\('link-error'\)/);
   assert.match(app, /onRetry=\{\(\)=>setRouteRevision\(revision=>revision\+1\)\}/);

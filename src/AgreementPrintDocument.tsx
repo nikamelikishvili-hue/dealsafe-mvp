@@ -13,13 +13,14 @@ import { useStoredAgreementDocument } from './AgreementRecordSummary';
 import { formatMoney } from './currency';
 import type { Deal } from './domain';
 import { getAppLanguage, t } from './i18n';
+import { dealPath } from './navigation';
 
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString(getAppLanguage());
 
 export function AgreementPrintDocument({ deal }: { deal: Deal }) {
   const { record, loading, error } = useStoredAgreementDocument(deal);
-  const link = `${location.origin}/?deal=${deal.publicId}`;
+  const link = `${location.origin}${dealPath(deal.publicId)}`;
 
   if (!record) {
     return (
@@ -33,7 +34,7 @@ export function AgreementPrintDocument({ deal }: { deal: Deal }) {
             type="button"
             className="secondary"
             onClick={() => {
-              location.href = `/?deal=${deal.publicId}`;
+              location.href = dealPath(deal.publicId);
             }}
           >
             ← {t('Back to deal')}
@@ -130,7 +131,7 @@ export function AgreementPrintDocument({ deal }: { deal: Deal }) {
           type="button"
           className="secondary"
           onClick={() => {
-            location.href = `/?deal=${deal.publicId}`;
+            location.href = dealPath(deal.publicId);
           }}
         >
           ← {t('Back to deal')}

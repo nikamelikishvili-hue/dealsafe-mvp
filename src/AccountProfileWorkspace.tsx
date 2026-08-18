@@ -16,6 +16,7 @@ import { copyTextToClipboard } from './clipboard';
 import { FieldError } from './FieldError';
 import { supportCasesEnabled } from './featureFlags';
 import { getAppLanguage, t } from './i18n';
+import { trustPassportPath } from './navigation';
 import { SupportCaseCenter } from './SupportCaseCenter';
 import {
   getTrustPassportSettings,
@@ -349,7 +350,7 @@ function TrustPassportControls({ session }: { session: StoredSession }) {
     };
   }, [session.user.id, session.accessToken]);
 
-  const publicUrl = settings ? `${location.origin}/?trust=${settings.public_id}` : '';
+  const publicUrl = settings ? `${location.origin}${trustPassportPath(settings.public_id)}` : '';
 
   const toggle = async () => {
     if (!settings || savingRef.current) return;

@@ -9,6 +9,13 @@ export const publicInfoPaths = {
 
 export type PublicInfoView = keyof typeof publicInfoPaths;
 export const verifyPath = '/verify';
+export const createPath = '/create';
+export const forgotPasswordPath = '/forgot-password';
+export const authPath = (mode: 'signin' | 'signup') => `/${mode}`;
+export const dealPath = (publicId: string, documentMode = false) =>
+  `/deal/${encodeURIComponent(publicId)}${documentMode ? '?document=1' : ''}`;
+export const trustPassportPath = (publicId: string) =>
+  `/trust/${encodeURIComponent(publicId)}`;
 
 export type BrowserRouteView =
   | 'home'
@@ -46,6 +53,33 @@ export function resolveBrowserRoute(input: string | URL): BrowserRoute {
     ? recoveryParams.get('access_token') || ''
     : '';
   if (recoveryToken) return { view: 'reset', recoveryToken };
+
+  if (pathname === createPath) return { view: 'create' };
+  if (pathname === forgotPasswordPath) return { view: 'forgot' };
+  if (pathname === authPath('signin')) return { view: 'auth', authMode: 'signin' };
+  if (pathname === authPath('signup')) return { view: 'auth', authMode: 'signup' };
+
+  const dealMatch = pathname.match(/^\/deal\/(.+)$/);
+  if (dealMatch) {
+    try {
+      return {
+        view: 'deal',
+        publicDealId: decodeURIComponent(dealMatch[1]),
+        documentMode: url.searchParams.get('document') === '1',
+      };
+    } catch {
+      return { view: 'not-found' };
+    }
+  }
+
+  const trustMatch = pathname.match(/^\/trust\/(.+)$/);
+  if (trustMatch) {
+    try {
+      return { view: 'passport', trustId: decodeURIComponent(trustMatch[1]) };
+    } catch {
+      return { view: 'not-found' };
+    }
+  }
 
   if (pathname === '/') {
     const trustId = url.searchParams.get('trust')?.trim();

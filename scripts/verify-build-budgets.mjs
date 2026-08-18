@@ -9,7 +9,11 @@ const budgets = Object.freeze({
   maximumCssChunkBytes: 200_000,
   // QR rendering stays behind the same-origin server boundary so the reviewed
   // launch graph retains meaningful headroom as critical UI evolves.
-  maximumTotalJavaScriptBytes: 820_000,
+  // Canonical refresh-safe customer routes add a single bounded resolver and
+  // replace query-only links throughout the application. The reviewed local
+  // build is 820,601 bytes, so the ceiling advances by exactly 1,000 bytes
+  // while preserving less than 0.13% growth and no chunk-budget increase.
+  maximumTotalJavaScriptBytes: 821_000,
   // Configured Preview/Production builds retain small provider branches that
   // Vite removes from an unconfigured local build. Keep that variance bounded
   // independently instead of silently weakening the base application budget.

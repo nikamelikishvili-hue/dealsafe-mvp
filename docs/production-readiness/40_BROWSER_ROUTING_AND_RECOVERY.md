@@ -1,6 +1,6 @@
 # Browser routing and recovery
 
-Status: implemented locally for review on 2026-07-29. This document does not
+Status: canonical customer routes implemented locally for review on 2026-08-18. This document does not
 authorize a Preview or Production deployment.
 
 ## Objective
@@ -19,10 +19,9 @@ ARC-002 requires Dealivra URLs to behave predictably when a customer:
 `src/navigation.ts` is the single browser-route resolver. It recognizes:
 
 - `/` and public landing-page sections;
-- `/?start=create`, `/?start=signin`, `/?start=signup`, and
-  `/?start=forgot`;
-- `/?deal=<public-id>` and agreement document mode;
-- `/?trust=<public-id>`;
+- `/create`, `/signin`, `/signup`, and `/forgot-password`;
+- `/deal/<public-id>` and agreement document mode through `?document=1`;
+- `/trust/<public-id>`;
 - Supabase recovery fragments containing a recovery access token;
 - `/verify`;
 - the six public protection, fee, dispute, terms, and privacy paths; and
@@ -30,8 +29,10 @@ ARC-002 requires Dealivra URLs to behave predictably when a customer:
 
 Recovery tokens take precedence and are never placed into titles, metadata,
 visible errors, or logs. Deal and trust identifiers are accepted only on the
-root application path, so an unknown path cannot silently become a valid deal
-page because it also contains a query parameter.
+matching canonical path. The earlier root-query forms (`/?start=...`,
+`/?deal=...`, and `/?trust=...`) remain accepted only as migration-compatible
+deep links. An unknown path cannot silently become a valid Deal page because it
+also contains a query parameter.
 
 ## History and asynchronous safety
 
@@ -81,8 +82,8 @@ Protected Preview browser evidence must still prove:
 
 ## Remaining architecture boundary
 
-The current Vite single-page application rewrites non-API paths to
-`index.html`. The customer receives the correct visible 404 and no-index
+The current Vite single-page application rewrites non-API paths, including the
+canonical customer routes, to `index.html`. The customer receives the correct visible 404 and no-index
 metadata, but the edge response remains HTTP 200. A target framework with
 server-aware routes must return an actual HTTP 404 before ARC-002 can be marked
 fully complete. Protected account records also still require authenticated,

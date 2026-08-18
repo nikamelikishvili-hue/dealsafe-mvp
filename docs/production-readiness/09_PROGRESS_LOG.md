@@ -5004,3 +5004,21 @@ promote Production, restore public access, or change a live Supabase resource.
   staging identity and configuration are absent.
 - Production aliases, public access, live Supabase resources, real payments,
   and privileged enforcement were not changed.
+
+## 2026-08-18 — Canonical customer routes
+
+- Added stable `/create`, `/signin`, `/signup`, `/forgot-password`,
+  `/deal/<public-id>`, and `/trust/<public-id>` routes through the single browser
+  resolver.
+- Updated application navigation, Deal sharing, agreement-document links,
+  trust-passport links, protected synthetic checks, and Preview smoke coverage
+  to emit the canonical paths.
+- Retained the former root-query URLs as migration-compatible inbound links so
+  previously shared Deal and recovery links do not break.
+- Added malformed-identifier rejection and canonical/legacy resolver coverage.
+  Production aliases, public access, live Supabase resources, and real payments
+  were not changed.
+- Measured the unconfigured production build at 820,601 JavaScript bytes. The
+  total-JavaScript ceiling moved from 820,000 to 821,000 bytes (0.122%) to
+  accommodate the shared resolver; initial-app, per-chunk, CSS, and configured
+  provider-overhead ceilings did not change.

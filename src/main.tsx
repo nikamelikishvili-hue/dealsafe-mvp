@@ -2,7 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { PublicLanding, type LandingDestination } from './PublicLanding';
 import { initializeI18n } from './i18n';
-import { publicInfoPaths, verifyPath } from './navigation';
+import { authPath, createPath, dealPath, publicInfoPaths, verifyPath } from './navigation';
 import { AppErrorBoundary, ApplicationFailurePage } from './AppErrorBoundary';
 import { reportClientFailure } from './services/clientFailureReporter.ts';
 import { startWebVitalMonitoring } from './services/webVitalReporter.ts';
@@ -14,7 +14,7 @@ import './workspace-redesign.css';
 import './verification-polish.css';
 import './dealivra-brand.css';
 
-const demoDealPath = '/?deal=DV7K4M2Q';
+const demoDealPath = dealPath('DV7K4M2Q');
 
 const analyticsHost = location.hostname === 'dealivra.com'
   || location.hostname === 'www.dealivra.com'
@@ -37,8 +37,10 @@ const destinationPath: Record<Exclude<LandingDestination, 'create' | 'signin' | 
 const loadFullApp = async (destination?: LandingDestination) => {
   if (destination === 'demo') {
     history.pushState({}, '', demoDealPath);
-  } else if (destination === 'create' || destination === 'signin' || destination === 'signup') {
-    history.pushState({}, '', `/?start=${destination}`);
+  } else if (destination === 'create') {
+    history.pushState({}, '', createPath);
+  } else if (destination === 'signin' || destination === 'signup') {
+    history.pushState({}, '', authPath(destination));
   } else if (destination) {
     history.pushState({}, '', destinationPath[destination]);
   }

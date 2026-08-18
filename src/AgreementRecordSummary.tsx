@@ -15,6 +15,7 @@ import { formatMoney } from './currency';
 import { copyTextToClipboard } from './clipboard';
 import type { Deal } from './domain';
 import { getAppLanguage, t } from './i18n';
+import { dealPath } from './navigation';
 import { DEMO_DEAL_PUBLIC_ID } from './services/demoRepository';
 import {
   getPublicAgreementDocument,
@@ -69,7 +70,7 @@ export function AgreementExport({ deal }: { deal: Deal }) {
   const [message, setMessage] = useState('');
   const [messageFailed, setMessageFailed] = useState(false);
   const { record, loading, error } = useStoredAgreementDocument(deal);
-  const url = `${location.origin}/?deal=${deal.publicId}`;
+  const url = `${location.origin}${dealPath(deal.publicId)}`;
 
   const share = async () => {
     setMessage('');
@@ -98,7 +99,7 @@ export function AgreementExport({ deal }: { deal: Deal }) {
     setMessage('');
     setMessageFailed(false);
     const popup = window.open(
-      `${url}&document=1`,
+      `${location.origin}${dealPath(deal.publicId, true)}`,
       '_blank',
     );
     if (!popup) {
