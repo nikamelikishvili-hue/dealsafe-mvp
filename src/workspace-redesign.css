@@ -573,6 +573,7 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .create-validation-summary li button{width:100%;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 11px;border:1px solid #edccc6;border-radius:10px;color:#713932;background:rgba(255,255,255,.78);font:700 11px/1.4 Manrope,sans-serif;text-align:left}
 .create-validation-summary li button:hover{border-color:#dca096;background:#fff}
 .create-validation-summary li button:focus-visible{outline:3px solid rgba(190,70,52,.2);outline-offset:2px}
+.create-validation-summary li button::after{content:'→';font-size:15px;line-height:1}
 .create-validation-summary li svg{width:15px;flex:none}
 .create-step-card [aria-invalid="true"]{border-color:#c45d50!important;background:#fff9f7!important;box-shadow:0 0 0 3px rgba(196,93,80,.1)!important}
 .create-step-card .field-help.invalid{color:#a23e33;font-weight:750}
