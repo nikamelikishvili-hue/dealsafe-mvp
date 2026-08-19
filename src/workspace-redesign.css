@@ -509,35 +509,35 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   padding:9px 10px;
   border:0;
   border-radius:12px;
-  color:#61758b;
+  color:var(--color-ink-600);
   background:transparent;
   text-align:left;
   cursor:pointer;
 }
 .create-flow-progress button:disabled{opacity:.48;cursor:not-allowed}
-.create-flow-progress button:not(:disabled):hover{background:#f3f7fb}
-.create-flow-progress button.is-current{color:#17499e;background:#edf4ff;box-shadow:inset 0 0 0 1px #b7cefb}
-.create-flow-progress button.is-complete{color:#1d6a51;background:#f1f8f5}
+.create-flow-progress button:not(:disabled):hover{background:var(--color-surface-subtle)}
+.create-flow-progress button.is-current{color:var(--color-info-800);background:var(--color-info-100);box-shadow:inset 0 0 0 1px var(--color-info-border)}
+.create-flow-progress button.is-complete{color:var(--color-success-700);background:var(--color-success-100)}
 .create-flow-step-icon{
   width:36px;
   height:36px;
   display:grid;
   place-items:center;
-  border:1px solid #d7e1ec;
+  border:1px solid var(--color-border-default);
   border-radius:11px;
-  color:#60768f;
-  background:#fff;
+  color:var(--color-ink-600);
+  background:var(--color-surface-card);
 }
 .create-flow-step-icon svg{width:17px}
-.create-flow-progress .is-current .create-flow-step-icon{border-color:#4a74df;color:#fff;background:#4a74df;box-shadow:0 7px 16px rgba(64,104,208,.22)}
-.create-flow-progress .is-complete .create-flow-step-icon{border-color:#b9ddce;color:#1d6a51;background:#fff}
+.create-flow-progress .is-current .create-flow-step-icon{border-color:var(--color-brand-700);color:var(--color-surface-card);background:var(--color-brand-700);box-shadow:var(--shadow-action)}
+.create-flow-progress .is-complete .create-flow-step-icon{border-color:var(--color-success-border);color:var(--color-success-700);background:var(--color-surface-card)}
 .create-flow-progress button>span:last-child{min-width:0}
 .create-flow-progress small,.create-flow-progress strong,.create-flow-progress em{display:block}
 .create-flow-progress small{color:inherit;font-size:8px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
-.create-flow-progress strong{overflow:hidden;margin-top:2px;color:#233c58;font:800 13px/1.25 Manrope,sans-serif;text-overflow:ellipsis;white-space:nowrap}
-.create-flow-progress em{overflow:hidden;margin-top:2px;color:#7b8c9f;font-size:9px;font-style:normal;text-overflow:ellipsis;white-space:nowrap}
-.create-flow-progress .is-current strong{color:#17499e}
-.create-flow-progress .is-complete strong{color:#1d6a51}
+.create-flow-progress strong{overflow:hidden;margin-top:2px;color:var(--color-ink-900);font:800 13px/1.25 Manrope,sans-serif;text-overflow:ellipsis;white-space:nowrap}
+.create-flow-progress em{overflow:hidden;margin-top:2px;color:var(--color-ink-600);font-size:9px;font-style:normal;text-overflow:ellipsis;white-space:nowrap}
+.create-flow-progress .is-current strong{color:var(--color-info-800)}
+.create-flow-progress .is-complete strong{color:var(--color-success-700)}
 .create-flow-heading{
   display:block;
   height:auto;

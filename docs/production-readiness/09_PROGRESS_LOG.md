@@ -5129,3 +5129,15 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   fixed release bundle budget.
 - No Production alias, public access, hosted configuration, live Supabase
   resource, customer record, or real-payment capability changed.
+
+# 2026-08-18 — Governed Deal-creation progress colors
+
+- Migrated the persistent New Deal progress control, its default state, current
+  state, completed state, labels, icons, borders, surfaces, and action shadow
+  onto the shared semantic design tokens.
+- Extended the release regression contract to prevent the creation journey from
+  drifting back to feature-owned status colors.
+- Kept the application change CSS-only, with no new customer capability or
+  JavaScript execution path.
+- No Production alias, public access, hosted configuration, live Supabase
+  resource, customer record, or real-payment capability changed.

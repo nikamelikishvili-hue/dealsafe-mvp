@@ -15103,6 +15103,9 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(workspaceStyles, /\.auth-journey \.is-current\{[^}]*border-color:var\(--color-info-border\)[^}]*color:var\(--color-info-800\)[^}]*background:var\(--color-info-100\)/);
   assert.match(workspaceStyles, /\.auth-journey \.is-complete\{[^}]*border-color:var\(--color-success-border\)[^}]*background:var\(--color-success-100\)/);
   assert.match(workspaceStyles, /\.policy-consent a\{color:var\(--color-brand-700\)/);
+  assert.match(workspaceStyles, /\.create-flow-progress button\.is-current\{[^}]*color:var\(--color-info-800\)[^}]*background:var\(--color-info-100\)[^}]*var\(--color-info-border\)/);
+  assert.match(workspaceStyles, /\.create-flow-progress button\.is-complete\{[^}]*color:var\(--color-success-700\)[^}]*background:var\(--color-success-100\)/);
+  assert.match(workspaceStyles, /\.create-flow-progress \.is-current \.create-flow-step-icon\{[^}]*background:var\(--color-brand-700\)[^}]*box-shadow:var\(--shadow-action\)/);
   assert.doesNotMatch(`${fieldErrorStyles}\n${asyncStateStyles}`, /var\(--ds-(?:error|info|border|ink-muted|surface-subtle)/);
   assert.match(tokens, /:focus-visible/);
   assert.match(tokens, /@media \(forced-colors: active\)/);
