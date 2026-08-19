@@ -391,18 +391,18 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
   align-items:center;
   gap:9px;
   padding:10px 12px;
-  border:1px solid #dce5ef;
+  border:1px solid var(--color-border-default);
   border-radius:12px;
-  color:#8290a0;
-  background:#f7f9fc;
+  color:var(--color-ink-600);
+  background:var(--color-surface-subtle);
 }
-.deal-progress-strip li>span{width:27px;height:27px;display:grid;flex:none;place-items:center;border-radius:9px;background:#e8edf3}
+.deal-progress-strip li>span{width:27px;height:27px;display:grid;flex:none;place-items:center;border-radius:9px;background:var(--color-border-default)}
 .deal-progress-strip li svg{width:14px;height:14px}
 .deal-progress-strip li small{overflow:hidden;font-size:11px;font-weight:800;text-overflow:ellipsis;white-space:nowrap}
-.deal-progress-strip li.current{border-color:#9bc4fa;color:#175fbf;background:#edf5ff;box-shadow:0 8px 20px rgba(31,106,208,.08)}
-.deal-progress-strip li.current>span{color:#fff;background:#1f73df}
-.deal-progress-strip li.complete{border-color:#cde5d8;color:#18704f;background:#edf8f2}
-.deal-progress-strip li.complete>span{color:#fff;background:#18845c}
+.deal-progress-strip li.current{border-color:var(--color-info-border);color:var(--color-info-800);background:var(--color-info-100);box-shadow:var(--shadow-action)}
+.deal-progress-strip li.current>span{color:var(--color-surface-card);background:var(--color-brand-700)}
+.deal-progress-strip li.complete{border-color:var(--color-success-border);color:var(--color-success-700);background:var(--color-success-100)}
+.deal-progress-strip li.complete>span{color:var(--color-surface-card);background:var(--color-success-700)}
 
 .deal-workspace-sections{
   order:-90;

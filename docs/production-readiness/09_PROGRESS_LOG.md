@@ -5141,3 +5141,15 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   JavaScript execution path.
 - No Production alias, public access, hosted configuration, live Supabase
   resource, customer record, or real-payment capability changed.
+
+# 2026-08-18 — Governed Deal Workspace progress colors
+
+- Aligned pending, current, and completed Deal Workspace milestones with the
+  same semantic border, surface, ink, information, success, brand, and action
+  shadow tokens used by the account and creation journeys.
+- Extended the repository regression contract so the core transaction timeline
+  cannot silently return to an independent status palette.
+- Kept the application change CSS-only and left all transaction state and role
+  policy behavior unchanged.
+- No Production alias, public access, hosted configuration, live Supabase
+  resource, customer record, or real-payment capability changed.
