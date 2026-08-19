@@ -12038,7 +12038,7 @@ test('production builds enforce explicit JavaScript and CSS budgets', () => {
   assert.match(budget, /\^app-\[A-Za-z0-9_-\]\+\\\.js\$/);
   assert.match(budget, /Expected exactly one initial application chunk/);
   assert.match(budget, /maximumCssChunkBytes: 200_000/);
-  assert.match(budget, /maximumTotalJavaScriptBytes: 821_000/);
+  assert.match(budget, /maximumTotalJavaScriptBytes: 822_000/);
   assert.match(budget, /maximumConfiguredBuildOverheadBytes: 3_000/);
   assert.match(budget, /VITE_SUPABASE_URL/);
   assert.match(budget, /VITE_SUPABASE_PUBLISHABLE_KEY/);
@@ -12445,16 +12445,23 @@ test('MFA removal can be cancelled by keyboard and restores the initiating contr
   assert.match(accountMfa, /window\.requestAnimationFrame\(\(\)=>removalTriggerRef\.current\?\.focus\(\)\)/);
 });
 
-test('account password changes expose field-specific validation and deterministic focus', () => {
+test('account password changes expose complete linked validation and deterministic summary focus', () => {
   const accountProfile = readText('src/AccountProfileWorkspace.tsx');
 
+  assert.match(accountProfile, /<ValidationSummary[\s\S]*id="account-password-validation-summary"/);
+  assert.match(accountProfile, /fieldId: 'account-current-password'/);
+  assert.match(accountProfile, /fieldId: 'account-new-password'/);
+  assert.match(accountProfile, /fieldId: 'account-confirm-password'/);
+  assert.match(accountProfile, /id="account-current-password"/);
+  assert.match(accountProfile, /<FieldError id="account-current-password-error">/);
   assert.match(accountProfile, /<FieldError id="account-password-error">/);
   assert.match(accountProfile, /<FieldError id="account-confirm-password-error">/);
   assert.match(accountProfile, /aria-describedby=\{passwordError \? 'account-password-requirements account-password-error'/);
   assert.match(accountProfile, /aria-describedby=\{confirmPasswordError \? 'account-password-requirements account-confirm-password-error'/);
-  assert.match(accountProfile, /New password'[\s\S]*?<input\s+ref=\{passwordRef\}/);
-  assert.match(accountProfile, /passwordRef\.current\?\.focus\(\)/);
-  assert.match(accountProfile, /confirmPasswordRef\.current\?\.focus\(\)/);
+  assert.match(accountProfile, /setPasswordValidationErrors\(nextErrors\)/);
+  assert.match(accountProfile, /if \(nextErrors\.length\)/);
+  assert.match(accountProfile, /getElementById\('account-password-validation-summary'\)\?\.focus\(\)/);
+  assert.match(accountProfile, /<form onSubmit=\{savePassword\} aria-busy=\{savingPassword\} noValidate>/);
 });
 
 test('account display names reject whitespace and expose field-specific recovery', () => {
@@ -15180,7 +15187,8 @@ test('account, support, and safety forms keep native validation actions availabl
   const resolution = readText('src/DealResolutionWorkspace.tsx');
 
   assert.match(account, /id="account-confirm-password"/);
-  assert.match(account, /confirmPasswordRef\.current\?\.focus\(\)/);
+  assert.match(account, /id="account-password-validation-summary"/);
+  assert.match(account, /fieldId: 'account-confirm-password'/);
   assert.doesNotMatch(account, /savingPassword \|\| !currentPassword/);
   assert.doesNotMatch(entry, /submitting \|\| \(isSignup && !acceptedPolicies\)/);
   assert.doesNotMatch(support, /saving \|\| reply\.trim\(\)\.length < 10/);

@@ -17,6 +17,7 @@ const { AccountEntryPage, ForgotPasswordEntry, recoveryValidationErrors, signupV
   '../../src/AccountEntryPages'
 );
 const { AddressAutocomplete } = await import('../../src/AddressAutocomplete');
+const { accountPasswordValidationErrors } = await import('../../src/AccountProfileWorkspace');
 const { formatCsvCell } = await import('../../src/AdministrationWorkspace');
 const { BrandLogo } = await import('../../src/BrandLogo');
 const { FeedbackMessage } = await import('../../src/FeedbackMessage');
@@ -257,6 +258,21 @@ test('password recovery reports strength and confirmation failures together', ()
     { fieldId: 'recovery-confirm-password', message: 'Passwords differ.' },
   ]);
   assert.deepEqual(recoveryValidationErrors('Strong-password-123!', 'Strong-password-123!'), []);
+});
+
+test('account password changes report every incomplete field in form order', () => {
+  assert.deepEqual(accountPasswordValidationErrors('', 'short', ''), [
+    { fieldId: 'account-current-password', message: 'Enter your current password.' },
+    {
+      fieldId: 'account-new-password',
+      message: 'Use 12+ characters with uppercase, lowercase, a number, and a symbol.',
+    },
+    { fieldId: 'account-confirm-password', message: 'Confirm your new password.' },
+  ]);
+  assert.deepEqual(
+    accountPasswordValidationErrors('Current-password-123!', 'Strong-password-123!', 'Strong-password-123!'),
+    [],
+  );
 });
 
 test('critical secondary actions cannot accidentally submit an account form', () => {

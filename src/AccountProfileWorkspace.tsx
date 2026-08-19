@@ -18,6 +18,7 @@ import { supportCasesEnabled } from './featureFlags';
 import { getAppLanguage, t } from './i18n';
 import { trustPassportPath } from './navigation';
 import { SupportCaseCenter } from './SupportCaseCenter';
+import { ValidationSummary, type ValidationSummaryItem } from './ValidationSummary';
 import {
   getTrustPassportSettings,
   setTrustPassportEnabled,
@@ -27,6 +28,30 @@ import {
   type StoredSession,
   type TrustPassportSettings,
 } from './services/supabaseRest';
+
+export function accountPasswordValidationErrors(
+  currentPassword: string,
+  password: string,
+  confirmPassword: string,
+): ValidationSummaryItem[] {
+  return [
+    currentPassword
+      ? null
+      : { fieldId: 'account-current-password', message: 'Enter your current password.' },
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/.test(password)
+      ? null
+      : {
+          fieldId: 'account-new-password',
+          message: 'Use 12+ characters with uppercase, lowercase, a number, and a symbol.',
+        },
+    password === confirmPassword && confirmPassword
+      ? null
+      : {
+          fieldId: 'account-confirm-password',
+          message: confirmPassword ? 'Passwords do not match.' : 'Confirm your new password.',
+        },
+  ].filter((error): error is ValidationSummaryItem => error !== null);
+}
 
 function SecurityCenter({
   email,
@@ -124,15 +149,20 @@ function AccountSettings({
   const [nameMessage, setNameMessage] = useState('');
   const [nameError, setNameError] = useState('');
   const [passwordMessage, setPasswordMessage] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [confirmPasswordError, setConfirmPasswordError] = useState('');
+  const [passwordValidationErrors, setPasswordValidationErrors] = useState<ValidationSummaryItem[]>([]);
   const [savingName, setSavingName] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const savingNameRef = useRef(false);
   const savingPasswordRef = useRef(false);
   const nameRef = useRef<HTMLInputElement>(null);
-  const passwordRef = useRef<HTMLInputElement>(null);
-  const confirmPasswordRef = useRef<HTMLInputElement>(null);
+
+  const passwordFieldError = (fieldId: string) =>
+    passwordValidationErrors.find(error => error.fieldId === fieldId)?.message ?? '';
+  const currentPasswordError = passwordFieldError('account-current-password');
+  const passwordError = passwordFieldError('account-new-password');
+  const confirmPasswordError = passwordFieldError('account-confirm-password');
+  const clearPasswordFieldError = (fieldId: string) =>
+    setPasswordValidationErrors(errors => errors.filter(error => error.fieldId !== fieldId));
 
   useEffect(() => setName(displayName), [displayName]);
 
@@ -167,16 +197,12 @@ function AccountSettings({
     event.preventDefault();
     if (savingPasswordRef.current) return;
     setPasswordMessage('');
-    setPasswordError('');
-    setConfirmPasswordError('');
-    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/.test(password)) {
-      setPasswordError('Use 12+ characters with uppercase, lowercase, a number, and a symbol.');
-      window.requestAnimationFrame(() => passwordRef.current?.focus());
-      return;
-    }
-    if (password !== confirmPassword) {
-      setConfirmPasswordError('Passwords do not match.');
-      window.requestAnimationFrame(() => confirmPasswordRef.current?.focus());
+    const nextErrors = accountPasswordValidationErrors(currentPassword, password, confirmPassword);
+    setPasswordValidationErrors(nextErrors);
+    if (nextErrors.length) {
+      window.requestAnimationFrame(() =>
+        document.getElementById('account-password-validation-summary')?.focus(),
+      );
       return;
     }
     savingPasswordRef.current = true;
@@ -237,31 +263,46 @@ function AccountSettings({
             {t(savingName ? 'Saving…' : 'Save name')}
           </button>
         </form>
-        <form onSubmit={savePassword} aria-busy={savingPassword}>
+        <form onSubmit={savePassword} aria-busy={savingPassword} noValidate>
           <h3>{t('Change password')}</h3>
           <p>
             {t(
               'Confirm your current password. Use at least 12 characters with uppercase, lowercase, a number, and a symbol.',
             )}
           </p>
+          {passwordValidationErrors.length ? (
+            <ValidationSummary
+              id="account-password-validation-summary"
+              title={passwordValidationErrors.length === 1 ? 'Check 1 password detail' : `Check ${passwordValidationErrors.length} password details`}
+              errors={passwordValidationErrors}
+            />
+          ) : null}
           <label>
             {t('Current password')}
             <input
+              id="account-current-password"
               required
               name="current"
               maxLength={256}
               autoComplete="current-password"
               enterKeyHint="next"
               type="password"
+              aria-invalid={Boolean(currentPasswordError)}
+              aria-describedby={currentPasswordError ? 'account-current-password-error' : undefined}
               disabled={savingPassword}
               value={currentPassword}
-              onChange={event => setCurrentPassword(event.target.value)}
+              onChange={event => {
+                setCurrentPassword(event.target.value);
+                if (currentPasswordError) clearPasswordFieldError('account-current-password');
+                if (passwordMessage) setPasswordMessage('');
+              }}
             />
+            {currentPasswordError ? <FieldError id="account-current-password-error">{currentPasswordError}</FieldError> : null}
           </label>
           <label>
             {t('New password')}
             <input
-              ref={passwordRef}
+              id="account-new-password"
               required
               name="new"
               minLength={12}
@@ -275,7 +316,7 @@ function AccountSettings({
               value={password}
               onChange={event => {
                 setPassword(event.target.value);
-                if (passwordError) setPasswordError('');
+                if (passwordError) clearPasswordFieldError('account-new-password');
               }}
             />
             {passwordError ? <FieldError id="account-password-error">{passwordError}</FieldError> : null}
@@ -283,7 +324,6 @@ function AccountSettings({
           <label>
             {t('Confirm password')}
             <input
-              ref={confirmPasswordRef}
               id="account-confirm-password"
               required
               name="confirm"
@@ -298,7 +338,7 @@ function AccountSettings({
               value={confirmPassword}
               onChange={event => {
                 setConfirmPassword(event.target.value);
-                if (confirmPasswordError) setConfirmPasswordError('');
+                if (confirmPasswordError) clearPasswordFieldError('account-confirm-password');
               }}
             />
             {confirmPasswordError ? <FieldError id="account-confirm-password-error">{confirmPasswordError}</FieldError> : null}

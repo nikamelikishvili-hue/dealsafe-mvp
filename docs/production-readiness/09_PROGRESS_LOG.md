@@ -5153,3 +5153,20 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   policy behavior unchanged.
 - No Production alias, public access, hosted configuration, live Supabase
   resource, customer record, or real-payment capability changed.
+
+# 2026-08-18 — Complete account-password correction summary
+
+- Replaced first-error-only account-password validation with the shared linked
+  validation summary so missing current credentials, password-policy failures,
+  and confirmation failures are announced together in form order.
+- Preserved field-level errors and password-manager semantics, added stable
+  summary targets for direct keyboard recovery, and moved focus to the complete
+  summary after an invalid submission.
+- Added focused rendered-component coverage for simultaneous failures and a
+  valid three-field submission, plus repository contracts for field links,
+  complete collection, and deterministic summary focus.
+- Kept every individual chunk within its existing ceiling and advanced the
+  fixed total-JavaScript ceiling by exactly 1,000 bytes for the reviewed
+  821,795-byte build (less than 0.13% growth).
+- No Production alias, public access, hosted configuration, live Supabase
+  resource, customer record, or real-payment capability changed.
