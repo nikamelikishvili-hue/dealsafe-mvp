@@ -5104,3 +5104,16 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   focus, stable field identifiers, and direct field-focus recovery.
 - No support record, Supabase resource, deployment, public-access setting,
   customer data, or real-payment capability changed.
+
+# 2026-08-18 — Complete account correction summaries
+
+- Replaced first-error-only sign-up and password-reset handling with the shared
+  validation summary so every invalid field is announced in form order.
+- Added stable field targets and direct summary-to-field focus actions while
+  preserving password-manager semantics and provider submission boundaries.
+- Added focused component regressions for the four sign-up requirements and
+  simultaneous password-policy and confirmation failures.
+- Kept application JavaScript inside the fixed release budget without adding a
+  configured-build allowance.
+- No Production alias, public access, hosted configuration, live Supabase
+  resource, customer record, or real-payment capability changed.

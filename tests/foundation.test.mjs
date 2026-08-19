@@ -6326,7 +6326,7 @@ test('account recovery progress and guidance are announced accessibly', () => {
   assert.ok((accountEntry.match(/<FeedbackMessage/g) || []).length >= 3);
   assert.match(feedback, /role=\{urgent \? 'alert' : 'status'\}/);
   assert.match(feedback, /aria-live=\{urgent \? 'assertive' : 'polite'\}/);
-  assert.ok((accountEntry.match(/aria-describedby=\{[^\n]*recovery-password-requirements/g) || []).length >= 2);
+  assert.ok((accountEntry.match(/aria-describedby="recovery-password-requirements"/g) || []).length >= 2);
   assert.match(accountEntry, /id="recovery-password-requirements"/);
 });
 
@@ -12500,11 +12500,10 @@ test('account registration rejects weak credentials before calling the provider'
   const app = readText('src/app.tsx');
 
   assert.match(accountEntry, /const normalizedDisplayName = form\.displayName\.trim\(\)/);
-  assert.match(accountEntry, /if \(normalizedDisplayName\.length < 2\)/);
-  assert.match(accountEntry, /<FieldError id="signup-display-name-error">/);
-  assert.match(accountEntry, /<FieldError id="signup-password-error">/);
-  assert.match(accountEntry, /displayNameRef\.current\?\.focus\(\)/);
-  assert.match(accountEntry, /passwordRef\.current\?\.focus\(\)/);
+  assert.match(accountEntry, /signupValidationErrors\(form,/);
+  assert.match(accountEntry, /focusSummary\('signup-validation-summary'\)/);
+  assert.match(accountEntry, /id="signup-display-name"/);
+  assert.match(accountEntry, /id=\{isSignup \? 'signup-password' : undefined\}/);
   assert.match(accountEntry, /onFormChange\(\{ \.\.\.form, displayName: normalizedDisplayName \}\)/);
   assert.match(accountEntry, /<form onSubmit=\{submitEntry\}/);
   assert.match(app, /signUp\(authForm\.email\.trim\(\),authForm\.password,authForm\.displayName\.trim\(\)\)/);
@@ -15152,18 +15151,15 @@ test('semantic feedback color pairs meet WCAG AA normal-text contrast', () => {
   }
 });
 
-test('password recovery exposes field-specific errors and deterministic focus recovery', () => {
+test('password recovery exposes a complete linked summary and deterministic focus recovery', () => {
   const source = readText('src/AccountEntryPages.tsx');
-  const fieldError = readText('src/FieldError.tsx');
   const fieldErrorStyles = readText('src/field-error.css');
-  assert.match(source, /aria-invalid=\{Boolean\(passwordError\)\}/);
-  assert.match(source, /recovery-password-error/);
-  assert.match(source, /aria-invalid=\{Boolean\(confirmPasswordError\)\}/);
-  assert.match(source, /recovery-confirm-password-error/);
-  assert.match(source, /passwordRef\.current\?\.focus\(\)/);
-  assert.match(source, /confirmPasswordRef\.current\?\.focus\(\)/);
-  assert.match(fieldError, /role="alert"/);
-  assert.match(fieldError, /aria-hidden="true"/);
+  assert.match(source, /aria-invalid=\{passwordError\}/);
+  assert.match(source, /id="recovery-password"/);
+  assert.match(source, /aria-invalid=\{confirmPasswordError\}/);
+  assert.match(source, /id="recovery-confirm-password"/);
+  assert.match(source, /focusSummary\('recovery-validation-summary'\)/);
+  assert.match(source, /<ValidationSummary id="recovery-validation-summary"/);
   assert.match(fieldErrorStyles, /\[aria-invalid='true'\]/);
 });
 
