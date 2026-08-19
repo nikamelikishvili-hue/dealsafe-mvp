@@ -15075,6 +15075,7 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   const feedbackStyles = readText('src/feedback-message.css');
   const fieldErrorStyles = readText('src/field-error.css');
   const asyncStateStyles = readText('src/async-state-panel.css');
+  const workspaceStyles = readText('src/workspace-redesign.css');
   const entry = readText('src/main.tsx');
 
   for (const token of [
@@ -15098,6 +15099,10 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(fieldErrorStyles, /var\(--color-danger-border\)/);
   assert.match(asyncStateStyles, /var\(--color-info-800\)/);
   assert.match(asyncStateStyles, /var\(--color-danger-100\)/);
+  assert.match(workspaceStyles, /\.auth-market-note\{[^}]*color:var\(--color-ink-600\)/);
+  assert.match(workspaceStyles, /\.auth-journey \.is-current\{[^}]*border-color:var\(--color-info-border\)[^}]*color:var\(--color-info-800\)[^}]*background:var\(--color-info-100\)/);
+  assert.match(workspaceStyles, /\.auth-journey \.is-complete\{[^}]*border-color:var\(--color-success-border\)[^}]*background:var\(--color-success-100\)/);
+  assert.match(workspaceStyles, /\.policy-consent a\{color:var\(--color-brand-700\)/);
   assert.doesNotMatch(`${fieldErrorStyles}\n${asyncStateStyles}`, /var\(--ds-(?:error|info|border|ink-muted|surface-subtle)/);
   assert.match(tokens, /:focus-visible/);
   assert.match(tokens, /@media \(forced-colors: active\)/);

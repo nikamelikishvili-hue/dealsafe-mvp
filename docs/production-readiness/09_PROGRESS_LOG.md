@@ -5117,3 +5117,15 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   configured-build allowance.
 - No Production alias, public access, hosted configuration, live Supabase
   resource, customer record, or real-payment capability changed.
+
+# 2026-08-18 — Governed account journey status colors
+
+- Replaced account-entry journey, market-note, and consent-link literal colors
+  with the shared semantic brand, information, success, surface, border, ink,
+  and action-shadow tokens.
+- Added a repository regression contract that keeps current and completed
+  account journey states on the governed palette.
+- Kept the change CSS-only for the application so it adds no JavaScript to the
+  fixed release bundle budget.
+- No Production alias, public access, hosted configuration, live Supabase
+  resource, customer record, or real-payment capability changed.
