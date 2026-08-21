@@ -10,18 +10,18 @@
   align-items: center;
   min-height: 48px;
   overflow: hidden;
-  border: 1px solid #cfd8e6;
-  border-radius: 12px;
-  background: #fff;
-  color: #64748b;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-card);
+  color: var(--color-ink-600);
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease;
 }
 
 .address-autocomplete-control:focus-within {
-  border-color: #4f7ee8;
-  box-shadow: 0 0 0 3px rgba(79, 126, 232, 0.16);
+  border-color: var(--color-brand-700);
+  box-shadow: var(--focus-ring);
 }
 
 .address-autocomplete-control > svg:first-child {
@@ -49,14 +49,14 @@
   border: 0;
   border-radius: 9px;
   background: transparent;
-  color: #64748b;
+  color: var(--color-ink-600);
   cursor: pointer;
 }
 
 .address-autocomplete-clear:hover,
 .address-autocomplete-clear:focus-visible {
-  background: #eef4ff;
-  color: #2455b6;
+  background: var(--color-info-100);
+  color: var(--color-info-800);
   outline: 0;
 }
 
@@ -72,10 +72,10 @@
   right: 0;
   left: 0;
   overflow: hidden;
-  border: 1px solid #d8e0ec;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.17);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-card);
+  box-shadow: var(--shadow-popover);
 }
 
 .address-autocomplete-option {
@@ -85,9 +85,9 @@
   width: 100%;
   padding: 12px 14px;
   border: 0;
-  border-bottom: 1px solid #edf1f7;
-  background: #fff;
-  color: #162033;
+  border-bottom: 1px solid var(--color-border-default);
+  background: var(--color-surface-card);
+  color: var(--color-ink-900);
   text-align: left;
   cursor: pointer;
 }
@@ -99,13 +99,13 @@
 .address-autocomplete-option:hover,
 .address-autocomplete-option.active,
 .address-autocomplete-option:focus-visible {
-  background: #eef5ff;
+  background: var(--color-info-100);
   outline: 0;
 }
 
 .address-autocomplete-option > svg {
   margin-top: 2px;
-  color: #3f70da;
+  color: var(--color-brand-700);
 }
 
 .address-autocomplete-option span,
@@ -117,7 +117,7 @@
 
 .address-autocomplete-option strong {
   overflow: hidden;
-  color: #162033;
+  color: var(--color-ink-900);
   font-size: 0.92rem;
   font-weight: 750;
   text-overflow: ellipsis;
@@ -127,7 +127,7 @@
 .address-autocomplete-option small {
   margin-top: 3px;
   overflow: hidden;
-  color: #64748b;
+  color: var(--color-ink-600);
   font-size: 0.78rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -135,8 +135,8 @@
 
 .address-autocomplete-attribution {
   padding: 8px 13px;
-  background: #f8fafc;
-  color: #64748b;
+  background: var(--color-surface-subtle);
+  color: var(--color-ink-600);
   font-size: 0.7rem;
   font-weight: 650;
   text-align: right;
@@ -152,7 +152,7 @@
   display: block;
   min-height: 1.1rem;
   margin-top: 6px;
-  color: #64748b;
+  color: var(--color-ink-600);
   font-size: 0.74rem;
   font-weight: 560;
   line-height: 1.45;
@@ -164,7 +164,7 @@
 }
 
 .address-autocomplete-status.warning {
-  color: #8b4a2b;
+  color: var(--color-warning-800);
 }
 
 @keyframes dealivra-address-spin {

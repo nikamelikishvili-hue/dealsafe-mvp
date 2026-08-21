@@ -5307,3 +5307,14 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - Added release assertions for the governed route icon, error canvas, and
   recovery-action contract. No routing behavior, hosted configuration,
   customer data, public access, or payment capability changed.
+
+# 2026-08-21 — Governed US address autocomplete visuals
+
+- Migrated address control, focus, menu, option, status, and warning states to
+  the shared semantic palette while retaining Google's required attribution
+  color.
+- Added one governed popover shadow token so suggestion menus no longer own an
+  isolated visual primitive.
+- Added release assertions for address field, focus, and menu styling. Address
+  behavior, provider configuration, customer data, and public access did not
+  change.
