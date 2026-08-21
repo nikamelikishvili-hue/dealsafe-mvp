@@ -30,7 +30,7 @@ jobs:
       DEALIVRA_STAGING_DATABASE_URL: ${{ secrets.DEALIVRA_STAGING_DATABASE_URL }}
     steps:
       - name: Check out the reviewed commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Use the pinned Node.js release
         uses: actions/setup-node@v4

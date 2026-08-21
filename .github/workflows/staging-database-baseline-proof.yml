@@ -32,7 +32,7 @@ jobs:
       SUPABASE_DB_PASSWORD: ${{ secrets.DEALIVRA_STAGING_SUPABASE_DB_PASSWORD }}
     steps:
       - name: Check out the reviewed commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Reject Production, mixed, or incomplete database targets
         run: npm run staging:database-target
