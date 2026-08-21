@@ -136,9 +136,9 @@ required.
 | ID | Priority | Work | Acceptance |
 |---|---|---|---|
 | PAY-001 | P0 | Finalize Stripe architecture with provider and counsel | Signed decision record documents liability, release, refunds, disputes, wording |
-| PAY-002 | P0 | Make webhook claim/processing atomic and replay-safe | Concurrent duplicate/out-of-order tests produce one valid transition |
-| PAY-003 | P0 | Enforce payment state transitions and trusted amount/account checks | Illegal transition and mismatch tests fail |
-| PAY-004 | P0 | Normalize provider errors and add correlation/monitoring | Users see safe messages; operators see actionable detail |
+| PAY-002 | P0 | **Repository and deployed Sandbox controls complete; provider exercise pending:** service-only atomic claim/apply/fail RPCs, leases, fencing tokens, legal ordering, bounded signature-authenticated request intake, and replay-safe finalization govern Stripe webhooks | Repository/database concurrency, replay, ordering, and mismatch tests pass; a retained Stripe Dashboard Sandbox resend/concurrency record remains |
+| PAY-003 | P0 | **Complete for the current Sandbox foundation:** immutable Checkout snapshots, trusted service-only financial commands, fenced state transitions, exact amount/currency/account/provider checks, and atomic dispute outcomes are enforced | Illegal transition, stale token, concurrency, role, identifier, amount, currency, account, and state mismatch tests pass; real-money mode and automatic payout remain disabled |
+| PAY-004 | P0 | **Complete for the current Sandbox foundation:** bounded customer-safe errors, fixed-schema privacy-safe logs, server correlation IDs, protected ledgers, and a service-only exception queue govern payment failures | Repository/database/provider-negative tests pass and support references remain correlation-safe; external alert routing and real-money operations remain release gates |
 | PAY-005 | P1 | Implement provider-hosted seller onboarding remediation | Requirement changes/restrictions are handled and tested |
 | PAY-006 | P1 | Implement refunds, release failures, chargebacks, and account suspension | Sandbox scenario matrix passes |
 | PAY-007 | P1 | Build daily reconciliation and exception queue | Every test transaction reconciles; discrepancy blocks release as designed |

@@ -5256,3 +5256,18 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - This reconciliation changes documentation only. It does not activate evidence
   upload, deploy an Edge Function or database migration, change a Production
   alias or public access, mutate customer data, or enable real payments.
+
+# 2026-08-21 — Reconciled protected-payment readiness
+
+- Reconciled PAY-002 through PAY-004 in the master implementation backlog with
+  their existing database, Edge Function, rollback-test, negative-HTTP,
+  protected Preview, and exact-release evidence.
+- Recorded PAY-003 and PAY-004 as complete only for the current Stripe Sandbox
+  foundation; real-money mode, automatic payout, and public access remain
+  disabled and are not implied by repository completion.
+- Kept PAY-002 open for the retained Stripe Dashboard Sandbox
+  resend/concurrency exercise even though the atomic claim, fencing, ordering,
+  replay, and mismatch controls are implemented and regression-tested.
+- This reconciliation changes documentation only. It does not call Stripe,
+  deploy payment code, mutate a financial or customer record, change hosted
+  configuration, or authorize a paid beta.
