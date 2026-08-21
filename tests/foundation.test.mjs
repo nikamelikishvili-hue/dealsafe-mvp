@@ -6326,8 +6326,11 @@ test('account recovery progress and guidance are announced accessibly', () => {
   assert.ok((accountEntry.match(/<FeedbackMessage/g) || []).length >= 3);
   assert.match(feedback, /role=\{urgent \? 'alert' : 'status'\}/);
   assert.match(feedback, /aria-live=\{urgent \? 'assertive' : 'polite'\}/);
-  assert.ok((accountEntry.match(/aria-describedby="recovery-password-requirements"/g) || []).length >= 2);
-  assert.match(accountEntry, /id="recovery-password-requirements"/);
+  assert.match(accountEntry, /const recoveryRequirementsId = 'recovery-password-help'/);
+  assert.match(accountEntry, /const recoverySummaryId = 'recovery-errors'/);
+  assert.ok((accountEntry.match(/recoveryRequirementsId/g) || []).length >= 3);
+  assert.ok((accountEntry.match(/`\$\{recoveryRequirementsId\} \$\{recoverySummaryId\}`/g) || []).length >= 2);
+  assert.match(accountEntry, /id=\{recoveryRequirementsId\}/);
 });
 
 test('dynamic account and deal feedback is announced without stealing focus', () => {
@@ -12508,9 +12511,16 @@ test('account registration rejects weak credentials before calling the provider'
 
   assert.match(accountEntry, /const normalizedDisplayName = form\.displayName\.trim\(\)/);
   assert.match(accountEntry, /signupValidationErrors\(form,/);
-  assert.match(accountEntry, /focusSummary\('signup-validation-summary'\)/);
+  assert.match(accountEntry, /focusSummary\(signupSummaryId\)/);
   assert.match(accountEntry, /id="signup-display-name"/);
   assert.match(accountEntry, /id=\{isSignup \? 'signup-password' : undefined\}/);
+  assert.match(accountEntry, /withoutFieldError\(current, 'signup-display-name'\)/);
+  assert.match(accountEntry, /withoutFieldError\(current, 'signup-email'\)/);
+  assert.match(accountEntry, /withoutFieldError\(current, 'signup-password'\)/);
+  assert.match(accountEntry, /withoutFieldError\(current, 'signup-policy'\)/);
+  assert.match(accountEntry, /aria-describedby=\{displayNameError \? signupSummaryId : undefined\}/);
+  assert.match(accountEntry, /aria-describedby=\{isSignup && emailError \? signupSummaryId : undefined\}/);
+  assert.match(accountEntry, /aria-describedby=\{policyError \? signupSummaryId : undefined\}/);
   assert.match(accountEntry, /onFormChange\(\{ \.\.\.form, displayName: normalizedDisplayName \}\)/);
   assert.match(accountEntry, /<form onSubmit=\{submitEntry\}/);
   assert.match(app, /signUp\(authForm\.email\.trim\(\),authForm\.password,authForm\.displayName\.trim\(\)\)/);
@@ -15175,8 +15185,15 @@ test('password recovery exposes a complete linked summary and deterministic focu
   assert.match(source, /id="recovery-password"/);
   assert.match(source, /aria-invalid=\{confirmPasswordError\}/);
   assert.match(source, /id="recovery-confirm-password"/);
-  assert.match(source, /focusSummary\('recovery-validation-summary'\)/);
-  assert.match(source, /<ValidationSummary id="recovery-validation-summary"/);
+  assert.match(source, /focusSummary\(recoverySummaryId\)/);
+  assert.match(source, /<ValidationSummary id=\{recoverySummaryId\}/);
+  assert.match(
+    source,
+    /passwordError[\s\S]*`\$\{recoveryRequirementsId\} \$\{recoverySummaryId\}`/,
+  );
+  assert.match(source, /withoutFieldError\(current, 'recovery-password'\)/);
+  assert.match(source, /withoutFieldError\(current, 'recovery-confirm-password'\)/);
+  assert.doesNotMatch(source, /setErrors\(\[\]\)/);
   assert.match(fieldErrorStyles, /\[aria-invalid='true'\]/);
 });
 

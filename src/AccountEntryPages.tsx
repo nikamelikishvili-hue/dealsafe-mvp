@@ -17,9 +17,14 @@ export type AuthFormState = {
 
 const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
 const passwordRequirement = 'Use 12+ characters with uppercase, lowercase, a number, and a symbol.';
+const signupSummaryId = 'signup-errors';
+const recoveryRequirementsId = 'recovery-password-help';
+const recoverySummaryId = 'recovery-errors';
 const issue = (fieldId: string, message: string): ValidationSummaryItem => ({ fieldId, message });
 const issues = (...items: (ValidationSummaryItem | false)[]) => items.filter(Boolean) as ValidationSummaryItem[];
 const hasError = (errors: ValidationSummaryItem[], fieldId: string) => errors.some(error => error.fieldId === fieldId);
+const withoutFieldError = (errors: ValidationSummaryItem[], fieldId: string) =>
+  errors.filter(error => error.fieldId !== fieldId);
 const focusSummary = (id: string) => window.requestAnimationFrame(() => document.getElementById(id)?.focus());
 
 export function recoveryValidationErrors(password: string, confirmation: string) {
@@ -160,7 +165,7 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
     const nextErrors = recoveryValidationErrors(password, confirmPassword);
     setErrors(nextErrors);
     if (nextErrors.length > 0) {
-      focusSummary('recovery-validation-summary');
+      focusSummary(recoverySummaryId);
       return;
     }
     updatingRef.current = true;
@@ -184,7 +189,7 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
       <h1>{t('Choose a new password')}</h1>
       <form onSubmit={submit} aria-busy={updating} noValidate>
         {errors.length > 0 ? (
-          <ValidationSummary id="recovery-validation-summary" title="Review password" errors={errors} />
+          <ValidationSummary id={recoverySummaryId} title="Review password" errors={errors} />
         ) : null}
         <label>
           {t('New password')}
@@ -198,12 +203,16 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
             type="password"
             enterKeyHint="next"
             aria-invalid={passwordError}
-            aria-describedby="recovery-password-requirements"
+            aria-describedby={
+              passwordError
+                ? `${recoveryRequirementsId} ${recoverySummaryId}`
+                : recoveryRequirementsId
+            }
             disabled={updating}
             value={password}
             onChange={event => {
               setPassword(event.target.value);
-              setErrors([]);
+              setErrors(current => withoutFieldError(current, 'recovery-password'));
             }}
           />
         </label>
@@ -219,16 +228,20 @@ export function ResetPassword({ token, onDone }: { token: string; onDone: () => 
             type="password"
             enterKeyHint="done"
             aria-invalid={confirmPasswordError}
-            aria-describedby="recovery-password-requirements"
+            aria-describedby={
+              confirmPasswordError
+                ? `${recoveryRequirementsId} ${recoverySummaryId}`
+                : recoveryRequirementsId
+            }
             disabled={updating}
             value={confirmPassword}
             onChange={event => {
               setConfirmPassword(event.target.value);
-              setErrors([]);
+              setErrors(current => withoutFieldError(current, 'recovery-confirm-password'));
             }}
           />
         </label>
-        <small id="recovery-password-requirements">{t(passwordRequirement)}</small>
+        <small id={recoveryRequirementsId}>{t(passwordRequirement)}</small>
         {message && (
           <FeedbackMessage tone={message === 'Password updated. You can now sign in.' ? 'success' : 'error'}>
             {t(message)}
@@ -292,7 +305,7 @@ export function AccountEntryPage({
     const nextErrors = signupValidationErrors(form, Boolean(emailRef.current?.validity.valid), acceptedPolicies);
     setEntryErrors(nextErrors);
     if (nextErrors.length > 0) {
-      focusSummary('signup-validation-summary');
+      focusSummary(signupSummaryId);
       return;
     }
     onFormChange({ ...form, displayName: normalizedDisplayName });
@@ -352,7 +365,7 @@ export function AccountEntryPage({
 
       <form onSubmit={submitEntry} aria-busy={submitting} noValidate={isSignup}>
         {isSignup && entryErrors.length > 0 ? (
-          <ValidationSummary id="signup-validation-summary" title="Check account details" errors={entryErrors} />
+          <ValidationSummary id={signupSummaryId} title="Check account details" errors={entryErrors} />
         ) : null}
         {isSignup && (
           <label>
@@ -365,11 +378,11 @@ export function AccountEntryPage({
               maxLength={80}
               autoComplete="name"
               aria-invalid={displayNameError}
-              aria-describedby="signup-validation-summary"
+              aria-describedby={displayNameError ? signupSummaryId : undefined}
               value={form.displayName}
               onChange={event => {
                 onFormChange({ ...form, displayName: event.target.value });
-                setEntryErrors([]);
+                setEntryErrors(current => withoutFieldError(current, 'signup-display-name'));
               }}
             />
           </label>
@@ -389,11 +402,11 @@ export function AccountEntryPage({
             spellCheck={false}
             enterKeyHint="next"
             aria-invalid={isSignup && emailError}
-            aria-describedby={isSignup ? 'signup-validation-summary' : undefined}
+            aria-describedby={isSignup && emailError ? signupSummaryId : undefined}
             value={form.email}
             onChange={event => {
               onFormChange({ ...form, email: event.target.value });
-              setEntryErrors([]);
+              setEntryErrors(current => withoutFieldError(current, 'signup-email'));
             }}
           />
         </label>
@@ -411,12 +424,18 @@ export function AccountEntryPage({
               autoComplete={isSignup ? 'new-password' : 'current-password'}
               enterKeyHint="done"
               aria-invalid={isSignup && passwordError}
-              aria-describedby={isSignup ? 'signup-password-requirements signup-validation-summary' : undefined}
+              aria-describedby={
+                isSignup
+                  ? passwordError
+                    ? `signup-password-requirements ${signupSummaryId}`
+                    : 'signup-password-requirements'
+                  : undefined
+              }
               placeholder={t(isSignup ? '12+ characters' : 'Your password')}
               value={form.password}
               onChange={event => {
                 onFormChange({ ...form, password: event.target.value });
-                setEntryErrors([]);
+                setEntryErrors(current => withoutFieldError(current, 'signup-password'));
               }}
             />
             <button
@@ -439,10 +458,10 @@ export function AccountEntryPage({
               type="checkbox"
               checked={acceptedPolicies}
               aria-invalid={policyError}
-              aria-describedby="signup-validation-summary"
+              aria-describedby={policyError ? signupSummaryId : undefined}
               onChange={event => {
                 onAcceptedPoliciesChange(event.target.checked);
-                setEntryErrors([]);
+                setEntryErrors(current => withoutFieldError(current, 'signup-policy'));
               }}
             />
             <span>

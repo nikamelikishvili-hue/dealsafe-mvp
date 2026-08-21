@@ -5170,3 +5170,20 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   821,795-byte build (less than 0.13% growth).
 - No Production alias, public access, hosted configuration, live Supabase
   resource, customer record, or real-payment capability changed.
+
+# 2026-08-21 — Preserve unresolved account correction guidance
+
+- Kept sign-up validation summaries stable while a customer corrects one
+  field: only that field's issue is removed, so unrelated name, email,
+  password, or policy guidance remains visible and actionable.
+- Kept password-recovery guidance field-scoped: changing either password
+  field clears only that field's issue, so every other unresolved correction
+  remains visible until the customer addresses it.
+- Linked invalid fields to the rendered validation summary only while that
+  summary exists, eliminating temporary references to absent accessibility
+  targets while preserving the permanent password-requirement description.
+- Added repository regressions for field-scoped recovery and dynamic
+  `aria-describedby` relationships; 387 foundation and 20 rendered-component
+  tests pass.
+- No Production alias, public access, hosted configuration, live Supabase
+  resource, customer record, or real-payment capability changed.
