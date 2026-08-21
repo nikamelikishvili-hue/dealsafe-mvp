@@ -5285,3 +5285,14 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - Added release coverage for the governed touch target and focus contract. This
   repository-only change does not alter hosted configuration, public access,
   customer data, or payment behavior.
+
+# 2026-08-21 — Corrected global notice semantics
+
+- Prevented urgent or explicitly failed notices from inheriting the green
+  success treatment used by ordinary status messages.
+- Mapped global notice and Deal-creation invalid-field states to the governed
+  success and danger tokens while preserving the dedicated warning treatment
+  used by the post-publication review notice.
+- Added release assertions for the semantic notice variants and invalid-field
+  boundary. No application behavior, hosted configuration, customer data,
+  public access, or payment capability changed.
