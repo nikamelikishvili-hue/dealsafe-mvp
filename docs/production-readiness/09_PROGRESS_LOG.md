@@ -5296,3 +5296,14 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - Added release assertions for the semantic notice variants and invalid-field
   boundary. No application behavior, hosted configuration, customer data,
   public access, or payment capability changed.
+
+# 2026-08-21 — Unified route and application error surfaces
+
+- Migrated public route status, not-found, and application-level error surfaces
+  from feature-owned color literals to the governed information, warning,
+  surface, border, ink, radius, and action tokens.
+- Guaranteed the error-boundary recovery actions retain the shared minimum
+  touch target while preserving clear primary and secondary hierarchy.
+- Added release assertions for the governed route icon, error canvas, and
+  recovery-action contract. No routing behavior, hosted configuration,
+  customer data, public access, or payment capability changed.
