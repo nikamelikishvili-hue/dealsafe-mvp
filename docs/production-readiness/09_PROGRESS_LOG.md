@@ -5240,3 +5240,19 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - No Vercel Firewall rule, CAPTCHA provider, Production alias, public access,
   hosted configuration, live Supabase resource, customer record, or real-payment
   capability changed.
+
+# 2026-08-21 — Reconciled evidence-security readiness
+
+- Reconciled EVD-001 through EVD-005 in the master implementation backlog with
+  the evidence controls and regression suites already present in the reviewed
+  release stack.
+- Recorded the repository-complete allowlist, byte/type/size validation,
+  fail-closed malware-scanner boundary, private short-lived access, open-time
+  integrity verification, safe media viewer, and lifecycle/legal-hold controls.
+- Kept every hosted dependency explicit: scanner/vendor approval, protected
+  Staging secrets, real-token cross-role and expiry tests, clean/replaced-object
+  verification, scheduled-worker ownership, alert routing, and supervised
+  lifecycle rehearsal remain release gates.
+- This reconciliation changes documentation only. It does not activate evidence
+  upload, deploy an Edge Function or database migration, change a Production
+  alias or public access, mutate customer data, or enable real payments.

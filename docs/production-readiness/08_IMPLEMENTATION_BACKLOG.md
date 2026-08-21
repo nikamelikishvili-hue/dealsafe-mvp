@@ -125,11 +125,11 @@ required.
 
 | ID | Priority | Work | Acceptance |
 |---|---|---|---|
-| EVD-001 | P0 | Define file allowlist and category evidence requirements | Client/server/storage enforce the same policy |
-| EVD-002 | P0 | Add byte-signature/type/size checks and malware scanning | Malicious, mismatched, and oversized fixtures are rejected |
-| EVD-003 | P0 | Add private short-lived signed access with case/participant authorization | Cross-user and expired-link tests pass |
-| EVD-004 | P1 | Add evidence integrity inventory and safe viewer | Hash/status visible; unsafe active content cannot execute |
-| EVD-005 | P1 | Implement retention/deletion/legal hold for storage objects | Scheduled and requested deletion is verified |
+| EVD-001 | P0 | **Repository complete; hosted activation pending:** one category-aware client/server/storage allowlist governs canonical WebP, MP4, MOV, and WebM evidence, with private quarantine intake and clean-only promotion | Repository policy and rollback tests pass; Staging provider activation and cross-role upload evidence remain |
+| EVD-002 | P0 | **Repository complete; scanner activation pending:** exact-length streams, byte-structure/type/size checks, metadata rejection, EICAR pre-check, hash-bound scanner verdicts, and fail-closed provider handling reject unsafe files | Malicious, mismatched, metadata-bearing, oversized, timeout, and malformed-provider fixtures pass locally; an approved scanner and isolated Staging matrix remain |
+| EVD-003 | P0 | **Repository complete; hosted acceptance pending:** final Storage objects have no browser read policy and 60-second URLs require participant or assigned dispute-case authorization, clean scan status, and open-time integrity verification | Repository authorization and expiry contracts pass; real-token cross-user, case-admin, and expired-link Staging evidence remain |
+| EVD-004 | P1 | **Repository complete; hosted acceptance pending:** append-only integrity inventory and the safe image/video viewer revalidate hash, size, and MIME before rendering a local object URL | Repository integrity, active-content exclusion, focus, and access-order tests pass; clean-object and replacement-negative Staging evidence remain |
+| EVD-005 | P1 | **Repository complete; operational activation pending:** review-gated retention, deletion, quarantine cleanup, legal hold, immutable lifecycle events, and Storage absence verification are implemented | Repository lifecycle and rollback tests pass; scheduled worker ownership, live hold/expiry cases, alert routing, and supervised Staging rehearsal remain |
 
 ## Epic 7 — Payments and provider events
 
