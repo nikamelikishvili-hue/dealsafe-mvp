@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { t } from './i18n';
+import './validation-summary.css';
 
 export type ValidationSummaryItem = {
   fieldId: string;
@@ -42,7 +43,7 @@ export function ValidationSummary({
   return (
     <section
       id={id}
-      className={className}
+      className={`validation-summary ${className}`}
       role="alert"
       aria-live="assertive"
       aria-atomic="true"
