@@ -157,6 +157,16 @@ function deniedBrowserRequest(message = "Request origin is not allowed") {
   return new Response(response.body, { status: response.status, headers });
 }
 
+function browserMethodNotAllowed(origin: string) {
+  const response = json({ error: "Method not allowed" }, 405);
+  const headers = new Headers(response.headers);
+  headers.set("Allow", "POST, OPTIONS");
+  return withBrowserCors(
+    new Response(response.body, { status: response.status, headers }),
+    origin,
+  );
+}
+
 export async function handleBrowserRequest(
   request: Request,
   handler: () => Promise<Response> | Response,
@@ -194,6 +204,11 @@ export async function handleBrowserRequest(
         "Vary": "Origin",
       },
     });
+  }
+
+  if (request.method !== "POST") {
+    const response = browserMethodNotAllowed(origin);
+    return context ? withPaymentCorrelation(response, context) : response;
   }
 
   const response = await handler();

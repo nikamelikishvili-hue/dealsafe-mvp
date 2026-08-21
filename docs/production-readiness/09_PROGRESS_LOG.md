@@ -5206,3 +5206,20 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   tests pass.
 - No Production alias, public access, hosted configuration, live Supabase
   resource, customer record, or real-payment capability changed.
+
+# 2026-08-21 — Central browser Edge mutation boundary
+
+- Inventoried all browser-invoked Edge mutations across evidence and payment
+  workflows and required each one to enter through the shared exact-origin
+  browser boundary.
+- Centralized `POST`-only enforcement after valid preflight handling and before
+  any feature handler can run; wrong-method requests return `405` with
+  `Allow: POST, OPTIONS` and exact approved-origin CORS metadata.
+- Kept Stripe webhooks and the security-notification worker outside the browser
+  boundary because they use independent signature or constant-time worker
+  credential authentication.
+- Added repository regressions for the complete browser mutation inventory,
+  wrong-method enforcement, and server-to-server exceptions.
+- No Edge Function was deployed and no Production alias, public access, hosted
+  configuration, live Supabase resource, customer record, or real-payment
+  capability changed.

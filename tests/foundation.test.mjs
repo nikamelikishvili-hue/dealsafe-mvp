@@ -4609,6 +4609,8 @@ test('protected payment Edge Functions use an exact fail-closed browser origin b
   assert.match(common, /DEALIVRA_VERCEL_PROJECT_SLUG/);
   assert.match(common, /DEALIVRA_VERCEL_TEAM_SLUG/);
   assert.match(common, /requestedHeaders\.some\(\(header\) => !browserRequestHeaders\.has\(header\)\)/);
+  assert.match(common, /if \(request\.method !== "POST"\)/);
+  assert.match(common, /headers\.set\("Allow", "POST, OPTIONS"\)/);
   assert.match(common, /Access-Control-Allow-Origin", origin/);
   assert.match(common, /"Vary": "Origin"/);
 
@@ -4617,6 +4619,31 @@ test('protected payment Edge Functions use an exact fail-closed browser origin b
     assert.match(source, /handleBrowserRequest\(request/);
     assert.doesNotMatch(source, /corsHeaders/);
   }
+});
+
+test('every browser Edge mutation uses the central origin and POST-only boundary', () => {
+  const browserFunctions = [
+    'evidence-files',
+    'evidence-maintenance',
+    'stripe-connect',
+    'stripe-create-checkout',
+    'stripe-release-payment',
+    'stripe-resolve-dispute',
+  ];
+
+  for (const functionName of browserFunctions) {
+    const source = readText(`supabase/functions/${functionName}/index.ts`);
+    assert.match(source, /handleBrowserRequest\(request/);
+  }
+
+  const webhook = readText('supabase/functions/stripe-webhook/index.ts');
+  const notifications = readText('supabase/functions/security-notifications/index.ts');
+  assert.doesNotMatch(webhook, /handleBrowserRequest/);
+  assert.doesNotMatch(notifications, /handleBrowserRequest/);
+  assert.match(webhook, /verifyStripeSignature/);
+  assert.match(notifications, /await authorizeWorker\(request\)/);
+  assert.match(notifications, /DEALIVRA_SECURITY_NOTIFICATION_WORKER_SECRET/);
+  assert.match(notifications, /crypto\.subtle\.digest\("SHA-256"/);
 });
 
 test('Stripe webhook stays signature-authenticated and outside browser CORS', () => {
