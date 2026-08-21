@@ -6326,8 +6326,11 @@ test('account recovery progress and guidance are announced accessibly', () => {
   assert.ok((accountEntry.match(/<FeedbackMessage/g) || []).length >= 3);
   assert.match(feedback, /role=\{urgent \? 'alert' : 'status'\}/);
   assert.match(feedback, /aria-live=\{urgent \? 'assertive' : 'polite'\}/);
-  assert.ok((accountEntry.match(/aria-describedby=\{[^\n]*recovery-password-requirements/g) || []).length >= 2);
-  assert.match(accountEntry, /id="recovery-password-requirements"/);
+  assert.match(accountEntry, /const recoveryRequirementsId = 'recovery-password-help'/);
+  assert.match(accountEntry, /const recoverySummaryId = 'recovery-errors'/);
+  assert.ok((accountEntry.match(/recoveryRequirementsId/g) || []).length >= 3);
+  assert.ok((accountEntry.match(/`\$\{recoveryRequirementsId\} \$\{recoverySummaryId\}`/g) || []).length >= 2);
+  assert.match(accountEntry, /id=\{recoveryRequirementsId\}/);
 });
 
 test('dynamic account and deal feedback is announced without stealing focus', () => {
@@ -12038,7 +12041,7 @@ test('production builds enforce explicit JavaScript and CSS budgets', () => {
   assert.match(budget, /\^app-\[A-Za-z0-9_-\]\+\\\.js\$/);
   assert.match(budget, /Expected exactly one initial application chunk/);
   assert.match(budget, /maximumCssChunkBytes: 200_000/);
-  assert.match(budget, /maximumTotalJavaScriptBytes: 821_000/);
+  assert.match(budget, /maximumTotalJavaScriptBytes: 822_000/);
   assert.match(budget, /maximumConfiguredBuildOverheadBytes: 3_000/);
   assert.match(budget, /VITE_SUPABASE_URL/);
   assert.match(budget, /VITE_SUPABASE_PUBLISHABLE_KEY/);
@@ -12445,16 +12448,23 @@ test('MFA removal can be cancelled by keyboard and restores the initiating contr
   assert.match(accountMfa, /window\.requestAnimationFrame\(\(\)=>removalTriggerRef\.current\?\.focus\(\)\)/);
 });
 
-test('account password changes expose field-specific validation and deterministic focus', () => {
+test('account password changes expose complete linked validation and deterministic summary focus', () => {
   const accountProfile = readText('src/AccountProfileWorkspace.tsx');
 
+  assert.match(accountProfile, /<ValidationSummary[\s\S]*id="account-password-validation-summary"/);
+  assert.match(accountProfile, /fieldId: 'account-current-password'/);
+  assert.match(accountProfile, /fieldId: 'account-new-password'/);
+  assert.match(accountProfile, /fieldId: 'account-confirm-password'/);
+  assert.match(accountProfile, /id="account-current-password"/);
+  assert.match(accountProfile, /<FieldError id="account-current-password-error">/);
   assert.match(accountProfile, /<FieldError id="account-password-error">/);
   assert.match(accountProfile, /<FieldError id="account-confirm-password-error">/);
   assert.match(accountProfile, /aria-describedby=\{passwordError \? 'account-password-requirements account-password-error'/);
   assert.match(accountProfile, /aria-describedby=\{confirmPasswordError \? 'account-password-requirements account-confirm-password-error'/);
-  assert.match(accountProfile, /New password'[\s\S]*?<input\s+ref=\{passwordRef\}/);
-  assert.match(accountProfile, /passwordRef\.current\?\.focus\(\)/);
-  assert.match(accountProfile, /confirmPasswordRef\.current\?\.focus\(\)/);
+  assert.match(accountProfile, /setPasswordValidationErrors\(nextErrors\)/);
+  assert.match(accountProfile, /if \(nextErrors\.length\)/);
+  assert.match(accountProfile, /getElementById\('account-password-validation-summary'\)\?\.focus\(\)/);
+  assert.match(accountProfile, /<form onSubmit=\{savePassword\} aria-busy=\{savingPassword\} noValidate>/);
 });
 
 test('account display names reject whitespace and expose field-specific recovery', () => {
@@ -12500,11 +12510,17 @@ test('account registration rejects weak credentials before calling the provider'
   const app = readText('src/app.tsx');
 
   assert.match(accountEntry, /const normalizedDisplayName = form\.displayName\.trim\(\)/);
-  assert.match(accountEntry, /if \(normalizedDisplayName\.length < 2\)/);
-  assert.match(accountEntry, /<FieldError id="signup-display-name-error">/);
-  assert.match(accountEntry, /<FieldError id="signup-password-error">/);
-  assert.match(accountEntry, /displayNameRef\.current\?\.focus\(\)/);
-  assert.match(accountEntry, /passwordRef\.current\?\.focus\(\)/);
+  assert.match(accountEntry, /signupValidationErrors\(form,/);
+  assert.match(accountEntry, /focusSummary\(signupSummaryId\)/);
+  assert.match(accountEntry, /id="signup-display-name"/);
+  assert.match(accountEntry, /id=\{isSignup \? 'signup-password' : undefined\}/);
+  assert.match(accountEntry, /withoutFieldError\(current, 'signup-display-name'\)/);
+  assert.match(accountEntry, /withoutFieldError\(current, 'signup-email'\)/);
+  assert.match(accountEntry, /withoutFieldError\(current, 'signup-password'\)/);
+  assert.match(accountEntry, /withoutFieldError\(current, 'signup-policy'\)/);
+  assert.match(accountEntry, /aria-describedby=\{displayNameError \? signupSummaryId : undefined\}/);
+  assert.match(accountEntry, /aria-describedby=\{isSignup && emailError \? signupSummaryId : undefined\}/);
+  assert.match(accountEntry, /aria-describedby=\{policyError \? signupSummaryId : undefined\}/);
   assert.match(accountEntry, /onFormChange\(\{ \.\.\.form, displayName: normalizedDisplayName \}\)/);
   assert.match(accountEntry, /<form onSubmit=\{submitEntry\}/);
   assert.match(app, /signUp\(authForm\.email\.trim\(\),authForm\.password,authForm\.displayName\.trim\(\)\)/);
@@ -15076,6 +15092,7 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   const feedbackStyles = readText('src/feedback-message.css');
   const fieldErrorStyles = readText('src/field-error.css');
   const asyncStateStyles = readText('src/async-state-panel.css');
+  const workspaceStyles = readText('src/workspace-redesign.css');
   const entry = readText('src/main.tsx');
 
   for (const token of [
@@ -15099,6 +15116,15 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(fieldErrorStyles, /var\(--color-danger-border\)/);
   assert.match(asyncStateStyles, /var\(--color-info-800\)/);
   assert.match(asyncStateStyles, /var\(--color-danger-100\)/);
+  assert.match(workspaceStyles, /\.auth-market-note\{[^}]*color:var\(--color-ink-600\)/);
+  assert.match(workspaceStyles, /\.auth-journey \.is-current\{[^}]*border-color:var\(--color-info-border\)[^}]*color:var\(--color-info-800\)[^}]*background:var\(--color-info-100\)/);
+  assert.match(workspaceStyles, /\.auth-journey \.is-complete\{[^}]*border-color:var\(--color-success-border\)[^}]*background:var\(--color-success-100\)/);
+  assert.match(workspaceStyles, /\.policy-consent a\{color:var\(--color-brand-700\)/);
+  assert.match(workspaceStyles, /\.create-flow-progress button\.is-current\{[^}]*color:var\(--color-info-800\)[^}]*background:var\(--color-info-100\)[^}]*var\(--color-info-border\)/);
+  assert.match(workspaceStyles, /\.create-flow-progress button\.is-complete\{[^}]*color:var\(--color-success-700\)[^}]*background:var\(--color-success-100\)/);
+  assert.match(workspaceStyles, /\.create-flow-progress \.is-current \.create-flow-step-icon\{[^}]*background:var\(--color-brand-700\)[^}]*box-shadow:var\(--shadow-action\)/);
+  assert.match(workspaceStyles, /\.deal-progress-strip li\.current\{[^}]*border-color:var\(--color-info-border\)[^}]*color:var\(--color-info-800\)[^}]*background:var\(--color-info-100\)[^}]*box-shadow:var\(--shadow-action\)/);
+  assert.match(workspaceStyles, /\.deal-progress-strip li\.complete\{[^}]*border-color:var\(--color-success-border\)[^}]*color:var\(--color-success-700\)[^}]*background:var\(--color-success-100\)/);
   assert.doesNotMatch(`${fieldErrorStyles}\n${asyncStateStyles}`, /var\(--ds-(?:error|info|border|ink-muted|surface-subtle)/);
   assert.match(tokens, /:focus-visible/);
   assert.match(tokens, /@media \(forced-colors: active\)/);
@@ -15152,18 +15178,22 @@ test('semantic feedback color pairs meet WCAG AA normal-text contrast', () => {
   }
 });
 
-test('password recovery exposes field-specific errors and deterministic focus recovery', () => {
+test('password recovery exposes a complete linked summary and deterministic focus recovery', () => {
   const source = readText('src/AccountEntryPages.tsx');
-  const fieldError = readText('src/FieldError.tsx');
   const fieldErrorStyles = readText('src/field-error.css');
-  assert.match(source, /aria-invalid=\{Boolean\(passwordError\)\}/);
-  assert.match(source, /recovery-password-error/);
-  assert.match(source, /aria-invalid=\{Boolean\(confirmPasswordError\)\}/);
-  assert.match(source, /recovery-confirm-password-error/);
-  assert.match(source, /passwordRef\.current\?\.focus\(\)/);
-  assert.match(source, /confirmPasswordRef\.current\?\.focus\(\)/);
-  assert.match(fieldError, /role="alert"/);
-  assert.match(fieldError, /aria-hidden="true"/);
+  assert.match(source, /aria-invalid=\{passwordError\}/);
+  assert.match(source, /id="recovery-password"/);
+  assert.match(source, /aria-invalid=\{confirmPasswordError\}/);
+  assert.match(source, /id="recovery-confirm-password"/);
+  assert.match(source, /focusSummary\(recoverySummaryId\)/);
+  assert.match(source, /<ValidationSummary id=\{recoverySummaryId\}/);
+  assert.match(
+    source,
+    /passwordError[\s\S]*`\$\{recoveryRequirementsId\} \$\{recoverySummaryId\}`/,
+  );
+  assert.match(source, /withoutFieldError\(current, 'recovery-password'\)/);
+  assert.match(source, /withoutFieldError\(current, 'recovery-confirm-password'\)/);
+  assert.doesNotMatch(source, /setErrors\(\[\]\)/);
   assert.match(fieldErrorStyles, /\[aria-invalid='true'\]/);
 });
 
@@ -15174,7 +15204,8 @@ test('account, support, and safety forms keep native validation actions availabl
   const resolution = readText('src/DealResolutionWorkspace.tsx');
 
   assert.match(account, /id="account-confirm-password"/);
-  assert.match(account, /confirmPasswordRef\.current\?\.focus\(\)/);
+  assert.match(account, /id="account-password-validation-summary"/);
+  assert.match(account, /fieldId: 'account-confirm-password'/);
   assert.doesNotMatch(account, /savingPassword \|\| !currentPassword/);
   assert.doesNotMatch(entry, /submitting \|\| \(isSignup && !acceptedPolicies\)/);
   assert.doesNotMatch(support, /saving \|\| reply\.trim\(\)\.length < 10/);

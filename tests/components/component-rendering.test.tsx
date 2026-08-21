@@ -13,8 +13,11 @@ Object.defineProperty(globalThis, 'document', {
   },
 });
 
-const { AccountEntryPage, ForgotPasswordEntry } = await import('../../src/AccountEntryPages');
+const { AccountEntryPage, ForgotPasswordEntry, recoveryValidationErrors, signupValidationErrors } = await import(
+  '../../src/AccountEntryPages'
+);
 const { AddressAutocomplete } = await import('../../src/AddressAutocomplete');
+const { accountPasswordValidationErrors } = await import('../../src/AccountProfileWorkspace');
 const { formatCsvCell } = await import('../../src/AdministrationWorkspace');
 const { BrandLogo } = await import('../../src/BrandLogo');
 const { FeedbackMessage } = await import('../../src/FeedbackMessage');
@@ -222,10 +225,54 @@ test('sign-up form keeps consent and policy links visible before submission', ()
   assert.match(markup, /enterKeyHint="next"/);
   assert.match(markup, /type="password"[^>]*name="password"/);
   assert.match(markup, /maxLength="256" type="password"/);
-  assert.match(markup, /<input required="" type="checkbox"\/>/);
+  assert.match(markup, /<input id="signup-policy" required="" type="checkbox"/);
   assert.match(markup, /href="\/terms"/);
   assert.match(markup, /href="\/privacy"/);
   assert.match(markup, /<button type="submit" class="primary full">Create account &amp; continue<\/button>/);
+});
+
+test('sign-up validation reports every incomplete account field in form order', () => {
+  assert.deepEqual(
+    signupValidationErrors({ displayName: ' ', email: 'not-an-email', password: 'short' }, false, false),
+    [
+      { fieldId: 'signup-display-name', message: 'Enter 2+ characters.' },
+      { fieldId: 'signup-email', message: 'Enter a valid email.' },
+      {
+        fieldId: 'signup-password',
+        message: 'Use 12+ characters with uppercase, lowercase, a number, and a symbol.',
+      },
+      {
+        fieldId: 'signup-policy',
+        message: 'Accept Terms and Privacy notice.',
+      },
+    ],
+  );
+});
+
+test('password recovery reports strength and confirmation failures together', () => {
+  assert.deepEqual(recoveryValidationErrors('short', 'different'), [
+    {
+      fieldId: 'recovery-password',
+      message: 'Use 12+ characters with uppercase, lowercase, a number, and a symbol.',
+    },
+    { fieldId: 'recovery-confirm-password', message: 'Passwords differ.' },
+  ]);
+  assert.deepEqual(recoveryValidationErrors('Strong-password-123!', 'Strong-password-123!'), []);
+});
+
+test('account password changes report every incomplete field in form order', () => {
+  assert.deepEqual(accountPasswordValidationErrors('', 'short', ''), [
+    { fieldId: 'account-current-password', message: 'Enter your current password.' },
+    {
+      fieldId: 'account-new-password',
+      message: 'Use 12+ characters with uppercase, lowercase, a number, and a symbol.',
+    },
+    { fieldId: 'account-confirm-password', message: 'Confirm your new password.' },
+  ]);
+  assert.deepEqual(
+    accountPasswordValidationErrors('Current-password-123!', 'Strong-password-123!', 'Strong-password-123!'),
+    [],
+  );
 });
 
 test('critical secondary actions cannot accidentally submit an account form', () => {

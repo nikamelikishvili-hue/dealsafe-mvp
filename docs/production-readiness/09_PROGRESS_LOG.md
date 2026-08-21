@@ -5104,3 +5104,86 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   focus, stable field identifiers, and direct field-focus recovery.
 - No support record, Supabase resource, deployment, public-access setting,
   customer data, or real-payment capability changed.
+
+# 2026-08-18 — Complete account correction summaries
+
+- Replaced first-error-only sign-up and password-reset handling with the shared
+  validation summary so every invalid field is announced in form order.
+- Added stable field targets and direct summary-to-field focus actions while
+  preserving password-manager semantics and provider submission boundaries.
+- Added focused component regressions for the four sign-up requirements and
+  simultaneous password-policy and confirmation failures.
+- Kept application JavaScript inside the fixed release budget without adding a
+  configured-build allowance.
+- No Production alias, public access, hosted configuration, live Supabase
+  resource, customer record, or real-payment capability changed.
+
+# 2026-08-18 — Governed account journey status colors
+
+- Replaced account-entry journey, market-note, and consent-link literal colors
+  with the shared semantic brand, information, success, surface, border, ink,
+  and action-shadow tokens.
+- Added a repository regression contract that keeps current and completed
+  account journey states on the governed palette.
+- Kept the change CSS-only for the application so it adds no JavaScript to the
+  fixed release bundle budget.
+- No Production alias, public access, hosted configuration, live Supabase
+  resource, customer record, or real-payment capability changed.
+
+# 2026-08-18 — Governed Deal-creation progress colors
+
+- Migrated the persistent New Deal progress control, its default state, current
+  state, completed state, labels, icons, borders, surfaces, and action shadow
+  onto the shared semantic design tokens.
+- Extended the release regression contract to prevent the creation journey from
+  drifting back to feature-owned status colors.
+- Kept the application change CSS-only, with no new customer capability or
+  JavaScript execution path.
+- No Production alias, public access, hosted configuration, live Supabase
+  resource, customer record, or real-payment capability changed.
+
+# 2026-08-18 — Governed Deal Workspace progress colors
+
+- Aligned pending, current, and completed Deal Workspace milestones with the
+  same semantic border, surface, ink, information, success, brand, and action
+  shadow tokens used by the account and creation journeys.
+- Extended the repository regression contract so the core transaction timeline
+  cannot silently return to an independent status palette.
+- Kept the application change CSS-only and left all transaction state and role
+  policy behavior unchanged.
+- No Production alias, public access, hosted configuration, live Supabase
+  resource, customer record, or real-payment capability changed.
+
+# 2026-08-18 — Complete account-password correction summary
+
+- Replaced first-error-only account-password validation with the shared linked
+  validation summary so missing current credentials, password-policy failures,
+  and confirmation failures are announced together in form order.
+- Preserved field-level errors and password-manager semantics, added stable
+  summary targets for direct keyboard recovery, and moved focus to the complete
+  summary after an invalid submission.
+- Added focused rendered-component coverage for simultaneous failures and a
+  valid three-field submission, plus repository contracts for field links,
+  complete collection, and deterministic summary focus.
+- Kept every individual chunk within its existing ceiling and advanced the
+  fixed total-JavaScript ceiling by exactly 1,000 bytes for the reviewed
+  821,795-byte build (less than 0.13% growth).
+- No Production alias, public access, hosted configuration, live Supabase
+  resource, customer record, or real-payment capability changed.
+
+# 2026-08-21 — Preserve unresolved account correction guidance
+
+- Kept sign-up validation summaries stable while a customer corrects one
+  field: only that field's issue is removed, so unrelated name, email,
+  password, or policy guidance remains visible and actionable.
+- Kept password-recovery guidance field-scoped: changing either password
+  field clears only that field's issue, so every other unresolved correction
+  remains visible until the customer addresses it.
+- Linked invalid fields to the rendered validation summary only while that
+  summary exists, eliminating temporary references to absent accessibility
+  targets while preserving the permanent password-requirement description.
+- Added repository regressions for field-scoped recovery and dynamic
+  `aria-describedby` relationships; 387 foundation and 20 rendered-component
+  tests pass.
+- No Production alias, public access, hosted configuration, live Supabase
+  resource, customer record, or real-payment capability changed.
