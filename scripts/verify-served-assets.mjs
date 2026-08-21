@@ -6,6 +6,7 @@ import {
   servedAssetUrl,
   validateServedAssetManifest,
 } from '../server/servedAssetIntegrityPolicy.mjs';
+import { validateServedBrowserHeaders } from '../server/servedBrowserHeaderPolicy.mjs';
 
 const commitPattern = /^[0-9a-f]{40}$/;
 const maximumManifestBytes = 250_000;
@@ -79,7 +80,7 @@ const requestHeaders = bypassToken
   ? { 'x-vercel-protection-bypass': bypassToken }
   : {};
 
-async function fetchExact(url, maximumBytes) {
+async function fetchExact(url, maximumBytes, { verifyBrowserHeaders = false } = {}) {
   const response = await fetch(url, {
     cache: 'no-store',
     headers: requestHeaders,
@@ -100,11 +101,16 @@ async function fetchExact(url, maximumBytes) {
   ) {
     fail('a response crossed the approved deployment boundary');
   }
+  if (verifyBrowserHeaders && !validateServedBrowserHeaders(response.headers)) {
+    fail('the deployment response is missing the reviewed browser security headers');
+  }
   return readBounded(response, maximumBytes);
 }
 
 const manifestUrl = new URL(`/${servedAssetManifestFile}`, `${origin}/`).href;
-const manifestBytes = await fetchExact(manifestUrl, maximumManifestBytes);
+const manifestBytes = await fetchExact(manifestUrl, maximumManifestBytes, {
+  verifyBrowserHeaders: true,
+});
 let manifestValue;
 try {
   manifestValue = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes));
@@ -149,4 +155,5 @@ console.log(JSON.stringify({
   origin_host: new URL(origin).hostname,
   asset_count: verifiedAssets,
   total_bytes: manifest.total_bytes,
+  browser_headers: 'verified',
 }));

@@ -1,5 +1,18 @@
 # Production-readiness progress log
 
+## 2026-08-21 — Exact-host served browser-header verification
+
+- Added a fail-closed browser-header policy for the exact protected deployment
+  response used by served-asset verification.
+- The hosted verifier now rejects missing or weakened CSP, reporting, HSTS,
+  framing, MIME, referrer, permissions, or cross-origin response controls
+  before trusting the deployment manifest.
+- Added negative tests for missing critical headers and unsafe inline-script
+  policy while keeping the protected origin and bypass credential out of logs.
+- SEC-004 remains a hosted acceptance gate until the protected Preview response,
+  synthetic CSP event, retention/alert ownership, and rollback rehearsal are
+  recorded.
+
 ## 2026-08-21 — DAT-001 hosted Staging preflight
 
 - Created the repository's protected-branch-only `staging` GitHub Environment;
