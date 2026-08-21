@@ -563,8 +563,8 @@ html[lang="ka"] .global-hero h1{font-size:clamp(36px,3.65vw,48px)}
 .create-validation-summary li button{display:flex;align-items:center;justify-content:space-between;gap:10px;font:700 11px/1.4 Manrope,sans-serif}
 .create-validation-summary li button::after{content:'→';font-size:15px;line-height:1}
 .create-validation-summary li svg{width:15px;flex:none}
-.create-step-card [aria-invalid="true"]{border-color:#c45d50!important;background:#fff9f7!important;box-shadow:0 0 0 3px rgba(196,93,80,.1)!important}
-.create-step-card .field-help.invalid{color:#a23e33;font-weight:750}
+.create-step-card [aria-invalid="true"]{border-color:var(--color-danger-border)!important;background:var(--color-danger-100)!important;box-shadow:0 0 0 3px rgba(143,36,48,.1)!important}
+.create-step-card .field-help.invalid{color:var(--color-danger-800);font-weight:750}
 .create-draft-recovery{
   display:grid;
   grid-template-columns:auto minmax(0,1fr) auto;
