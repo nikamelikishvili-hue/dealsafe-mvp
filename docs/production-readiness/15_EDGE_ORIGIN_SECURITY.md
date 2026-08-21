@@ -2,17 +2,21 @@
 
 ## Scope
 
-This control applies to the four authenticated payment functions invoked by
-the Dealivra browser:
+This control applies to every authenticated Edge mutation invoked by the
+Dealivra browser:
 
+- `evidence-files`
+- `evidence-maintenance` (interactive administrator path only)
 - `stripe-connect`
 - `stripe-create-checkout`
 - `stripe-release-payment`
 - `stripe-resolve-dispute`
 
-The Stripe webhook is intentionally excluded. Stripe calls it server to server,
-and the function authenticates the raw request body with the configured Stripe
-webhook signature and timestamp tolerance.
+The Stripe webhook is intentionally excluded. The security-notification
+dispatcher is also excluded. These server-to-server routes are authenticated
+respectively by a Stripe signature/timestamp and a separate constant-time
+worker credential. The scheduled evidence-maintenance path likewise uses its
+dedicated maintenance credential before the browser boundary is considered.
 
 ## Deny-by-default behavior
 
@@ -36,10 +40,15 @@ It rejects:
 - Preview hosts for another project or team;
 - preflight methods other than `POST`;
 - preflight headers outside the reviewed allowlist.
+- every non-`POST` browser request other than a valid `OPTIONS` preflight.
 
 Allowed responses echo the exact approved origin, include `Vary: Origin`, and
 never return `Access-Control-Allow-Origin: *`. Responses use `no-store`.
 Preflight responses expire after ten minutes.
+Method rejection is centralized before a feature handler runs and returns
+`405` with `Allow: POST, OPTIONS`, so a new browser Edge mutation cannot
+accidentally execute on `GET`, `PUT`, `PATCH`, or `DELETE` merely because its
+feature handler omitted a local method check.
 
 ## Layering
 
@@ -67,6 +76,7 @@ authentication path and cannot silently weaken this boundary.
 | Another Vercel team/project | `403`, no permissive CORS header |
 | Missing or `null` origin | `403`, no permissive CORS header |
 | Disallowed requested method/header | `403`, no permissive CORS header |
+| Approved origin with a non-POST actual method | `405`, `Allow: POST, OPTIONS` |
 | Approved origin without JWT | Gateway/function authentication failure |
 | Approved origin with revoked session | `401` |
 | Stripe webhook with valid signature | Continues on the signature-only server path |
