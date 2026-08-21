@@ -6405,6 +6405,7 @@ test('dense workspace controls retain full touch targets', () => {
   const smartCatalog = readText('src/smart-catalog.css');
   const agreementExport = readText('src/agreement-export.css');
   const workspace = readText('src/workspace-redesign.css');
+  const validationSummary = readText('src/validation-summary.css');
   const support = readText('src/support-case.css');
   const sessions = readText('src/session-security.css');
 
@@ -6414,7 +6415,8 @@ test('dense workspace controls retain full touch targets', () => {
   assert.match(agreementExport, /\.agreement-document-toolbar button\{min-height:44px/);
   assert.match(workspace, /\.deal-workspace-bar \.back\{min-height:44px/);
   assert.match(workspace, /\.deal-workspace-bar nav button\{min-height:44px/);
-  assert.match(workspace, /\.create-validation-summary li button\{width:100%;min-height:44px/);
+  assert.match(validationSummary, /\.validation-summary li button \{[\s\S]*?min-height: var\(--touch-target\);/);
+  assert.match(validationSummary, /\.validation-summary li button:focus-visible \{ outline-color: var\(--validation-accent\); \}/);
   assert.match(support, /\.icon-button\{width:44px;height:44px/);
   assert.match(sessions, /\.session-confirmation button\{min-height:44px/);
 });

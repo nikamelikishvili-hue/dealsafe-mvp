@@ -5271,3 +5271,17 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - This reconciliation changes documentation only. It does not call Stripe,
   deploy payment code, mutate a financial or customer record, change hosted
   configuration, or authorize a paid beta.
+
+# 2026-08-21 — Unified validation-summary experience
+
+- Replaced page-owned validation-summary colors and undersized actions with one
+  semantic danger, surface, border, focus, radius, and touch-target contract.
+- Applied the shared contract across account creation, password recovery,
+  account security, Deal creation, meeting, shipping, and support-case forms
+  while preserving the compact prominent layout used by Deal creation.
+- Kept each error actionable: selecting it still restores focus directly to the
+  invalid field, labels wrap safely, keyboard focus remains visible, and forced
+  colors receive an explicit high-contrast boundary.
+- Added release coverage for the governed touch target and focus contract. This
+  repository-only change does not alter hosted configuration, public access,
+  customer data, or payment behavior.
