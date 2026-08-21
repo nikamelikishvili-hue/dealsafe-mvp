@@ -32,6 +32,12 @@ secrets are required:
 The workflow intentionally does not commit, push, open a pull request, deploy,
 or touch Production.
 
+The target guard runs immediately after checkout, before Node setup,
+dependency installation, Supabase CLI installation, or any provider command.
+An incomplete environment therefore fails quickly without contacting Supabase.
+Disposable-stack cleanup runs only when that stack was started successfully;
+an expected preflight rejection cannot create a misleading cleanup failure.
+
 1. Start from a clean reviewed branch with no `supabase/migrations` directory.
 2. Link the CLI to the isolated Staging project after the target guard passes.
 3. Run `supabase db pull dealivra_staging_baseline`. The CLI must create the
@@ -80,3 +86,13 @@ the empty-database reset passes, Staging upgrade passes, all 17 SQL suites pass,
 advisors have no unreviewed error-level finding, and the exact migration
 manifest is attached to the reviewed commit. Production, public access, live
 payments, and customer data remain unchanged until a separate launch approval.
+
+## First hosted preflight evidence
+
+GitHub Actions run `32494006891` on reviewed `main` commit
+`8c57cad22820cca72e2ebb14559f94c1b18e9a0e` confirmed the fail-closed boundary:
+the isolated `staging` environment existed, but its required protected values
+were absent. The target guard rejected the run before Supabase CLI installation,
+linking, migration capture, or any database command. No database was contacted
+or changed. Configure the two project-reference variables and three secrets
+listed above before repeating the baseline capture.

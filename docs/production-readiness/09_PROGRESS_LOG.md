@@ -1,5 +1,24 @@
 # Production-readiness progress log
 
+## 2026-08-21 — DAT-001 hosted Staging preflight
+
+- Created the repository's protected-branch-only `staging` GitHub Environment;
+  no secrets, deployments, production aliases, or provider resources were
+  added or changed.
+- Dispatched the manual database-baseline workflow on reviewed `main` commit
+  `8c57cad22820cca72e2ebb14559f94c1b18e9a0e`.
+- Run `32494006891` failed closed at the database-target guard because the
+  required Staging variables and secrets are not configured. Supabase CLI
+  installation, project linking, baseline capture, and every database command
+  were skipped.
+- Tightened the workflow so the target guard executes immediately after
+  checkout and disposable-stack cleanup runs only after a successful local
+  stack start. This removes unnecessary setup work and a misleading cleanup
+  failure from intentionally rejected preflight runs.
+- DAT-001 remains open until the five protected Staging settings are supplied,
+  the CLI-generated migration is reviewed, and empty/upgrade database proofs
+  pass. Production, public access, payments, and customer data remain unchanged.
+
 ## 2026-08-15 — Global logout browser clearing
 
 - Added browser cache, cookie, and origin-storage clearing only after the Auth

@@ -34,6 +34,9 @@ jobs:
       - name: Check out the reviewed commit
         uses: actions/checkout@v4
 
+      - name: Reject Production, mixed, or incomplete database targets
+        run: npm run staging:database-target
+
       - name: Use the pinned Node.js release
         uses: actions/setup-node@v4
         with:
@@ -42,9 +45,6 @@ jobs:
 
       - name: Install dependencies without lifecycle scripts
         run: npm ci --ignore-scripts
-
-      - name: Reject Production or mixed database targets
-        run: npm run staging:database-target
 
       - name: Install the pinned Supabase CLI
         uses: supabase/setup-cli@v2
@@ -78,6 +78,7 @@ jobs:
         run: supabase migration list
 
       - name: Start a disposable local Supabase stack
+        id: local_stack
         run: supabase start
 
       - name: Rebuild the empty local database from migrations
@@ -111,5 +112,5 @@ jobs:
           retention-days: 7
 
       - name: Stop the disposable local stack
-        if: always()
+        if: ${{ always() && steps.local_stack.outcome == 'success' }}
         run: supabase stop --no-backup
