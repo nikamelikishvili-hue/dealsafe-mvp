@@ -106,6 +106,12 @@ Repository acceptance requires:
 - privacy-redaction assertions; and
 - the complete type-check, test, build, and verification gate.
 
+The protected served-asset verifier also validates the reviewed browser
+security-header policy on the exact deployment origin before it reads the
+manifest. Missing or weakened CSP, reporting, transport, framing, MIME,
+referrer, permissions, or cross-origin isolation headers fail deployment
+verification without printing the protected origin or bypass credential.
+
 Environment acceptance additionally requires:
 
 - successful Preview deployment;

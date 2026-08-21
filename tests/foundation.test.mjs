@@ -46,6 +46,7 @@ import {
   servedAssetUrl,
   validateServedAssetManifest,
 } from '../server/servedAssetIntegrityPolicy.mjs';
+import { validateServedBrowserHeaders } from '../server/servedBrowserHeaderPolicy.mjs';
 import {
   buildDependencySbom,
   serializeDependencySbom,
@@ -259,6 +260,36 @@ test('Vercel configuration includes the minimum browser security headers', () =>
       permanent: false,
     },
   ]);
+});
+
+test('served browser header verification fails closed on weakened deployment responses', () => {
+  const vercel = readJson('vercel.json');
+  const configured = vercel.headers.find(rule => rule.source === '/(.*)')?.headers ?? [];
+  const approved = new Headers(configured.map(header => [header.key, header.value]));
+  assert.deepEqual(validateServedBrowserHeaders(approved), {
+    policy: 'dealivra.served-browser-headers.v1',
+    status: 'verified',
+    checked_header_count: 11,
+  });
+
+  for (const name of [
+    'content-security-policy',
+    'strict-transport-security',
+    'permissions-policy',
+    'reporting-endpoints',
+  ]) {
+    const weakened = new Headers(approved);
+    weakened.delete(name);
+    assert.equal(validateServedBrowserHeaders(weakened), null);
+  }
+
+  const unsafeScript = new Headers(approved);
+  unsafeScript.set(
+    'content-security-policy',
+    `${approved.get('content-security-policy')} ; script-src 'self' 'unsafe-inline'`,
+  );
+  assert.equal(validateServedBrowserHeaders(unsafeScript), null);
+  assert.equal(validateServedBrowserHeaders(new Map()), null);
 });
 
 test('CSP report endpoint fails safely for invalid request shapes', async () => {
@@ -12823,6 +12854,8 @@ test('served asset verification keeps redirects and protection secrets on exact 
   assert.match(verifier, /x-vercel-protection-bypass/);
   assert.match(verifier, /manifest\.source_commit !== expectedCommit/);
   assert.match(verifier, /comparison\?\.matches/);
+  assert.match(verifier, /validateServedBrowserHeaders\(response\.headers\)/);
+  assert.match(verifier, /verifyBrowserHeaders: true/);
   assert.match(smoke, /validateServedAssetManifest/);
   assert.match(smoke, /compareServedAsset/);
   assert.match(workflow, /vars\.DEALIVRA_SERVED_ASSET_VERIFICATION_ENABLED == 'enabled'/);
