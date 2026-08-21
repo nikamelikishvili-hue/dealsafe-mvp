@@ -2505,6 +2505,80 @@ test('auth abuse telemetry and firewall rollout remain privacy-safe and staged',
   assert.match(readinessIndex, /37_PASSWORD_MUTATION_BOUNDARY\.md/);
 });
 
+test('every API route has a staged abuse-control policy', async () => {
+  const {
+    apiAbuseControlPolicy,
+    evaluateApiAbuseWindow,
+    validateApiAbuseControlPolicy,
+  } = await import('../server/apiAbuseControlPolicy.mjs');
+  const { apiRoutePolicy } = await import('../server/apiMutationOriginPolicy.mjs');
+
+  const validation = validateApiAbuseControlPolicy();
+  assert.equal(validation.status, 'passed');
+  assert.deepEqual(validation.findings, []);
+  assert.equal(validation.routesReviewed, Object.keys(apiRoutePolicy).length);
+  assert.deepEqual(
+    Object.keys(apiAbuseControlPolicy).sort(),
+    Object.keys(apiRoutePolicy).sort(),
+  );
+  assert.equal(validation.productionActivation, 'log_only');
+  assert.equal(validation.captchaActivation, 'disabled_pending_evidence');
+
+  for (const [route, control] of Object.entries(apiAbuseControlPolicy)) {
+    const boundary = evaluateApiAbuseWindow({
+      route,
+      method: control.method,
+      environment: 'preview',
+      count: control.threshold,
+    });
+    assert.equal(boundary.status, 'accepted');
+    assert.equal(boundary.action, 'allow');
+    assert.equal(boundary.alert, false);
+
+    const previewBurst = evaluateApiAbuseWindow({
+      route,
+      method: control.method,
+      environment: 'preview',
+      count: control.threshold + 1,
+    });
+    assert.equal(previewBurst.status, 'accepted');
+    assert.equal(previewBurst.action, 'block');
+    assert.equal(previewBurst.alert, true);
+
+    const productionBurst = evaluateApiAbuseWindow({
+      route,
+      method: control.method,
+      environment: 'production',
+      count: control.threshold + 1,
+    });
+    assert.equal(productionBurst.status, 'accepted');
+    assert.equal(productionBurst.action, 'observe');
+    assert.equal(productionBurst.alert, true);
+    assert.equal(productionBurst.captcha, 'disabled_pending_evidence');
+  }
+});
+
+test('abuse-control observations reject ambiguous route, method, environment, and count', async () => {
+  const { evaluateApiAbuseWindow } = await import('../server/apiAbuseControlPolicy.mjs');
+
+  assert.deepEqual(evaluateApiAbuseWindow(null), {
+    status: 'rejected',
+    reason: 'invalid_observation',
+  });
+  assert.deepEqual(evaluateApiAbuseWindow({
+    route: 'api/unreviewed.mjs', method: 'POST', environment: 'preview', count: 1,
+  }), { status: 'rejected', reason: 'unreviewed_route' });
+  assert.deepEqual(evaluateApiAbuseWindow({
+    route: 'api/auth/login.mjs', method: 'GET', environment: 'preview', count: 1,
+  }), { status: 'rejected', reason: 'method_mismatch' });
+  assert.deepEqual(evaluateApiAbuseWindow({
+    route: 'api/auth/login.mjs', method: 'POST', environment: 'unknown', count: 1,
+  }), { status: 'rejected', reason: 'invalid_environment' });
+  assert.deepEqual(evaluateApiAbuseWindow({
+    route: 'api/auth/login.mjs', method: 'POST', environment: 'preview', count: -1,
+  }), { status: 'rejected', reason: 'invalid_count' });
+});
+
 test('failed password login directs the user to secure account recovery', async () => {
   const { default: login } = await import('../api/auth/login.mjs');
   const response = createResponse();
@@ -12930,7 +13004,7 @@ test('locked dependencies follow the reviewed offline supply-chain policy', () =
   );
   assert.match(
     packageJson.scripts.verify,
-    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run security:mutation-origins && npm run brand:verify && npm run config:verify && npm run format:check && npm run lint && npm run typecheck/,
+    /catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run security:mutation-origins && npm run security:abuse-policy && npm run brand:verify && npm run config:verify && npm run format:check && npm run lint && npm run typecheck/,
   );
   assert.match(policy, /lockfile\.lockfileVersion !== 3/);
   assert.match(policy, /url\.protocol === 'https:'/);

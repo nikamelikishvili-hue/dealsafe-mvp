@@ -21,6 +21,19 @@ The server:
 Provider limits remain a required second layer. An application response must
 not imply that Dealivra can override a Supabase Auth sending or request limit.
 
+## Governed route inventory
+
+`server/apiAbuseControlPolicy.mjs` is the machine-readable source for every
+current Vercel API route. CI rejects a new or removed API route until its exact
+method, observation window, threshold, category, Preview action, Production
+action, and CAPTCHA state have been reviewed. The policy evaluator is a release
+and staging control; it does not claim that a Vercel Firewall rule is active.
+
+At the threshold, traffic remains allowed. Above the threshold, the reviewed
+Preview outcome is `block`, while Production remains `observe`. Invalid route,
+method, environment, or counter input is rejected rather than assigned a
+default. CAPTCHA remains `disabled_pending_evidence` for every route.
+
 ## Proposed Vercel Firewall observation rules
 
 The first live firewall stage is **log-only**. Limits are intentionally five to
@@ -35,6 +48,10 @@ ten times above expected legitimate private-beta behavior:
 | `POST /api/security/mfa-recovery` | 10 minutes | 40 | IP |
 | `POST /api/vehicles/vin` | 10 minutes | 200 | IP |
 | `POST /api/security/csp-report` | 1 minute | 300 | IP |
+
+The governed inventory also covers logout, refresh, password completion,
+bounded telemetry, public catalog/document reads, and liveness. Those routes
+use the same staged rule model and cannot silently disappear from CI coverage.
 
 Vercel rate counters are regional. These thresholds are therefore observation
 controls, not proof of a globally exact request count.
@@ -83,6 +100,8 @@ cannot contain. The selected challenge must:
 - Decide whether a challenge provider is necessary based on measured abuse.
 - Extend the same layered policy to deal creation, messaging, evidence intake,
   Checkout creation, payment release, public access codes, and admin actions.
+- Translate the governed route inventory into protected Vercel rule identifiers
+  and record their Preview/Production deployment evidence.
 
 ## Current references
 

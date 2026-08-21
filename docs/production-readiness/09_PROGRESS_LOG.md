@@ -5223,3 +5223,20 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - No Edge Function was deployed and no Production alias, public access, hosted
   configuration, live Supabase resource, customer record, or real-payment
   capability changed.
+
+# 2026-08-21 — Governed SEC-006 API abuse policy
+
+- Added one machine-readable abuse-control inventory for every current Vercel
+  API route, including exact method, observation window, threshold, category,
+  count key, Preview action, Production action, and CAPTCHA state.
+- Added a fail-closed release verifier that rejects route drift, invalid bounds,
+  premature Production blocking, missing Preview enforcement, or unsupported
+  CAPTCHA activation.
+- Added boundary and burst matrices for every route: threshold traffic remains
+  allowed, Preview traffic above threshold blocks and alerts, while Production
+  remains observation-only pending real traffic and false-positive review.
+- Kept CAPTCHA disabled pending measured automation, accessibility/privacy
+  review, and a non-CAPTCHA recovery path.
+- No Vercel Firewall rule, CAPTCHA provider, Production alias, public access,
+  hosted configuration, live Supabase resource, customer record, or real-payment
+  capability changed.

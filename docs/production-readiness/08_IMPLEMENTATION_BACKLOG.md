@@ -63,7 +63,7 @@ This backlog turns the production specification into controlled delivery work. P
 | SEC-003 | P0 | Add user MFA and require phishing-resistant MFA for privileged roles where supported | Enrollment/recovery/step-up tests pass |
 | SEC-004 | P0 | Add strict CSP, HSTS plan, frame, MIME, referrer, and permissions headers | Automated header tests pass per environment |
 | SEC-005 | P0 | **In progress locally:** same-origin Auth mutations require a canonical HTTPS Origin and one validated exact host; every inventoried browser Edge mutation now shares an exact-origin, POST-only boundary; hosted enforcement proof remains | Cross-origin and wrong-method abuse tests fail safely |
-| SEC-006 | P0 | Add route/action rate limits, CAPTCHA, and abuse telemetry | Defined burst/velocity tests create alerts/blocks |
+| SEC-006 | P0 | **In progress locally:** every Vercel API route has a fail-closed method/window/threshold policy; Preview burst matrices block above threshold, Production remains log-only, Auth abuse telemetry alerts, and CAPTCHA remains evidence-gated; protected Vercel rule activation and traffic evidence remain | Defined burst/velocity tests create alerts/blocks |
 | SEC-007 | P1 | Add security notifications and sensitive-change cooldowns | Email/payout/MFA changes are recorded and alerted |
 
 SEC-006 now has a same-origin server boundary for signup, password login, and
