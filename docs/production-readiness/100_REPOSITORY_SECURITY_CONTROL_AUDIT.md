@@ -2,9 +2,12 @@
 
 Audit date: 2026-08-21
 
-Scope: read-only GitHub repository controls for
-`nikamelikishvili-hue/dealsafe-mvp`. This audit did not change settings,
-alerts, branches, pull requests, deployments, or application data.
+Scope: GitHub repository controls for `nikamelikishvili-hue/dealsafe-mvp`.
+The follow-up observation is bound to `main` commit
+`a91e84b6085bdd94a0b844b4a9d80884d9700ff5`. Hosted secret scanning, push
+protection, vulnerability alerts, and Dependabot security updates were enabled
+before this record was refreshed. This audit did not dismiss alerts, weaken
+branch protection, change deployments, or access application data.
 
 ## Observed controls
 
@@ -32,13 +35,14 @@ dismiss stale approvals, and require approval of the final pushed revision.
 The organization must retain a documented emergency exception path rather than
 bypassing this control informally.
 
-### CodeQL findings are clear on the current main branch
+### Current hosted finding queues are clear
 
-The read-only API returned zero open findings on `refs/heads/main` at commit
-`6739b70035926f2952e821405911a15751e1c4d1`. The ten high-severity findings
-recorded by the 2026-08-15 audit were remediated in source and the current
-main-target CodeQL analysis passed. This is evidence for the audited commit,
-not a permanent exemption from future scanner triage.
+The GitHub APIs returned zero open CodeQL findings on `refs/heads/main`, zero
+open Dependabot alerts, and zero open secret-scanning alerts at the audited
+commit. The ten high-severity CodeQL findings recorded by the 2026-08-15 audit
+were remediated in source and the current main-target analysis passed. This is
+evidence for the audited commit, not a permanent exemption from future scanner
+triage.
 
 Every new finding still requires source-level review on the exact candidate. A
 true positive requires a tested fix; a false positive requires a reviewer,
@@ -54,29 +58,29 @@ TypeScript` check. The final main-target pull request must run CodeQL on the
 fully assembled exact head; earlier component PR results cannot substitute for
 that final analysis.
 
-### Dependency alerts are not enabled
+### Dependency advisory monitoring is enabled
 
-The Dependabot alerts API reported that alerts are disabled for this
-repository. Before external private beta, enable dependency graph and
-Dependabot alerts, confirm access for the named owner, define severity SLAs,
-and prove one non-production alert-to-triage workflow. The repository's local
-lockfile, license, install-script, SBOM, and audit gates remain useful defense
-in depth but do not replace hosted advisory monitoring.
+Vulnerability alerts and Dependabot security updates are enabled. The hosted
+queue contained zero open alerts at the audited commit. The local lockfile,
+license, install-script, SBOM, and high-severity audit gates remain required
+defense in depth. Before external private beta, the named owner must still
+prove access and retain one synthetic or historical non-production
+alert-to-triage record against the documented severity SLA.
 
-### Hosted secret detection is not enabled
+### Hosted secret detection and push prevention are enabled
 
-The repository security-and-analysis response reports `disabled` for secret
-scanning, push protection, non-provider pattern scanning, and validity checks.
-The repository's deterministic local secret gate remains required, but it
-cannot reject a secret before a Git push or continuously re-evaluate hosted
-history when provider patterns improve.
+The repository security-and-analysis response reports `enabled` for secret
+scanning and secret-scanning push protection. It reports `disabled` for
+non-provider pattern scanning and validity checks; those optional capabilities
+must not be represented as active. The deterministic local secret gate remains
+required and complements the hosted controls.
 
-Before external private beta, enable the supported GitHub secret-scanning and
-push-protection controls, assign bypass review to a named security owner, and
-prove the block/approved-bypass/revocation workflow with a non-secret synthetic
-fixture. Never upload a real credential to test the control. Any existing
-finding must be treated as potentially exposed: revoke first, then investigate
-and document remediation without copying the value into an issue or log.
+Before external private beta, assign bypass review to a named security owner
+and prove the block/approved-bypass/revocation workflow with a non-secret
+synthetic fixture. Never upload a real credential to test the control. Any
+future finding must be treated as potentially exposed: revoke first, then
+investigate and document remediation without copying the value into an issue
+or log.
 
 ## Required verification after remediation
 
@@ -88,10 +92,11 @@ and document remediation without copying the value into an issue or log.
    JavaScript and TypeScript` check for its exact head. Record disposition for
    any finding that appears after the audited commit and rerun analysis after
    each source fix and final rebase.
-3. Verify Dependabot alert visibility with the named owner and record the
-   triage SLA without copying advisory payloads or credentials into CI logs.
-4. Verify hosted secret scanning and push protection with a synthetic token
-   pattern, including named bypass review and a recorded revocation exercise.
+3. Verify the enabled Dependabot alert visibility with the named owner and
+   record the triage SLA without copying advisory payloads into CI logs.
+4. Verify the enabled hosted secret scanning and push protection with a
+   non-secret synthetic token pattern, including named bypass review and a
+   recorded revocation exercise.
 5. Open a synthetic pull request that cannot merge without the independent
    approval and all required checks. Update the head and prove stale approval
    is invalidated.
@@ -100,10 +105,11 @@ and document remediation without copying the value into an issue or log.
 
 ## Go/no-go effect
 
-The current repository control state is **no-go for external private beta**.
-A clean Draft PR, passing `verify`, and a `READY` Preview do not override the
-missing approval requirement or disabled hosted dependency and
-secret-detection controls.
+The current repository control state remains **no-go for external private
+beta**, but hosted dependency monitoring, secret scanning, and push protection
+are no longer blockers. A clean pull request, passing `verify`, and a `READY`
+Preview do not override the missing independent approval requirement or the
+remaining hosted workflow exercises.
 
 ### Activation boundary
 

@@ -5331,3 +5331,20 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - Added release assertions for address field, focus, and menu styling. Address
   behavior, provider configuration, customer data, and public access did not
   change.
+
+# 2026-08-21 — Activated hosted repository threat detection
+
+- Enabled GitHub secret scanning, secret-scanning push protection,
+  vulnerability alerts, and Dependabot security updates for the repository.
+- Confirmed zero open secret-scanning alerts, zero open Dependabot alerts, and
+  zero open CodeQL alerts on `main` commit
+  `a91e84b6085bdd94a0b844b4a9d80884d9700ff5`.
+- Confirmed strict required `verify`, CodeQL, and Vercel checks, signed commits,
+  administrator enforcement, linear history, resolved conversations, and
+  force-push/deletion denial remain active on `main`.
+- Kept the repository at no-go for external private beta because independent
+  approval and retained synthetic hosted-control exercises remain unresolved.
+  Non-provider secret patterns and validity checks remain disabled and are not
+  claimed as active.
+- No alert was dismissed, no branch protection was weakened, and no deployment,
+  customer data, public-access setting, or payment capability changed.
