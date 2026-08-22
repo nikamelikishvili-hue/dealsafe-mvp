@@ -110,6 +110,7 @@ The documents are intentionally stricter than a normal MVP checklist. Dealivra h
 | [99_RELEASE_READINESS_SNAPSHOT.md](99_RELEASE_READINESS_SNAPSHOT.md) | Exact-candidate go/no-go decision, protected-beta blockers, real-money blockers, evidence ownership, and activation boundary |
 | [100_REPOSITORY_SECURITY_CONTROL_AUDIT.md](100_REPOSITORY_SECURITY_CONTROL_AUDIT.md) | Read-only branch-protection, approval, CodeQL, and dependency-alert audit with exact release-remediation gates |
 | [101_ACCOUNT_TAKEOVER_RESPONSE.md](101_ACCOUNT_TAKEOVER_RESPONSE.md) | Fail-closed containment, identity re-proofing, dual-control recovery, restoration, and two-device rehearsal evidence for suspected takeover |
+| [102_ROUTED_SESSION_SSR_PROOF.md](102_ROUTED_SESSION_SSR_PROOF.md) | Preview-only origin rendering, nonce CSP, HttpOnly session rotation, protected-route denial, and the remaining target-framework acceptance matrix |
 
 ## Authority and change control
 

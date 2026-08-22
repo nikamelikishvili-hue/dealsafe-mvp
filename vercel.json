@@ -115,6 +115,14 @@
   ],
   "rewrites": [
     {
+      "source": "/__architecture/public",
+      "destination": "/api/architecture-poc/public"
+    },
+    {
+      "source": "/__architecture/protected",
+      "destination": "/api/architecture-poc/protected"
+    },
+    {
       "source": "/create",
       "destination": "/index.html"
     },

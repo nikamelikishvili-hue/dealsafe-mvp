@@ -15,6 +15,8 @@ const route = (method, windowSeconds, threshold, category) => Object.freeze({
 });
 
 export const apiAbuseControlPolicy = Object.freeze({
+  'api/architecture-poc/protected.mjs': route('GET', 60, 120, 'authenticated_session'),
+  'api/architecture-poc/public.mjs': route('GET', 60, 300, 'public_read'),
   'api/auth/login.mjs': route('POST', 600, 200, 'authentication'),
   'api/auth/logout.mjs': route('POST', 600, 200, 'authenticated_session'),
   'api/auth/mfa.mjs': route('POST', 600, 200, 'authentication'),
