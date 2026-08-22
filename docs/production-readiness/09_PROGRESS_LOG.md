@@ -5360,3 +5360,10 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - Kept ARC-002 open until protected Preview proves each supported deep link and
   the real unknown-path status. No Production alias, public-access setting,
   customer data, provider configuration, or payment capability changed.
+## 2026-08-22 — ARC-001 routed session/origin-rendering contract proof
+
+- Added exact Preview-only public and protected origin-rendered proof routes without changing customer navigation or Production access.
+- Reused the bounded server Auth transport and `HttpOnly` refresh cookie, including rotation and AAL2 denial when verified MFA is enrolled.
+- Added per-response nonce CSP, private no-store behavior, HTML escaping, noindex, clickjacking denial, and generic monitored provider failure handling.
+- Added regression coverage for Preview-only activation, exact rewrites, CSP construction, credential-free markup, and hostile display-name escaping.
+- Recorded Next.js App Router as the leading comparison target while keeping ARC-001 open until a protected framework Preview and measured migration decision are accepted.

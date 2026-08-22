@@ -20,6 +20,8 @@ import passwordHandler from '../api/auth/password.mjs';
 import recoverHandler from '../api/auth/recover.mjs';
 import refreshHandler from '../api/auth/refresh.mjs';
 import signupHandler from '../api/auth/signup.mjs';
+import architecturePublicHandler from '../api/architecture-poc/public.mjs';
+import architectureProtectedHandler from '../api/architecture-poc/protected.mjs';
 import {
   readBoundedJson as readBoundedReportingJson,
   validateReportingRequest,
@@ -556,8 +558,10 @@ test('auth endpoints enforce same-origin POST requests and do not cache response
   assert.match(shared, /request\.method === 'POST'/);
   assert.match(shared, /new URL\(origin\)\.host !== host/);
   assert.match(shared, /no-store, max-age=0/);
-  assert.ok(vercel.rewrites.every(rule => rule.destination === '/index.html'));
-  assert.ok(vercel.rewrites.every(rule => !rule.source.includes('api')));
+  const spaRewrites = vercel.rewrites.filter(rule => rule.destination === '/index.html');
+  assert.ok(spaRewrites.length > 0);
+  assert.ok(spaRewrites.every(rule => !rule.source.includes('api')));
+  assert.ok(vercel.rewrites.every(rule => !rule.source.startsWith('/api/')));
 });
 
 test('every authentication handler applies the runtime no-store response contract', async () => {
@@ -5400,6 +5404,10 @@ test('browser route resolver preserves canonical and legacy deep links and rejec
 test('Vercel rewrites only supported SPA deep links and leaves unknown paths as HTTP 404', () => {
   const vercel = readJson('vercel.json');
   const sources = vercel.rewrites.map(rule => rule.source);
+  const architectureProofRoutes = [
+    '/__architecture/public',
+    '/__architecture/protected',
+  ];
   const exactRoutes = [
     '/create',
     '/signin',
@@ -5416,11 +5424,136 @@ test('Vercel rewrites only supported SPA deep links and leaves unknown paths as 
     '/trust/:publicId',
   ];
 
-  assert.deepEqual(sources, exactRoutes);
-  assert.ok(vercel.rewrites.every(rule => rule.destination === '/index.html'));
+  assert.deepEqual(sources, [...architectureProofRoutes, ...exactRoutes]);
+  assert.deepEqual(
+    vercel.rewrites.slice(0, 2).map(rule => rule.destination),
+    ['/api/architecture-poc/public', '/api/architecture-poc/protected'],
+  );
+  assert.ok(vercel.rewrites.slice(2).every(rule => rule.destination === '/index.html'));
   assert.ok(sources.every(source => !source.includes('*')));
   assert.ok(sources.every(source => !source.includes('(.*)')));
   assert.ok(!sources.includes('/api/:path*'));
+});
+
+test('ARC-001 proof renders escaped origin HTML with a nonce-bound CSP only in Preview', async () => {
+  const {
+    architecturePocCsp,
+    architecturePocEnabled,
+    renderArchitecturePocPage,
+  } = await import('../server/architecturePoc.mjs');
+  const nonce = 'Abcdefghijklmnopqrstuv';
+
+  assert.equal(architecturePocEnabled('preview'), true);
+  assert.equal(architecturePocEnabled('production'), false);
+  assert.equal(architecturePocEnabled('development'), false);
+  assert.match(architecturePocCsp(nonce), /default-src 'none'/);
+  assert.match(architecturePocCsp(nonce), /style-src 'nonce-Abcdefghijklmnopqrstuv'/);
+  assert.throws(() => architecturePocCsp("bad'nonce"));
+
+  const publicMarkup = renderArchitecturePocPage({ nonce });
+  const protectedMarkup = renderArchitecturePocPage({
+    nonce,
+    protectedRoute: true,
+    displayName: '<script>unsafe</script>',
+  });
+  assert.match(publicMarkup, /SERVER-RENDERED PUBLIC ROUTE/);
+  assert.match(protectedMarkup, /SERVER-VERIFIED SESSION/);
+  assert.match(protectedMarkup, /&lt;script&gt;unsafe&lt;\/script&gt;/);
+  assert.doesNotMatch(protectedMarkup, /<script>unsafe<\/script>/);
+  assert.doesNotMatch(protectedMarkup, /access_token|refresh_token/i);
+});
+
+test('ARC-001 public proof is Preview-only, method-bounded, and bodyless on HEAD', async () => {
+  const originalEnvironment = process.env.VERCEL_ENV;
+  try {
+    process.env.VERCEL_ENV = 'production';
+    const production = createResponse();
+    await architecturePublicHandler({ method: 'GET' }, production);
+    assert.equal(production.statusCode, 404);
+
+    process.env.VERCEL_ENV = 'preview';
+    const post = createResponse();
+    await architecturePublicHandler({ method: 'POST' }, post);
+    assert.equal(post.statusCode, 405);
+    assert.equal(post.headers.get('allow'), 'GET, HEAD');
+
+    const head = createResponse();
+    await architecturePublicHandler({ method: 'HEAD' }, head);
+    assert.equal(head.statusCode, 200);
+    assert.equal(head.ended, true);
+    assert.equal(head.payload, undefined);
+
+    const get = createResponse();
+    await architecturePublicHandler({ method: 'GET' }, get);
+    assert.equal(get.statusCode, 200);
+    assert.match(get.headers.get('content-security-policy'), /default-src 'none'/);
+    assert.match(get.payload, /SERVER-RENDERED PUBLIC ROUTE/);
+  } finally {
+    if (originalEnvironment === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = originalEnvironment;
+  }
+});
+
+test('ARC-001 protected proof rejects non-GET requests before session or provider access', async () => {
+  const originalEnvironment = process.env.VERCEL_ENV;
+  let providerCalled = false;
+  try {
+    process.env.VERCEL_ENV = 'preview';
+    const response = createResponse();
+    await withAuthProvider(async () => {
+      providerCalled = true;
+      throw new Error('The provider must not be called.');
+    }, () => architectureProtectedHandler({ method: 'HEAD', headers: {} }, response));
+    assert.equal(response.statusCode, 405);
+    assert.equal(response.headers.get('allow'), 'GET');
+    assert.equal(providerCalled, false);
+  } finally {
+    if (originalEnvironment === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = originalEnvironment;
+  }
+});
+
+test('ARC-001 protected proof redirects missing sessions and renders only bounded identity data', async () => {
+  const originalEnvironment = process.env.VERCEL_ENV;
+  try {
+    process.env.VERCEL_ENV = 'preview';
+    const missing = createResponse();
+    await architectureProtectedHandler({ method: 'GET', headers: {} }, missing);
+    assert.equal(missing.statusCode, 307);
+    assert.equal(missing.headers.get('location'), '/signin?returnTo=%2F__architecture%2Fprotected');
+
+    const valid = createResponse();
+    await withAuthProvider(async () => new Response(JSON.stringify(
+      authProviderSession('rotated-refresh-token', { aal: 'aal1' }),
+    ), { status: 200, headers: { 'content-type': 'application/json' } }), () => (
+      architectureProtectedHandler({
+        method: 'GET',
+        headers: { cookie: '__Host-dealivra-refresh=existing-refresh-token' },
+      }, valid)
+    ));
+    assert.equal(valid.statusCode, 200);
+    assert.match(valid.payload, /Welcome, Test User/);
+    assert.doesNotMatch(valid.payload, /rotated-refresh-token|existing-refresh-token|access_token/i);
+    assert.match(String(valid.headers.get('set-cookie')), /HttpOnly/i);
+    assert.match(valid.headers.get('content-security-policy'), /default-src 'none'/);
+
+    const insufficient = createResponse();
+    await withAuthProvider(async () => new Response(JSON.stringify(authProviderSession(
+      'rotated-mfa-token',
+      { aal: 'aal1', factors: [{ status: 'verified', factor_type: 'totp' }] },
+    )), { status: 200, headers: { 'content-type': 'application/json' } }), () => (
+      architectureProtectedHandler({
+        method: 'GET',
+        headers: { cookie: '__Host-dealivra-refresh=existing-refresh-token' },
+      }, insufficient)
+    ));
+    assert.equal(insufficient.statusCode, 307);
+    assert.equal(insufficient.headers.get('location'), '/signin?returnTo=%2F__architecture%2Fprotected');
+    assert.match(String(insufficient.headers.get('set-cookie')), /Max-Age=0/i);
+  } finally {
+    if (originalEnvironment === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = originalEnvironment;
+  }
 });
 
 test('authentication origin checks reject malformed and insecure public origins', async () => {
