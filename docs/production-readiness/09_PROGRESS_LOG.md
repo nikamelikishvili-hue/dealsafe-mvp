@@ -2,9 +2,10 @@
 
 ## 2026-08-22 — Bounded development dependency refresh
 
-- Updated Biome, the Vite React plugin, and Vite after reproducing the hosted build against the refreshed dependency graph.
-- Kept TypeScript on the reviewed 5.9 line because TypeScript 7 removes the stable compiler-AST surface used by the launch-locale transform and semantic accessibility tests; the attempted grouped upgrade failed closed in CI and Vercel.
-- Switched the locale transform to a namespace import compatible with the current reviewed compiler API and reran format, lint, type, 396 foundation, 20 component, configuration, and production-compilation checks successfully.
+- Updated Biome from 2.5.6 to 2.5.9 after reproducing the hosted build against the refreshed dependency graph.
+- Kept TypeScript on the reviewed 5.9 line because TypeScript 7 removes the stable compiler-AST surface used by the launch-locale transform and semantic accessibility tests.
+- Kept the Vite React plugin at 6.0.3 and Vite at 8.1.5 because the attempted grouped upgrade raised the initial application JavaScript from 133,940 to 214,882 bytes and correctly failed the 160,000-byte release budget in CI and Vercel.
+- Switched the locale transform to a namespace import compatible with the current reviewed compiler API and reran format, lint, type, 396 foundation, 20 component, configuration, production-compilation, and hosted release-budget checks successfully.
 - No Production alias, public-access setting, provider configuration, customer data, or payment capability changed.
 
 ## 2026-08-21 — Exact-host served browser-header verification
