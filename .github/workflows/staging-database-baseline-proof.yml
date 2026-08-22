@@ -32,13 +32,13 @@ jobs:
       SUPABASE_DB_PASSWORD: ${{ secrets.DEALIVRA_STAGING_SUPABASE_DB_PASSWORD }}
     steps:
       - name: Check out the reviewed commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Reject Production, mixed, or incomplete database targets
         run: npm run staging:database-target
 
       - name: Use the pinned Node.js release
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -104,7 +104,7 @@ jobs:
         run: supabase db advisors --local
 
       - name: Upload only the verified baseline
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: dealivra-staging-baseline-${{ github.sha }}
           path: supabase/migrations/*.sql
