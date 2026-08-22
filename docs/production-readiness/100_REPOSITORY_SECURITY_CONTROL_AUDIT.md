@@ -1,6 +1,6 @@
 # Repository security-control audit
 
-Audit date: 2026-08-15
+Audit date: 2026-08-21
 
 Scope: read-only GitHub repository controls for
 `nikamelikishvili-hue/dealsafe-mvp`. This audit did not change settings,
@@ -32,24 +32,19 @@ dismiss stale approvals, and require approval of the final pushed revision.
 The organization must retain a documented emergency exception path rather than
 bypassing this control informally.
 
-### Open CodeQL findings require triage
+### CodeQL findings are clear on the current main branch
 
-The read-only API returned ten open findings on `refs/heads/main`, all labelled
-high severity by CodeQL:
+The read-only API returned zero open findings on `refs/heads/main` at commit
+`6739b70035926f2952e821405911a15751e1c4d1`. The ten high-severity findings
+recorded by the 2026-08-15 audit were remediated in source and the current
+main-target CodeQL analysis passed. This is evidence for the audited commit,
+not a permanent exemption from future scanner triage.
 
-| Alerts | Rule | Most recent path |
-|---|---|---|
-| `#10` | `js/clear-text-storage-of-sensitive-data` | `src/services/supabaseRest.ts` |
-| `#8`, `#9` | `js/xss-through-dom` | `src/DealWorkspaceFeatures.tsx` |
-| `#7` | `js/file-system-race` | `scripts/create-release-evidence.mjs` |
-| `#2`–`#6` | `js/regex/missing-regexp-anchor` | `tests/foundation.test.mjs` |
-| `#1` | `js/bad-tag-filter` | `tests/foundation.test.mjs` |
-
-This table records scanner output, not a vulnerability conclusion. Each alert
-must receive source-level review on the current candidate. A true positive
-requires a tested fix; a false positive requires a reviewer, rationale,
-affected commit, expiry/re-review condition, and retained dismissal record.
-No alert should be dismissed solely to obtain a green merge check.
+Every new finding still requires source-level review on the exact candidate. A
+true positive requires a tested fix; a false positive requires a reviewer,
+rationale, affected commit, expiry or re-review condition, and retained
+dismissal record. No alert should be dismissed solely to obtain a green merge
+check.
 
 The CodeQL workflow runs for pushes to `main`, pull requests whose base is
 `main`, the weekly schedule, and manual dispatch. The current stacked Draft
@@ -88,10 +83,11 @@ and document remediation without copying the value into an issue or log.
 1. Capture the branch-protection response showing the intended approval count,
    code-owner/last-push policy, stale-review dismissal, administrator
    enforcement, signatures, conversations, and exact required checks.
-2. Record disposition for every CodeQL alert against the exact release
-   candidate; rerun analysis after each source fix and after the final rebase.
-   Confirm that the final pull request is based on `main` and reports the
-   required `Analyze JavaScript and TypeScript` check for its exact head.
+2. Confirm that the exact release-candidate pull request is based on `main`,
+   reports zero open CodeQL findings, and passes the required `Analyze
+   JavaScript and TypeScript` check for its exact head. Record disposition for
+   any finding that appears after the audited commit and rerun analysis after
+   each source fix and final rebase.
 3. Verify Dependabot alert visibility with the named owner and record the
    triage SLA without copying advisory payloads or credentials into CI logs.
 4. Verify hosted secret scanning and push protection with a synthetic token
@@ -106,8 +102,8 @@ and document remediation without copying the value into an issue or log.
 
 The current repository control state is **no-go for external private beta**.
 A clean Draft PR, passing `verify`, and a `READY` Preview do not override the
-missing approval requirement, unresolved scanner triage, or disabled hosted
-dependency and secret-detection controls.
+missing approval requirement or disabled hosted dependency and
+secret-detection controls.
 
 ### Activation boundary
 
