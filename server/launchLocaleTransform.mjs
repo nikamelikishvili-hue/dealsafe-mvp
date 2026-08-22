@@ -1,4 +1,4 @@
-import ts from 'typescript';
+import * as ts from 'typescript';
 
 function importsLaunchTranslator(sourceFile) {
   return sourceFile.statements.some(statement => {
