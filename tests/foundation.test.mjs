@@ -13014,6 +13014,11 @@ test('served asset verification keeps redirects and protection secrets on exact 
   assert.match(verifier, /comparison\?\.matches/);
   assert.match(verifier, /validateServedBrowserHeaders\(response\.headers\)/);
   assert.match(verifier, /verifyBrowserHeaders: true/);
+  assert.match(verifier, /const spaRoutes = \[/);
+  assert.match(verifier, /'\/deal\/route-verification'/);
+  assert.match(verifier, /'\/trust\/route-verification'/);
+  assert.match(verifier, /'\/__route-verification-unknown'/);
+  assert.match(verifier, /SERVER-RENDERED PUBLIC ROUTE/);
   assert.match(smoke, /validateServedAssetManifest/);
   assert.match(smoke, /compareServedAsset/);
   assert.match(workflow, /vars\.DEALIVRA_SERVED_ASSET_VERIFICATION_ENABLED == 'enabled'/);

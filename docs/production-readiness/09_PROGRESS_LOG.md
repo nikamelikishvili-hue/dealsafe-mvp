@@ -5375,3 +5375,18 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - Added per-response nonce CSP, private no-store behavior, HTML escaping, noindex, clickjacking denial, and generic monitored provider failure handling.
 - Added regression coverage for Preview-only activation, exact rewrites, CSP construction, credential-free markup, and hostile display-name escaping.
 - Recorded Next.js App Router as the leading comparison target while keeping ARC-001 open until a protected framework Preview and measured migration decision are accepted.
+
+## 2026-08-22 — Made protected Preview route evidence fail closed
+
+- Extended the trusted served-deployment verifier to request every reviewed SPA
+  deep link, bounded Deal and trust identifiers, the Preview-only public and
+  protected origin routes, and an unknown sibling path that must return HTTP
+  `404`.
+- Required exact statuses, content types, method/Allow behavior, redirect
+  location, application-shell markers, response-size bounds, and reviewed
+  browser security headers without following redirects.
+- Kept hosted activation default-off until its exact-host allowlist and
+  server-only bypass secret are configured and the first run is retained.
+- Kept ARC-002 open until that protected Preview run is retained. No Preview
+  protection, Production alias, public access, provider data, or payment
+  capability changed.

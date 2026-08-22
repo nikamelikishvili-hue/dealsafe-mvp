@@ -13,6 +13,12 @@ const maximumManifestBytes = 250_000;
 const maximumAssetBytes = 5_000_000;
 const requestTimeoutMilliseconds = 15_000;
 const verificationConcurrency = 4;
+const maximumRouteBytes = 250_000;
+const spaRoutes = [
+  '/', '/create', '/signin', '/signup', '/forgot-password', '/verify',
+  '/buyer-protection', '/seller-protection', '/fees', '/disputes', '/terms',
+  '/privacy', '/deal/route-verification', '/trust/route-verification',
+];
 
 function fail(message) {
   throw new Error(`Served asset verification rejected: ${message}`);
@@ -107,6 +113,37 @@ async function fetchExact(url, maximumBytes, { verifyBrowserHeaders = false } = 
   return readBounded(response, maximumBytes);
 }
 
+async function requestRoute(path, {
+  method = 'GET', expectedStatus, expectedContentType, expectedText,
+  expectedAllow, expectedLocation,
+} = {}) {
+  const url = new URL(path, `${origin}/`);
+  if (url.origin !== origin) fail('a route escaped the approved deployment boundary');
+  const response = await fetch(url, {
+    cache: 'no-store', headers: requestHeaders, method, redirect: 'manual',
+    signal: AbortSignal.timeout(requestTimeoutMilliseconds),
+  });
+  if (response.status !== expectedStatus) fail('a reviewed route returned an unexpected HTTP status');
+  if (expectedContentType && !response.headers.get('content-type')?.startsWith(expectedContentType)) {
+    fail('a reviewed route returned an unexpected content type');
+  }
+  if (expectedAllow && response.headers.get('allow') !== expectedAllow) {
+    fail('a reviewed route returned an unexpected Allow header');
+  }
+  if (expectedLocation && response.headers.get('location') !== expectedLocation) {
+    fail('a reviewed route returned an unexpected redirect target');
+  }
+  if (!validateServedBrowserHeaders(response.headers)) {
+    fail('a reviewed route is missing the browser security headers');
+  }
+  const bytes = await readBounded(response, maximumRouteBytes);
+  if (method === 'HEAD' && bytes.byteLength !== 0) fail('a HEAD response unexpectedly returned a body');
+  if (expectedText) {
+    const body = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    if (!body.includes(expectedText)) fail('a reviewed route did not return the expected bounded document');
+  }
+}
+
 const manifestUrl = new URL(`/${servedAssetManifestFile}`, `${origin}/`).href;
 const manifestBytes = await fetchExact(manifestUrl, maximumManifestBytes, {
   verifyBrowserHeaders: true,
@@ -148,6 +185,30 @@ if (verifiedAssets !== manifest.asset_count) {
   fail('the complete served asset set was not verified');
 }
 
+for (const path of spaRoutes) {
+  await requestRoute(path, {
+    expectedStatus: 200,
+    expectedContentType: 'text/html',
+    expectedText: '<div id="root"></div>',
+  });
+}
+await requestRoute('/__architecture/public', {
+  expectedStatus: 200, expectedContentType: 'text/html',
+  expectedText: 'SERVER-RENDERED PUBLIC ROUTE',
+});
+await requestRoute('/__architecture/public', { method: 'HEAD', expectedStatus: 200 });
+await requestRoute('/__architecture/public', {
+  method: 'POST', expectedStatus: 405, expectedAllow: 'GET, HEAD',
+});
+await requestRoute('/__architecture/protected', {
+  expectedStatus: 307,
+  expectedLocation: '/signin?returnTo=%2F__architecture%2Fprotected',
+});
+await requestRoute('/__architecture/protected', {
+  method: 'HEAD', expectedStatus: 405, expectedAllow: 'GET',
+});
+await requestRoute('/__route-verification-unknown', { expectedStatus: 404 });
+
 console.log(JSON.stringify({
   schema: 'dealivra.served-asset-verification-result.v1',
   status: 'verified',
@@ -156,4 +217,6 @@ console.log(JSON.stringify({
   asset_count: verifiedAssets,
   total_bytes: manifest.total_bytes,
   browser_headers: 'verified',
+  spa_routes: spaRoutes.length,
+  route_contract: 'verified',
 }));

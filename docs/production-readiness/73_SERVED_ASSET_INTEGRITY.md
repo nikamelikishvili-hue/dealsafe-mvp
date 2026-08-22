@@ -43,6 +43,12 @@ with four bounded workers. Each response must remain on the approved origin,
 arrive without a redirect, stay within its declared byte limit, and match both
 the declared byte count and SHA-256 digest.
 
+The same verifier then requests every exact SPA deep link, including bounded
+Deal and trust identifiers. Each must return the reviewed application shell
+with browser security headers. It also verifies the Preview-only public origin
+route, its HEAD and method contract, the unauthenticated protected-route
+redirect, and an unknown sibling path that must return a real HTTP `404`.
+
 Protected Preview access may use
 `DEALIVRA_DEPLOYMENT_BYPASS_TOKEN`. The token is sent only after exact-host
 validation, only in the Vercel protection header, and is never printed or
