@@ -82,9 +82,10 @@ Protected Preview browser evidence must still prove:
 
 ## Remaining architecture boundary
 
-The current Vite single-page application rewrites non-API paths, including the
-canonical customer routes, to `index.html`. The customer receives the correct visible 404 and no-index
-metadata, but the edge response remains HTTP 200. A target framework with
-server-aware routes must return an actual HTTP 404 before ARC-002 can be marked
-fully complete. Protected account records also still require authenticated,
-non-public route identifiers during the ARC-001/ARC-003 migration.
+The current Vite single-page application rewrites only the reviewed canonical
+customer routes to `index.html`. Unknown paths are deliberately outside that
+allowlist and must receive an actual edge HTTP 404 instead of the SPA shell.
+Protected Preview still must prove the status and every supported deep link
+before ARC-002 can be marked fully complete. A target framework remains
+necessary for server-rendered public routes and authenticated, non-public
+account record identifiers during the ARC-001 migration.

@@ -115,7 +115,55 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/|_vercel/).*)",
+      "source": "/create",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/signin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/signup",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/forgot-password",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/verify",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/buyer-protection",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/seller-protection",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/fees",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/disputes",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/deal/:publicId",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/trust/:publicId",
       "destination": "/index.html"
     }
   ]

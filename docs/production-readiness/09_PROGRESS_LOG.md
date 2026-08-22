@@ -5348,3 +5348,15 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   claimed as active.
 - No alert was dismissed, no branch protection was weakened, and no deployment,
   customer data, public-access setting, or payment capability changed.
+
+# 2026-08-21 — Replaced the global SPA fallback with an exact route allowlist
+
+- Replaced the catch-all non-API Vercel rewrite with exact create, account,
+  public-information, Deal Link, and trust-passport rewrites.
+- Unknown paths now remain outside the SPA rewrite contract and can return a
+  real edge HTTP 404 instead of a successful `index.html` response.
+- Added a fail-closed release assertion that rejects wildcard rewrites, API
+  capture, route drift, or non-shell destinations.
+- Kept ARC-002 open until protected Preview proves each supported deep link and
+  the real unknown-path status. No Production alias, public-access setting,
+  customer data, provider configuration, or payment capability changed.

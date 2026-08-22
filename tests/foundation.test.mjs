@@ -552,13 +552,12 @@ test('browser auth keeps the long-lived refresh secret in an HttpOnly cookie', (
 test('auth endpoints enforce same-origin POST requests and do not cache responses', () => {
   const shared = readText('server/authShared.mjs');
   const vercel = readJson('vercel.json');
-  const spaRewrite = vercel.rewrites.find(rule => rule.destination === '/index.html');
 
   assert.match(shared, /request\.method === 'POST'/);
   assert.match(shared, /new URL\(origin\)\.host !== host/);
   assert.match(shared, /no-store, max-age=0/);
-  assert.ok(spaRewrite);
-  assert.match(spaRewrite.source, /api\//);
+  assert.ok(vercel.rewrites.every(rule => rule.destination === '/index.html'));
+  assert.ok(vercel.rewrites.every(rule => !rule.source.includes('api')));
 });
 
 test('every authentication handler applies the runtime no-store response contract', async () => {
@@ -5396,6 +5395,32 @@ test('browser route resolver preserves canonical and legacy deep links and rejec
   assert.match(errorBoundary, /componentDidCatch/);
   assert.match(errorBoundary, /No transaction action was completed on this screen/);
   assert.doesNotMatch(errorBoundary, /\{error\.message\}/);
+});
+
+test('Vercel rewrites only supported SPA deep links and leaves unknown paths as HTTP 404', () => {
+  const vercel = readJson('vercel.json');
+  const sources = vercel.rewrites.map(rule => rule.source);
+  const exactRoutes = [
+    '/create',
+    '/signin',
+    '/signup',
+    '/forgot-password',
+    '/verify',
+    '/buyer-protection',
+    '/seller-protection',
+    '/fees',
+    '/disputes',
+    '/terms',
+    '/privacy',
+    '/deal/:publicId',
+    '/trust/:publicId',
+  ];
+
+  assert.deepEqual(sources, exactRoutes);
+  assert.ok(vercel.rewrites.every(rule => rule.destination === '/index.html'));
+  assert.ok(sources.every(source => !source.includes('*')));
+  assert.ok(sources.every(source => !source.includes('(.*)')));
+  assert.ok(!sources.includes('/api/:path*'));
 });
 
 test('authentication origin checks reject malformed and insecure public origins', async () => {
