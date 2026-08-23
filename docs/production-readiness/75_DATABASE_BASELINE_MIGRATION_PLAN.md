@@ -96,3 +96,16 @@ were absent. The target guard rejected the run before Supabase CLI installation,
 linking, migration capture, or any database command. No database was contacted
 or changed. Configure the two project-reference variables and three secrets
 listed above before repeating the baseline capture.
+
+## 2026-08-23 protected-environment reconciliation
+
+The isolated Staging and Production project-reference variables are now set in
+the protected GitHub `staging` environment and are intentionally different.
+The access token, database password, and direct database URL remain absent, so
+the hosted workflow still fails closed before it can contact Supabase.
+
+A data-free Staging migration-history manifest now pins the 30 observed remote
+versions by ordered name, byte count, and SHA-256. It contains no SQL, database
+URL, credential, user row, or payment data. The manifest is drift evidence, not
+a replacement for the CLI-generated baseline, empty-database reset, or upgrade
+proof required to close DAT-001.
