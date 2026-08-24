@@ -13155,7 +13155,10 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
     /npm audit --audit-level=high[\s\S]+npm run release:sbom[\s\S]+npm run release:evidence/,
   );
   assert.match(workflow, /DEALIVRA_RELEASE_COMMIT: \$\{\{ github\.sha \}\}/);
-  assert.match(workflow, /actions\/upload-artifact@v7/);
+  assert.match(
+    workflow,
+    /actions\/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7/,
+  );
   assert.match(workflow, /if-no-files-found: error/);
   assert.match(workflow, /retention-days: 30/);
   assert.match(script, /git\(\['rev-parse', 'HEAD'\]\)/);
@@ -13294,11 +13297,17 @@ test('CodeQL findings and dependency controls have scoped ownership and SLAs', (
   assert.match(workflow, /contents: read/);
   assert.match(workflow, /packages: read/);
   assert.match(workflow, /security-events: write/);
-  assert.match(workflow, /github\/codeql-action\/init@v4/);
+  assert.match(
+    workflow,
+    /github\/codeql-action\/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4/,
+  );
   assert.match(workflow, /languages: javascript-typescript/);
   assert.match(workflow, /build-mode: none/);
   assert.match(workflow, /queries: security-extended/);
-  assert.match(workflow, /github\/codeql-action\/analyze@v4/);
+  assert.match(
+    workflow,
+    /github\/codeql-action\/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4/,
+  );
   assert.doesNotMatch(workflow, /pull_request_target|secrets\.|permissions:\s*write-all/);
 
   for (const path of [
@@ -13319,6 +13328,28 @@ test('CodeQL findings and dependency controls have scoped ownership and SLAs', (
     governance,
     /does not falsely claim that a\s+parallel CodeQL run passed/,
   );
+});
+
+test('every GitHub Actions dependency is pinned to an immutable commit', () => {
+  const workflows = [
+    '.github/workflows/ci.yml',
+    '.github/workflows/codeql.yml',
+    '.github/workflows/served-asset-integrity.yml',
+    '.github/workflows/staging-database-baseline-proof.yml',
+    '.github/workflows/staging-database-gate.yml',
+  ];
+
+  for (const path of workflows) {
+    const uses = readText(path).match(/^\s*uses:\s+\S.*$/gm) ?? [];
+    assert.ok(uses.length > 0, `${path} must declare at least one action`);
+    for (const dependency of uses) {
+      assert.match(
+        dependency,
+        /@[a-f0-9]{40}(?:\s+#\s+\S.*)?$/,
+        `${path} contains a movable or unpinned action: ${dependency.trim()}`,
+      );
+    }
+  }
 });
 
 test('service worker caches only immutable public build assets', () => {
@@ -14237,6 +14268,11 @@ test('database baseline proof is manual, Staging-only, and rebuilds locally', ()
   assert.doesNotMatch(workflow, /\n\s+pull_request:/);
   assert.match(workflow, /environment: staging/);
   assert.match(workflow, /npm run staging:database-target/);
+  assert.match(
+    workflow,
+    /supabase\/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2\.1\.1/,
+  );
+  assert.doesNotMatch(workflow, /supabase\/setup-cli@v\d/);
   assert.match(workflow, /version: 2\.101\.0/);
   assert.match(workflow, /supabase db pull dealivra_staging_baseline/);
   assert.match(workflow, /npm run database:baseline:verify/);
@@ -15845,4 +15881,18 @@ test('support detail failures return to a recoverable case list', () => {
     /if \(!detail\) \{\s+setSelectedReference\(''\);\s+setSelected\(null\);\s+setFeedback\(/,
   );
   assert.match(source, /Your reply was sent, but the refreshed support case is unavailable\./);
+});
+
+test('staging migration history is ordered, hashed, and included in verification', async () => {
+  const packageJson = JSON.parse(readText('package.json'));
+  const manifest = JSON.parse(readText('docs/production-readiness/staging-migration-history-manifest.json'));
+  const { evaluateStagingMigrationHistory } = await import('../scripts/verify-staging-migration-history.mjs');
+
+  const result = evaluateStagingMigrationHistory(manifest);
+  assert.equal(result.status, 'passed');
+  assert.equal(result.migration_count, 30);
+  assert.match(result.history_sha256, /^[a-f0-9]{64}$/);
+  assert.equal(packageJson.scripts['database:staging-history:verify'], 'node scripts/verify-staging-migration-history.mjs');
+  assert.match(packageJson.scripts.verify, /database:staging-history:verify/);
+  assert.doesNotMatch(JSON.stringify(manifest), /(?:postgres(?:ql)?:\/\/|SUPABASE_SERVICE_ROLE_KEY\s*[=:])/i);
 });
