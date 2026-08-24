@@ -15434,6 +15434,7 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   const addressStyles = readText('src/address-autocomplete.css');
   const deliveryAddressStyles = readText('src/delivery-address.css');
   const shippingStyles = readText('src/shipping.css');
+  const paymentStatusStyles = readText('src/payment-status.css');
   const workflowStyles = readText('src/deal-workflow-modern.css');
   const compactDealStyles = readText('src/deal-sections-compact.css');
   const workspaceStyles = readText('src/workspace-redesign.css');
@@ -15477,6 +15478,14 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(shippingStyles, /\.shipping-readiness\.is-ready\{[^}]*border-color:var\(--color-success-border\)[^}]*background:var\(--color-success-100\)/);
   assert.match(shippingStyles, /\.shipping-readiness-list>div\.complete\{[^}]*border-color:var\(--color-success-border\)[^}]*background:var\(--color-success-100\)[^}]*color:var\(--color-success-700\)/);
   assert.doesNotMatch(shippingStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+  assert.match(paymentStatusStyles, /\.payment-method-card em\{[^}]*background:var\(--color-warning-100\);color:var\(--color-warning-800\)/);
+  assert.match(paymentStatusStyles, /\.payment-method-card em\.confirmed\{background:var\(--color-success-100\);color:var\(--color-success-700\)\}/);
+  assert.match(paymentStatusStyles, /\.protected-payment-state\.warning\{border-color:var\(--color-warning-border\);background:var\(--color-warning-100\);color:var\(--color-warning-800\)\}/);
+  assert.doesNotMatch(paymentStatusStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+  assert.match(workflowStyles, /\.view-deal :is\(\.payment-method-form,\.payment-method-card,\.payment-flow,\.payment-next-step\)\{[^}]*border-color:var\(--color-border-default\)!important;[^}]*background:var\(--color-surface-card\)!important/);
+  assert.match(workflowStyles, /\.view-deal :is\(\.payment-progress article\.done,\.payment-flow-step\.done\)\{[^}]*border-color:var\(--color-success-border\);[^}]*background:var\(--color-success-100\);[^}]*color:var\(--color-success-700\)/);
+  assert.match(workflowStyles, /\.view-deal \.protected-payment-state\{border-color:var\(--color-info-border\);background:var\(--color-info-100\);color:var\(--color-info-800\)\}/);
+  assert.match(workflowStyles, /\.view-deal \.protected-payment-state\.success\{border-color:var\(--color-success-border\);background:var\(--color-success-100\);color:var\(--color-success-700\)\}/);
   assert.match(compactDealStyles, /\.view-deal \.shipping-readiness\.is-ready\{border-color:var\(--color-success-border\);background:var\(--color-success-100\)\}/);
   assert.match(workflowStyles, /\.view-deal \.shipping-readiness-progress span\{background:linear-gradient\(90deg,var\(--color-brand-700\),var\(--color-brand-500\)\)\}/);
   assert.match(compactDealStyles, /\.view-deal \.shipping-readiness-icon\{[^}]*color:var\(--color-info-800\);background:var\(--color-info-100\)\}/);
