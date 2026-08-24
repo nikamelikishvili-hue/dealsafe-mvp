@@ -15429,6 +15429,7 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   const asyncStateStyles = readText('src/async-state-panel.css');
   const baseStyles = readText('src/styles.css');
   const addressStyles = readText('src/address-autocomplete.css');
+  const deliveryAddressStyles = readText('src/delivery-address.css');
   const workspaceStyles = readText('src/workspace-redesign.css');
   const entry = readText('src/main.tsx');
 
@@ -15439,6 +15440,7 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
     '--color-danger-800',
     '--color-info-800',
     '--focus-ring',
+    '--shadow-card',
     '--touch-target',
   ]) {
     assert.match(tokens, new RegExp(`${token}:`));
@@ -15461,6 +15463,10 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(addressStyles, /\.address-autocomplete-control\s*\{[^}]*border: 1px solid var\(--color-border-default\)[^}]*background: var\(--color-surface-card\)[^}]*color: var\(--color-ink-600\)/s);
   assert.match(addressStyles, /\.address-autocomplete-control:focus-within\s*\{[^}]*border-color: var\(--color-brand-700\)[^}]*box-shadow: var\(--focus-ring\)/s);
   assert.match(addressStyles, /\.address-autocomplete-menu\s*\{[^}]*box-shadow: var\(--shadow-popover\)/s);
+  assert.match(deliveryAddressStyles, /\.delivery-address-card\{[^}]*border:1px solid var\(--color-border-default\)[^}]*background:var\(--color-surface-card\)[^}]*box-shadow:var\(--shadow-card\)/);
+  assert.match(deliveryAddressStyles, /\.delivery-address-form :is\(input,select,textarea\):focus\{[^}]*border-color:var\(--color-brand-700\)[^}]*box-shadow:var\(--focus-ring\)/);
+  assert.match(deliveryAddressStyles, /\.address-field-line-two\{[^}]*border:1px solid var\(--color-info-border\)[^}]*background:var\(--color-info-100\)/);
+  assert.doesNotMatch(deliveryAddressStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
   assert.match(workspaceStyles, /\.create-step-card \[aria-invalid="true"\]\{border-color:var\(--color-danger-border\)!important;background:var\(--color-danger-100\)!important/);
   assert.match(workspaceStyles, /\.auth-market-note\{[^}]*color:var\(--color-ink-600\)/);
   assert.match(workspaceStyles, /\.auth-journey \.is-current\{[^}]*border-color:var\(--color-info-border\)[^}]*color:var\(--color-info-800\)[^}]*background:var\(--color-info-100\)/);
