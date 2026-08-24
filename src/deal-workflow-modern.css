@@ -177,28 +177,28 @@
 }
 
 .view-deal :is(.payment-method-form,.payment-method-card,.payment-flow,.payment-next-step){
-  border-color:#d9e5f2!important;
-  background:#f8fbff!important;
+  border-color:var(--color-border-default)!important;
+  background:var(--color-surface-card)!important;
 }
 
 .view-deal :is(.payment-progress article,.payment-flow-step){
-  border-color:#dfe8f2;
-  background:#f7f9fc;
-  color:#6c7e94;
+  border-color:var(--color-border-default);
+  background:var(--color-surface-subtle);
+  color:var(--color-ink-600);
 }
 
 .view-deal :is(.payment-progress article.done,.payment-flow-step.done){
-  border-color:#cfe0f5;
-  background:#eff6ff;
-  color:#2865b2;
+  border-color:var(--color-success-border);
+  background:var(--color-success-100);
+  color:var(--color-success-700);
 }
 
-.view-deal .payment-flow-step.done small{color:#54749b}
-.view-deal .protected-payment-state{border-color:#d7e4f2;background:#f5f9ff;color:#2e609d}
-.view-deal .protected-payment-state.success{border-color:#cfe0f5;background:#eff6ff;color:#2865b2}
-.view-deal .payment-next-step>svg{color:#2d73ce}
-.view-deal .payment-disclaimer{color:#62758b}
-.view-deal .payment-disclaimer svg{color:#3478d5}
+.view-deal .payment-flow-step.done small{color:var(--color-success-700)}
+.view-deal .protected-payment-state{border-color:var(--color-info-border);background:var(--color-info-100);color:var(--color-info-800)}
+.view-deal .protected-payment-state.success{border-color:var(--color-success-border);background:var(--color-success-100);color:var(--color-success-700)}
+.view-deal .payment-next-step>svg{color:var(--color-info-800)}
+.view-deal .payment-disclaimer{color:var(--color-ink-600)}
+.view-deal .payment-disclaimer svg{color:var(--color-info-800)}
 
 .view-deal .shipping-readiness-heading span{color:var(--color-ink-600)}
 .view-deal .shipping-readiness-progress{background:var(--color-border-default)}

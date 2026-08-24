@@ -1,5 +1,18 @@
 # Production-readiness progress log
 
+## 2026-08-24 — Payment Status semantic palette closure
+
+- Migrated the dedicated Payment Status stylesheet from legacy green, gray,
+  warning, and success literals to the shared semantic design tokens.
+- Migrated the final Deal workflow payment overrides to the same semantic
+  tokens and removed declarations already owned by later compact rules, keeping
+  one authoritative visual rule per state.
+- Added release assertions for warning and confirmed badges, warning payment
+  state, and a gate that rejects new color literals in this stylesheet.
+- No Stripe request, payment transition, provider configuration, database,
+  customer record, Production alias, public-access setting, or real-money
+  capability changed.
+
 ## 2026-08-24 — Compact Deal Workspace palette governance
 
 - Migrated the high-frequency Safety, Participants, Payment, Shipping, and
