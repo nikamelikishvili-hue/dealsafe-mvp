@@ -1,5 +1,19 @@
 # Production-readiness progress log
 
+## 2026-08-24 — Compact Deal Workspace palette governance
+
+- Migrated the high-frequency Safety, Participants, Payment, Shipping, and
+  delivery-address sections from feature-owned literal colors to the shared
+  brand, surface, border, information, success, warning, danger, ink, and
+  shadow tokens.
+- Added a release regression gate that rejects new hex, RGB/RGBA, or HSL/HSLA
+  literals in the compact Deal Workspace stylesheet.
+- Reviewed the public homepage, account entry, and Sample Deal Room at desktop
+  and mobile breakpoints before narrowing this change to the repeated internal
+  workflow surfaces.
+- No Production alias, public-access setting, provider configuration, customer
+  data, database resource, or real-money capability changed.
+
 ## 2026-08-22 — Bounded development dependency refresh
 
 - Updated Biome from 2.5.6 to 2.5.9 after reproducing the hosted build against the refreshed dependency graph.
