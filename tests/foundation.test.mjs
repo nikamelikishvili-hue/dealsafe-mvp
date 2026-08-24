@@ -15477,10 +15477,12 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(shippingStyles, /\.shipping-readiness\.is-ready\{[^}]*border-color:var\(--color-success-border\)[^}]*background:var\(--color-success-100\)/);
   assert.match(shippingStyles, /\.shipping-readiness-list>div\.complete\{[^}]*border-color:var\(--color-success-border\)[^}]*background:var\(--color-success-100\)[^}]*color:var\(--color-success-700\)/);
   assert.doesNotMatch(shippingStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
-  assert.match(workflowStyles, /\.view-deal \.shipping-readiness\.is-ready\{border-color:var\(--color-success-border\);background:var\(--color-success-100\)\}/);
+  assert.match(compactDealStyles, /\.view-deal \.shipping-readiness\.is-ready\{border-color:var\(--color-success-border\);background:var\(--color-success-100\)\}/);
   assert.match(workflowStyles, /\.view-deal \.shipping-readiness-progress span\{background:linear-gradient\(90deg,var\(--color-brand-700\),var\(--color-brand-500\)\)\}/);
   assert.match(compactDealStyles, /\.view-deal \.shipping-readiness-icon\{[^}]*color:var\(--color-info-800\);background:var\(--color-info-100\)\}/);
-  assert.match(compactDealStyles, /\.view-deal \.shipping-note\{[^}]*border-top:1px solid var\(--color-border-default\)/);
+  assert.match(compactDealStyles, /--deal-line:var\(--color-border-default\)/);
+  assert.match(compactDealStyles, /\.view-deal \.shipping-note\{[^}]*border-top:1px solid var\(--deal-line\)/);
+  assert.doesNotMatch(compactDealStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
   assert.match(workspaceStyles, /\.create-step-card \[aria-invalid="true"\]\{border-color:var\(--color-danger-border\)!important;background:var\(--color-danger-100\)!important/);
   assert.match(workspaceStyles, /\.auth-market-note\{[^}]*color:var\(--color-ink-600\)/);
   assert.match(workspaceStyles, /\.auth-journey \.is-current\{[^}]*border-color:var\(--color-info-border\)[^}]*color:var\(--color-info-800\)[^}]*background:var\(--color-info-100\)/);
