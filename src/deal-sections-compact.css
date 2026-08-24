@@ -383,12 +383,12 @@
   margin:12px 0 0;
   padding:0;
   overflow:hidden;
-  border:1px solid #dbe6f2;
+  border:1px solid var(--color-border-default);
   border-radius:12px;
-  background:#fff;
+  background:var(--color-surface-card);
 }
 
-.view-deal .shipping-readiness.is-ready{border-color:#cfe1f5;background:#f8fbff}
+.view-deal .shipping-readiness.is-ready{border-color:var(--color-success-border);background:var(--color-success-100)}
 .view-deal .shipping-readiness>summary{
   min-height:60px;
   display:grid;
@@ -401,17 +401,17 @@
 }
 
 .view-deal .shipping-readiness>summary::-webkit-details-marker{display:none}
-.view-deal .shipping-readiness-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;color:#2a73d0;background:#eaf3ff}
+.view-deal .shipping-readiness-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;color:var(--color-info-800);background:var(--color-info-100)}
 .view-deal .shipping-readiness-icon svg{width:17px}
 .view-deal .shipping-readiness-heading h3{margin:0;font-size:13px}
 .view-deal .shipping-readiness-heading span{font-size:10px}
-.view-deal .shipping-readiness-chevron{width:17px;color:#71849a;transition:transform .2s ease}
+.view-deal .shipping-readiness-chevron{width:17px;color:var(--color-ink-600);transition:transform .2s ease}
 .view-deal .shipping-readiness[open] .shipping-readiness-chevron{transform:rotate(180deg)}
-.view-deal .shipping-readiness-body{padding:0 12px 12px;border-top:1px solid #e5ecf4}
+.view-deal .shipping-readiness-body{padding:0 12px 12px;border-top:1px solid var(--color-border-default)}
 .view-deal .shipping-readiness-progress{margin:11px 0 9px}
 .view-deal .shipping-readiness-list{gap:6px}
-.view-deal .shipping-readiness-list>div{min-height:38px;padding:7px 9px;border:1px solid #e2e9f1;border-radius:9px;background:#f7f9fc;font-size:10px}
-.view-deal .shipping-readiness-list>div.complete{border-color:#d4e5f8;color:#2869b7;background:#f0f6fd}
+.view-deal .shipping-readiness-list>div{min-height:38px;padding:7px 9px;border:1px solid var(--color-border-default);border-radius:9px;background:var(--color-surface-subtle);font-size:10px}
+.view-deal .shipping-readiness-list>div.complete{border-color:var(--color-success-border);color:var(--color-success-700);background:var(--color-success-100)}
 .view-deal .shipping-readiness-list em{font-size:9px}
 .view-deal .shipping-evidence-link{min-height:38px;margin-top:9px}
 
@@ -425,10 +425,10 @@
 .view-deal .shipping-panel>form input{min-height:42px}
 .view-deal .shipping-panel>form button{min-height:42px}
 .view-deal .shipment-card{min-height:58px;margin:12px 0 0;padding:11px 12px;border-radius:12px}
-.view-deal .shipment-card>svg{width:23px;height:23px;color:#2d73ce}
+.view-deal .shipment-card>svg{width:23px;height:23px;color:var(--color-brand-700)}
 .view-deal .shipment-card b{font-size:12px}
 .view-deal .shipment-card span,.view-deal .shipment-card small{margin-top:2px;font-size:10px}
-.view-deal .shipping-note{margin-top:10px;padding-top:9px;border-top:1px solid #e4ebf3;font-size:9px}
+.view-deal .shipping-note{margin-top:10px;padding-top:9px;border-top:1px solid var(--color-border-default);font-size:9px}
 
 @media(max-width:1180px){
   .view-deal .deal-fulfillment-grid.has-shipping{grid-template-columns:1fr}
