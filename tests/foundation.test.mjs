@@ -4468,15 +4468,18 @@ test('account takeover response is fail-closed, non-secret, and rehearsal-gated'
   assert.match(backlog, /suspected-account-takeover runbook exist/);
 });
 
-test('release snapshot names the current consolidated no-go evidence', () => {
+test('release snapshot names the current reconciled no-go evidence', () => {
   const snapshot = readText('docs/production-readiness/99_RELEASE_READINESS_SNAPSHOT.md');
 
-  assert.match(snapshot, /Status date: 2026-08-18/);
-  assert.match(snapshot, /agent\/p0-reviewed-release-candidate/);
-  assert.match(snapshot, /385 foundation, and 17 component checks/);
-  assert.match(snapshot, /820,555 JavaScript bytes/);
-  assert.match(snapshot, /does not create or merge the Draft pull\s+request/);
+  assert.match(snapshot, /Status date: 2026-08-24/);
+  assert.match(snapshot, /Reviewed `main` is `35214dae98df003d9792e08b77a235deebca93c1`/);
+  assert.match(snapshot, /398 foundation tests,\s+20 rendered-component tests/);
+  assert.match(snapshot, /Initial application JavaScript is 133,941 bytes/);
+  assert.match(snapshot, /DEALIVRA_STAGING_DATABASE_URL/);
+  assert.match(snapshot, /No pull request remains open/);
+  assert.match(snapshot, /does not promote Production, restore\s+public access/);
   assert.match(snapshot, /No-go for public or real-money launch/);
+  assert.doesNotMatch(snapshot, /Draft PR `#232` at signed commit/);
   assert.doesNotMatch(snapshot, /Draft PR `#181`/);
   assert.doesNotMatch(snapshot, /Only 297 bytes/);
 });

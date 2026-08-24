@@ -109,3 +109,21 @@ versions by ordered name, byte count, and SHA-256. It contains no SQL, database
 URL, credential, user row, or payment data. The manifest is drift evidence, not
 a replacement for the CLI-generated baseline, empty-database reset, or upgrade
 proof required to close DAT-001.
+
+## 2026-08-24 exact-main preflight evidence
+
+GitHub Actions run `32759970707` evaluated the manual baseline workflow on
+reviewed `main` commit `35214dae98df003d9792e08b77a235deebca93c1`.
+The two protected project-reference variables were present and distinct, but
+the Staging database URL, Supabase access token, and database password were not
+configured as environment secrets.
+
+The target guard rejected the run at step 3. Node setup, dependency
+installation, Supabase CLI installation, project linking, baseline capture,
+migration comparison, local-stack startup, SQL suites, advisors, and artifact
+upload were all skipped. No Supabase project or database was contacted or
+changed.
+
+This is current fail-closed evidence, not DAT-001 completion. The next valid
+run requires all three secret names in the protected `staging` environment and
+must retain its generated data-free baseline and empty-database proof.
