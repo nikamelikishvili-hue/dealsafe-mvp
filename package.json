@@ -42,7 +42,7 @@
     "verify": "npm run catalog:verify && npm run dependency:policy && npm run release:sbom && npm run security:browser-storage && npm run security:transport && npm run security:mutation-origins && npm run security:abuse-policy && npm run brand:verify && npm run config:verify && npm run format:check && npm run lint && npm run typecheck && npm run database:staging-history:verify && npm test && npm run incident:drill && npm run security:secrets && npm run build && npm run smoke:preview"
   },
   "dependencies": {
-    "lucide-react": "1.32.0",
+    "lucide-react": "1.33.0",
     "qrcode": "1.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
