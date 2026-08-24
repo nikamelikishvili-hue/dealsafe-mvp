@@ -5390,3 +5390,29 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - Kept ARC-002 open until that protected Preview run is retained. No Preview
   protection, Production alias, public access, provider data, or payment
   capability changed.
+
+## 2026-08-24 — Reconciled the exact release and Staging preflight state
+
+- Confirmed reviewed `main` at signed commit
+  `35214dae98df003d9792e08b77a235deebca93c1` and reconciled every remaining
+  pull request. PR `#255` and the narrowed PR `#256` passed required CI,
+  CodeQL, and Vercel checks before squash merge; no pull request remains open.
+- Retained TypeScript 5.9.3 because the TypeScript 7 package no longer exposes
+  the stable compiler API used by release and security tooling. Retained Vite
+  8.1.5 because Linux CI measured Vite 8.2.2 at 214,882 initial application
+  JavaScript bytes against the fixed 160,000-byte ceiling. Only the compatible
+  `@vitejs/plugin-react` 6.1.0 update was accepted.
+- Re-ran the complete local release gate for the narrowed dependency change:
+  398 foundation tests, 20 rendered-component tests, security and dependency
+  policies, production build, 133,941-byte initial application JavaScript,
+  served-asset generation, performance budgets, and Preview smoke passed.
+- Dispatched manual Staging baseline preflight run `32759970707` on exact
+  `main`. It rejected incomplete protected configuration before installing the
+  Supabase CLI, linking a project, or issuing any database command.
+- Confirmed the protected `staging` environment has distinct Staging and
+  Production project references but no database URL, access-token, or database
+  password secret. Secret values were not accessed or logged.
+- Refreshed the release-readiness snapshot so it no longer claims Draft PR
+  `#232` is the active candidate and now records the actual Staging activation
+  dependency. Production, public access, hosted Supabase resources, customer
+  records, and real-payment capabilities remain unchanged.

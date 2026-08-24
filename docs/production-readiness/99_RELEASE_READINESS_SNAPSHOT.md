@@ -1,79 +1,96 @@
 # Dealivra release-readiness snapshot
 
-Status date: 2026-08-18
+Status date: 2026-08-24
 
 ## Decision
 
-**No-go for public or real-money launch.** The current review stack is suitable
-for continued protected Preview evaluation. It is not evidence that the hosted
-database, operational response, legal terms, or payment controls are ready for
-customers.
+**No-go for public or real-money launch.** The reviewed repository stack is
+suitable for continued protected Preview evaluation. It is not evidence that
+the hosted Staging database, operational response, legal terms, or payment
+controls are ready for customers.
 
 This decision is intentionally stricter than a successful build or visual
 review. A release becomes eligible only when the environment-specific evidence
-below is complete for the exact candidate commit.
+below is complete for the same immutable candidate commit and deployment.
 
-## Review-candidate evidence available
+## Current reviewed repository evidence
 
-- Merged `main` remains `2621fcd55cdbe6381f58fedf1164b1acf997f3c8`.
-  Nothing in this review changed `main`, Production, public access, hosted
-  Supabase resources, customer records, or payment configuration.
-- Draft PR `#232` at signed commit
-  `d46bb1541c4c3923cce62476ec59013273248e2d` is cleanly mergeable. Its required
-  verification, CodeQL analysis, Vercel deployment, and Vercel review checks
-  passed; served-asset verification is correctly skipped for the protected
-  Preview deployment event.
-- The consolidated branch `agent/p0-reviewed-release-candidate` combines the
-  canonical customer routes, single Deal Workspace action, shared accessible
-  validation summaries, SEC-002 takeover response, and Node 24 artifact action.
-  Its signed integration head before this documentation-only snapshot is
-  `a9a384db5032eaf6533e1abb3634a2b418296207`.
-- The consolidated branch passes catalog, dependency, SBOM, browser-storage,
-  outbound-transport, API-origin, brand, runtime-configuration, formatting,
-  lint, TypeScript, 385 foundation, and 17 component checks plus the incident
-  drill, secret scan, production build, deterministic served-asset manifest,
-  performance budgets, and Preview smoke.
-- The integrated production build contains 820,555 JavaScript bytes against the
-  fixed 821,000-byte ceiling, 285,554 CSS bytes, and 28 served assets totaling
-  1,112,006 bytes. The initial application JavaScript is 133,804 bytes.
-- Local browser acceptance covered Home plus canonical sign-in, sign-up,
-  password recovery, create, public Deal, and Trust Passport routes. Hosted
-  protected-Preview role/state, keyboard, mobile, and provider acceptance is
-  still required against the final exact PR head.
+- Reviewed `main` is `35214dae98df003d9792e08b77a235deebca93c1` with
+  a valid GitHub signature. The consolidated release candidate was merged by
+  PR `#233`; subsequent reviewed account, routing, security, database-history,
+  dependency, and interface changes are also on `main`.
+- No pull request remains open. The two final dependency reviews, PR `#255`
+  and PR `#256`, passed the protected `verify`, CodeQL, and Vercel checks
+  before squash merge. TypeScript 7 and Vite 8.2.2 were deliberately excluded
+  from PR `#256` after compatibility and bundle-budget review; only
+  `@vitejs/plugin-react` 6.1.0 was accepted.
+- The current repository gate passes catalog, dependency, SBOM,
+  browser-storage, outbound-transport, API-origin, abuse-policy, brand,
+  runtime-configuration, formatting, lint, TypeScript, 398 foundation tests,
+  20 rendered-component tests, the incident drill, secret scan, production
+  build, deterministic served-asset manifest, performance budgets, and Preview
+  smoke.
+- The reviewed unconfigured build contains 821,815 JavaScript bytes and
+  289,973 CSS bytes. Initial application JavaScript is 133,941 bytes against
+  the fixed 160,000-byte ceiling. The served-asset manifest contains 28 assets
+  totaling 1,117,593 bytes.
+- GitHub Actions run `32759970707` executed the current manual Staging baseline
+  preflight on exact `main`. The target guard rejected incomplete protected
+  configuration before Node setup, dependency installation, Supabase CLI
+  installation, project linking, migration capture, or any database command.
+- The protected GitHub `staging` environment contains distinct Staging and
+  Production project-reference variables. Its required database URL, access
+  token, and database-password secrets are not configured. Only secret names
+  were inspected; no secret value was accessed or logged.
 
-These results prove the consolidated repository candidate passes the local
-release gate and that PR `#232` passed its hosted review. They do not yet prove
-that the consolidated candidate's exact hosted artifact, Staging authorization,
-operational response, legal terms, or financial controls are ready.
+These results prove the repository review stack is clean and that an incomplete
+Staging target fails closed. They do not prove the Staging schema can be rebuilt,
+that hosted cross-user authorization is correct, or that a candidate is ready
+for external testers.
+
+## Closed since the previous snapshot
+
+- The former Draft release stack was consolidated, reviewed, and merged by
+  PR `#233`; the previous instruction to open Draft PR `#232` is obsolete.
+- All later review branches have been reconciled. There is no hidden or stale
+  open pull request waiting to be promoted.
+- Required repository checks and commit-signature enforcement remain intact;
+  no security finding or branch-protection rule was dismissed or weakened.
 
 ## External private-beta blockers
 
-All items below must be closed against one isolated Staging release candidate:
+All items below must close against one isolated Staging release candidate:
 
-1. Open the consolidated review branch as one Draft pull request, require every
-   protected GitHub and Vercel check on its exact signed head, resolve review
-   findings, and bind the final approved commit to deterministic release and
-   served-asset manifests before merge.
-2. Run the database-wide authorization and hosted HTTP/Storage matrices with
-   short-lived synthetic seller, buyer, outsider, support, and administrator
-   identities. Record cross-account denial and rollback evidence without using
-   Production customer data.
-3. Complete protected-Preview keyboard and mobile acceptance for account,
+1. Configure the protected GitHub `staging` environment with
+   `DEALIVRA_STAGING_DATABASE_URL`,
+   `DEALIVRA_STAGING_SUPABASE_ACCESS_TOKEN`, and
+   `DEALIVRA_STAGING_SUPABASE_DB_PASSWORD`. Keep values out of source control,
+   logs, screenshots, issues, and pull-request text.
+2. Run the manual Staging baseline proof, review the CLI-generated data-free
+   migration, rebuild an empty disposable local database, run advisors, retain
+   the exact migration manifest, and prove local/Staging history alignment.
+3. Run the database-wide authorization gate on the same candidate and retain
+   the sorted 17-suite seller, buyer, outsider, support, administrator,
+   evidence, dispute, payment-command, immutable-audit, and RLS results.
+4. Run the hosted Data API and Storage matrix with short-lived synthetic
+   seller, buyer, outsider, expired, and anonymous identities. Prove cleanup
+   and cross-account denial without Production customer data.
+5. Complete protected-Preview keyboard and mobile acceptance for account,
    Deal creation, public acceptance, payment-disabled, delivery, dispute,
-   support, and recovery journeys, including the US address provider fallback.
-4. Activate a privacy-safe external monitoring drain, synthetic schedule,
-   named alert owner, acknowledgement path, retention rule, and one recovery
-   drill. A green CI job without alert delivery is insufficient.
-5. Assign an independent security approver, resolve required CodeQL/security
-   findings, and retain the exact approval and exception record.
-6. Publish counsel-approved beta Terms, Privacy, prohibited-items, retention,
-   support, cancellation, and product-claim language at every relevant
-   collection and consent point.
-7. Staff the support/escalation rota and prove urgent/normal case routing,
-   AAL2 operator access, cross-account denial, audit history, and customer
+   support, and recovery journeys, including the US address-provider fallback.
+6. Activate a privacy-safe external monitoring drain and synthetic schedule;
+   assign an alert owner, acknowledgement path, retention rule, and recovery
+   drill. A green CI job without delivered alert evidence is insufficient.
+7. Assign an independent security approver, resolve every required hosted
+   finding, and retain the exact approval and exception record.
+8. Publish counsel-approved beta Terms, Privacy, prohibited-items, retention,
+   support, cancellation, and product-claim language at every collection and
+   consent point.
+9. Staff the support/escalation rota and prove urgent/normal routing, AAL2
+   operator access, cross-account denial, audit history, and customer
    communication in Staging.
-8. Approve the release owner, rollback owner, incident commander, go/no-go
-   record, and recovery procedure for the exact candidate commit.
+10. Approve the release owner, rollback owner, incident commander, go/no-go
+    record, and recovery procedure for the exact candidate commit.
 
 ## Additional real-money blockers
 
@@ -101,9 +118,16 @@ code, configuration, migration, provider, policy, or ownership change after
 approval invalidates the affected evidence and requires the relevant gates to
 run again.
 
+### Immediate controlled action
+
+The next permitted hosted action is to add the three missing secrets to the
+protected `staging` environment and rerun the baseline proof. Do not place
+those credentials in chat or repository content. Until that externally owned
+configuration exists, repository work may continue, but DAT-001 and DAT-003
+cannot be marked complete.
+
 ### Activation boundary
 
-This snapshot is documentation only. It does not create or merge the Draft pull
-request, promote Production, restore public access, apply staged SQL, change
-hosted configuration, touch live Supabase resources or customer records, or
-enable real payments.
+This snapshot is documentation only. It does not promote Production, restore
+public access, apply staged SQL, change hosted configuration, touch live
+Supabase resources or customer records, or enable real payments.
