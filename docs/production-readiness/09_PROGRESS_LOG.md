@@ -1,5 +1,17 @@
 # Production-readiness progress log
 
+## 2026-08-25 — Agreement record semantic palette
+
+- Migrated the agreement fingerprint, verification code, version history,
+  acceptance, pending, fact, and archive-note surfaces to the governed
+  Dealivra surface, border, copy, accent, success, warning, and radius tokens.
+- Added a release assertion that rejects future literal colors from both live
+  record panels while intentionally preserving the separately calibrated
+  print-only fingerprint palette.
+- No agreement data, hash, version ordering, acceptance logic, archive source,
+  authorization, provider configuration, database resource, Production alias,
+  public-access setting, or payment capability changed.
+
 ## 2026-08-25 — Compact agreement export and governed document shell
 
 - Reduced the agreement export card from three stacked actions to one clear

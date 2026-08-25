@@ -5342,6 +5342,19 @@ test('agreement export and document preview use a compact governed shell', () =>
   assert.match(styles, /\.agreement-document-mode>\.agreement-document-toolbar\{[\s\S]*border:1px solid var\(--ds-line\);[\s\S]*background:var\(--ds-card\);[\s\S]*box-shadow:var\(--shadow-popover\)/);
 });
 
+test('agreement fingerprint and history use the governed semantic palette', () => {
+  const fingerprintStyles = readText('src/agreement-fingerprint.css');
+  const historyStyles = readText('src/agreement-history.css');
+  const screenFingerprintStyles = fingerprintStyles.split('@media print')[0];
+
+  assert.match(fingerprintStyles, /\.agreement-fingerprint\{[^}]*background:var\(--cream\);[^}]*border:1px solid var\(--line\);[^}]*border-radius:var\(--radius-card\)/);
+  assert.match(fingerprintStyles, /\.agreement-fingerprint code\{[^}]*background:var\(--ink\);[^}]*color:var\(--ds-card\)/);
+  assert.match(historyStyles, /\.agreement-history-version em\{[^}]*color:var\(--color-success-700\);background:var\(--color-success-100\)/);
+  assert.match(historyStyles, /\.agreement-history-acceptance\.pending\{color:var\(--color-warning-800\)\}/);
+  assert.doesNotMatch(screenFingerprintStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+  assert.doesNotMatch(historyStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+});
+
 test('browser route resolver preserves canonical and legacy deep links and rejects unknown paths', async () => {
   const {
     authPath,
