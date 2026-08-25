@@ -5456,3 +5456,15 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   `#232` is the active candidate and now records the actual Staging activation
   dependency. Production, public access, hosted Supabase resources, customer
   records, and real-payment capabilities remain unchanged.
+
+# 2026-08-24 — Governed agreement and expiry feedback states
+
+- Replaced feature-owned literal colors in agreement consent, buyer-waiting,
+  Deal-expiry, and expired-agreement surfaces with the shared success, warning,
+  danger, surface, border, radius, and action tokens.
+- Preserved the existing workflow behavior while making completed, waiting,
+  and expired states visually consistent with the rest of the Deal workspace.
+- Added release assertions that reject raw color literals in both stylesheets
+  and retain the intended semantic status mappings.
+- No provider configuration, customer data, public-access setting, Production
+  alias, or real-payment capability changed.
