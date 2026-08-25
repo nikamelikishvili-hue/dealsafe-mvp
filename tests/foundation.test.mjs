@@ -15486,6 +15486,12 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(workflowStyles, /\.view-deal :is\(\.payment-progress article\.done,\.payment-flow-step\.done\)\{[^}]*border-color:var\(--color-success-border\);[^}]*background:var\(--color-success-100\);[^}]*color:var\(--color-success-700\)/);
   assert.match(workflowStyles, /\.view-deal \.protected-payment-state\{border-color:var\(--color-info-border\);background:var\(--color-info-100\);color:var\(--color-info-800\)\}/);
   assert.match(workflowStyles, /\.view-deal \.protected-payment-state\.success\{border-color:var\(--color-success-border\);background:var\(--color-success-100\);color:var\(--color-success-700\)\}/);
+  assert.match(workflowStyles, /\.view-deal \.meeting-panel :is\(input,select\):focus\{[^}]*border-color:var\(--color-brand-700\);[^}]*box-shadow:var\(--focus-ring\)/);
+  assert.match(workflowStyles, /\.view-deal \[aria-invalid="true"\]\{border-color:var\(--color-danger-border\)!important\}/);
+  assert.match(workflowStyles, /\.view-deal \.arrival-grid \.done\{[^}]*border-color:var\(--color-success-border\);[^}]*background:var\(--color-success-100\);[^}]*color:var\(--color-success-700\)/);
+  assert.match(workflowStyles, /\.view-deal \.inspection-items label\.checked\{[^}]*border-color:var\(--color-success-border\);[^}]*background:var\(--color-success-100\);[^}]*color:var\(--color-success-700\)/);
+  assert.match(workflowStyles, /\.view-deal \.pin-box\{background:linear-gradient\(145deg,var\(--color-ink-950\),var\(--color-info-800\)\)\}/);
+  assert.doesNotMatch(workflowStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
   assert.match(compactDealStyles, /\.view-deal \.shipping-readiness\.is-ready\{border-color:var\(--color-success-border\);background:var\(--color-success-100\)\}/);
   assert.match(workflowStyles, /\.view-deal \.shipping-readiness-progress span\{background:linear-gradient\(90deg,var\(--color-brand-700\),var\(--color-brand-500\)\)\}/);
   assert.match(compactDealStyles, /\.view-deal \.shipping-readiness-icon\{[^}]*color:var\(--color-info-800\);background:var\(--color-info-100\)\}/);
