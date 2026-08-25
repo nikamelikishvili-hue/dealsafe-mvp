@@ -1,5 +1,19 @@
 # Production-readiness progress log
 
+## 2026-08-25 — Governed public agreement-verification recovery
+
+- Replaced the public agreement verifier's sentinel message and direct
+  first-field focus with the shared typed validation-summary contract.
+- The verifier now announces every invalid field together, focuses one
+  deterministic summary, links each error back to its exact input, and clears
+  only the corrected field's error while retaining any remaining guidance.
+- Added release assertions for the stable summary and field links, per-field
+  recovery, and removal of the legacy message sentinel. Lint, type checking,
+  398 foundation tests, 20 rendered-component tests, production compilation,
+  and the unchanged CSS budget pass locally.
+- No verification service, provider configuration, database, customer record,
+  Production alias, public-access setting, or payment capability changed.
+
 ## 2026-08-25 — Authenticator and MFA semantic UI governance
 
 - Migrated Authenticator enrollment, login verification, protected/unprotected
