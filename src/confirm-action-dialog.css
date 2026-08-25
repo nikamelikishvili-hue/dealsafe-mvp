@@ -5,18 +5,17 @@
   display: grid;
   place-items: center;
   padding: 1.25rem;
-  background: rgb(7 17 35 / 64%);
-  backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--color-ink-950) 64%, transparent);
 }
 
 .confirm-action-dialog {
   position: relative;
   width: min(100%, 30rem);
   padding: 1.5rem;
-  border: 1px solid rgb(45 96 160 / 18%);
+  border: 1px solid var(--color-border-default);
   border-radius: 1.25rem;
-  background: #fff;
-  box-shadow: 0 28px 80px rgb(9 27 58 / 28%);
+  background: var(--color-surface-card);
+  box-shadow: var(--shadow-popover);
 }
 
 .confirm-action-icon {
@@ -26,13 +25,13 @@
   place-items: center;
   margin-bottom: 1rem;
   border-radius: 0.85rem;
-  color: #236c62;
-  background: #e9f7f3;
+  color: var(--color-success-700);
+  background: var(--color-success-100);
 }
 
 .confirm-action-dialog.danger .confirm-action-icon {
-  color: #a52929;
-  background: #fff0ef;
+  color: var(--color-danger-800);
+  background: var(--color-danger-100);
 }
 
 .confirm-action-close {
@@ -45,27 +44,27 @@
   place-items: center;
   border: 0;
   border-radius: 0.75rem;
-  color: #526179;
+  color: var(--color-ink-600);
   background: transparent;
   cursor: pointer;
 }
 
 .confirm-action-close:hover,
 .confirm-action-close:focus-visible {
-  color: #12203a;
-  background: #edf2f8;
+  color: var(--color-ink-900);
+  background: var(--color-surface-subtle);
 }
 
 .confirm-action-copy h2 {
   margin: 0;
-  color: #111d34;
+  color: var(--color-ink-900);
   font-size: clamp(1.25rem, 3vw, 1.55rem);
   line-height: 1.25;
 }
 
 .confirm-action-copy p {
   margin: 0.65rem 0 0;
-  color: #5a687d;
+  color: var(--color-ink-600);
   line-height: 1.6;
 }
 
@@ -81,18 +80,16 @@
 }
 
 .confirm-action-buttons .danger-action {
-  border: 1px solid #b52d2d;
+  border: 1px solid var(--color-danger-800);
   border-radius: 0.8rem;
-  color: #fff;
-  background: #b52d2d;
-  font: inherit;
+  color: var(--color-surface-card);
+  background: var(--color-danger-800);
   font-weight: 750;
-  cursor: pointer;
 }
 
 .confirm-action-buttons .danger-action:hover,
 .confirm-action-buttons .danger-action:focus-visible {
-  background: #952323;
+  filter: brightness(0.84);
 }
 
 @media (max-width: 520px) {
@@ -113,17 +110,9 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .confirm-action-backdrop {
-    animation: confirm-backdrop-in 140ms ease-out;
-  }
-
   .confirm-action-dialog {
     animation: confirm-dialog-in 180ms ease-out;
   }
-}
-
-@keyframes confirm-backdrop-in {
-  from { opacity: 0; }
 }
 
 @keyframes confirm-dialog-in {

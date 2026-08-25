@@ -12727,12 +12727,18 @@ test('sample and local fallback deal identifiers satisfy every public boundary',
 
 test('global session revocation uses the governed accessible confirmation dialog', () => {
   const sessionSecurity = readText('src/AccountSessionSecurity.tsx');
+  const confirmationStyles = readText('src/confirm-action-dialog.css');
 
   assert.match(sessionSecurity, /useConfirmAction\(\)/);
   assert.match(sessionSecurity, /tone:'danger'/);
   assert.match(sessionSecurity, /if\(confirmed\)await signOutAll\(\)/);
   assert.match(sessionSecurity, /\{confirmDialog\}/);
   assert.doesNotMatch(sessionSecurity, /className="session-confirmation"/);
+  assert.match(confirmationStyles, /background: var\(--color-surface-card\)/);
+  assert.match(confirmationStyles, /color: var\(--color-danger-800\)/);
+  assert.match(confirmationStyles, /background: var\(--color-danger-100\)/);
+  assert.match(confirmationStyles, /box-shadow: var\(--shadow-popover\)/);
+  assert.doesNotMatch(confirmationStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
 });
 
 test('MFA removal can be cancelled by keyboard and restores the initiating control', () => {
