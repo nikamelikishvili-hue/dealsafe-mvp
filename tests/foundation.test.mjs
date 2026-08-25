@@ -15488,8 +15488,10 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(agreementConsentStyles, /\.waiting-buyer\{[^}]*border:1px solid var\(--color-warning-border\)[^}]*background:var\(--color-warning-100\)[^}]*color:var\(--color-warning-800\)/);
   assert.doesNotMatch(agreementConsentStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
   assert.match(dealExpiryStyles, /\.deal-expiry\{[^}]*border:1px solid var\(--color-warning-border\)[^}]*background:var\(--color-warning-100\)/);
-  assert.match(dealExpiryStyles, /\.deal-expiry\.expired\{border-color:var\(--color-danger-border\);background:var\(--color-danger-100\)\}/);
-  assert.match(dealExpiryStyles, /\.expired-agreement\{[^}]*border:1px solid var\(--color-danger-border\)[^}]*background:var\(--color-danger-100\)[^}]*color:var\(--color-danger-800\)/);
+  assert.match(dealExpiryStyles, /\.deal-expiry\.expired\{border-color:var\(--color-danger-border\)\}/);
+  assert.match(dealExpiryStyles, /\.expired-agreement\{[^}]*border:1px solid var\(--color-danger-border\)[^}]*border-radius:var\(--radius-control\)/);
+  assert.match(dealExpiryStyles, /\.deal-expiry\.expired,\.expired-agreement,\.status\.expired\{background:var\(--color-danger-100\)\}/);
+  assert.match(dealExpiryStyles, /\.deal-expiry\.expired>svg,\.expired-agreement,\.status\.expired\{color:var\(--color-danger-800\)\}/);
   assert.doesNotMatch(dealExpiryStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
   assert.match(workflowStyles, /\.view-deal :is\(\.payment-method-form,\.payment-method-card,\.payment-flow,\.payment-next-step\)\{[^}]*border-color:var\(--color-border-default\)!important;[^}]*background:var\(--color-surface-card\)!important/);
   assert.match(workflowStyles, /\.view-deal :is\(\.payment-progress article\.done,\.payment-flow-step\.done\)\{[^}]*border-color:var\(--color-success-border\);[^}]*background:var\(--color-success-100\);[^}]*color:var\(--color-success-700\)/);
