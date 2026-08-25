@@ -1,5 +1,22 @@
 # Production-readiness progress log
 
+## 2026-08-25 — Sensitive-action confirmation semantic palette
+
+- Migrated the shared confirmation dialog, including safe, destructive, hover,
+  backdrop, card, and copy states, to the governed Dealivra design tokens.
+- Preserved keyboard cancellation, focus restoration, responsive bottom-sheet
+  behavior, and the existing explicit confirmation boundary.
+- Added a release assertion that rejects future literal colors in the shared
+  confirmation stylesheet and verifies its critical semantic states.
+- Lint, type checking, 398 foundation tests, 20 rendered-component tests,
+  production compilation, served-asset manifest creation, preview smoke test,
+  and the JavaScript and CSS budgets pass locally; total CSS is 289,985 bytes
+  against the reviewed 290,000-byte limit. Desktop and 390px browser checks
+  render without an error overlay or console warning/error.
+- No authentication operation, session-revocation behavior, MFA mutation,
+  database resource, Production alias, public-access setting, or payment
+  capability changed.
+
 ## 2026-08-25 — Public agreement-verification semantic palette
 
 - Migrated the public agreement verifier panel, supporting copy, form, note, and
