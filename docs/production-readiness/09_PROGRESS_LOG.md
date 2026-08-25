@@ -1,5 +1,19 @@
 # Production-readiness progress log
 
+## 2026-08-25 — Public agreement-verification semantic palette
+
+- Migrated the public agreement verifier panel, supporting copy, form, note, and
+  success, warning, and danger results to the shared semantic design tokens.
+- Preserved the verifier's responsive layout and behavior while aligning every
+  visible state with the governed Dealivra palette.
+- Added release assertions for the verifier surface and status states plus a
+  gate that rejects future literal colors in its stylesheet.
+- Lint, type checking, 398 foundation tests, 20 rendered-component tests,
+  production compilation, served-asset manifest creation, and the JavaScript
+  and CSS budgets pass locally; total CSS remains within its reviewed limit.
+- No verification service, provider configuration, database, customer record,
+  Production alias, public-access setting, or payment capability changed.
+
 ## 2026-08-25 — Governed public agreement-verification recovery
 
 - Replaced the public agreement verifier's sentinel message and direct
