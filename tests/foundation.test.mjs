@@ -5331,6 +5331,17 @@ test('agreement PDF has accessible structure and print-safe layout rules', () =>
   assert.match(readinessIndex, /39_ACCESSIBLE_AGREEMENT_PDF\.md/);
 });
 
+test('agreement export and document preview use a compact governed shell', () => {
+  const styles = readText('src/agreement-export.css');
+
+  assert.match(styles, /\.agreement-export\{[\s\S]*background:var\(--ds-card\);[\s\S]*box-shadow:var\(--shadow-card\)/);
+  assert.match(styles, /\.agreement-export-actions\{display:grid;grid-template-columns:1fr 1fr;gap:8px\}/);
+  assert.match(styles, /\.agreement-export-actions \.primary\{grid-column:1\/-1\}/);
+  assert.match(styles, /\.agreement-document-view\{[\s\S]*background:var\(--ds-surface\)/);
+  assert.match(styles, /\.agreement-document-mode>\.agreement-print-document\{[\s\S]*border:1px solid var\(--ds-line\);[\s\S]*background:var\(--ds-card\);[\s\S]*box-shadow:var\(--shadow-popover\)/);
+  assert.match(styles, /\.agreement-document-mode>\.agreement-document-toolbar\{[\s\S]*border:1px solid var\(--ds-line\);[\s\S]*background:var\(--ds-card\);[\s\S]*box-shadow:var\(--shadow-popover\)/);
+});
+
 test('browser route resolver preserves canonical and legacy deep links and rejects unknown paths', async () => {
   const {
     authPath,
