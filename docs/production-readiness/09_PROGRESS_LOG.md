@@ -1,5 +1,19 @@
 # Production-readiness progress log
 
+## 2026-08-25 — Deal Action Plan semantic state governance
+
+- Migrated the compact Deal Action Plan card, progress indicator, completed
+  steps, current step, icons, and supporting copy from legacy color literals to
+  the shared semantic design tokens.
+- Assigned success semantics to completed steps and information semantics to
+  the current step so status meaning no longer depends on a single decorative
+  blue treatment.
+- Added release assertions for the Action Plan surface and lifecycle states,
+  plus a gate that rejects new hex, RGB/RGBA, or HSL/HSLA literals in its
+  stylesheet.
+- No workflow transition, provider configuration, database, customer record,
+  Production alias, public-access setting, or real-money capability changed.
+
 ## 2026-08-24 — Deal workflow semantic palette closure
 
 - Migrated Meeting, Arrival, handoff PIN, journey completion, and Inspection
