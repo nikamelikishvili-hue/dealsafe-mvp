@@ -1,5 +1,21 @@
 # Production-readiness progress log
 
+## 2026-08-25 — Compact agreement export and governed document shell
+
+- Reduced the agreement export card from three stacked actions to one clear
+  primary action plus a compact two-column secondary-action row, while keeping
+  every action at the governed touch-target size and preserving the existing
+  single-column small-screen fallback.
+- Migrated the export card, document-preview canvas, paper surface, and sticky
+  document toolbar to the shared Dealivra surface, border, brand, and shadow
+  system without changing the immutable agreement source or print semantics.
+- Added a release assertion for the compact action hierarchy and governed
+  document shell. The calibrated Letter-print palette remains explicitly
+  separate until browser, archive, and legal evidence closes `AGR-003`.
+- No agreement data, acceptance logic, authorization, provider configuration,
+  database resource, Production alias, public-access setting, or payment
+  capability changed.
+
 ## 2026-08-25 — Account-session security semantic palette
 
 - Migrated the signed-in-device inventory, current-session state, refresh
