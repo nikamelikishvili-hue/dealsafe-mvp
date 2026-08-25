@@ -15437,6 +15437,7 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   const paymentStatusStyles = readText('src/payment-status.css');
   const agreementConsentStyles = readText('src/agreement-consent.css');
   const dealExpiryStyles = readText('src/deal-expiry.css');
+  const actionPlanStyles = readText('src/deal-action-plan.css');
   const workflowStyles = readText('src/deal-workflow-modern.css');
   const compactDealStyles = readText('src/deal-sections-compact.css');
   const workspaceStyles = readText('src/workspace-redesign.css');
@@ -15493,6 +15494,11 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(dealExpiryStyles, /\.deal-expiry\.expired,\.expired-agreement,\.status\.expired\{background:var\(--color-danger-100\)\}/);
   assert.match(dealExpiryStyles, /\.deal-expiry\.expired>svg,\.expired-agreement,\.status\.expired\{color:var\(--color-danger-800\)\}/);
   assert.doesNotMatch(dealExpiryStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+  assert.match(actionPlanStyles, /\.deal-action-plan\{[^}]*border:1px solid var\(--color-border-default\)[^}]*background:linear-gradient\(145deg,var\(--color-surface-card\),var\(--color-surface-subtle\)\)[^}]*box-shadow:var\(--shadow-card\)[^}]*color:var\(--color-ink-900\)/);
+  assert.match(actionPlanStyles, /\.action-plan-steps li\.done\{border-color:var\(--color-success-border\);background:var\(--color-success-100\);color:var\(--color-success-700\)\}/);
+  assert.match(actionPlanStyles, /\.action-plan-steps li\.current\{[^}]*border-color:var\(--color-info-border\)[^}]*background:var\(--color-info-100\)[^}]*color:var\(--color-info-800\)[^}]*box-shadow:var\(--shadow-card\)/);
+  assert.match(actionPlanStyles, /\.action-plan-steps li\.current \.action-plan-step-icon\{background:linear-gradient\(145deg,var\(--color-brand-600\),var\(--color-info-800\)\);color:var\(--color-surface-card\);box-shadow:var\(--shadow-action\)\}/);
+  assert.doesNotMatch(actionPlanStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
   assert.match(workflowStyles, /\.view-deal :is\(\.payment-method-form,\.payment-method-card,\.payment-flow,\.payment-next-step\)\{[^}]*border-color:var\(--color-border-default\)!important;[^}]*background:var\(--color-surface-card\)!important/);
   assert.match(workflowStyles, /\.view-deal :is\(\.payment-progress article\.done,\.payment-flow-step\.done\)\{[^}]*border-color:var\(--color-success-border\);[^}]*background:var\(--color-success-100\);[^}]*color:var\(--color-success-700\)/);
   assert.match(workflowStyles, /\.view-deal \.protected-payment-state\{border-color:var\(--color-info-border\);background:var\(--color-info-100\);color:var\(--color-info-800\)\}/);
