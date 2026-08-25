@@ -12741,6 +12741,21 @@ test('global session revocation uses the governed accessible confirmation dialog
   assert.doesNotMatch(confirmationStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
 });
 
+test('deal management surfaces use the governed semantic palette', () => {
+  const coverStyles = readText('src/cover-selector.css');
+  const editorStyles = readText('src/deal-edit.css');
+  const renewalStyles = readText('src/deal-renewal.css');
+  const dealManagementStyles = `${coverStyles}\n${editorStyles}\n${renewalStyles}`;
+
+  assert.match(coverStyles, /background:var\(--cream\)/);
+  assert.match(editorStyles, /background:var\(--ds-card\)/);
+  assert.match(editorStyles, /background:var\(--cream\)/);
+  assert.match(renewalStyles, /border-color:var\(--color-warning-border\)/);
+  assert.match(renewalStyles, /background:var\(--color-warning-100\)/);
+  assert.match(renewalStyles, /color:var\(--color-success-700\)/);
+  assert.doesNotMatch(dealManagementStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+});
+
 test('MFA removal can be cancelled by keyboard and restores the initiating control', () => {
   const accountMfa = readText('src/AccountMfaSecurity.tsx');
 
