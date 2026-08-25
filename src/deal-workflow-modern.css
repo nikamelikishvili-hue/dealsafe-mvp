@@ -55,26 +55,26 @@
 .view-deal .meeting-panel :is(input,select){
   width:100%;
   min-height:52px;
-  border:1px solid #cbd9e8;
+  border:1px solid var(--color-border-strong);
   border-radius:12px;
-  background:#fff;
+  background:var(--color-surface-card);
 }
 
 .view-deal .meeting-panel :is(input,select):focus{
-  border-color:#4b8ce8;
-  box-shadow:0 0 0 4px rgba(55,126,225,.12);
+  border-color:var(--color-brand-700);
+  box-shadow:var(--focus-ring);
   outline:0;
 }
 
 .view-deal .field-help{
   min-height:16px;
-  color:#71839a;
+  color:var(--color-ink-600);
   font-size:.73rem;
   font-weight:600;
 }
 
-.view-deal .field-help.invalid{color:#ad452d}
-.view-deal [aria-invalid="true"]{border-color:#c35c45!important}
+.view-deal .field-help.invalid{color:var(--color-danger-800)}
+.view-deal [aria-invalid="true"]{border-color:var(--color-danger-border)!important}
 
 .view-deal .meeting-submit{
   min-height:52px;
@@ -92,27 +92,25 @@
 .view-deal .meeting-summary>div{
   min-width:0;
   padding:16px;
-  border:1px solid #dce6f1;
+  border:1px solid var(--color-border-default);
   border-radius:15px;
-  background:#f7faff;
+  background:var(--color-surface-subtle);
 }
 
-.view-deal .meeting-summary>div>svg{color:#3176d2}
-.view-deal .meeting-summary small{color:#657991;overflow-wrap:anywhere}
+.view-deal :is(.meeting-summary>div>svg,.meeting-safety svg){color:var(--color-info-800)}
+.view-deal .meeting-summary small{color:var(--color-ink-600);overflow-wrap:anywhere}
 .view-deal .meeting-summary .meeting-address{white-space:pre-line}
-.view-deal .meeting-status.confirmed{background:#e8f2ff;color:#2367bf}
+.view-deal .meeting-status.confirmed{background:var(--color-success-100);color:var(--color-success-700)}
 
 .view-deal .meeting-safety{
   gap:9px;
   margin:18px 0 0;
   padding-top:16px;
-  border-top:1px solid #e0e8f2;
-  color:#62748a;
+  border-top:1px solid var(--color-border-default);
+  color:var(--color-ink-600);
   font-size:.82rem;
   line-height:1.45;
 }
-
-.view-deal .meeting-safety svg{color:#3478d5}
 
 .view-deal :is(.meeting-panel,.shipping-panel,.payment-status,.handoff-panel,.rating-panel) .primary{
   border-color:transparent;
@@ -148,33 +146,19 @@
 .view-deal .payment-wait svg,
 .view-deal .shipping-wait svg{color:var(--color-brand-700)}
 
-.view-deal .shipping-note{color:var(--color-ink-600)}
-.view-deal .shipping-note svg{color:var(--color-brand-700)}
-
 .view-deal .arrival-grid div{
-  border:1px solid #dce5ef;
-  background:#f6f8fb;
-  color:#687b91;
+  border:1px solid var(--color-border-default);
+  background:var(--color-surface-subtle);
+  color:var(--color-ink-600);
 }
 
 .view-deal .arrival-grid .done{
-  border-color:#cfe0f5;
-  background:#eff6ff;
-  color:#2865b2;
+  border-color:var(--color-success-border);
+  background:var(--color-success-100);
+  color:var(--color-success-700);
 }
 
-.view-deal .pin-box{background:linear-gradient(145deg,#142640,#1c3760)}
-
-.view-deal .deal-progress-strip li.complete{
-  border-color:#cfe0f5;
-  background:#f0f6ff;
-  color:#2367bf;
-}
-
-.view-deal .deal-progress-strip li.complete>span{
-  background:#2b78e7;
-  color:#fff;
-}
+.view-deal .pin-box{background:linear-gradient(145deg,var(--color-ink-950),var(--color-info-800))}
 
 .view-deal :is(.payment-method-form,.payment-method-card,.payment-flow,.payment-next-step){
   border-color:var(--color-border-default)!important;
@@ -200,18 +184,15 @@
 .view-deal .payment-disclaimer{color:var(--color-ink-600)}
 .view-deal .payment-disclaimer svg{color:var(--color-info-800)}
 
-.view-deal .shipping-readiness-heading span{color:var(--color-ink-600)}
-.view-deal .shipping-readiness-progress{background:var(--color-border-default)}
 .view-deal .shipping-readiness-progress span{background:linear-gradient(90deg,var(--color-brand-700),var(--color-brand-500))}
-.view-deal .shipping-readiness-list>div{background:var(--color-surface-subtle);color:var(--color-ink-600)}
 
-.view-deal .inspection-checklist{border-color:#d9e5f2;background:#f8fbff}
-.view-deal .inspection-items label{border-color:#dce6f1}
-.view-deal .inspection-items label.checked{border-color:#c5dcf7;background:#edf5ff;color:#2865b2}
-.view-deal .inspection-items input{accent-color:#2875df}
-.view-deal .inspection-receipt{background:#edf5ff;color:#2865b2}
-.view-deal .inspection-receipt small{color:#5c7695}
-.view-deal .inspection-wait{background:#f5f8fc;color:#65778c}
+.view-deal .inspection-checklist{border-color:var(--color-border-default);background:var(--color-surface-card)}
+.view-deal .inspection-items label{border-color:var(--color-border-default)}
+.view-deal .inspection-items label.checked{border-color:var(--color-success-border);background:var(--color-success-100);color:var(--color-success-700)}
+.view-deal .inspection-items input{accent-color:var(--color-brand-700)}
+.view-deal .inspection-receipt{background:var(--color-success-100);color:var(--color-success-700)}
+.view-deal .inspection-receipt small{color:var(--color-ink-600)}
+.view-deal .inspection-wait{background:var(--color-surface-subtle);color:var(--color-ink-600)}
 
 @media(max-width:880px){
   .view-deal .meeting-field-place,

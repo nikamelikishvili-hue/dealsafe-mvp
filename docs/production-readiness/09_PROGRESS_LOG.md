@@ -1,5 +1,18 @@
 # Production-readiness progress log
 
+## 2026-08-24 — Deal workflow semantic palette closure
+
+- Migrated Meeting, Arrival, handoff PIN, journey completion, and Inspection
+  states from legacy blue and gray literals to the shared semantic design
+  tokens.
+- Aligned focus, invalid-field, confirmed, completed, waiting, and evidence
+  states with their governed interaction or status meaning.
+- Added release assertions for focus, error, completed, inspection, and PIN
+  treatments plus a gate that rejects new color literals in the modern Deal
+  workflow stylesheet.
+- No workflow transition, provider configuration, database, customer record,
+  Production alias, public-access setting, or real-money capability changed.
+
 ## 2026-08-24 — Payment Status semantic palette closure
 
 - Migrated the dedicated Payment Status stylesheet from legacy green, gray,
