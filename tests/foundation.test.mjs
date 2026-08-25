@@ -6611,7 +6611,7 @@ test('dense workspace controls retain full touch targets', () => {
   assert.match(validationSummary, /\.validation-summary li button \{[\s\S]*?min-height: var\(--touch-target\);/);
   assert.match(validationSummary, /\.validation-summary li button:focus-visible \{ outline-color: var\(--validation-accent\); \}/);
   assert.match(support, /\.icon-button\{width:44px;height:44px/);
-  assert.match(sessions, /\.session-confirmation button\{min-height:44px/);
+  assert.match(sessions, /\.session-security-actions button\{[^}]*min-height:60px/);
 });
 
 test('account recovery progress and guidance are announced accessibly', () => {
@@ -12739,6 +12739,16 @@ test('global session revocation uses the governed accessible confirmation dialog
   assert.match(confirmationStyles, /background: var\(--color-danger-100\)/);
   assert.match(confirmationStyles, /box-shadow: var\(--shadow-popover\)/);
   assert.doesNotMatch(confirmationStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+});
+
+test('account session security uses the governed semantic palette', () => {
+  const sessionStyles = readText('src/session-security.css');
+
+  assert.match(sessionStyles, /background:var\(--color-info-100\);color:var\(--color-info-800\)/);
+  assert.match(sessionStyles, /border:1px solid var\(--color-danger-border\);background:var\(--color-danger-100\);color:var\(--color-danger-800\)/);
+  assert.match(sessionStyles, /border:1px solid var\(--color-success-border\);background:var\(--color-success-100\);color:var\(--color-success-700\)/);
+  assert.doesNotMatch(sessionStyles, /session-confirmation/);
+  assert.doesNotMatch(sessionStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
 });
 
 test('deal management surfaces use the governed semantic palette', () => {
