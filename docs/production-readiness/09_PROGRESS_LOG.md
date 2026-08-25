@@ -1,5 +1,21 @@
 # Production-readiness progress log
 
+## 2026-08-25 — Account-session security semantic palette
+
+- Migrated the signed-in-device inventory, current-session state, refresh
+  control, feedback, and global sign-out action to the governed Dealivra
+  surface, copy, information, success, danger, border, radius, shadow, focus,
+  and touch-target tokens.
+- Removed the legacy inline session-confirmation styles after global sign-out
+  moved to the shared accessible confirmation dialog, and scoped the loading
+  animation to the session-security component.
+- Added a release assertion for session information, success, and danger states
+  plus a gate that rejects future literal colors or restoration of the unused
+  confirmation surface.
+- No authentication request, session-revocation policy, provider
+  configuration, database resource, Production alias, public-access setting,
+  or payment capability changed.
+
 ## 2026-08-25 — Deal safety, dispute, and reporting semantic palette
 
 - Migrated Deal cancellation, dispute, safety-alert, suspicious-Deal report,
