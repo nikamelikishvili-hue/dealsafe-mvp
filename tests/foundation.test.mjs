@@ -5939,6 +5939,7 @@ test('public agreement verification is isolated from central application state',
   assert.match(verification, /function AgreementVerifier/);
   assert.match(verification, /await verifyAgreementRecord\(cleanId, cleanCode\)/);
   assert.match(verification, /\/\^\[a-f0-9\]\{64\}\$\/i/);
+  assert.match(verification, /import \{[\s\S]*ValidationSummary,[\s\S]*type ValidationSummaryItem,[\s\S]*\} from '\.\/ValidationSummary'/);
   assert.match(verification, /aria-invalid=\{dealIdInvalid\}/);
   assert.match(verification, /aria-invalid=\{codeInvalid\}/);
   assert.match(verification, /role="status"/);
@@ -12788,16 +12789,21 @@ test('support messages reject whitespace and recover focus at the exact invalid 
   assert.match(supportCenter, /replySupportCase\(session, selected\.public_reference, normalizedReply\)/);
 });
 
-test('agreement verification restores focus to the first invalid field', () => {
+test('agreement verification links an assertive summary to each invalid field', () => {
   const verifier = readText('src/AgreementVerificationPage.tsx');
 
-  assert.match(verifier, /ref=\{dealIdRef\}/);
-  assert.match(verifier, /ref=\{codeRef\}/);
-  assert.match(verifier, /if \(cleanId\.length < 4\) dealIdRef\.current\?\.focus\(\)/);
-  assert.match(verifier, /else codeRef\.current\?\.focus\(\)/);
+  assert.match(verifier, /const agreementValidationSummaryId = 'verify-errors'/);
+  assert.match(verifier, /const agreementDealIdFieldId = 'v-deal'/);
+  assert.match(verifier, /const agreementCodeFieldId = 'verify-code'/);
+  assert.match(verifier, /document\.getElementById\(agreementValidationSummaryId\)\?\.focus\(\)/);
+  assert.match(verifier, /<ValidationSummary[\s\S]*id=\{agreementValidationSummaryId\}[\s\S]*errors=\{validationErrors\}/);
+  assert.match(verifier, /id=\{agreementDealIdFieldId\}/);
+  assert.match(verifier, /id=\{agreementCodeFieldId\}/);
   assert.match(verifier, /<FieldError id="deal-id-error">/);
   assert.match(verifier, /<FieldError id="agreement-code-error">/);
-  assert.match(verifier, /if \(validationVisible\) setMessage\(''\)/);
+  assert.match(verifier, /withoutFieldError\(current, agreementDealIdFieldId\)/);
+  assert.match(verifier, /withoutFieldError\(current, agreementCodeFieldId\)/);
+  assert.doesNotMatch(verifier, /message === 'Review the highlighted fields\.'/);
 });
 
 test('account registration rejects weak credentials before calling the provider', () => {
