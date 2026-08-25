@@ -12756,6 +12756,19 @@ test('deal management surfaces use the governed semantic palette', () => {
   assert.doesNotMatch(dealManagementStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
 });
 
+test('participant trust and Deal readiness states use the governed semantic palette', () => {
+  const participantStyles = readText('src/deal-participants.css');
+  const readinessStyles = readText('src/deal-readiness.css');
+  const trustReadinessStyles = `${participantStyles}\n${readinessStyles}`;
+
+  assert.match(participantStyles, /background:var\(--color-success-100\)/);
+  assert.match(participantStyles, /color:var\(--color-danger-800\)/);
+  assert.match(readinessStyles, /background:var\(--color-warning-100\)/);
+  assert.match(readinessStyles, /color:var\(--color-info-800\)/);
+  assert.match(readinessStyles, /border:1px solid var\(--color-warning-border\)/);
+  assert.doesNotMatch(trustReadinessStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+});
+
 test('MFA removal can be cancelled by keyboard and restores the initiating control', () => {
   const accountMfa = readText('src/AccountMfaSecurity.tsx');
 
