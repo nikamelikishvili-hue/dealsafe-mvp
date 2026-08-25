@@ -15440,6 +15440,8 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   const actionPlanStyles = readText('src/deal-action-plan.css');
   const workflowStyles = readText('src/deal-workflow-modern.css');
   const compactDealStyles = readText('src/deal-sections-compact.css');
+  const mfaSecurityStyles = readText('src/mfa-security.css');
+  const mfaStepUpStyles = readText('src/mfa-step-up.css');
   const workspaceStyles = readText('src/workspace-redesign.css');
   const entry = readText('src/main.tsx');
 
@@ -15515,6 +15517,15 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(compactDealStyles, /--deal-line:var\(--color-border-default\)/);
   assert.match(compactDealStyles, /\.view-deal \.shipping-note\{[^}]*border-top:1px solid var\(--deal-line\)/);
   assert.doesNotMatch(compactDealStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+  assert.match(mfaSecurityStyles, /\.account-mfa-security\s*\{[^}]*border: 1px solid var\(--m-l\)[^}]*background: linear-gradient\(145deg, var\(--m-c\), var\(--m-s\)\)[^}]*box-shadow: var\(--shadow-card\)/s);
+  assert.match(mfaSecurityStyles, /\.mfa-state\s*\{[^}]*background: var\(--m-wb\)[^}]*color: var\(--m-w\)/s);
+  assert.match(mfaSecurityStyles, /\.mfa-state\.is-protected\s*\{[^}]*border-color: var\(--m-ol\)[^}]*background: var\(--m-ob\)[^}]*color: var\(--m-o\)/s);
+  assert.match(mfaSecurityStyles, /\.mfa-factor-list li > b\s*\{[^}]*background: var\(--m-ob\)[^}]*color: var\(--m-o\)/s);
+  assert.match(mfaSecurityStyles, /\.mfa-factor-list li > button\s*\{[^}]*height: 44px[^}]*background: var\(--m-db\)[^}]*color: var\(--m-d\)/s);
+  assert.match(mfaStepUpStyles, /\.mfa-remove-confirmation\s*\{[^}]*border: 1px solid var\(--m-dl\)[^}]*background: var\(--m-db\)/s);
+  assert.match(mfaStepUpStyles, /\.mfa-remove-fields (?:select|input):focus-visible[\s\S]*box-shadow: var\(--focus-ring\)/);
+  assert.match(mfaStepUpStyles, /\.confirm-danger\s*\{[^}]*background: var\(--m-d\)[^}]*color: var\(--m-c\)/s);
+  assert.doesNotMatch(`${mfaSecurityStyles}\n${mfaStepUpStyles}`, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
   assert.match(workspaceStyles, /\.create-step-card \[aria-invalid="true"\]\{border-color:var\(--color-danger-border\)!important;background:var\(--color-danger-100\)!important/);
   assert.match(workspaceStyles, /\.auth-market-note\{[^}]*color:var\(--color-ink-600\)/);
   assert.match(workspaceStyles, /\.auth-journey \.is-current\{[^}]*border-color:var\(--color-info-border\)[^}]*color:var\(--color-info-800\)[^}]*background:var\(--color-info-100\)/);

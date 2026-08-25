@@ -1,5 +1,20 @@
 # Production-readiness progress log
 
+## 2026-08-25 — Authenticator and MFA semantic UI governance
+
+- Migrated Authenticator enrollment, login verification, protected/unprotected
+  status, verified-factor, feedback, and removal-confirmation surfaces to the
+  shared semantic design tokens.
+- Consolidated the duplicated removal-confirmation treatment into its dedicated
+  step-up stylesheet and enforced full touch targets, visible focus, and a
+  compact 430px layout for security-critical controls.
+- Added release assertions for warning, success, information, danger, focus,
+  and removal states plus a gate that rejects new color literals in both MFA
+  stylesheets.
+- No authentication-provider setting, MFA factor, session, database, customer
+  record, Production alias, public-access setting, or payment capability
+  changed.
+
 ## 2026-08-25 — Deal Action Plan semantic state governance
 
 - Migrated the compact Deal Action Plan card, progress indicator, completed
