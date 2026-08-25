@@ -1,5 +1,18 @@
 # Production-readiness progress log
 
+## 2026-08-25 — Deal-management semantic palette
+
+- Migrated Deal cover selection, editing, and renewal surfaces from legacy
+  literal colors to the governed Dealivra surface, border, copy, accent,
+  warning, success, and radius tokens.
+- Preserved existing layouts, responsive behavior, selection, editing, expiry,
+  and renewal logic while aligning the three related management surfaces.
+- Added a release assertion for the critical surface and lifecycle states and a
+  gate that rejects future literal colors across all three stylesheets.
+- No Deal mutation, expiry policy, media handling, provider configuration,
+  database resource, Production alias, public-access setting, or payment
+  capability changed.
+
 ## 2026-08-25 — Sensitive-action confirmation semantic palette
 
 - Migrated the shared confirmation dialog, including safe, destructive, hover,
