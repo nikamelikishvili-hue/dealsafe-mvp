@@ -1,5 +1,19 @@
 # Production-readiness progress log
 
+## 2026-08-25 — Participant trust and Deal-readiness semantic palette
+
+- Migrated participant cards, verification states, safety score levels,
+  readiness milestones, and review guidance from feature-owned literal colors
+  to the governed Dealivra surface, border, copy, success, warning, danger, and
+  information tokens.
+- Preserved the existing participant privacy boundary, risk calculation,
+  guidance behavior, responsive layout, and Deal workflow logic.
+- Added a release assertion that rejects future literal colors across both
+  trust/readiness stylesheets.
+- No participant authorization, verification decision, risk calculation,
+  provider configuration, database resource, Production alias, public-access
+  setting, or payment capability changed.
+
 ## 2026-08-25 — Deal-management semantic palette
 
 - Migrated Deal cover selection, editing, and renewal surfaces from legacy
