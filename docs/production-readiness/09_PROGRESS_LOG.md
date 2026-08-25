@@ -1,5 +1,24 @@
 # Production-readiness progress log
 
+## 2026-08-25 — Deal safety, dispute, and reporting semantic palette
+
+- Migrated Deal cancellation, dispute, safety-alert, suspicious-Deal report,
+  sign-in guidance, and report-success surfaces from feature-owned literal
+  colors to the governed Dealivra surface, copy, warning, danger, information,
+  success, border, and radius tokens.
+- Scoped destructive button styling to the safety and reporting components so
+  it cannot leak into unrelated controls, while preserving every existing
+  cancellation, dispute, report, validation, and responsive behavior.
+- Added a release assertion for the critical status states and a gate that
+  rejects future literal colors across both safety/reporting stylesheets.
+- Lint, type checking, 401 foundation tests, 20 rendered-component tests,
+  production compilation, served-asset manifest creation, preview smoke, and
+  the JavaScript and CSS budgets pass locally; total CSS is 289,989 bytes
+  against the reviewed 290,000-byte limit.
+- No authorization, cancellation or dispute policy, report submission,
+  provider configuration, database resource, Production alias, public-access
+  setting, or payment capability changed.
+
 ## 2026-08-25 — Participant trust and Deal-readiness semantic palette
 
 - Migrated participant cards, verification states, safety score levels,

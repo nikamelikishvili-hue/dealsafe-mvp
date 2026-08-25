@@ -12769,6 +12769,18 @@ test('participant trust and Deal readiness states use the governed semantic pale
   assert.doesNotMatch(trustReadinessStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
 });
 
+test('Deal safety and reporting states use the governed semantic palette', () => {
+  const disputeStyles = readText('src/dispute.css');
+  const reportStyles = readText('src/report-deal.css');
+  const safetyStyles = `${disputeStyles}\n${reportStyles}`;
+
+  assert.match(disputeStyles, /\.deal-safety-actions \.danger\{color:var\(--color-danger-800\);border-color:var\(--color-danger-border\)\}/);
+  assert.match(disputeStyles, /\.deal-alert\.disputed\{background:var\(--color-warning-100\);border-color:var\(--color-warning-border\)\}/);
+  assert.match(reportStyles, /\.report-signin\{[^}]*background:var\(--color-info-100\)[^}]*color:var\(--color-info-800\)/);
+  assert.match(reportStyles, /\.report-success\{[^}]*background:var\(--color-success-100\);color:var\(--color-success-700\)/);
+  assert.doesNotMatch(safetyStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+});
+
 test('MFA removal can be cancelled by keyboard and restores the initiating control', () => {
   const accountMfa = readText('src/AccountMfaSecurity.tsx');
 
