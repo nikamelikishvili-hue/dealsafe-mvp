@@ -1,5 +1,13 @@
 # Production-readiness progress log
 
+## 2026-09-02 — Governed Account Settings palette
+
+- Migrated Account Settings cards, borders, supporting copy, and radii from feature-owned literals to the shared Dealivra semantic design tokens.
+- Added a regression assertion that prevents the Account Settings stylesheet from reintroducing literal screen colors.
+- Preserved the existing account forms, validation, responsive layout, and security behavior.
+- Complete local release verification passed: 406 foundation tests, 20 rendered-component tests, security and dependency policies, production build, 289,695-byte CSS bundle, and Preview smoke.
+- No provider configuration, customer data, database resource, Production alias, public-access setting, or payment capability changed.
+
 ## 2026-09-02 — Retired the legacy base palette override
 
 - Removed the final legacy `:root` palette from `src/styles.css` so shared compatibility aliases resolve from the governed design-token source before the reviewed Dealivra brand layer applies product overrides.
