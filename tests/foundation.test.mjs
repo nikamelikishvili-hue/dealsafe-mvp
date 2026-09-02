@@ -15557,6 +15557,7 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
     assert.match(tokens, new RegExp(`${token}:`));
   }
   assert.match(entry, /import '\.\/design-tokens\.css';[\s\S]*import '\.\/styles\.css';/);
+  assert.doesNotMatch(baseStyles, /^:root\{/m);
   assert.match(feedback, /role=\{urgent \? 'alert' : 'status'\}/);
   assert.match(feedback, /aria-live=\{urgent \? 'assertive' : 'polite'\}/);
   assert.match(feedback, /aria-atomic="true"/);

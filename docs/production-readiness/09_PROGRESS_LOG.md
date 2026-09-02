@@ -1,5 +1,12 @@
 # Production-readiness progress log
 
+## 2026-09-02 — Retired the legacy base palette override
+
+- Removed the final legacy `:root` palette from `src/styles.css` so shared compatibility aliases resolve from the governed design-token source before the reviewed Dealivra brand layer applies product overrides.
+- Preserved all base selectors and behavior; added a regression assertion preventing this fallback layer from reintroducing a global token source.
+- Complete local release verification passed: 405 foundation tests, 20 rendered-component tests, security and dependency policies, production build, 289,574-byte CSS bundle, and Preview smoke.
+- No provider configuration, customer data, database resource, Production alias, public-access setting, or payment capability changed.
+
 ## 2026-08-25 — Single global token source and CSS budget headroom
 
 - Removed the duplicate legacy `:root` palette from the global redesign layer;
