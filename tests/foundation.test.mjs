@@ -12787,6 +12787,15 @@ test('account session security uses the governed semantic palette', () => {
   assert.doesNotMatch(sessionStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
 });
 
+test('account settings use the governed semantic palette', () => {
+  const settingsStyles = readText('src/account-settings.css');
+
+  assert.match(settingsStyles, /\.account-settings\{[^}]*background:var\(--color-surface-card\);[^}]*border:1px solid var\(--color-border-default\);[^}]*border-radius:var\(--radius-card\)/);
+  assert.match(settingsStyles, /\.settings-grid form\{[^}]*background:var\(--color-surface-subtle\);[^}]*border:1px solid var\(--color-border-default\);[^}]*border-radius:var\(--radius-control\)/);
+  assert.match(settingsStyles, /\.settings-grid form>p\{color:var\(--color-ink-600\)/);
+  assert.doesNotMatch(settingsStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+});
+
 test('deal management surfaces use the governed semantic palette', () => {
   const coverStyles = readText('src/cover-selector.css');
   const editorStyles = readText('src/deal-edit.css');
