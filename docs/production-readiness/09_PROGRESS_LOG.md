@@ -1,5 +1,23 @@
 # Production-readiness progress log
 
+## 2026-09-02 — Reconciled bounded dependency and CodeQL maintenance
+
+- Updated `lucide-react`, Biome, React DOM types, and the Vite React plugin to
+  the exact patch/minor versions already proposed for review while retaining
+  TypeScript 5.9.3 and Vite 8.1.5.
+- Updated both CodeQL workflow actions to the same immutable 4.37.9 commit so
+  initialization and analysis cannot drift onto incompatible action versions.
+- Limited grouped Dependabot reviews to patch and minor updates and retained
+  the reviewed Vite 8.2.2 exclusion; major upgrades must now receive a separate
+  compatibility review.
+- Added repository assertions for the Dependabot grouping boundary and the
+  single CodeQL action revision. The complete local release gate passes on a
+  fresh Node 24 dependency installation.
+- The Supabase setup action major upgrade remains outside this maintenance
+  change until its isolated Staging workflow is approved and exercised. No
+  hosted configuration, database, customer data, Production alias,
+  public-access setting, or payment capability changed.
+
 ## 2026-09-02 — Governed Account Settings palette
 
 - Migrated Account Settings cards, borders, supporting copy, and radii from feature-owned literals to the shared Dealivra semantic design tokens.

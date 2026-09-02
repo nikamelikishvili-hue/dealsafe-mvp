@@ -180,6 +180,23 @@ test('runtime and development dependencies are exactly pinned', () => {
   }
 });
 
+test('Dependabot keeps major upgrades outside grouped maintenance reviews', () => {
+  const dependabot = readText('.github/dependabot.yml');
+
+  assert.match(
+    dependabot,
+    /production-dependencies:[\s\S]+update-types:[\s\S]+- minor[\s\S]+- patch/,
+  );
+  assert.match(
+    dependabot,
+    /development-dependencies:[\s\S]+update-types:[\s\S]+- minor[\s\S]+- patch/,
+  );
+  assert.match(
+    dependabot,
+    /dependency-name: vite[\s\S]+versions:[\s\S]+- 8\.2\.2/,
+  );
+});
+
 test('npm is the only repository package-manager lockfile', () => {
   assert.equal(existsSync(join(rootPath, 'package-lock.json')), true);
   assert.equal(existsSync(join(rootPath, 'pnpm-lock.yaml')), false);
@@ -13409,15 +13426,22 @@ test('CodeQL findings and dependency controls have scoped ownership and SLAs', (
   assert.match(workflow, /security-events: write/);
   assert.match(
     workflow,
-    /github\/codeql-action\/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4/,
+    /github\/codeql-action\/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4/,
   );
   assert.match(workflow, /languages: javascript-typescript/);
   assert.match(workflow, /build-mode: none/);
   assert.match(workflow, /queries: security-extended/);
   assert.match(
     workflow,
-    /github\/codeql-action\/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4/,
+    /github\/codeql-action\/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4/,
   );
+  const codeqlActionRefs = [
+    ...workflow.matchAll(
+      /github\/codeql-action\/(?:init|analyze)@([0-9a-f]{40}) # v4/g,
+    ),
+  ].map(match => match[1]);
+  assert.equal(codeqlActionRefs.length, 2);
+  assert.equal(new Set(codeqlActionRefs).size, 1);
   assert.doesNotMatch(workflow, /pull_request_target|secrets\.|permissions:\s*write-all/);
 
   for (const path of [
