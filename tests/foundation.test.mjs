@@ -5355,6 +5355,18 @@ test('agreement fingerprint and history use the governed semantic palette', () =
   assert.doesNotMatch(historyStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
 });
 
+test('global redesign consumes the single governed token source', () => {
+  const main = readText('src/main.tsx');
+  const globalStyles = readText('src/global-redesign.css');
+
+  assert.ok(
+    main.indexOf("import './design-tokens.css';")
+      < main.indexOf("import './global-redesign.css';"),
+  );
+  assert.doesNotMatch(globalStyles, /^:root\s*\{/);
+  assert.match(globalStyles, /body\{background:var\(--ds-surface\);color:var\(--ds-ink\)\}/);
+});
+
 test('browser route resolver preserves canonical and legacy deep links and rejects unknown paths', async () => {
   const {
     authPath,
