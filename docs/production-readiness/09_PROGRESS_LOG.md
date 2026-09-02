@@ -1,5 +1,16 @@
 # Production-readiness progress log
 
+## 2026-08-25 — Single global token source and CSS budget headroom
+
+- Removed the duplicate legacy `:root` palette from the global redesign layer;
+  the application now loads shared design tokens first and lets the Dealivra
+  brand layer apply the reviewed product-theme overrides once.
+- Added a release assertion that preserves the stylesheet order and prevents
+  the global layout layer from silently restoring a second token source.
+- Reduced production CSS without raising the reviewed bundle budget or
+  changing layout, responsive behavior, accessibility, workflow logic, data,
+  provider configuration, Production aliases, public access, or payments.
+
 ## 2026-08-25 — Agreement record semantic palette
 
 - Migrated the agreement fingerprint, verification code, version history,
