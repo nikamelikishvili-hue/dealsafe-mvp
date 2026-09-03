@@ -38,8 +38,11 @@ content, and rejects WebP EXIF, XMP, ICC, and animation chunks. A filename,
 extension, browser MIME value, or Storage metadata field never proves type.
 
 The Storage buckets enforce the union allowlist and the absolute 50 MB ceiling.
-The shared policy module enforces the narrower category limit in both the
-browser and Edge Function.
+The browser applies declaration and category limits before upload. The Edge
+Function authoritatively applies the same declaration rules to the quarantined
+object and validates its actual bytes before promotion. This avoids reading a
+potentially 50 MB video into browser memory twice without trusting client-side
+validation as a security control.
 
 ## Intake and promotion
 
