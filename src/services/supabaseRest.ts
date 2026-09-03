@@ -6,10 +6,8 @@ import {
   readBoundedJson,
   readBoundedText,
   readExactArrayBuffer,
-  readExactBlobArrayBuffer,
 } from './browserResponseBoundary';
 import {
-  validateEvidenceBytes,
   validateEvidenceDeclaration,
   type EvidenceUploadType,
 } from '../../supabase/functions/_shared/evidence-policy';
@@ -1162,8 +1160,7 @@ export async function uploadDealEvidence(session:StoredSession,dealId:string,upl
   const declaration={claimedMimeType:preparedFile.type,evidenceType,fileName:preparedFile.name,fileSize:preparedFile.size,role:uploaderRole};
   const validation=validateEvidenceDeclaration(declaration);
   if(!validation.ok)throw new Error(validation.message);
-  const byteValidation=validateEvidenceBytes(new Uint8Array(await readExactBlobArrayBuffer(preparedFile,preparedFile.size)),declaration);
-  if(!byteValidation.ok)throw new Error(byteValidation.message);
+  // The Edge Function validates the quarantined bytes and malware verdict before promotion.
   const intake=parseEvidenceUploadIntakeResponse(await invokeEvidenceFiles(session,{
     action:'request-upload',
     dealId,

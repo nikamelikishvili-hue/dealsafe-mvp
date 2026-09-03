@@ -5157,10 +5157,9 @@ test('private evidence uses quarantine, service-side scanning, and 60-second acc
 
   assert.match(client, /functions\/v1\/evidence-files/);
   assert.match(client, /deal_evidence_safe/);
-  assert.match(
-    client,
-    /readExactBlobArrayBuffer\(preparedFile,preparedFile\.size\)/,
-  );
+  assert.match(client, /validateEvidenceDeclaration\(declaration\)/);
+  assert.doesNotMatch(client, /validateEvidenceBytes\(/);
+  assert.doesNotMatch(client, /readExactBlobArrayBuffer\(preparedFile/);
   assert.doesNotMatch(client, /preparedFile\.arrayBuffer\(\)/);
   assert.doesNotMatch(client, /fetch\([^)]*object\/sign\/deal-evidence/);
   assert.doesNotMatch(client, /rest\/v1\/deal_evidence[^_]/);
@@ -14083,7 +14082,7 @@ test('browser data responses are bounded before runtime-schema validation', asyn
   assert.match(client, /readBoundedJson\(/);
   assert.match(client, /readBoundedText\(response\.clone\(\),16_384\)/);
   assert.match(client, /readExactArrayBuffer\(response,data\.fileSizeBytes\)/);
-  assert.match(client, /readExactBlobArrayBuffer\(preparedFile,preparedFile\.size\)/);
+  assert.doesNotMatch(client, /readExactBlobArrayBuffer\(preparedFile/);
   assert.doesNotMatch(client, /preparedFile\.arrayBuffer\(\)/);
   assert.doesNotMatch(client, /\.json\(\)/);
   assert.doesNotMatch(client, /clone\(\)\.text\(\)/);
