@@ -13312,7 +13312,7 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
   );
   assert.match(
     workflow,
-    /npm audit --audit-level=high[\s\S]+npm run release:sbom[\s\S]+npm run release:evidence/,
+    /npm run security:audit[\s\S]+npm run release:sbom[\s\S]+npm run release:evidence/,
   );
   assert.match(workflow, /DEALIVRA_RELEASE_COMMIT: \$\{\{ github\.sha \}\}/);
   assert.match(
