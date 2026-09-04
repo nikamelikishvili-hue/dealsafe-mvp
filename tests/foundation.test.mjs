@@ -15615,8 +15615,7 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(shippingStyles, /\.shipping-readiness\.is-ready\{[^}]*border-color:var\(--color-success-border\)[^}]*background:var\(--color-success-100\)/);
   assert.match(shippingStyles, /\.shipping-readiness-list>div\.complete\{[^}]*border-color:var\(--color-success-border\)[^}]*background:var\(--color-success-100\)[^}]*color:var\(--color-success-700\)/);
   assert.doesNotMatch(shippingStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
-  assert.match(paymentStatusStyles, /\.payment-method-card em\{[^}]*background:var\(--color-warning-100\);color:var\(--color-warning-800\)/);
-  assert.match(paymentStatusStyles, /\.payment-method-card em\.confirmed\{background:var\(--color-success-100\);color:var\(--color-success-700\)\}/);
+  assert.doesNotMatch(paymentStatusStyles, /payment-method-(?:form|card)|payment-progress/);
   assert.match(paymentStatusStyles, /\.protected-payment-state\.warning\{border-color:var\(--color-warning-border\);background:var\(--color-warning-100\);color:var\(--color-warning-800\)\}/);
   assert.doesNotMatch(paymentStatusStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
   assert.match(agreementConsentStyles, /\.agreement-confirm-list li\.checked label\{border-color:var\(--color-success-border\);background:var\(--color-success-100\);color:var\(--color-success-700\)\}/);
@@ -15638,8 +15637,9 @@ test('shared UI foundations expose semantic tokens and accessible feedback state
   assert.match(actionPlanStyles, /\.action-plan-steps li\.current\{[^}]*border-color:var\(--color-info-border\)[^}]*background:var\(--color-info-100\)[^}]*color:var\(--color-info-800\)[^}]*box-shadow:var\(--shadow-card\)/);
   assert.match(actionPlanStyles, /\.action-plan-steps li\.current \.action-plan-step-icon\{background:linear-gradient\(145deg,var\(--color-brand-600\),var\(--color-info-800\)\);color:var\(--color-surface-card\);box-shadow:var\(--shadow-action\)\}/);
   assert.doesNotMatch(actionPlanStyles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
-  assert.match(workflowStyles, /\.view-deal :is\(\.payment-method-form,\.payment-method-card,\.payment-flow,\.payment-next-step\)\{[^}]*border-color:var\(--color-border-default\)!important;[^}]*background:var\(--color-surface-card\)!important/);
-  assert.match(workflowStyles, /\.view-deal :is\(\.payment-progress article\.done,\.payment-flow-step\.done\)\{[^}]*border-color:var\(--color-success-border\);[^}]*background:var\(--color-success-100\);[^}]*color:var\(--color-success-700\)/);
+  assert.match(workflowStyles, /\.view-deal :is\(\.payment-flow,\.payment-next-step\)\{[^}]*border-color:var\(--color-border-default\)!important;[^}]*background:var\(--color-surface-card\)!important/);
+  assert.match(workflowStyles, /\.view-deal \.payment-flow-step\.done\{[^}]*border-color:var\(--color-success-border\);[^}]*background:var\(--color-success-100\);[^}]*color:var\(--color-success-700\)/);
+  assert.doesNotMatch(workflowStyles, /payment-method-(?:form|card)|payment-progress/);
   assert.match(workflowStyles, /\.view-deal \.protected-payment-state\{border-color:var\(--color-info-border\);background:var\(--color-info-100\);color:var\(--color-info-800\)\}/);
   assert.match(workflowStyles, /\.view-deal \.protected-payment-state\.success\{border-color:var\(--color-success-border\);background:var\(--color-success-100\);color:var\(--color-success-700\)\}/);
   assert.match(workflowStyles, /\.view-deal \.meeting-panel :is\(input,select\):focus\{[^}]*border-color:var\(--color-brand-700\);[^}]*box-shadow:var\(--focus-ring\)/);
