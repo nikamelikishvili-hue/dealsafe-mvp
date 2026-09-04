@@ -5693,3 +5693,23 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   and retain the intended semantic status mappings.
 - No provider configuration, customer data, public-access setting, Production
   alias, or real-payment capability changed.
+
+# 2026-09-04 — Exercised the protected exact-host verifier boundary
+
+- Confirmed signed `main` at
+  `511f6b0d7077bb90d3d1e78a4029611f55125511` after PR `#287` expanded Preview
+  smoke to all 14 supported SPA routes and passed the required quality,
+  CodeQL, and Vercel checks.
+- Created the `served-asset-verification` GitHub environment with a
+  protected-branches-only deployment policy and configured the value-free
+  exact-host allowlist for `dealsafe-dqx3xke41-nika13.vercel.app`.
+- Dispatched manual run `33839430086` against the same immutable commit and
+  protected Vercel deployment. The verifier rejected the authentication
+  redirect without following it, proving that a protected host cannot be
+  treated as byte-for-byte evidence without the scoped bypass secret.
+- Kept automatic served-asset verification disabled. A scoped
+  `DEALIVRA_DEPLOYMENT_BYPASS_TOKEN`, one successful retained manual run, its
+  restricted archive, and named promotion approval still block FND-003.
+- No protection rule was weakened, no secret value was accessed or logged,
+  and no Production alias, public access, hosted customer data, or real-payment
+  capability changed.
