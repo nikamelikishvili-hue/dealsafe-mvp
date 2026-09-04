@@ -17,6 +17,22 @@ const builtIndex = resolve(workspaceRoot, 'dist', 'index.html');
 const host = '127.0.0.1';
 const port = 4175;
 const origin = `http://${host}:${port}`;
+const applicationRoutes = [
+  '/',
+  '/create',
+  '/signin',
+  '/signup',
+  '/forgot-password',
+  '/verify',
+  '/buyer-protection',
+  '/seller-protection',
+  '/fees',
+  '/disputes',
+  '/terms',
+  '/privacy',
+  '/deal/route-verification',
+  '/trust/route-verification',
+];
 
 if (!existsSync(builtIndex)) {
   console.error('Preview smoke test requires a production build. Run npm run build first.');
@@ -72,8 +88,9 @@ async function stopServer() {
 try {
   await waitForPreview();
   const home = await expectApplicationPage('/');
-  await expectApplicationPage('/terms');
-  await expectApplicationPage('/signin');
+  for (const route of applicationRoutes.slice(1)) {
+    await expectApplicationPage(route);
+  }
 
   const localOrigin = normalizeDeploymentOrigin(
     origin,

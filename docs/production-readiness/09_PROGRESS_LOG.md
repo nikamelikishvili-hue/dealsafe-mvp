@@ -1,5 +1,22 @@
 # Production-readiness progress log
 
+## 2026-09-04 — Complete public-route and responsive smoke matrix
+
+- Expanded Preview smoke from three entry points to all 14 supported SPA
+  routes, including direct create, account, recovery, protection, policy,
+  dispute, Deal, and trust-passport deep links.
+- Added release assertions that keep the route matrix explicit and prevent a
+  future smoke reduction from silently omitting a supported public entry path.
+- Exercised the reviewed local build at 320, 360, 390, 768, 1024, 1280, and
+  1440 pixels with no horizontal overflow. Mobile Home navigation, create and
+  sign-in calls to action, and the sample Deal entry path behaved correctly.
+- The reviewed build remains below the fixed budgets: 819,425 JavaScript
+  bytes, 285,346 CSS bytes, 134,125 initial application JavaScript bytes, and
+  1,110,576 bytes across the 28-asset served manifest.
+- This evidence is local and repository-bound. It does not activate public
+  access, mutate hosted data, configure a provider, enable payments, or replace
+  the protected-Preview authenticated and exact-host acceptance gates.
+
 ## 2026-09-02 — Reconciled bounded dependency and CodeQL maintenance
 
 - Updated `lucide-react`, Biome, React DOM types, and the Vite React plugin to

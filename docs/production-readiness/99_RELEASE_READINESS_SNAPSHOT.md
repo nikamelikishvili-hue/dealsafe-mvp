@@ -1,6 +1,6 @@
 # Dealivra release-readiness snapshot
 
-Status date: 2026-08-24
+Status date: 2026-09-04
 
 ## Decision
 
@@ -15,38 +15,43 @@ below is complete for the same immutable candidate commit and deployment.
 
 ## Current reviewed repository evidence
 
-- Reviewed `main` is `35214dae98df003d9792e08b77a235deebca93c1` with
-  a valid GitHub signature. The consolidated release candidate was merged by
-  PR `#233`; subsequent reviewed account, routing, security, database-history,
-  dependency, and interface changes are also on `main`.
-- No pull request remains open. The two final dependency reviews, PR `#255`
-  and PR `#256`, passed the protected `verify`, CodeQL, and Vercel checks
-  before squash merge. TypeScript 7 and Vite 8.2.2 were deliberately excluded
-  from PR `#256` after compatibility and bundle-budget review; only
-  `@vitejs/plugin-react` 6.1.0 was accepted.
+- The reviewed baseline `main` is `103fd4509a1eb2be3db1eca0b961a6ca9d5e1e11` with
+  a valid GitHub signature. Dependency maintenance was merged by PR `#282`,
+  JavaScript budget headroom by PR `#285`, and CSS budget headroom by PR
+  `#286`; no pre-existing pull request remained open at this audit boundary.
 - The current repository gate passes catalog, dependency, SBOM,
   browser-storage, outbound-transport, API-origin, abuse-policy, brand,
-  runtime-configuration, formatting, lint, TypeScript, 398 foundation tests,
+  runtime-configuration, formatting, lint, TypeScript, 407 foundation tests,
   20 rendered-component tests, the incident drill, secret scan, production
   build, deterministic served-asset manifest, performance budgets, and Preview
   smoke.
-- The reviewed unconfigured build contains 821,815 JavaScript bytes and
-  289,973 CSS bytes. Initial application JavaScript is 133,941 bytes against
+- The reviewed unconfigured build contains 819,425 JavaScript bytes and
+  285,346 CSS bytes. Initial application JavaScript is 134,125 bytes against
   the fixed 160,000-byte ceiling. The served-asset manifest contains 28 assets
-  totaling 1,117,593 bytes.
-- GitHub Actions run `32759970707` executed the current manual Staging baseline
-  preflight on exact `main`. The target guard rejected incomplete protected
-  configuration before Node setup, dependency installation, Supabase CLI
-  installation, project linking, migration capture, or any database command.
+  totaling 1,110,576 bytes.
+- GitHub Actions runs `33829693230` and `33829693245` passed the required
+  quality/security and CodeQL gates on exact `main`. Served-asset run
+  `33829712069` remained intentionally skipped because protected exact-host
+  verification is default-off until its environment and scoped token are
+  configured.
+- Vercel deployment `dpl_855HekBT4kMYEVwEyL7yGHrzPfHB` for that baseline is
+  `READY`, access-protected, and not assigned to public live operation. Runtime
+  inspection reported no hosted errors. This does not replace retained
+  exact-host served-asset evidence.
+- Local browser acceptance covered widths 320, 360, 390, 768, 1024, 1280, and
+  1440 without horizontal overflow. The public route matrix, mobile Home
+  navigation, account entry calls to action, and sample Deal path were also
+  exercised. The repository Preview smoke now requests all 14 supported SPA
+  routes rather than only the root, Terms, and sign-in paths.
 - The protected GitHub `staging` environment contains distinct Staging and
   Production project-reference variables. Its required database URL, access
   token, and database-password secrets are not configured. Only secret names
   were inspected; no secret value was accessed or logged.
 
-These results prove the repository review stack is clean and that an incomplete
-Staging target fails closed. They do not prove the Staging schema can be rebuilt,
-that hosted cross-user authorization is correct, or that a candidate is ready
-for external testers.
+These results prove the reviewed repository and local responsive route stack
+are clean. They do not prove the Staging schema can be rebuilt, hosted
+cross-user authorization is correct, protected authenticated journeys pass, or
+that a candidate is ready for external testers.
 
 ## Closed since the previous snapshot
 
@@ -56,6 +61,8 @@ for external testers.
   open pull request waiting to be promoted.
 - Required repository checks and commit-signature enforcement remain intact;
   no security finding or branch-protection rule was dismissed or weakened.
+- The JavaScript and CSS performance ceilings were retained rather than raised;
+  both now have measurable release headroom.
 
 ## External private-beta blockers
 
@@ -120,11 +127,12 @@ run again.
 
 ### Immediate controlled action
 
-The next permitted hosted action is to add the three missing secrets to the
-protected `staging` environment and rerun the baseline proof. Do not place
-those credentials in chat or repository content. Until that externally owned
-configuration exists, repository work may continue, but DAT-001 and DAT-003
-cannot be marked complete.
+The next permitted hosted actions are to configure the protected exact-host
+served-asset verifier and add the three missing database secrets to the
+protected `staging` environment. Use only scoped secrets and never place their
+values in chat, repository content, logs, screenshots, issues, or pull-request
+text. Until those externally owned settings exist, repository work may
+continue, but FND-003, DAT-001, and DAT-003 cannot be marked complete.
 
 ### Activation boundary
 
