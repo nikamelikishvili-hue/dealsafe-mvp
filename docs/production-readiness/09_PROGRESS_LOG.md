@@ -1,5 +1,22 @@
 # Production-readiness progress log
 
+## 2026-09-04 — Governed Evidence Vault correction and presentation
+
+- Replaced the Evidence Vault's silent empty-file submission with the shared
+  assertive validation summary, deterministic summary focus, and a direct
+  focus path back to the file control.
+- Added stable labels, names, help relationships, invalid-state semantics, and
+  recovery behavior so selecting a file clears stale validation and a
+  successful retry cannot retain an earlier error announcement.
+- Reused the shared feedback contract and migrated the Evidence Vault upload,
+  evidence list, and secure viewer surfaces to the governed palette, focus,
+  radius, shadow, and touch-target tokens. Long file names and fingerprints now
+  wrap without forcing horizontal overflow.
+- Added rendered-component and release assertions for the validation contract,
+  semantic feedback, token-only stylesheet, and touch targets. No provider
+  configuration, hosted data, Production alias, public-access setting, or
+  payment capability changed.
+
 ## 2026-09-04 — Complete public-route and responsive smoke matrix
 
 - Expanded Preview smoke from three entry points to all 14 supported SPA
