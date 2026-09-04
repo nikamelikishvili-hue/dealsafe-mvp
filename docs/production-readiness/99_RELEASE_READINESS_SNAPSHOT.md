@@ -15,10 +15,11 @@ below is complete for the same immutable candidate commit and deployment.
 
 ## Current reviewed repository evidence
 
-- The reviewed baseline `main` is `103fd4509a1eb2be3db1eca0b961a6ca9d5e1e11` with
+- The reviewed baseline `main` is `511f6b0d7077bb90d3d1e78a4029611f55125511` with
   a valid GitHub signature. Dependency maintenance was merged by PR `#282`,
-  JavaScript budget headroom by PR `#285`, and CSS budget headroom by PR
-  `#286`; no pre-existing pull request remained open at this audit boundary.
+  JavaScript budget headroom by PR `#285`, CSS budget headroom by PR `#286`,
+  and the complete 14-route Preview smoke matrix by PR `#287`; no
+  pre-existing pull request remained open at this audit boundary.
 - The current repository gate passes catalog, dependency, SBOM,
   browser-storage, outbound-transport, API-origin, abuse-policy, brand,
   runtime-configuration, formatting, lint, TypeScript, 407 foundation tests,
@@ -29,15 +30,21 @@ below is complete for the same immutable candidate commit and deployment.
   285,346 CSS bytes. Initial application JavaScript is 134,125 bytes against
   the fixed 160,000-byte ceiling. The served-asset manifest contains 28 assets
   totaling 1,110,576 bytes.
-- GitHub Actions runs `33829693230` and `33829693245` passed the required
-  quality/security and CodeQL gates on exact `main`. Served-asset run
-  `33829712069` remained intentionally skipped because protected exact-host
-  verification is default-off until its environment and scoped token are
-  configured.
-- Vercel deployment `dpl_855HekBT4kMYEVwEyL7yGHrzPfHB` for that baseline is
+- GitHub Actions runs `33838666629` and `33838666625` passed the required
+  quality/security and CodeQL gates on the PR `#287` candidate before its
+  signed squash merge. Automatic served-asset verification remains
+  intentionally default-off until the protected bypass secret is configured
+  and a successful manual run is retained.
+- Vercel deployment `dpl_GgSXSytKkqkv8ruEFP56s1aY3v8P` for that baseline is
   `READY`, access-protected, and not assigned to public live operation. Runtime
   inspection reported no hosted errors. This does not replace retained
   exact-host served-asset evidence.
+- The `served-asset-verification` GitHub environment now accepts protected
+  branches only and contains the exact-host allowlist
+  `dealsafe-dqx3xke41-nika13.vercel.app`. Manual run `33839430086` checked out
+  exact `main` and failed closed when that protected host redirected to Vercel
+  authentication. No bypass secret is configured, so the result proves the
+  guard boundary but is not successful served-asset evidence.
 - Local browser acceptance covered widths 320, 360, 390, 768, 1024, 1280, and
   1440 without horizontal overflow. The public route matrix, mobile Home
   navigation, account entry calls to action, and sample Deal path were also
@@ -63,6 +70,10 @@ that a candidate is ready for external testers.
   no security finding or branch-protection rule was dismissed or weakened.
 - The JavaScript and CSS performance ceilings were retained rather than raised;
   both now have measurable release headroom.
+- The protected served-asset environment and exact-host allowlist are now
+  configured. Its first manual exact-commit exercise rejected the Vercel
+  authentication redirect instead of following it or accepting unverifiable
+  bytes.
 
 ## External private-beta blockers
 
@@ -127,12 +138,15 @@ run again.
 
 ### Immediate controlled action
 
-The next permitted hosted actions are to configure the protected exact-host
-served-asset verifier and add the three missing database secrets to the
-protected `staging` environment. Use only scoped secrets and never place their
-values in chat, repository content, logs, screenshots, issues, or pull-request
-text. Until those externally owned settings exist, repository work may
-continue, but FND-003, DAT-001, and DAT-003 cannot be marked complete.
+The next permitted hosted actions are to add a scoped
+`DEALIVRA_DEPLOYMENT_BYPASS_TOKEN` secret to the protected
+`served-asset-verification` environment, retain one successful manual
+exact-commit run, and only then consider enabling automatic execution. The
+three missing database secrets must also be added to the protected `staging`
+environment. Never place secret values in chat, repository content, logs,
+screenshots, issues, or pull-request text. Until those externally owned
+settings exist, repository work may continue, but FND-003, DAT-001, and
+DAT-003 cannot be marked complete.
 
 ### Activation boundary
 
