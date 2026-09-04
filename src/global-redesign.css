@@ -221,88 +221,6 @@ body{background:var(--ds-surface);color:var(--ds-ink)}
 .beta-payment-note svg{flex:none;margin-top:1px;color:#f6c66b}
 
 .network-stage{position:relative;min-height:470px}
-.network-orb{
-  position:absolute;
-  top:50%;
-  right:3%;
-  width:min(470px,80%);
-  aspect-ratio:1;
-  transform:translateY(-50%);
-  border:1px solid rgba(102,177,255,.34);
-  border-radius:50%;
-  overflow:hidden;
-  background:
-    radial-gradient(circle at 35% 28%,rgba(111,188,255,.48) 0 1px,transparent 2px),
-    radial-gradient(circle at 67% 42%,rgba(100,176,255,.55) 0 1px,transparent 2px),
-    repeating-radial-gradient(circle at 46% 44%,transparent 0 30px,rgba(67,150,255,.12) 31px 32px),
-    radial-gradient(circle at 43% 40%,#123c72 0,#0a2850 37%,#061a36 68%,#030c18 100%);
-  box-shadow:inset -45px -24px 80px rgba(0,0,0,.48),0 0 85px rgba(34,119,255,.24);
-}
-.network-orb::before,.network-orb::after{
-  position:absolute;
-  content:"";
-  inset:14% -18%;
-  border:1px solid rgba(85,168,255,.34);
-  border-radius:50%;
-  transform:rotate(-16deg);
-}
-.network-orb::after{inset:-16% 20%;transform:rotate(63deg)}
-.orbit{position:absolute;border:1px solid rgba(89,167,255,.22);border-radius:50%}
-.orbit-one{inset:19% 5%;transform:rotate(23deg)}
-.orbit-two{inset:5% 27%;transform:rotate(65deg)}
-.orbit-three{inset:38% -8%;transform:rotate(-8deg)}
-.network-node{
-  position:absolute;
-  width:9px;
-  height:9px;
-  border:2px solid #b6dcff;
-  border-radius:50%;
-  background:#3c9cff;
-  box-shadow:0 0 18px 5px rgba(45,148,255,.63);
-}
-.node-one{top:20%;left:28%}.node-two{top:39%;right:14%}.node-three{bottom:25%;left:20%}.node-four{bottom:12%;right:37%}.node-five{top:10%;right:40%}
-.orb-shield{
-  position:absolute;
-  left:50%;
-  top:50%;
-  width:84px;
-  height:84px;
-  display:grid;
-  place-items:center;
-  transform:translate(-50%,-50%);
-  border:1px solid rgba(138,201,255,.42);
-  border-radius:25px;
-  color:#fff;
-  background:rgba(10,40,78,.66);
-  box-shadow:0 18px 50px rgba(0,0,0,.38),0 0 38px rgba(39,128,255,.25);
-  backdrop-filter:blur(8px);
-}
-.orb-shield svg{width:43px;height:43px;color:#68b3ff}
-.signal-card{
-  position:absolute;
-  z-index:3;
-  min-width:220px;
-  display:grid;
-  grid-template-columns:42px 1fr 20px;
-  align-items:center;
-  gap:11px;
-  padding:13px;
-  border:1px solid rgba(112,181,255,.34);
-  border-radius:13px;
-  color:#fff;
-  background:rgba(8,27,52,.82);
-  box-shadow:0 18px 45px rgba(0,5,15,.3);
-  backdrop-filter:blur(14px);
-}
-.signal-card>span{width:42px;height:42px;display:grid;place-items:center;border-radius:10px;color:#7fbfff;background:rgba(41,121,229,.18)}
-.signal-card>span svg{width:21px}
-.signal-card small,.signal-card b{display:block}
-.signal-card small{margin-bottom:3px;color:#7895b6;font-size:9px;font-weight:800;letter-spacing:.12em}
-.signal-card b{font-size:13px}
-.signal-card>svg{width:17px;color:#52d69b}
-.signal-agreement{top:11%;left:3%}
-.signal-payment{top:43%;right:-2%}
-.signal-handoff{left:9%;bottom:8%}
 
 .deal-flow,.home-use-cases,.money-flow,.home-faq,.global-protection,.global-cta{
   width:min(1180px,calc(100% - 44px));
@@ -581,8 +499,6 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(39,120,245,.12);b
   .site-nav{gap:0}
   .global-hero{grid-template-columns:1fr 470px;padding-top:64px}
   .network-stage{min-height:420px}
-  .network-orb{width:410px}
-  .signal-card{min-width:195px}
   .deal-flow-grid{grid-template-columns:repeat(2,1fr)}
   .deal-flow-grid::before{display:none}
 }
@@ -602,7 +518,6 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(39,120,245,.12);b
   .global-hero{grid-template-columns:1fr;padding:62px 28px 72px}
   .global-hero-copy{max-width:680px}
   .network-stage{min-height:430px;max-width:620px;width:100%;margin:12px auto 0}
-  .network-orb{right:50%;transform:translate(50%,-50%)}
   .global-protection{grid-template-columns:1fr;padding:38px}
   .money-flow{grid-template-columns:1fr;padding:38px}
   .home-faq{grid-template-columns:1fr;gap:22px}
@@ -630,13 +545,6 @@ input:focus,textarea:focus,select:focus{outline:3px solid rgba(39,120,245,.12);b
   .demo-deal-banner .primary{grid-column:1/-1;width:100%}
   .global-proof{display:grid;grid-template-columns:1fr 1fr;gap:11px}
   .network-stage{min-height:350px;margin-top:18px}
-  .network-orb{width:310px}
-  .signal-card{min-width:172px;padding:10px;grid-template-columns:35px 1fr 17px}
-  .signal-card>span{width:35px;height:35px}
-  .signal-card b{font-size:11px}
-  .signal-agreement{top:4%;left:0}
-  .signal-payment{top:45%;right:0}
-  .signal-handoff{left:2%;bottom:1%}
   .deal-flow,.home-use-cases,.money-flow,.home-faq,.global-protection,.global-cta,.view-home main>.agreement-verifier{width:calc(100% - 28px);margin:54px auto}
   .deal-flow-grid{grid-template-columns:1fr}
   .deal-flow-grid article{min-height:auto}

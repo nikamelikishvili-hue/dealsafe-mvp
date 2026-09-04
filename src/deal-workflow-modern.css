@@ -160,18 +160,18 @@
 
 .view-deal .pin-box{background:linear-gradient(145deg,var(--color-ink-950),var(--color-info-800))}
 
-.view-deal :is(.payment-method-form,.payment-method-card,.payment-flow,.payment-next-step){
+.view-deal :is(.payment-flow,.payment-next-step){
   border-color:var(--color-border-default)!important;
   background:var(--color-surface-card)!important;
 }
 
-.view-deal :is(.payment-progress article,.payment-flow-step){
+.view-deal .payment-flow-step{
   border-color:var(--color-border-default);
   background:var(--color-surface-subtle);
   color:var(--color-ink-600);
 }
 
-.view-deal :is(.payment-progress article.done,.payment-flow-step.done){
+.view-deal .payment-flow-step.done{
   border-color:var(--color-success-border);
   background:var(--color-success-100);
   color:var(--color-success-700);
