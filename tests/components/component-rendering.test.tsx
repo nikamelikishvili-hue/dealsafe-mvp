@@ -20,6 +20,7 @@ const { AddressAutocomplete } = await import('../../src/AddressAutocomplete');
 const { accountPasswordValidationErrors } = await import('../../src/AccountProfileWorkspace');
 const { formatCsvCell } = await import('../../src/AdministrationWorkspace');
 const { BrandLogo } = await import('../../src/BrandLogo');
+const { evidenceUploadValidationErrors } = await import('../../src/DealEvidenceWorkspace');
 const { FeedbackMessage } = await import('../../src/FeedbackMessage');
 const { FieldError } = await import('../../src/FieldError');
 const { AsyncStatePanel } = await import('../../src/AsyncStatePanel');
@@ -163,6 +164,16 @@ test('stored delivery addresses preserve address line two, state, and ZIP+4', ()
     state: 'FL',
     postalCode: '33141-2140',
   });
+});
+
+test('evidence uploads expose one actionable file error and clear it after selection', () => {
+  assert.deepEqual(evidenceUploadValidationErrors(0), [
+    {
+      fieldId: 'evidence-files',
+      message: 'Choose at least one photo or video.',
+    },
+  ]);
+  assert.deepEqual(evidenceUploadValidationErrors(2), []);
 });
 
 test('sign-in form preserves password-manager semantics and explicit button behavior', () => {

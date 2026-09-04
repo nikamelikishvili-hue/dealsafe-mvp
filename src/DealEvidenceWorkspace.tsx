@@ -3,6 +3,7 @@ import { BadgeCheck, LockKeyhole, Package, ShieldCheck } from 'lucide-react';
 import { evidenceInputAccept } from '../supabase/functions/_shared/evidence-policy';
 import type { Deal } from './domain';
 import { EvidenceViewer } from './EvidenceViewer';
+import { FeedbackMessage } from './FeedbackMessage';
 import { getAppLanguage, t } from './i18n';
 import {
   listDealEvidence,
@@ -11,6 +12,7 @@ import {
   type EvidenceType,
   type StoredSession,
 } from './services/supabaseRest';
+import { ValidationSummary, type ValidationSummaryItem } from './ValidationSummary';
 
 export const evidenceLabels: Record<string, string> = {
   seller_packing_video: 'Packing video',
@@ -30,15 +32,19 @@ const sellerOptions: EvidenceType[] = [
   'seller_package_weight',
 ];
 
-const buyerOptions: EvidenceType[] = [
-  'buyer_unboxing_video',
-  'buyer_received_photo',
-  'buyer_damage_photo',
-  'other',
-];
+const buyerOptions: EvidenceType[] = ['buyer_unboxing_video', 'buyer_received_photo', 'buyer_damage_photo', 'other'];
 
-const formatDateTime = (value: string) =>
-  new Date(value).toLocaleString(getAppLanguage());
+const formatDateTime = (value: string) => new Date(value).toLocaleString(getAppLanguage());
+
+export const evidenceUploadValidationErrors = (fileCount: number): ValidationSummaryItem[] =>
+  fileCount > 0
+    ? []
+    : [
+        {
+          fieldId: 'evidence-files',
+          message: 'Choose at least one photo or video.',
+        },
+      ];
 
 export function DealEvidenceWorkspace({
   deal,
@@ -61,30 +67,32 @@ export function DealEvidenceWorkspace({
   const loadSequenceRef = useRef(0);
   const [message, setMessage] = useState('');
   const [messageFailed, setMessageFailed] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<ValidationSummaryItem[]>([]);
+  const validationSummaryId = 'evidence-validation-summary';
 
   const load = async () => {
     const request = ++loadSequenceRef.current;
     try {
       const next = await listDealEvidence(session, deal.id);
-      if (request === loadSequenceRef.current) setItems(next);
+      if (request === loadSequenceRef.current) {
+        setItems(next);
+        setMessageFailed(false);
+      }
     } catch (error) {
       if (request === loadSequenceRef.current) {
         setMessageFailed(true);
-        setMessage(
-          error instanceof Error ? error.message : 'Could not load evidence',
-        );
+        setMessage(error instanceof Error ? error.message : 'Could not load evidence');
       }
     }
   };
 
   useEffect(() => {
-    setEvidenceType(
-      role === 'seller' ? 'seller_packing_video' : 'buyer_unboxing_video',
-    );
+    setEvidenceType(role === 'seller' ? 'seller_packing_video' : 'buyer_unboxing_video');
     setFiles([]);
     setSelected(null);
     setMessage('');
     setMessageFailed(false);
+    setValidationErrors([]);
     void load();
     return () => {
       loadSequenceRef.current += 1;
@@ -94,32 +102,37 @@ export function DealEvidenceWorkspace({
   const upload = async (event: FormEvent) => {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;
-    if (!files.length || busyRef.current) return;
+    if (busyRef.current) return;
+    const nextValidationErrors = evidenceUploadValidationErrors(files.length);
+    if (nextValidationErrors.length) {
+      setValidationErrors(nextValidationErrors);
+      setMessage('');
+      setMessageFailed(false);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          document.getElementById(validationSummaryId)?.focus();
+        });
+      });
+      return;
+    }
     busyRef.current = true;
     setBusy(true);
     setMessage('');
+    setMessageFailed(false);
+    setValidationErrors([]);
     try {
       for (const file of files) {
-        await uploadDealEvidence(
-          session,
-          deal.id,
-          role,
-          evidenceType,
-          file,
-        );
+        await uploadDealEvidence(session, deal.id, role, evidenceType, file);
       }
       setFiles([]);
       form.reset();
       await load();
       onChanged?.();
-      setMessage(
-        'Security scan passed. Evidence was saved privately to this deal record.',
-      );
+      setMessageFailed(false);
+      setMessage('Security scan passed. Evidence was saved privately to this deal record.');
     } catch (error) {
       setMessageFailed(true);
-      setMessage(
-        error instanceof Error ? error.message : 'Could not upload evidence',
-      );
+      setMessage(error instanceof Error ? error.message : 'Could not upload evidence');
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -144,20 +157,13 @@ export function DealEvidenceWorkspace({
   const acceptedFiles = evidenceInputAccept(role, evidenceType);
 
   return (
-    <section
-      id="deal-evidence-vault"
-      className="evidence-panel no-print"
-    >
+    <section id="deal-evidence-vault" className="evidence-panel no-print" aria-labelledby="deal-evidence-title">
       <div className="evidence-heading">
         <ShieldCheck aria-hidden="true" />
         <div>
           <p className="eyebrow">{t('Evidence vault')}</p>
-          <h2>
-            {t(
-              role === 'seller'
-                ? 'Document the package before shipping'
-                : 'Document the item when it arrives',
-            )}
+          <h2 id="deal-evidence-title">
+            {t(role === 'seller' ? 'Document the package before shipping' : 'Document the item when it arrives')}
           </h2>
           <span>
             {t(
@@ -168,14 +174,25 @@ export function DealEvidenceWorkspace({
           </span>
         </div>
       </div>
-      <form className="evidence-form" onSubmit={upload} aria-busy={busy}>
-        <label>
+      <form className="evidence-form" onSubmit={upload} aria-busy={busy} noValidate>
+        {validationErrors.length > 0 && (
+          <ValidationSummary
+            id={validationSummaryId}
+            className="workflow-validation-summary evidence-validation-summary"
+            title="Check the evidence files"
+            errors={validationErrors}
+          />
+        )}
+        <label htmlFor="evidence-type">
           {t('Evidence type')}
           <select
+            id="evidence-type"
+            name="evidence-type"
             value={evidenceType}
             onChange={event => {
               setEvidenceType(event.target.value as EvidenceType);
               setFiles([]);
+              setValidationErrors([]);
             }}
           >
             {options.map(option => (
@@ -185,22 +202,25 @@ export function DealEvidenceWorkspace({
             ))}
           </select>
         </label>
-        <label className="evidence-picker">
+        <label className="evidence-picker" htmlFor="evidence-files">
           {t('Choose photos or video')}
           <input
+            id="evidence-files"
+            name="evidence-files"
             type="file"
             required
             accept={acceptedFiles}
             multiple
+            aria-invalid={validationErrors.some(error => error.fieldId === 'evidence-files')}
+            aria-describedby="evidence-files-help"
             onChange={event => {
               setFiles(Array.from(event.target.files || []));
+              setValidationErrors([]);
             }}
           />
-          <small>
+          <small id="evidence-files-help">
             {files.length
-              ? `${files.length} ${t(
-                  files.length === 1 ? 'file selected' : 'files selected',
-                )}`
+              ? `${files.length} ${t(files.length === 1 ? 'file selected' : 'files selected')}`
               : t('Photos up to 10 MB; videos up to 50 MB')}
           </small>
         </label>
@@ -221,25 +241,18 @@ export function DealEvidenceWorkspace({
       </form>
       <p className="evidence-scan-note">
         <ShieldCheck size={15} aria-hidden="true" />
-        {t(
-          'Files enter an isolated quarantine and are available only after type, size, and malware checks pass.',
-        )}
+        {t('Files enter an isolated quarantine and are available only after type, size, and malware checks pass.')}
       </p>
       {message && (
-        <div
-          className="notice"
-          role={messageFailed ? 'alert' : 'status'}
-          aria-live={messageFailed ? 'assertive' : 'polite'}
-        >
+        <FeedbackMessage tone={messageFailed ? 'error' : 'success'} className="evidence-feedback">
           {t(message)}
-        </div>
+        </FeedbackMessage>
       )}
       <div className="evidence-list">
         <div className="evidence-list-heading">
           <b>{t('Saved evidence')}</b>
           <span>
-            {items.length} {t(items.length === 1 ? 'file' : 'files')} ·{' '}
-            {t('Private to the deal participants')}
+            {items.length} {t(items.length === 1 ? 'file' : 'files')} · {t('Private to the deal participants')}
           </span>
         </div>
         {items.length ? (
@@ -247,18 +260,12 @@ export function DealEvidenceWorkspace({
             <article key={item.id}>
               <BadgeCheck size={17} aria-hidden="true" />
               <div>
-                <b>
-                  {t(evidenceLabels[item.evidence_type] || 'Other evidence')}
-                </b>
+                <b>{t(evidenceLabels[item.evidence_type] || 'Other evidence')}</b>
                 <span>
-                  {item.file_name || t('Uploaded file')} ·{' '}
-                  {formatDateTime(item.created_at)}
+                  {item.file_name || t('Uploaded file')} · {formatDateTime(item.created_at)}
                 </span>
                 <span>
-                  {item.sha256
-                    ? `SHA-256 ${item.sha256.slice(0, 12)}…`
-                    : t('Fingerprint unavailable')}{' '}
-                  ·{' '}
+                  {item.sha256 ? `SHA-256 ${item.sha256.slice(0, 12)}…` : t('Fingerprint unavailable')} ·{' '}
                   {t(
                     item.integrity_status === 'verified'
                       ? 'Integrity verified'
@@ -287,11 +294,7 @@ export function DealEvidenceWorkspace({
                 )}
               </em>
               {item.scan_status === 'clean' && (
-                <button
-                  type="button"
-                  className="secondary evidence-open"
-                  onClick={() => setSelected(item)}
-                >
+                <button type="button" className="secondary evidence-open" onClick={() => setSelected(item)}>
                   {t('Verify and open')}
                 </button>
               )}
@@ -303,9 +306,7 @@ export function DealEvidenceWorkspace({
       </div>
       <p className="evidence-note">
         <LockKeyhole size={15} aria-hidden="true" />
-        {t(
-          'Evidence is append-only, access is logged, and each viewing link expires after 60 seconds.',
-        )}
+        {t('Evidence is append-only, access is logged, and each viewing link expires after 60 seconds.')}
       </p>
       {selected && (
         <EvidenceViewer

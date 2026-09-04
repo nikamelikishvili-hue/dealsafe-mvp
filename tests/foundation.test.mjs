@@ -5249,8 +5249,8 @@ test('evidence viewer revalidates bytes and records append-only integrity before
   assert.match(viewer, /event\.key === 'Escape'/);
   assert.match(viewer, /event\.key !== 'Tab'/);
   assert.match(styles, /\.evidence-viewer-backdrop/);
-  assert.match(styles, /@media \(max-width:700px\)/);
-  assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
+  assert.match(styles, /@media\s*\(max-width:\s*700px\)/);
+  assert.match(styles, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
 
   assert.match(rollbackTests, /EVD-004 matching bytes were not recorded as verified/);
   assert.match(rollbackTests, /EVD-004 digest mismatch did not fail closed/);
@@ -6139,7 +6139,10 @@ test('participant evidence workspace is isolated with security controls intact',
   assert.match(evidence, /listDealEvidence\(session, deal\.id\)/);
   assert.match(evidence, /uploadDealEvidence\(/);
   assert.match(evidence, /for \(const file of files\)/);
-  assert.match(evidence, /if \(request === loadSequenceRef\.current\) setItems\(next\)/);
+  assert.match(
+    evidence,
+    /if \(request === loadSequenceRef\.current\) \{[\s\S]*setItems\(next\);[\s\S]*setMessageFailed\(false\)/,
+  );
   assert.match(evidence, /\[deal\.id, session\.accessToken, role\]/);
   assert.match(evidence, /<EvidenceViewer/);
   assert.match(
@@ -14733,19 +14736,33 @@ test('agreement verification and evidence uploads are single-flight', () => {
   assert.match(verification, /if \(checkingRef\.current\) return/);
   assert.match(verification, /checkingRef\.current = true/);
   assert.match(evidence, /const busyRef = useRef\(false\)/);
-  assert.match(evidence, /if \(!files\.length \|\| busyRef\.current\) return/);
+  assert.match(evidence, /if \(busyRef\.current\) return/);
+  assert.match(evidence, /evidenceUploadValidationErrors\(files\.length\)/);
   assert.match(evidence, /busyRef\.current = true/);
   assert.match(evidence, /aria-busy=\{busy\}/);
 });
 
-test('evidence upload keeps native file validation actionable', () => {
+test('evidence upload reports actionable validation and governed feedback', () => {
   const evidence = readText('src/DealEvidenceWorkspace.tsx');
+  const styles = readText('src/evidence.css');
 
+  assert.match(evidence, /export const evidenceUploadValidationErrors/);
+  assert.match(evidence, /fieldId: 'evidence-files'/);
+  assert.match(evidence, /<ValidationSummary[\s\S]*id=\{validationSummaryId\}/);
+  assert.match(evidence, /document\.getElementById\(validationSummaryId\)\?\.focus\(\)/);
+  assert.match(evidence, /className="evidence-form"[\s\S]*noValidate/);
   assert.match(evidence, /type="file"[\s\S]*required/);
+  assert.match(evidence, /id="evidence-files"/);
+  assert.match(evidence, /aria-invalid=\{validationErrors\.some/);
+  assert.match(evidence, /aria-describedby="evidence-files-help"/);
   assert.match(evidence, /type="submit" className="primary" disabled=\{busy\}/);
   assert.doesNotMatch(evidence, /disabled=\{busy \|\| !files\.length\}/);
   assert.match(evidence, /const form = event\.currentTarget as HTMLFormElement/);
   assert.match(evidence, /setFiles\(\[\]\);[\s\S]*form\.reset\(\)/);
+  assert.match(evidence, /<FeedbackMessage[\s\S]*tone=\{messageFailed \? 'error' : 'success'\}/);
+  assert.doesNotMatch(styles, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+  assert.match(styles, /var\(--color-border-default\)/);
+  assert.match(styles, /min-height: var\(--touch-target\)/);
 });
 
 test('shipment submission keeps native carrier and tracking validation actionable', () => {
@@ -16029,8 +16046,8 @@ test('evidence and payment failures use urgent accessible feedback', () => {
   const payment = readText('src/DealPaymentWorkspace.tsx');
 
   assert.match(evidence, /const \[messageFailed, setMessageFailed\] = useState\(false\)/);
-  assert.match(evidence, /role=\{messageFailed \? 'alert' : 'status'\}/);
-  assert.match(evidence, /aria-live=\{messageFailed \? 'assertive' : 'polite'\}/);
+  assert.match(evidence, /<FeedbackMessage[\s\S]*tone=\{messageFailed \? 'error' : 'success'\}/);
+  assert.match(evidence, /setMessageFailed\(false\);[\s\S]*setMessage\(/);
   assert.match(payment, /\{message && \(\s+<div className="notice" role="alert" aria-live="assertive">/);
   assert.doesNotMatch(payment, /\{message && \(\s+<div className="notice" role="status" aria-live="polite">/);
   assert.ok((payment.match(/className="notice error" role="alert"/g) ?? []).length >= 2);
