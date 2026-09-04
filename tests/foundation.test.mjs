@@ -3925,11 +3925,30 @@ test('secret scanner recognizes high-risk credentials without returning their va
 test('verification includes a production-preview navigation smoke test', () => {
   const packageJson = readJson('package.json');
   const smokeTest = readText('scripts/smoke-preview.mjs');
+  const supportedRoutes = [
+    '/',
+    '/create',
+    '/signin',
+    '/signup',
+    '/forgot-password',
+    '/verify',
+    '/buyer-protection',
+    '/seller-protection',
+    '/fees',
+    '/disputes',
+    '/terms',
+    '/privacy',
+    '/deal/route-verification',
+    '/trust/route-verification',
+  ];
 
   assert.match(packageJson.scripts.verify, /npm run smoke:preview/);
   assert.equal(packageJson.scripts['smoke:preview'], 'node scripts/smoke-preview.mjs');
-  assert.match(smokeTest, /expectApplicationPage\('\/terms'\)/);
-  assert.match(smokeTest, /expectApplicationPage\('\/signin'\)/);
+  assert.match(smokeTest, /const applicationRoutes = \[/);
+  for (const route of supportedRoutes) {
+    assert.match(smokeTest, new RegExp(`['"]${route.replaceAll('/', '\\/')}['"]`));
+  }
+  assert.match(smokeTest, /for \(const route of applicationRoutes\.slice\(1\)\)/);
   assert.match(smokeTest, /serviceWorkerResponse/);
 });
 
@@ -4488,12 +4507,14 @@ test('account takeover response is fail-closed, non-secret, and rehearsal-gated'
 test('release snapshot names the current reconciled no-go evidence', () => {
   const snapshot = readText('docs/production-readiness/99_RELEASE_READINESS_SNAPSHOT.md');
 
-  assert.match(snapshot, /Status date: 2026-08-24/);
-  assert.match(snapshot, /Reviewed `main` is `35214dae98df003d9792e08b77a235deebca93c1`/);
-  assert.match(snapshot, /398 foundation tests,\s+20 rendered-component tests/);
-  assert.match(snapshot, /Initial application JavaScript is 133,941 bytes/);
+  assert.match(snapshot, /Status date: 2026-09-04/);
+  assert.match(snapshot, /reviewed baseline `main` is `103fd4509a1eb2be3db1eca0b961a6ca9d5e1e11`/i);
+  assert.match(snapshot, /407 foundation tests,\s+20 rendered-component tests/);
+  assert.match(snapshot, /Initial application JavaScript is 134,125 bytes/);
   assert.match(snapshot, /DEALIVRA_STAGING_DATABASE_URL/);
-  assert.match(snapshot, /No pull request remains open/);
+  assert.match(snapshot, /no pre-existing pull request remained open at this audit boundary/);
+  assert.match(snapshot, /all 14 supported SPA\s+routes/);
+  assert.match(snapshot, /dpl_855HekBT4kMYEVwEyL7yGHrzPfHB/);
   assert.match(snapshot, /does not promote Production, restore\s+public access/);
   assert.match(snapshot, /No-go for public or real-money launch/);
   assert.doesNotMatch(snapshot, /Draft PR `#232` at signed commit/);
