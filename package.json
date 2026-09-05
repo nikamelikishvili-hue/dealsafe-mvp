@@ -14,6 +14,7 @@
     "test:components": "node scripts/run-component-tests.mjs",
     "catalog:verify": "node scripts/validate-catalog-release.mjs",
     "dependency:policy": "node scripts/verify-dependency-policy.mjs",
+    "security:audit": "node scripts/run-dependency-audit.mjs",
     "security:browser-storage": "node scripts/verify-browser-storage-policy.mjs",
     "security:transport": "node scripts/verify-outbound-transport-policy.mjs",
     "security:mutation-origins": "node scripts/verify-api-mutation-origin-policy.mjs",

@@ -54,6 +54,10 @@ import {
   serializeDependencySbom,
 } from '../server/dependencySbomPolicy.mjs';
 import {
+  classifyDependencyAuditAttempt,
+  runDependencyAuditWithRetry,
+} from '../server/dependencyAuditPolicy.mjs';
+import {
   classifyLegacyIdentifierLine,
   evaluateLegacyIdentifierInventory,
 } from '../server/legacyIdentifierPolicy.mjs';
@@ -13205,6 +13209,7 @@ test('release evidence binds a clean exact commit to bounded file hashes', () =>
     'scripts/create-dependency-sbom.mjs',
     'scripts/create-release-evidence.mjs',
     'scripts/create-served-asset-manifest.mjs',
+    'scripts/run-dependency-audit.mjs',
     'scripts/scan-repository-secrets.mjs',
     'scripts/verify-browser-storage-policy.mjs',
     'scripts/verify-build-budgets.mjs',
@@ -13214,6 +13219,7 @@ test('release evidence binds a clean exact commit to bounded file hashes', () =>
     'scripts/verify-served-assets.mjs',
     'scripts/verify-legacy-identifiers.mjs',
     'server/dependencySbomPolicy.mjs',
+    'server/dependencyAuditPolicy.mjs',
     'server/legacyIdentifierPolicy.mjs',
     'server/releaseEvidencePolicy.mjs',
     'server/runtimeConfigurationPolicy.mjs',
@@ -13306,7 +13312,7 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
   );
   assert.match(
     workflow,
-    /npm audit --audit-level=high[\s\S]+npm run release:sbom[\s\S]+npm run release:evidence/,
+    /npm run security:audit[\s\S]+npm run release:sbom[\s\S]+npm run release:evidence/,
   );
   assert.match(workflow, /DEALIVRA_RELEASE_COMMIT: \$\{\{ github\.sha \}\}/);
   assert.match(
@@ -13333,7 +13339,9 @@ test('CI release evidence is exact-commit, clean-tree, and retained', () => {
   assert.match(policy, /'served_asset_manifest_created'/);
   assert.match(script, /'release-evidence\/dependency-sbom\.cdx\.json'/);
   assert.match(script, /'scripts\/create-dependency-sbom\.mjs'/);
+  assert.match(script, /'scripts\/run-dependency-audit\.mjs'/);
   assert.match(script, /'server\/dependencySbomPolicy\.mjs'/);
+  assert.match(script, /'server\/dependencyAuditPolicy\.mjs'/);
   assert.match(script, /'scripts\/verify-browser-storage-policy\.mjs'/);
   assert.match(script, /'scripts\/verify-outbound-transport-policy\.mjs'/);
   assert.match(script, /'scripts\/verify-runtime-configuration\.mjs'/);
@@ -13375,6 +13383,157 @@ test('locked dependencies follow the reviewed offline supply-chain policy', () =
     policy,
     /fetch\(|https?:\/\/(?!registry\.npmjs\.org)|node:child_process|writeFile|shell:\s*true/i,
   );
+});
+
+const cleanDependencyAudit = JSON.stringify({
+  auditReportVersion: 2,
+  vulnerabilities: {},
+  metadata: {
+    vulnerabilities: {
+      info: 0,
+      low: 0,
+      moderate: 0,
+      high: 0,
+      critical: 0,
+      total: 0,
+    },
+  },
+});
+
+test('dependency audit succeeds once without retrying', async () => {
+  let attempts = 0;
+  const result = await runDependencyAuditWithRetry({
+    executeAttempt: async () => {
+      attempts += 1;
+      return { exitCode: 0, stdout: cleanDependencyAudit, stderr: '' };
+    },
+    sleep: async () => assert.fail('a clean audit must not sleep'),
+  });
+
+  assert.equal(attempts, 1);
+  assert.deepEqual(result, {
+    schema: 'dealivra.dependency-audit-result.v1',
+    status: 'passed',
+    attempts: 1,
+    maximum_attempts: 3,
+    high: 0,
+    critical: 0,
+  });
+});
+
+test('dependency audit retries an explicit temporary registry failure and then passes', async () => {
+  let attempts = 0;
+  const delays = [];
+  const result = await runDependencyAuditWithRetry({
+    executeAttempt: async () => {
+      attempts += 1;
+      return attempts === 1
+        ? { exitCode: 1, stdout: '', stderr: 'npm error code E503' }
+        : { exitCode: 0, stdout: cleanDependencyAudit, stderr: '' };
+    },
+    sleep: async delay => delays.push(delay),
+  });
+
+  assert.equal(result.attempts, 2);
+  assert.deepEqual(delays, [1_000]);
+});
+
+test('dependency audit classifies a bounded process timeout as transient', () => {
+  assert.deepEqual(
+    classifyDependencyAuditAttempt({
+      exitCode: null,
+      stdout: '',
+      stderr: '',
+      timedOut: true,
+    }),
+    { kind: 'transient', reason: 'audit request timed out' },
+  );
+});
+
+test('dependency audit blocks a real high finding without retrying', async () => {
+  let attempts = 0;
+  const vulnerableAudit = JSON.stringify({
+    auditReportVersion: 2,
+    vulnerabilities: {
+      example: { severity: 'high', via: ['advisory mentions HTTP status 503'] },
+    },
+    metadata: { vulnerabilities: { high: 1, critical: 0 } },
+  });
+
+  await assert.rejects(
+    runDependencyAuditWithRetry({
+      executeAttempt: async () => {
+        attempts += 1;
+        return {
+          exitCode: 1,
+          stdout: vulnerableAudit,
+          stderr: 'registry returned HTTP status 503 after producing the report',
+        };
+      },
+      sleep: async () => assert.fail('a vulnerability must not be retried'),
+    }),
+    /blocked the release: 1 high and 0 critical findings/,
+  );
+  assert.equal(attempts, 1);
+});
+
+test('dependency audit fails closed immediately on an unknown result', async () => {
+  let attempts = 0;
+  await assert.rejects(
+    runDependencyAuditWithRetry({
+      executeAttempt: async () => {
+        attempts += 1;
+        return { exitCode: 1, stdout: '', stderr: 'unexpected package manager response' };
+      },
+      sleep: async () => assert.fail('an unknown result must not be retried'),
+    }),
+    /failed closed: unexpected package manager response/,
+  );
+  assert.equal(attempts, 1);
+});
+
+test('dependency audit fails closed after three temporary failures', async () => {
+  let attempts = 0;
+  let sleeps = 0;
+  await assert.rejects(
+    runDependencyAuditWithRetry({
+      executeAttempt: async () => {
+        attempts += 1;
+        return { exitCode: 1, stdout: '', stderr: '503 Service Unavailable' };
+      },
+      sleep: async () => {
+        sleeps += 1;
+      },
+    }),
+    /failed closed after 3 temporary registry or network failures/,
+  );
+  assert.equal(attempts, 3);
+  assert.equal(sleeps, 2);
+});
+
+test('dependency audit runner is bounded, strict, and release-evidenced', () => {
+  const packageJson = readJson('package.json');
+  const workflow = readText('.github/workflows/ci.yml');
+  const runner = readText('scripts/run-dependency-audit.mjs');
+  const policy = readText('server/dependencyAuditPolicy.mjs');
+  const evidence = readText('scripts/create-release-evidence.mjs');
+  const evidencePolicy = readText('server/releaseEvidencePolicy.mjs');
+
+  assert.equal(packageJson.scripts['security:audit'], 'node scripts/run-dependency-audit.mjs');
+  assert.match(workflow, /run: npm run security:audit/);
+  assert.doesNotMatch(workflow, /run: npm audit/);
+  assert.match(runner, /const attemptTimeoutMs = 45_000/);
+  assert.match(runner, /const maximumOutputBytes = 512_000/);
+  assert.match(runner, /'--audit-level=high'/);
+  assert.match(runner, /'--ignore-scripts'/);
+  assert.match(runner, /shell: false/);
+  assert.match(policy, /maximumAttempts = 3/);
+  assert.match(policy, /attemptNumber === maximumAttempts/);
+  assert.match(policy, /outcome\.kind === 'vulnerable'/);
+  assert.match(evidence, /'scripts\/run-dependency-audit\.mjs'/);
+  assert.match(evidence, /'server\/dependencyAuditPolicy\.mjs'/);
+  assert.match(evidencePolicy, /'scripts\/run-dependency-audit\.mjs'/);
+  assert.match(evidencePolicy, /'server\/dependencyAuditPolicy\.mjs'/);
 });
 
 test('CycloneDX dependency inventory is deterministic, bounded, and private', () => {

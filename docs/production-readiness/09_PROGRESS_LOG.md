@@ -1,5 +1,19 @@
 # Production-readiness progress log
 
+## 2026-09-04 — Bounded fail-closed dependency audit resilience
+
+- Replaced the one-shot CI dependency audit with a strict runner that retries
+  only explicit temporary registry, transport, or timeout failures and caps the
+  complete attempt count at three.
+- Kept real high/critical findings, malformed reports, oversized output, and
+  unknown failures non-retryable so provider instability cannot hide a release
+  blocker or turn an unavailable audit into success.
+- Added deterministic tests for first-attempt success, transient recovery,
+  timeout classification, vulnerability precedence, unknown failure, and
+  exhausted retries; added the runner and policy to signed release evidence.
+- No dependency, provider configuration, hosted data, Production alias,
+  public-access setting, or payment capability changed.
+
 ## 2026-09-04 — Governed Evidence Vault correction and presentation
 
 - Replaced the Evidence Vault's silent empty-file submission with the shared
