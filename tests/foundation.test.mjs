@@ -48,6 +48,7 @@ import {
   servedAssetUrl,
   validateServedAssetManifest,
 } from '../server/servedAssetIntegrityPolicy.mjs';
+import { validateArchitecturePocHeaders } from '../server/architecturePocHeaderPolicy.mjs';
 import { validateServedBrowserHeaders } from '../server/servedBrowserHeaderPolicy.mjs';
 import {
   buildDependencySbom,
@@ -313,6 +314,36 @@ test('served browser header verification fails closed on weakened deployment res
   );
   assert.equal(validateServedBrowserHeaders(unsafeScript), null);
   assert.equal(validateServedBrowserHeaders(new Map()), null);
+});
+
+test('architecture proof header verification accepts only the isolated nonce policy', async () => {
+  const { architecturePocCsp } = await import('../server/architecturePoc.mjs');
+  const vercel = readJson('vercel.json');
+  const configured = vercel.headers.find(rule => rule.source === '/(.*)')?.headers ?? [];
+  const approved = new Headers(configured.map(header => [header.key, header.value]));
+  approved.set('content-security-policy', architecturePocCsp('Abcdefghijklmnopqrstuv'));
+  approved.set('cache-control', 'private, no-store, max-age=0');
+  approved.set('pragma', 'no-cache');
+  approved.set('referrer-policy', 'no-referrer');
+  approved.set('x-robots-tag', 'noindex, nofollow');
+
+  assert.deepEqual(validateArchitecturePocHeaders(approved), {
+    policy: 'dealivra.architecture-poc-headers.v1',
+    status: 'verified',
+    checked_header_count: 13,
+  });
+
+  const missingNoIndex = new Headers(approved);
+  missingNoIndex.delete('x-robots-tag');
+  assert.equal(validateArchitecturePocHeaders(missingNoIndex), null);
+
+  const unsafeStyle = new Headers(approved);
+  unsafeStyle.set(
+    'content-security-policy',
+    `${approved.get('content-security-policy')}; style-src 'unsafe-inline'`,
+  );
+  assert.equal(validateArchitecturePocHeaders(unsafeStyle), null);
+  assert.equal(validateArchitecturePocHeaders(new Map()), null);
 });
 
 test('CSP report endpoint fails safely for invalid request shapes', async () => {
@@ -13171,6 +13202,8 @@ test('served asset verification keeps redirects and protection secrets on exact 
   assert.match(verifier, /manifest\.source_commit !== expectedCommit/);
   assert.match(verifier, /comparison\?\.matches/);
   assert.match(verifier, /validateServedBrowserHeaders\(response\.headers\)/);
+  assert.match(verifier, /validateArchitecturePocHeaders/);
+  assert.match(verifier, /validateHeaders: validateArchitecturePocHeaders/);
   assert.match(verifier, /verifyBrowserHeaders: true/);
   assert.match(verifier, /const spaRoutes = \[/);
   assert.match(verifier, /'\/deal\/route-verification'/);
