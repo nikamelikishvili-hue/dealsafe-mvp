@@ -6,6 +6,7 @@ import {
   servedAssetUrl,
   validateServedAssetManifest,
 } from '../server/servedAssetIntegrityPolicy.mjs';
+import { validateArchitecturePocHeaders } from '../server/architecturePocHeaderPolicy.mjs';
 import { validateServedBrowserHeaders } from '../server/servedBrowserHeaderPolicy.mjs';
 
 const commitPattern = /^[0-9a-f]{40}$/;
@@ -115,7 +116,7 @@ async function fetchExact(url, maximumBytes, { verifyBrowserHeaders = false } = 
 
 async function requestRoute(path, {
   method = 'GET', expectedStatus, expectedContentType, expectedText,
-  expectedAllow, expectedLocation,
+  expectedAllow, expectedLocation, validateHeaders = validateServedBrowserHeaders,
 } = {}) {
   const url = new URL(path, `${origin}/`);
   if (url.origin !== origin) fail('a route escaped the approved deployment boundary');
@@ -133,7 +134,7 @@ async function requestRoute(path, {
   if (expectedLocation && response.headers.get('location') !== expectedLocation) {
     fail('a reviewed route returned an unexpected redirect target');
   }
-  if (!validateServedBrowserHeaders(response.headers)) {
+  if (!validateHeaders(response.headers)) {
     fail('a reviewed route is missing the browser security headers');
   }
   const bytes = await readBounded(response, maximumRouteBytes);
@@ -195,8 +196,12 @@ for (const path of spaRoutes) {
 await requestRoute('/__architecture/public', {
   expectedStatus: 200, expectedContentType: 'text/html',
   expectedText: 'SERVER-RENDERED PUBLIC ROUTE',
+  validateHeaders: validateArchitecturePocHeaders,
 });
-await requestRoute('/__architecture/public', { method: 'HEAD', expectedStatus: 200 });
+await requestRoute('/__architecture/public', {
+  method: 'HEAD', expectedStatus: 200,
+  validateHeaders: validateArchitecturePocHeaders,
+});
 await requestRoute('/__architecture/public', {
   method: 'POST', expectedStatus: 405, expectedAllow: 'GET, HEAD',
 });
