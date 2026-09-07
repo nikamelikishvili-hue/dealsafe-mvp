@@ -13204,6 +13204,10 @@ test('served asset verification keeps redirects and protection secrets on exact 
   assert.match(verifier, /validateServedBrowserHeaders\(response\.headers\)/);
   assert.match(verifier, /validateArchitecturePocHeaders/);
   assert.match(verifier, /validateHeaders: validateArchitecturePocHeaders/);
+  assert.match(
+    verifier,
+    /if \(method === 'HEAD' && response\.body === null\) return;[\s\S]*const bytes = await readBounded\(response, maximumRouteBytes\);/,
+  );
   assert.match(verifier, /verifyBrowserHeaders: true/);
   assert.match(verifier, /const spaRoutes = \[/);
   assert.match(verifier, /'\/deal\/route-verification'/);

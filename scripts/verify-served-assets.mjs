@@ -137,8 +137,14 @@ async function requestRoute(path, {
   if (!validateHeaders(response.headers)) {
     fail('a reviewed route is missing the browser security headers');
   }
+  // Fetch exposes no body stream for HEAD responses, which is the expected
+  // protocol behavior rather than a missing response payload.
+  if (method === 'HEAD' && response.body === null) return;
   const bytes = await readBounded(response, maximumRouteBytes);
-  if (method === 'HEAD' && bytes.byteLength !== 0) fail('a HEAD response unexpectedly returned a body');
+  if (method === 'HEAD') {
+    if (bytes.byteLength !== 0) fail('a HEAD response unexpectedly returned a body');
+    return;
+  }
   if (expectedText) {
     const body = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     if (!body.includes(expectedText)) fail('a reviewed route did not return the expected bounded document');
