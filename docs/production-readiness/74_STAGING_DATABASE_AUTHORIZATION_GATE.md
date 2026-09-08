@@ -12,10 +12,43 @@ The gate is manual-only and refuses to run unless all of these are true:
 - the selected environment is exactly `staging`;
 - Staging and Production Supabase project references are valid and different;
 - the direct PostgreSQL host belongs to the declared Staging project;
-- the connection uses a reviewed TLS mode;
+- the connection explicitly specifies exactly one `sslmode=require` or
+  `sslmode=verify-full` parameter; missing, empty, duplicate, and other modes
+  are rejected before a client connects;
 - the job executes in the protected GitHub `staging` environment.
 
-## Current verified state
+## Current verification — 2026-09-08
+
+A supplemental Supabase MCP run against isolated Staging at source commit
+`9367ddd456a482494c5c38aaa0ce0fc8369f13f4` passed 16 of the 17 SQL suites.
+The lifecycle suite was not run: its global claim function could touch an
+existing queue item (one pending/approved/processing item was observed).
+See [the status-only evidence record](evidence/2026-09-08-staging-sql-supplement.json)
+for the complete inventory, source hashes, preflight, and limitations.
+
+Each executed suite ran as one transaction with its original assertions and
+final rollback. Nine suites additionally used a read-only transaction; all
+had a 15-second statement timeout and a 2-second lock timeout. The observed
+user, profile, deal, dispute, evidence, integrity-event, audit-event, and
+Storage-object counts matched before and after. This is not a row-by-row
+identity assertion. Audit/payment probes may advance identity sequences
+despite rollback; no sequence was reset. No Production operation, actual
+Stripe call, or Storage-byte deletion was performed.
+
+This evidence does **not** complete the protected GitHub gate: it does not
+prove that workflow's direct-Postgres/TLS path, migration step, or ownership
+inventory. The `staging` environment still has no secrets. DAT-001 and DAT-003
+remain open; SQL role settings are not real Auth tokens. The data-free baseline
+workflow also needs a reviewed synthetic-fixture bootstrap before its
+fixture-dependent suites can prove an empty rebuild. Historical results below
+are not current-candidate launch evidence.
+
+The TLS guard now rejects absent and duplicate modes instead of claiming TLS
+was required for an ambiguous URL. `require` enforces encryption but is not a
+hostname/certificate-verification claim; use `verify-full` with the appropriate
+trusted CA for that protection ([PostgreSQL SSL documentation](https://www.postgresql.org/docs/current/libpq-ssl.html)).
+
+## Previously recorded verification (historical)
 
 The connected Supabase organization now has an isolated Staging project
 (`dealivra-staging`) that is different from Production. Staging contains the
@@ -23,8 +56,8 @@ reviewed schema and 30 applied migration records. The repository still lacks a
 complete timestamped migration chain capable of building an empty database,
 so DAT-001 remains open.
 
-All 17 rollback-only database authorization and integrity suites pass against
-Staging. The verified matrix covers seller, buyer, outsider, administrator,
+An earlier run recorded all 17 rollback-only database authorization and integrity
+suites passing against Staging. That recorded matrix covers seller, buyer, outsider, administrator,
 MFA, evidence, dispute, support, payment-command, immutable-audit, and RLS
 boundaries. The Staging fixtures use only synthetic `.invalid` identities and
 fake provider identifiers; no Production customer rows or payment objects were

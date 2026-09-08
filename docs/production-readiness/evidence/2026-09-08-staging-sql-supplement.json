@@ -1,0 +1,211 @@
+{
+  "schema": "dealivra.staging-sql-supplement.v1",
+  "captured_at": "2026-09-08 15:48:12 UTC",
+  "source_commit": "9367ddd456a482494c5c38aaa0ce0fc8369f13f4",
+  "sql_source_commit_used": "b6b28fdc73723dc14339541161685964f53f126e",
+  "sql_sources_identical_to_source_commit": true,
+  "source_hash_scope": "Original source-file bytes, before execution wrappers. Wrappers added read-only/time limits and tightened the audit suite's existing lock timeout; assertions were unchanged.",
+  "execution_method": "Supabase MCP; one complete SQL file per transaction, original assertions and final rollback retained",
+  "target_verification": {
+    "environment": "isolated-staging",
+    "project_label": "dealivra-staging",
+    "production_project_distinct": true,
+    "production_operations_performed": false,
+    "direct_postgres_tls_path_exercised": false
+  },
+  "database_state": {
+    "observed_migration_count": 30,
+    "migration_history_equivalence_proven": false
+  },
+  "preflight": {
+    "fail_fast_sentinel_stopped_execution": true,
+    "authenticated_role_switch_verified": true,
+    "service_role_switch_verified": true,
+    "role_restoration_verified": true,
+    "jwt_transaction_local_control_verified": true,
+    "rpc_existing_fixture_ready": true,
+    "canonical_mutation_sample_present": true,
+    "evidence_file_fixture_ready": true,
+    "integrity_latest_row_unambiguous": true,
+    "integrity_latest_fixture_ready": true,
+    "rls_ready_table_count": 6,
+    "audit_fixture_ready": true,
+    "payment_fixture_ready": true,
+    "lifecycle_deal_fixture_ready": true,
+    "lifecycle_operator_ready": true,
+    "lifecycle_vault_and_enabled_verifier_ready": true,
+    "lifecycle_registered_job_count": 2,
+    "lifecycle_existing_queue_work_count": 1
+  },
+  "execution_controls": {
+    "statement_timeout_seconds": 15,
+    "lock_timeout_seconds": 2,
+    "read_only_suites": 9,
+    "rollback_only_write_capable_suites": 7,
+    "assertions_weakened": false
+  },
+  "suites": [
+    {
+      "file": "supabase/tests/authenticated_rpc_cross_role_rollback.sql",
+      "source_sha256": "5f8d098fd82073e28f74c8c5a3fdfa111706dd4b551912e52acfec4668dd2238",
+      "status": "passed",
+      "transaction": "rollback-only"
+    },
+    {
+      "file": "supabase/tests/canonical_agreement_record_rollback.sql",
+      "source_sha256": "4c525cf7ff716d6bec217a9368ce167881e5fc5cfc6cda6a6c01045a5c75d1a6",
+      "status": "passed",
+      "transaction": "rollback-only"
+    },
+    {
+      "file": "supabase/tests/database_security_contract_rollback.sql",
+      "source_sha256": "0acc3962b2ec37ec0979ea408e3c3f6022ea64edf123b8a680d1aafbeeb2c4cd",
+      "status": "passed",
+      "transaction": "read-only with rollback"
+    },
+    {
+      "file": "supabase/tests/evidence_file_security_rollback.sql",
+      "source_sha256": "07e878362a6de1ff6fa3331b66e093431f5f96e8f7a4b242e9ffa4a6f16b8783",
+      "status": "passed",
+      "transaction": "rollback-only"
+    },
+    {
+      "file": "supabase/tests/evidence_integrity_inventory_rollback.sql",
+      "source_sha256": "43b44dcd8f8057acb2001044a9a81d1ba91bbe411f0e5525be98c8e11b4a29f5",
+      "status": "passed",
+      "transaction": "rollback-only"
+    },
+    {
+      "file": "supabase/tests/evidence_lifecycle_governance_rollback.sql",
+      "source_sha256": "b93a4ccf44e69b045cb82930b8cdf14fce9b4755201b71eedcbcdc5ad9b4b4e9",
+      "status": "deferred",
+      "transaction": "not-executed",
+      "reason": "One existing pending/approved/processing queue item; global claim may touch unrelated work."
+    },
+    {
+      "file": "supabase/tests/foreign_key_hot_path_indexes_rollback.sql",
+      "source_sha256": "a2cfe9c84e44c9f0da702d0cca1ba68a3bb8dfd7c37d69f27961e7807a09f4c6",
+      "status": "passed",
+      "transaction": "read-only with rollback"
+    },
+    {
+      "file": "supabase/tests/immutable_material_audit_events_rollback.sql",
+      "source_sha256": "f7f4f27bbc5f99e2505291070fa804741e920ec665b5e3047785f5bdbaba6355",
+      "status": "passed",
+      "transaction": "rollback-only"
+    },
+    {
+      "file": "supabase/tests/mfa_assurance_enforcement_rollback.sql",
+      "source_sha256": "ab6dba88d0fe06723079221dd110fc60a4c9fce333734513133b9b0066b24fbd",
+      "status": "passed",
+      "transaction": "read-only with rollback"
+    },
+    {
+      "file": "supabase/tests/mfa_password_only_negative_matrix_rollback.sql",
+      "source_sha256": "3bc2658f57425dfa92baf401648d4d32e3470cc73bf3e45faf662a2365eb3d72",
+      "status": "passed",
+      "transaction": "read-only with rollback"
+    },
+    {
+      "file": "supabase/tests/payment_provider_observability_rollback.sql",
+      "source_sha256": "fddd1ece8663caa8e764018a2c730d77055eb07213b82d6bc4eb2e555f2f71bc",
+      "status": "passed",
+      "transaction": "read-only with rollback"
+    },
+    {
+      "file": "supabase/tests/private_evidence_maintenance_settings_rls_rollback.sql",
+      "source_sha256": "bc7b1e6e0631ef22e731bfdabd87ba30448f848c838ba4787e7442508c6803f8",
+      "status": "passed",
+      "transaction": "read-only with rollback"
+    },
+    {
+      "file": "supabase/tests/privileged_mfa_recovery_control_rollback.sql",
+      "source_sha256": "58cd7df49b5a3b46c0655f97166d471ad21414541b4d826973bffcbe315358c8",
+      "status": "passed",
+      "transaction": "read-only with rollback"
+    },
+    {
+      "file": "supabase/tests/rls_auth_initplan_optimization_rollback.sql",
+      "source_sha256": "f0fc82593bf9c6d67fb768534455443e9accb967534a247d2756ea6392e907ae",
+      "status": "passed",
+      "transaction": "rollback-only"
+    },
+    {
+      "file": "supabase/tests/security_definer_advisor_hardening_rollback.sql",
+      "source_sha256": "9bb2e0fbe27a37d4b68a6fac23d0f60177650c3a68e06df1f8b29f8df4b9705e",
+      "status": "passed",
+      "transaction": "read-only with rollback"
+    },
+    {
+      "file": "supabase/tests/stripe_trusted_payment_commands_rollback.sql",
+      "source_sha256": "36967852a158de944e0b5e07b3ef275e0228ad33aa65036f0e001c755b06cbbb",
+      "status": "passed",
+      "transaction": "rollback-only"
+    },
+    {
+      "file": "supabase/tests/support_case_authorization_rollback.sql",
+      "source_sha256": "483da9f9fae9ab1eb0cc867afa389764af0afa9b556157d999d250aa6e07c526",
+      "status": "passed",
+      "transaction": "read-only with rollback"
+    }
+  ],
+  "summary": {
+    "expected": 17,
+    "passed": 16,
+    "failed": 0,
+    "deferred": 1
+  },
+  "rollback_evidence": {
+    "complete_transactions_reported_success": true,
+    "observed_counts_before": {
+      "users": 4,
+      "profiles": 4,
+      "deals": 5,
+      "disputes": 2,
+      "evidence": 1,
+      "integrity_events": 0,
+      "audit_events": 6,
+      "storage_objects": 0
+    },
+    "observed_counts_after": {
+      "users": 4,
+      "profiles": 4,
+      "deals": 5,
+      "disputes": 2,
+      "evidence": 1,
+      "integrity_events": 0,
+      "audit_events": 6,
+      "storage_objects": 0
+    },
+    "row_by_row_identity_proven": false,
+    "existing_queue_work_count_before": 1,
+    "existing_queue_work_count_after": 1
+  },
+  "accepted_side_effects": [
+    "Audit/payment probes may advance audit identity sequences despite rollback; no sequence reset was attempted."
+  ],
+  "scope_exclusions": [
+    "No real Auth-token HTTP matrix",
+    "No real Storage-byte upload/delete proof",
+    "No Stripe API calls or real-payment proof",
+    "No Production operations",
+    "No protected GitHub gate run",
+    "No private-RLS migration step or database ownership validator run in this session",
+    "No empty rebuild, upgrade, backup or restore proof"
+  ],
+  "limitations": [
+    "Read-only role/claim simulation is SQL authorization evidence, not hosted session authentication evidence.",
+    "Existing evidence integrity/lifecycle negative tests contain broad exception assertions; these passes alone do not prove exact denial classification.",
+    "Aggregate counts cannot prove every existing row was unchanged; transaction rollback is the isolation mechanism."
+  ],
+  "remaining_gates": [
+    "Lifecycle suite on an isolated idle queue",
+    "Protected Staging credentials and workflow completion",
+    "Reviewed synthetic fixture bootstrap for empty baseline suites",
+    "DAT-001 migration/rebuild/upgrade/rollback evidence",
+    "DAT-003 real-token Data API/Storage matrix with cleanup evidence",
+    "Backup/restore proof and paid-beta launch controls"
+  ],
+  "gate_status": "incomplete",
+  "launch_status": "no-go"
+}

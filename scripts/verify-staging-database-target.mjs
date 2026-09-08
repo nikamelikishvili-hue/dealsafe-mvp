@@ -45,9 +45,9 @@ function validatedDatabaseUrl(value, stagingProjectRef) {
       reject('the database URL contains an unreviewed connection parameter.');
     }
   }
-  const sslMode = parsed.searchParams.get('sslmode');
-  if (sslMode && !['require', 'verify-full'].includes(sslMode)) {
-    reject('the database URL must use a reviewed TLS mode.');
+  const sslModes = parsed.searchParams.getAll('sslmode');
+  if (sslModes.length !== 1 || !['require', 'verify-full'].includes(sslModes[0])) {
+    reject('the database URL must specify exactly one reviewed TLS mode.');
   }
 
   return parsed;

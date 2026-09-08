@@ -5815,3 +5815,21 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   has no configured secrets. DAT-003 remains open until a real-token hosted
   matrix and the 17 rollback suites pass. No hosted object, database state,
   public-access setting, or real payment was changed by this work.
+
+# 2026-09-08 - Supplemental hosted SQL proof and explicit Staging TLS
+
+- Executed 16 of the 17 reviewed rollback-only SQL suites through the connected
+  Supabase MCP on isolated Staging; all 16 passed. Deferred the lifecycle suite
+  because its global claim function could touch one existing queue-work item.
+- Verified fail-fast propagation, transaction-local roles, fixture readiness,
+  and matching before/after aggregate row counts without exporting credentials
+  or record identifiers. Audit/payment identity sequences may advance despite
+  rollback; no reset, real payment, or Storage-byte deletion was performed.
+- Found and fixed the direct-database target guard accepting missing or
+  duplicate TLS modes. It now requires exactly one explicit reviewed mode;
+  regression cases cover omitted, blank, insecure, repeated, conflicting,
+  percent-encoded duplicate keys, and both supported positive modes.
+- Retained a status-only evidence inventory and qualified stale runbook claims.
+  This is supplemental SQL evidence, not protected-workflow or real-token HTTP
+  proof. Missing protected Staging secrets, a synthetic baseline fixture
+  bootstrap, lifecycle isolation, and DAT-001/DAT-003 remain launch gates.
