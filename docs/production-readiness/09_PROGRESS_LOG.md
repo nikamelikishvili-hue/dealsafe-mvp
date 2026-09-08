@@ -5797,3 +5797,21 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - Added a fail-closed release assertion that rejects future raw screen colors
   in both administrator stylesheets. No API, database, provider, Production,
   public-access, customer-data, or payment behavior changed.
+
+# 2026-09-08 - Fail-closed Staging HTTP authorization evidence
+
+- Hardened the DAT-003 runner so server errors cannot count as authorization
+  denials, and an empty or malformed participant action plan cannot pass.
+- Bound the runner to the explicit, distinct Staging project before network
+  access, with bounded session preflight and response reads.
+- Registered both synthetic upload paths before mutation, attempted cleanup
+  after interrupted writes, and required owner-visible upload and post-delete
+  absence evidence. Reports remain status-only, including failure paths.
+- Added executable provider fixtures for target rejection, malformed responses,
+  denial classification, interrupted uploads, timeouts, and cleanup failure.
+  These are automated regression evidence, not hosted authorization evidence.
+- Read-only inspection found 30 Staging migrations, the protected action-plan
+  function, and the deal-media bucket. The GitHub staging environment still
+  has no configured secrets. DAT-003 remains open until a real-token hosted
+  matrix and the 17 rollback suites pass. No hosted object, database state,
+  public-access setting, or real payment was changed by this work.

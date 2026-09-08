@@ -54,6 +54,12 @@ This backlog turns the production specification into controlled delivery work. P
 | DAT-006 | P1 | Add PITR, storage backup, retention jobs, and restore drill | RPO/RTO evidence passes |
 | DAT-007 | P1 | Implement privacy export, correction, deletion, and legal hold ledger | End-to-end privacy requests are auditable |
 
+DAT-003 verification hardening (2026-09-08): the HTTP runner now requires
+explicit Staging isolation, valid participant action-plan rows, recognized
+authorization denials, bounded responses, and proven cleanup after interrupted
+uploads. Executable provider fixtures cover these boundaries; real-token
+hosted evidence and the 17 rollback suites are still required for closure.
+
 ## Epic 5 — Authentication and account security
 
 | ID | Priority | Work | Acceptance |

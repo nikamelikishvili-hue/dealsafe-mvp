@@ -65,6 +65,7 @@ import {
 import { evaluateDatabaseBaseline } from '../scripts/verify-database-baseline.mjs';
 import { validateDatabaseOwnershipInventory } from '../scripts/validate-database-ownership-inventory.mjs';
 import { apiRoutePolicy, evaluateApiMutationOriginPolicy } from '../server/apiMutationOriginPolicy.mjs';
+import './staging-http-authorization.test.mjs';
 
 const root = new URL('../', import.meta.url);
 const rootPath = fileURLToPath(root);
@@ -14649,21 +14650,12 @@ test('database baseline proof is manual, Staging-only, and rebuilds locally', ()
   assert.match(runbook, /Never dump Production\s+data/);
 });
 
-test('Staging HTTP matrix is status-only, cross-user, and cleans synthetic Storage', () => {
+test('Staging HTTP matrix has an explicit operator entry point', () => {
   const packageJson = readJson('package.json');
-  const matrix = readText('scripts/run-staging-http-authorization-matrix.mjs');
   assert.equal(
     packageJson.scripts['staging:http-authorization'],
     'node scripts/run-staging-http-authorization-matrix.mjs',
   );
-  assert.match(matrix, /get_deal_action_plan/);
-  assert.match(matrix, /Data API outsider/);
-  assert.match(matrix, /Data API expired/);
-  assert.match(matrix, /Storage outsider cross-user upload/);
-  assert.match(matrix, /Storage seller own upload/);
-  assert.match(matrix, /Storage buyer own upload/);
-  assert.match(matrix, /method: 'DELETE'/);
-  assert.doesNotMatch(matrix, /results:[\s\S]{0,200}(?:token|subject|dealId|path)/i);
 });
 
 test('database ownership inventory covers every governed object class', () => {
