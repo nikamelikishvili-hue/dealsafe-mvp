@@ -5725,7 +5725,7 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - No provider configuration, customer data, public-access setting, Production
   alias, or real-payment capability changed.
 
-# 2026-09-04 — Exercised the protected exact-host verifier boundary
+# 2026-09-04 - Exercised the protected exact-host verifier boundary
 
 - Confirmed signed `main` at
   `511f6b0d7077bb90d3d1e78a4029611f55125511` after PR `#287` expanded Preview
@@ -5744,3 +5744,32 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - No protection rule was weakened, no secret value was accessed or logged,
   and no Production alias, public access, hosted customer data, or real-payment
   capability changed.
+
+# 2026-09-07 - Retained protected verification and refreshed the release candidate
+
+- Corrected the trusted verifier's HEAD-response handling through PR `#292`
+  without weakening its exact-host, redirect, security-header, size, hash, or
+  route-contract boundaries.
+- Retained successful protected manual run `34136690776` for source commit
+  `f0d0f3e3b8b7b56c5f2b9cae676741eda0d9a4e7` at
+  `dealsafe-r3mn6u0au-nika13.vercel.app`. It verified 29 assets totaling
+  1,116,568 bytes, all 14 SPA routes, browser headers, and the Preview route
+  contract while keeping the bypass token masked.
+- Merged production dependency maintenance through PR `#293`, then separated
+  the safe Biome and React DOM type patches into PR `#295`. The grouped Vite
+  update was closed after exceeding the fixed initial-JavaScript budget; the
+  performance ceiling was not raised.
+- Confirmed signed `main` at
+  `076be82bfa339ffee2ad9f0a7730cc081a85bd5b`. Required CI and CodeQL passed,
+  including 415 foundation tests, 21 rendered-component tests, zero audit
+  vulnerabilities, 133,643 initial JavaScript bytes, and a 29-asset manifest
+  totaling 1,113,746 bytes. Release artifact `10037615080` retained manifest
+  SHA-256 `8d78fa605ab6203aa0b92b7e0964c059ce27bf5ed10083e54d49da177cb33e50`.
+- Recorded the current generated Vercel host
+  `dealsafe-9b9028nkn-nika13.vercel.app` as access-protected and not yet
+  supplied with the protected bypass token. The earlier successful run is not
+  exact-candidate evidence for this later commit.
+- Confirmed the protected `staging` environment still lacks its database URL,
+  Supabase access-token, and database-password secrets. No Supabase resource,
+  Production alias, public access, customer record, or real-payment capability
+  was changed.

@@ -73,6 +73,20 @@ default-off until the repository owner configures:
 The workflow must be exercised against a reviewed protected Preview before it
 is made a required promotion check.
 
+## First protected activation evidence
+
+Manual run `34136690776` retained a successful protected exact-host exercise
+for source commit `f0d0f3e3b8b7b56c5f2b9cae676741eda0d9a4e7` at
+`dealsafe-r3mn6u0au-nika13.vercel.app`. The trusted verifier checked 29 assets
+totaling 1,116,568 bytes, all 14 SPA routes, browser security headers, and the
+Preview route contract. The protected bypass token remained masked.
+
+This proves the activation mechanism, not an evergreen release approval. Later
+code or dependency changes invalidate the result for a new candidate. The
+current candidate must receive its own exact-host run before promotion;
+automatic verification remains default-off until its ownership, retention,
+and promotion policy are approved.
+
 ## Release evidence
 
 The deterministic release evidence includes the served manifest, both
