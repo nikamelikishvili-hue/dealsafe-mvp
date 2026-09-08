@@ -14539,6 +14539,58 @@ test('staging database target guard rejects Production and mixed projects', asyn
   );
 });
 
+test('staging database target guard requires one explicit reviewed TLS mode', async () => {
+  const { verifyStagingDatabaseTarget } = await import(
+    '../scripts/verify-staging-database-target.mjs'
+  );
+  const databaseUrl =
+    'postgresql://postgres:synthetic-secret@db.abcdefghijklmnopqrst.supabase.co/postgres';
+  const values = {
+    DEALIVRA_DATABASE_ENVIRONMENT: 'staging',
+    DEALIVRA_STAGING_SUPABASE_PROJECT_REF: 'abcdefghijklmnopqrst',
+    DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF: 'zyxwvutsrqponmlkjihg',
+  };
+
+  for (const mode of ['require', 'verify-full']) {
+    const result = verifyStagingDatabaseTarget({
+      ...values,
+      DEALIVRA_STAGING_DATABASE_URL: `${databaseUrl}?sslmode=${mode}`,
+    });
+    assert.equal(result.status, 'passed');
+    assert.equal(result.tls, 'required');
+    assert.doesNotMatch(JSON.stringify(result), /synthetic-secret|postgresql:/);
+  }
+
+  for (const query of [
+    '',
+    '?',
+    '?sslmode',
+    '?sslmode=',
+    '?sslmode=disable',
+    '?sslmode=allow',
+    '?sslmode=prefer',
+    '?sslmode=verify-ca',
+    '?sslmode=require&sslmode=disable',
+    '?sslmode=disable&sslmode=require',
+    '?sslmode=require&sslmode=require',
+    '?sslmode=require&sslmode=verify-full',
+    '?sslmode=require&%73slmode=disable',
+  ]) {
+    assert.throws(
+      () => verifyStagingDatabaseTarget({
+        ...values,
+        DEALIVRA_STAGING_DATABASE_URL: `${databaseUrl}${query}`,
+      }),
+      (error) => {
+        assert.match(error.message, /exactly one reviewed TLS mode/);
+        assert.doesNotMatch(error.message, /synthetic-secret|postgresql:/);
+        return true;
+      },
+      `Rejected missing, ambiguous, or unreviewed TLS mode: ${query}`,
+    );
+  }
+});
+
 test('database authorization gate is manual-only and covers role isolation', () => {
   const packageJson = readJson('package.json');
   const workflow = readText('.github/workflows/staging-database-gate.yml');
