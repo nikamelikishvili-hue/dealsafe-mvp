@@ -15020,6 +15020,23 @@ test('administrative dispute and moderation decisions are single-flight', () => 
   assert.ok((workspace.match(/aria-live=\{messageFailed \? 'assertive' : 'polite'\}/g) ?? []).length >= 2);
 });
 
+test('administrator moderation and dispute surfaces use governed semantic colors', () => {
+  const moderationStyles = readText('src/admin-center.css');
+  const disputeStyles = readText('src/admin-disputes.css');
+  const rawColorPattern = /#[0-9a-f]{3,8}|rgba?\(|hsla?\(|(?:^|[:\s,(])(?:white|black)(?=[;\s,)])/i;
+
+  for (const styles of [moderationStyles, disputeStyles]) {
+    assert.doesNotMatch(styles, rawColorPattern);
+    assert.match(styles, /var\(--color-surface-card\)/);
+    assert.match(styles, /var\(--color-border-default\)/);
+  }
+
+  assert.match(moderationStyles, /var\(--color-danger-100\)/);
+  assert.match(moderationStyles, /var\(--color-success-100\)/);
+  assert.match(disputeStyles, /var\(--color-warning-100\)/);
+  assert.match(disputeStyles, /var\(--color-success-700\)/);
+});
+
 test('watchlist, access-code, and renewal mutations are single-flight', () => {
   const workspace = readText('src/DealWorkspaceFeatures.tsx');
 
