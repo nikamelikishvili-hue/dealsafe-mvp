@@ -4477,6 +4477,9 @@ test('catalog governance validation is part of the full release gate', () => {
   assert.match(governance, /Deal ID, public ID, user ID, email, address/);
   assert.match(adminStyles, /@media \(max-width: 700px\)/);
   assert.match(adminStyles, /\.admin-catalog-grid\s*\{\s*grid-template-columns: 1fr;/);
+  assert.match(adminStyles, /var\(--color-warning-800\)/);
+  assert.match(adminStyles, /var\(--color-success-100\)/);
+  assert.doesNotMatch(adminStyles, /#[0-9a-f]{3,8}|rgba?\(|hsla?\(/i);
 });
 
 test('account session inventory is current-user-only, minimal, and deny-by-default', () => {
