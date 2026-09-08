@@ -1,6 +1,6 @@
 # Dealivra release-readiness snapshot
 
-Status date: 2026-09-04
+Status date: 2026-09-07
 
 ## Decision
 
@@ -15,36 +15,38 @@ below is complete for the same immutable candidate commit and deployment.
 
 ## Current reviewed repository evidence
 
-- The reviewed baseline `main` is `511f6b0d7077bb90d3d1e78a4029611f55125511` with
-  a valid GitHub signature. Dependency maintenance was merged by PR `#282`,
-  JavaScript budget headroom by PR `#285`, CSS budget headroom by PR `#286`,
-  and the complete 14-route Preview smoke matrix by PR `#287`; no
-  pre-existing pull request remained open at this audit boundary.
+- The reviewed baseline `main` is `076be82bfa339ffee2ad9f0a7730cc081a85bd5b`
+  with a valid GitHub signature. The trusted protected-deployment verifier was
+  corrected by PR `#292`; production dependency maintenance was merged by PR
+  `#293`; and the safe Biome and React DOM type patches were narrowed, reviewed,
+  and merged by PR `#295`. No pull request remains open at this audit boundary.
 - The current repository gate passes catalog, dependency, SBOM,
   browser-storage, outbound-transport, API-origin, abuse-policy, brand,
-  runtime-configuration, formatting, lint, TypeScript, 407 foundation tests,
-  20 rendered-component tests, the incident drill, secret scan, production
+  runtime-configuration, formatting, lint, TypeScript, 415 foundation tests,
+  21 rendered-component tests, the incident drill, secret scan, production
   build, deterministic served-asset manifest, performance budgets, and Preview
   smoke.
-- The reviewed unconfigured build contains 819,425 JavaScript bytes and
-  285,346 CSS bytes. Initial application JavaScript is 134,125 bytes against
-  the fixed 160,000-byte ceiling. The served-asset manifest contains 28 assets
-  totaling 1,110,576 bytes.
-- GitHub Actions runs `33838666629` and `33838666625` passed the required
-  quality/security and CodeQL gates on the PR `#287` candidate before its
-  signed squash merge. Automatic served-asset verification remains
-  intentionally default-off until the protected bypass secret is configured
-  and a successful manual run is retained.
-- Vercel deployment `dpl_GgSXSytKkqkv8ruEFP56s1aY3v8P` for that baseline is
-  `READY`, access-protected, and not assigned to public live operation. Runtime
-  inspection reported no hosted errors. This does not replace retained
-  exact-host served-asset evidence.
-- The `served-asset-verification` GitHub environment now accepts protected
-  branches only and contains the exact-host allowlist
-  `dealsafe-dqx3xke41-nika13.vercel.app`. Manual run `33839430086` checked out
-  exact `main` and failed closed when that protected host redirected to Vercel
-  authentication. No bypass secret is configured, so the result proves the
-  guard boundary but is not successful served-asset evidence.
+- The reviewed unconfigured build contains 820,401 JavaScript bytes and
+  287,540 CSS bytes. Initial application JavaScript is 133,643 bytes against
+  the fixed 160,000-byte ceiling. The served-asset manifest contains 29 assets
+  totaling 1,113,746 bytes.
+- GitHub Actions runs `34177050869` and `34177050841` passed the required
+  quality/security and CodeQL gates for the signed `#295` merge. The retained
+  release-evidence artifact is `10037615080`; its manifest SHA-256 is
+  `8d78fa605ab6203aa0b92b7e0964c059ce27bf5ed10083e54d49da177cb33e50`.
+- Vercel deployment record `6318925288` for the current baseline completed at
+  `dealsafe-9b9028nkn-nika13.vercel.app`. The generated host remains
+  access-protected and redirects an unauthenticated request to Vercel. It has
+  not received the protected bypass token and is not current exact-host
+  served-asset evidence.
+- The protected `served-asset-verification` environment retained successful
+  manual run `34136690776` for source commit
+  `f0d0f3e3b8b7b56c5f2b9cae676741eda0d9a4e7` at the exact approved host
+  `dealsafe-r3mn6u0au-nika13.vercel.app`. It verified 29 assets totaling
+  1,116,568 bytes, all 14 SPA routes, browser headers, and the Preview route
+  contract while masking the bypass token. Later signed dependency merges
+  invalidate that result for the current `main`, so a current exact-candidate
+  rerun remains required.
 - Local browser acceptance covered widths 320, 360, 390, 768, 1024, 1280, and
   1440 without horizontal overflow. The public route matrix, mobile Home
   navigation, account entry calls to action, and sample Deal path were also
@@ -62,18 +64,22 @@ that a candidate is ready for external testers.
 
 ## Closed since the previous snapshot
 
-- The former Draft release stack was consolidated, reviewed, and merged by
-  PR `#233`; the previous instruction to open Draft PR `#232` is obsolete.
-- All later review branches have been reconciled. There is no hidden or stale
-  open pull request waiting to be promoted.
+- The protected verifier's HEAD-response bug was fixed without weakening its
+  redirect, host, header, size, or hash boundaries, and the first successful
+  protected exact-host exercise is retained in GitHub Actions.
+- Safe dependency maintenance was merged without raising the JavaScript
+  ceiling. The grouped Vite `8.2.1` update was closed after exceeding that
+  ceiling, while the compatible patches were delivered separately by `#295`.
+- All review branches have been reconciled. There is no hidden or stale open
+  pull request waiting to be promoted.
 - Required repository checks and commit-signature enforcement remain intact;
   no security finding or branch-protection rule was dismissed or weakened.
 - The JavaScript and CSS performance ceilings were retained rather than raised;
   both now have measurable release headroom.
-- The protected served-asset environment and exact-host allowlist are now
-  configured. Its first manual exact-commit exercise rejected the Vercel
-  authentication redirect instead of following it or accepting unverifiable
-  bytes.
+- The protected served-asset environment, scoped bypass secret, exact-host
+  allowlist, and one successful activation exercise now exist. Automatic
+  verification remains default-off, and the current candidate still requires
+  its own exact-host run, restricted archive, and named promotion approval.
 
 ## External private-beta blockers
 
@@ -138,15 +144,18 @@ run again.
 
 ### Immediate controlled action
 
-The next permitted hosted actions are to add a scoped
-`DEALIVRA_DEPLOYMENT_BYPASS_TOKEN` secret to the protected
-`served-asset-verification` environment, retain one successful manual
-exact-commit run, and only then consider enabling automatic execution. The
-three missing database secrets must also be added to the protected `staging`
-environment. Never place secret values in chat, repository content, logs,
-screenshots, issues, or pull-request text. Until those externally owned
-settings exist, repository work may continue, but FND-003, DAT-001, and
-DAT-003 cannot be marked complete.
+Provision `DEALIVRA_STAGING_DATABASE_URL`,
+`DEALIVRA_STAGING_SUPABASE_ACCESS_TOKEN`, and
+`DEALIVRA_STAGING_SUPABASE_DB_PASSWORD` in the protected `staging`
+environment, then run the baseline and authorization gates against one
+isolated Staging candidate. Separately, approve the current exact generated
+Preview host before sending it the protected
+`DEALIVRA_DEPLOYMENT_BYPASS_TOKEN` and rerun the
+served-asset verifier for the same immutable commit. Retain that result in the
+restricted archive and record named technical/security approval. Never place
+secret values in chat, repository content, logs, screenshots, issues, or
+pull-request text. Until those externally owned settings and evidence exist,
+FND-003, DAT-001, and DAT-003 cannot be marked complete.
 
 ### Activation boundary
 

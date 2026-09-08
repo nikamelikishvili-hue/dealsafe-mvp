@@ -81,9 +81,11 @@ Before Production promotion:
 
 The repository now implements step 4 through the bounded served-asset
 manifest and verifier in
-[73_SERVED_ASSET_INTEGRITY.md](73_SERVED_ASSET_INTEGRITY.md). Hosted
-allowlist/token configuration and a successful protected-Preview activation
-exercise remain required before the result becomes a promotion check.
+[73_SERVED_ASSET_INTEGRITY.md](73_SERVED_ASSET_INTEGRITY.md). The protected
+allowlist, scoped token, and one successful protected-Preview activation
+exercise now exist. The current exact candidate still requires its own run,
+restricted long-term archive, and named technical/security approval before the
+result becomes a promotion check.
 
 ## Rollback
 

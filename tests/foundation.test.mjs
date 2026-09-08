@@ -4542,17 +4542,18 @@ test('account takeover response is fail-closed, non-secret, and rehearsal-gated'
 test('release snapshot names the current reconciled no-go evidence', () => {
   const snapshot = readText('docs/production-readiness/99_RELEASE_READINESS_SNAPSHOT.md');
 
-  assert.match(snapshot, /Status date: 2026-09-04/);
-  assert.match(snapshot, /reviewed baseline `main` is `511f6b0d7077bb90d3d1e78a4029611f55125511`/i);
-  assert.match(snapshot, /407 foundation tests,\s+20 rendered-component tests/);
-  assert.match(snapshot, /Initial application JavaScript is 134,125 bytes/);
+  assert.match(snapshot, /Status date: 2026-09-07/);
+  assert.match(snapshot, /reviewed baseline `main` is `076be82bfa339ffee2ad9f0a7730cc081a85bd5b`/i);
+  assert.match(snapshot, /415 foundation tests,\s+21 rendered-component tests/);
+  assert.match(snapshot, /Initial application JavaScript is 133,643 bytes/);
   assert.match(snapshot, /DEALIVRA_STAGING_DATABASE_URL/);
-  assert.match(snapshot, /no\s+pre-existing pull request remained open at this audit boundary/);
+  assert.match(snapshot, /No pull request remains open at this audit boundary/);
   assert.match(snapshot, /all 14 supported SPA\s+routes/);
-  assert.match(snapshot, /dpl_GgSXSytKkqkv8ruEFP56s1aY3v8P/);
+  assert.match(snapshot, /dealsafe-9b9028nkn-nika13\.vercel\.app/);
   assert.match(snapshot, /served-asset-verification/);
-  assert.match(snapshot, /33839430086/);
-  assert.match(snapshot, /failed closed when that protected host redirected to Vercel\s+authentication/);
+  assert.match(snapshot, /34136690776/);
+  assert.match(snapshot, /29 assets totaling\s+1,116,568 bytes/);
+  assert.match(snapshot, /current exact-candidate\s+rerun remains required/);
   assert.match(snapshot, /DEALIVRA_DEPLOYMENT_BYPASS_TOKEN/);
   assert.match(snapshot, /does not promote Production, restore\s+public access/);
   assert.match(snapshot, /No-go for public or real-money launch/);
