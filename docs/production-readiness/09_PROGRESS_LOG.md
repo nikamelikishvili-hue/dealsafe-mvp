@@ -5773,3 +5773,15 @@ Its exact signed commit was published for protected GitHub and Vercel review.
   Supabase access-token, and database-password secrets. No Supabase resource,
   Production alias, public access, customer record, or real-payment capability
   was changed.
+
+# 2026-09-07 - Governed administrator catalog visuals
+
+- Replaced the administrator catalog-governance screen's feature-owned color,
+  border, surface, status, and shadow literals with the shared semantic design
+  tokens.
+- Preserved the existing responsive grid and aggregate-only catalog behavior
+  while aligning active-release and needs-review states with the governed
+  success and warning palette.
+- Added a fail-closed release assertion that rejects future raw screen colors
+  in the administrator catalog stylesheet. No API, database, provider,
+  Production, public-access, customer-data, or payment behavior changed.
