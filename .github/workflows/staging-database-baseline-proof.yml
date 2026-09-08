@@ -84,21 +84,8 @@ jobs:
       - name: Rebuild the empty local database from migrations
         run: supabase db reset --local
 
-      - name: Verify all 17 authorization and integrity suites locally
-        shell: bash
-        env:
-          PGPASSWORD: postgres
-        run: |
-          set -euo pipefail
-          mapfile -t tests < <(find supabase/tests -maxdepth 1 -type f -name '*_rollback.sql' | sort)
-          test "${#tests[@]}" -eq 17
-          for test_file in "${tests[@]}"; do
-            echo "Running ${test_file}"
-            psql "postgresql://postgres@127.0.0.1:54322/postgres" \
-              -X \
-              -v ON_ERROR_STOP=1 \
-              -f "$test_file"
-          done
+      - name: Bootstrap disposable fixtures and verify all 17 suites locally
+        run: npm run database:local:rollback -- --local-disposable
 
       - name: Run local database advisors
         run: supabase db advisors --local

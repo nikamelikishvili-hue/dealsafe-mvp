@@ -57,12 +57,13 @@ are mandatory before capture.
 
 ## Empty-database proof
 
-Use a local Docker-backed Supabase stack or a disposable non-Production
-project:
+Use a local Docker-backed Supabase stack. The fixture runner below deliberately
+does not support a hosted target, even a disposable Staging project:
 
-1. run `supabase db reset` against the local stack;
-2. run all 17 sorted `supabase/tests/*_rollback.sql` suites with
-   `ON_ERROR_STOP=1`;
+1. run `supabase db reset --local` against the local stack;
+2. run `npm run database:local:rollback -- --local-disposable`. It first commits
+   the separately reviewed synthetic fixture bootstrap, then runs exactly the
+   17 named `supabase/tests/*_rollback.sql` suites with `ON_ERROR_STOP=1`;
 3. run Supabase database advisors and review every security finding;
 4. run `npm run verify` and record the exact commit and migration hashes;
 5. destroy the disposable environment or retain only synthetic `.invalid`
@@ -70,6 +71,45 @@ project:
 
 Seed files may contain synthetic development data only. Never dump Production
 data into `seed.sql`, and never use `--include-seed` against Production.
+
+### Local fixture boundary
+
+`supabase/tests/fixtures/local-authorization-bootstrap.sql` is not a migration,
+an automatic `seed.sql`, or a rollback suite. A schema-only rebuild lacks the
+users, deals, private buckets, and maintenance configuration that these suites
+require. The explicit local bootstrap supplies synthetic prerequisites without
+changing application grants, RLS policies, or rollback assertions.
+
+The runner accepts no connection URL or target override. Every database command
+uses `127.0.0.1:54322`, database/user `postgres`, no shell, no psql startup file,
+bounded execution, and a minimal subprocess environment. Hosted credentials,
+libpq service files/settings, and preload variables are not forwarded. Only
+the disposable CLI stack's local default password is supplied. Process output
+is withheld on failures because SQL errors may contain the synthetic Vault
+secret. The process reports the failed filename and stops without retries.
+
+Loopback alone cannot prove disposability (for example, an operator could
+forward a remote port). The SQL independently checks the explicit local marker
+and refuses populated application/Auth/Storage/Vault/scheduler state before
+its first write. Never port-forward a hosted database onto the local test port.
+Use only the reviewed local executable and freshly rebuilt CLI stack. A rerun
+requires another local reset; the bootstrap never deletes or reconciles
+pre-existing data. Cron fixture jobs are inactive no-ops, and no usable login
+passwords, authenticated sessions, real payment requests, or object bytes are
+created. The local Authenticator role setting required by the schema tests is
+restored only inside this disposable bootstrap.
+
+### 2026-09-08 verification status
+
+The previous workflow ran the rollback suites immediately after schema reset
+without preparing their required data. The new runner and bootstrap address
+that missing step, but their presence is **not** empty-database execution proof.
+No local Docker/Postgres engine was available during preparation, and the
+CLI-generated baseline and protected Staging credentials were still missing.
+Unit tests of the runner cannot validate SQL constraints or triggers. Keep
+DAT-001 open until the real isolated reset, bootstrap, all 17 suites, advisors,
+and upgrade proof have executed successfully. The earlier 16/17 hosted
+supplement remains a separate result, not a pass for this local workflow.
 
 ## Upgrade and rollback proof
 

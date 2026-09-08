@@ -66,6 +66,7 @@ import { evaluateDatabaseBaseline } from '../scripts/verify-database-baseline.mj
 import { validateDatabaseOwnershipInventory } from '../scripts/validate-database-ownership-inventory.mjs';
 import { apiRoutePolicy, evaluateApiMutationOriginPolicy } from '../server/apiMutationOriginPolicy.mjs';
 import './staging-http-authorization.test.mjs';
+import './local-database-rollback-proof.test.mjs';
 
 const root = new URL('../', import.meta.url);
 const rootPath = fileURLToPath(root);
@@ -3935,7 +3936,7 @@ test('legacy runtime identifiers are machine-governed migration aliases', async 
   const { verifyLegacyIdentifiers } = await import('../scripts/verify-legacy-identifiers.mjs');
   const current = verifyLegacyIdentifiers(rootPath);
   assert.equal(current.status, 'passed');
-  assert.equal(current.legacy_occurrences, 173);
+  assert.equal(current.legacy_occurrences, 179);
   assert.equal(current.approved_aliases, 9);
   assert.equal(packageJson.scripts['brand:verify'], 'node scripts/verify-legacy-identifiers.mjs');
   assert.match(packageJson.scripts.verify, /npm run brand:verify/);
@@ -14691,7 +14692,9 @@ test('database baseline proof is manual, Staging-only, and rebuilds locally', ()
   assert.match(workflow, /supabase db pull dealivra_staging_baseline/);
   assert.match(workflow, /npm run database:baseline:verify/);
   assert.match(workflow, /supabase db reset --local/);
-  assert.match(workflow, /test "\$\{#tests\[@\]\}" -eq 17/);
+  assert.match(workflow, /npm run database:local:rollback -- --local-disposable/);
+  assert.ok(workflow.indexOf('supabase db reset --local') < workflow.indexOf('npm run database:local:rollback'));
+  assert.equal(packageJson.scripts['database:local:rollback'], 'node scripts/run-local-database-rollback-proof.mjs');
   assert.match(workflow, /supabase db advisors --local/);
   assert.match(workflow, /retention-days: 7/);
   assert.equal(
