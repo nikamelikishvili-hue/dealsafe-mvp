@@ -5785,3 +5785,15 @@ Its exact signed commit was published for protected GitHub and Vercel review.
 - Added a fail-closed release assertion that rejects future raw screen colors
   in the administrator catalog stylesheet. No API, database, provider,
   Production, public-access, customer-data, or payment behavior changed.
+
+# 2026-09-08 - Governed administrator moderation and dispute visuals
+
+- Replaced feature-owned color, surface, border, and status literals across
+  the administrator moderation and dispute-review screens with the shared
+  semantic design tokens.
+- Preserved the existing responsive layouts and decision workflows while
+  aligning visible, hidden, pending, resolved, warning, and evidence-preview
+  states with the governed success, danger, warning, and neutral palette.
+- Added a fail-closed release assertion that rejects future raw screen colors
+  in both administrator stylesheets. No API, database, provider, Production,
+  public-access, customer-data, or payment behavior changed.
