@@ -86,7 +86,9 @@ test('checked-in local fixture stays explicit, transactional and separate from m
   assert.equal((sql.match(/^begin;$/gm) || []).length, 1);
   assert.equal((sql.match(/^commit;$/gm) || []).length, 1);
   assert.match(sql, /commit;\s*$/);
-  assert.match(sql, /update cron\.job set active = false/);
+  assert.match(sql, /cron\.alter_job\(job_id := inventory_job_id, active := false\)/);
+  assert.match(sql, /cron\.alter_job\(job_id := worker_job_id, active := false\)/);
+  assert.doesNotMatch(sql, /update\s+cron\.job/i);
   assert.match(sql, /where active or command <> 'select 1'/);
   assert.match(sql, /@example\.invalid/);
   assert.doesNotMatch(sql, /\b(?:truncate|delete\s+from|grant|revoke|disable\s+trigger)\b/i);
