@@ -55,7 +55,9 @@ jobs:
       - name: Confirm the reviewed CLI command surface
         run: |
           supabase --version
-          supabase db pull --help
+          supabase migration new --help
+          supabase db dump --help
+          supabase db diff --help
           supabase migration list --help
           supabase db reset --help
 
@@ -69,13 +71,30 @@ jobs:
         run: supabase link --project-ref "$DEALIVRA_STAGING_SUPABASE_PROJECT_REF"
 
       - name: Capture the CLI-generated Staging baseline
-        run: supabase db pull dealivra_staging_baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase migration new dealivra_staging_baseline
+          mapfile -t baselines < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql')
+          test "${#baselines[@]}" -eq 1
+          baseline="${baselines[0]}"
+          [[ "$baseline" =~ /[0-9]{14}_dealivra_staging_baseline\.sql$ ]]
+          # Schema-only export: never fetch data or repair hosted migration history.
+          supabase db dump --linked --file "$baseline"
+          test -s "$baseline"
+          # Reproduce db pull's second pass for managed schemas and privileges.
+          # The diff is applied to a disposable shadow database, never to Staging.
+          delta="$(mktemp)"
+          trap 'rm -f "$delta"' EXIT
+          supabase db diff --linked --use-migra > "$delta"
+          printf '\n' >> "$baseline"
+          cat "$delta" >> "$baseline"
 
       - name: Verify the data-free migration manifest
         run: npm run database:baseline:verify
 
-      - name: Compare local and isolated Staging migration history
-        run: supabase migration list
+      - name: Report existing Staging history without changing it
+        run: supabase migration list --linked
 
       - name: Start a disposable local Supabase stack
         id: local_stack
