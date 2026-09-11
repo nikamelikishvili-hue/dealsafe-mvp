@@ -50,7 +50,8 @@ begin
 
   if not exists (select 1 from pg_roles where rolname = 'authenticator')
      or to_regprocedure('public.enforce_active_auth_session()') is null
-     or to_regprocedure('cron.schedule(text,text,text)') is null then
+     or to_regprocedure('cron.schedule(text,text,text)') is null
+     or to_regprocedure('cron.alter_job(bigint,text,text,text,text,boolean)') is null then
     raise exception 'Local fixture bootstrap requires the reviewed helper dependencies';
   end if;
 
@@ -347,8 +348,8 @@ begin
   worker_job_id := cron.schedule(
     'dealivra-evidence-maintenance-worker', '0 0 1 1 *', 'select 1'
   );
-  update cron.job set active = false
-  where jobid in (inventory_job_id, worker_job_id);
+  perform cron.alter_job(job_id := inventory_job_id, active := false);
+  perform cron.alter_job(job_id := worker_job_id, active := false);
 
   if (select count(*) from cron.job) <> 2
      or exists (select 1 from cron.job where active or command <> 'select 1')
