@@ -14689,7 +14689,11 @@ test('database baseline proof is manual, Staging-only, and rebuilds locally', ()
   );
   assert.doesNotMatch(workflow, /supabase\/setup-cli@v\d/);
   assert.match(workflow, /version: 2\.101\.0/);
-  assert.match(workflow, /supabase db pull dealivra_staging_baseline/);
+  assert.match(workflow, /supabase migration new dealivra_staging_baseline/);
+  assert.match(workflow, /supabase db dump --linked --file "\$baseline"/);
+  assert.match(workflow, /supabase db diff --linked --use-migra > "\$delta"/);
+  assert.doesNotMatch(workflow, /supabase (?:migration repair|db push|db pull)\b/);
+  assert.doesNotMatch(workflow, /--data-only|--role-only|db reset --linked/);
   assert.match(workflow, /npm run database:baseline:verify/);
   assert.match(workflow, /supabase db reset --local/);
   assert.match(workflow, /npm run database:local:rollback -- --local-disposable/);
