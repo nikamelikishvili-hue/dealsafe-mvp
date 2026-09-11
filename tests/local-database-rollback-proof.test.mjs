@@ -7,6 +7,7 @@ import {
   approvedRollbackSuites,
   createLocalRollbackPlan,
   runLocalRollbackProof,
+  safeLocalFailure,
 } from '../scripts/run-local-database-rollback-proof.mjs';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -238,6 +239,7 @@ test('local rollback proof invokes only fixed bounded psql commands and returns 
       '--no-password',
       '-X',
       '--set=ON_ERROR_STOP=1',
+      '--set=VERBOSITY=verbose',
       '--quiet',
       `--file=${plan.files[index]}`,
     ]);
@@ -340,6 +342,12 @@ test('local rollback proof aborts at every failed stage without retry or diagnos
       assert.equal(calls, failureIndex + 1);
     }
   }
+});
+
+test('local failure diagnostics expose only codes and fixed guard categories', () => {
+  const result = safeLocalFailure({ stderr: `psql:/private/local.sql:213: ERROR:  P0001: Local fixture bootstrap requires the complete reviewed schema\nDETAIL: ${remoteSentinel}`, error: { code: 'ENOENT' } });
+  assert.equal(result, 'SQLSTATE=P0001; line=213; process=ENOENT; guard=missing-schema');
+  assert.equal(safeLocalFailure({ stderr: remoteSentinel, error: { code: privateSentinel } }), 'SQLSTATE=unknown; line=unknown; process=unclassified; guard=unclassified');
 });
 
 test('local rollback proof sanitizes thrown subprocess errors and stops immediately', t => {
