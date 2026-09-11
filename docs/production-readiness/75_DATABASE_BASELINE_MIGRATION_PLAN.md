@@ -11,7 +11,8 @@ isolated Staging project. Production is not a baseline source or a test target.
 Use only the isolated `dealivra-staging` project. Before connecting the CLI,
 run the existing `npm run staging:database-target` guard with the protected
 Staging environment variables. Confirm the CLI version and command surface
-with `supabase --version`, `supabase db pull --help`, and
+with `supabase --version`, `supabase migration new --help`,
+`supabase db dump --help`, `supabase db diff --help`, and
 `supabase migration list --help`; do not copy flags from memory.
 
 The CLI access token, database password, and direct database URL remain
@@ -40,20 +41,30 @@ an expected preflight rejection cannot create a misleading cleanup failure.
 
 1. Start from a clean reviewed branch with no `supabase/migrations` directory.
 2. Link the CLI to the isolated Staging project after the target guard passes.
-3. Run `supabase db pull dealivra_staging_baseline`. The CLI must create the
-   timestamped baseline file; never invent its timestamp or filename.
+3. Run `supabase migration new dealivra_staging_baseline`. Require exactly one
+   canonical baseline file, then use `supabase db dump --linked --file` to
+   populate that file with schema only. Run `supabase db diff --linked --use-migra`
+   into a temporary file and append it only after the command succeeds. This
+   second pass captures managed-schema and default-privilege differences after
+   replaying the dump in a disposable shadow database. The CLI creates the
+   timestamp; never invent it. Neither command applies changes to Staging.
 4. Review the generated SQL for unexpected extension changes, especially
    `DROP EXTENSION`, and for any object outside the reviewed schemas.
 5. Run `npm run database:baseline:verify`. The verifier requires the baseline
    to be first, canonical timestamp ordering, unique timestamps, no Auth user
    inserts, no connection URL or privileged credential, no deprecated
    extension version pin, and emits only file sizes and SHA-256 hashes.
-6. Run `supabase migration list` and retain value-free local/remote alignment
-   evidence.
+6. Run `supabase migration list --linked` to report the existing history. This
+   inventory is not evidence that the new baseline and hosted history align.
 
-`db pull` records the generated baseline as applied in the linked Staging
-migration history. This is why the target guard and separate Staging project
-are mandatory before capture.
+Run `34656757704`, attempt 3, authenticated successfully on 2026-09-11 but
+`db pull` rejected the empty local history against 30 existing Staging
+migrations. Do not mark those migrations reverted merely to unblock capture.
+The schema dump plus diff reproduces the two capture passes in the pinned
+CLI's initial-pull implementation without its history check or remote history
+write. The generated baseline is for disposable rebuild proof; it must not be
+pushed to the existing hosted project. Reconciliation with the existing
+history and upgrade proof remain separate, reviewed activation gates.
 
 ## Empty-database proof
 
