@@ -85,6 +85,32 @@ export function createLocalRollbackPlan({
   return { files, env: localProcessEnvironment(env) };
 }
 
+export function safeLocalFailure(result) {
+  const stderr = typeof result?.stderr === 'string' ? result.stderr : '';
+  const state = stderr.match(/\b(?:ERROR|FATAL):\s+([0-9A-Z]{5}):/);
+  const line = stderr.match(/\.sql:(\d{1,6}):\s+(?:ERROR|FATAL):/);
+  const processCode = ['ENOENT', 'EACCES', 'EPERM', 'ETIMEDOUT'].includes(result?.error?.code)
+    ? result.error.code : 'unclassified';
+  const rules = [
+    ['requires the complete reviewed schema', 'missing-schema'],
+    ['requires the reviewed helper dependencies', 'missing-helper'],
+    ['refuses existing configuration or Storage data', 'existing-configuration'],
+    ['refuses queued network requests', 'network-queue'],
+    ['refuses existing Auth data', 'existing-auth'],
+    ['refuses foreign application tables', 'foreign-table'],
+    ['refuses existing application data', 'existing-data'],
+    ['refuses unexpected mutation triggers', 'unexpected-trigger'],
+    ['Local Cron must support inactive fixture registrations', 'cron-capability'],
+    ['Local authenticator has an unexpected pre-request configuration', 'authenticator-setting'],
+    ['Local initial-agreement trigger did not create both snapshots', 'agreement-trigger'],
+    ['Local maintenance fixtures failed their isolated safety boundary', 'maintenance-boundary'],
+    ['Local synthetic fixture inventory failed', 'fixture-inventory'],
+    ['Local disposable fixture authorization is required', 'local-authorization'],
+  ];
+  const rule = rules.find(([message]) => stderr.includes(message))?.[1] ?? 'unclassified';
+  return `SQLSTATE=${state?.[1] ?? 'unknown'}; line=${line?.[1] ?? 'unknown'}; process=${processCode}; guard=${rule}`;
+}
+
 export function runLocalRollbackProof({ argv, env, root = repositoryRoot, run = spawnSync } = {}) {
   const plan = createLocalRollbackPlan({ argv, env, root });
   for (const file of plan.files) {
@@ -100,6 +126,7 @@ export function runLocalRollbackProof({ argv, env, root = repositoryRoot, run = 
           '--no-password',
           '-X',
           '--set=ON_ERROR_STOP=1',
+          '--set=VERBOSITY=verbose',
           '--quiet',
           `--file=${file}`,
         ],
@@ -120,7 +147,7 @@ export function runLocalRollbackProof({ argv, env, root = repositoryRoot, run = 
     }
     if (!result || result.status !== 0 || result.error || result.signal) {
       throw new Error(
-        `Local database proof failed at ${basename(file)}. No later suite was run. Database output is withheld to protect fixture secrets.`,
+        `Local database proof failed at ${basename(file)}. ${safeLocalFailure(result)}. No later suite was run. Database output is withheld to protect fixture secrets.`,
       );
     }
   }
