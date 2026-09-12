@@ -96,6 +96,14 @@ jobs:
       - name: Report existing Staging history without changing it
         run: supabase migration list --linked
 
+      - name: Retain captured schema for review before database proof
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dealivra-staging-schema-review-${{ github.sha }}
+          path: supabase/migrations/*.sql
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Start a disposable local Supabase stack
         id: local_stack
         run: supabase start
