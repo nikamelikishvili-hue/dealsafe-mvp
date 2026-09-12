@@ -155,6 +155,9 @@ jobs:
           console.log('Local fixture rejected missing authorization and existing state; both transactions rolled back.');
           JS
 
+      - name: Rehearse the final authorization upgrade with persisted fixtures
+        run: node scripts/run-local-upgrade-rehearsal.mjs --local-disposable
+
       - name: Run local database advisors
         run: supabase db advisors --local
 
