@@ -48,6 +48,12 @@ an expected preflight rejection cannot create a misleading cleanup failure.
    second pass captures managed-schema and default-privilege differences after
    replaying the dump in a disposable shadow database. The CLI creates the
    timestamp; never invent it. Neither command applies changes to Staging.
+   Before replay, prepend the reviewed revocations of API-role default grants
+   for future postgres-owned public functions, tables and sequences. pg_dump
+   restores object ACLs assuming stock defaults; the local Supabase template
+   otherwise adds API-role access which is absent from the source object ACLs.
+   The dump's final default-privilege statements restore the source defaults.
+   This preamble executes only in the shadow/disposable database, never hosted.
 4. Review the generated SQL for unexpected extension changes, especially
    `DROP EXTENSION`, and for any object outside the reviewed schemas.
 5. Run `npm run database:baseline:verify`. The verifier requires the baseline
