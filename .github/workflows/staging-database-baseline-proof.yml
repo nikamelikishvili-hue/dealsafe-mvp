@@ -55,7 +55,9 @@ jobs:
       - name: Confirm the reviewed CLI command surface
         run: |
           supabase --version
-          supabase db pull --help
+          supabase migration new --help
+          supabase db dump --help
+          supabase db diff --help
           supabase migration list --help
           supabase db reset --help
 
@@ -69,13 +71,49 @@ jobs:
         run: supabase link --project-ref "$DEALIVRA_STAGING_SUPABASE_PROJECT_REF"
 
       - name: Capture the CLI-generated Staging baseline
-        run: supabase db pull dealivra_staging_baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase migration new dealivra_staging_baseline
+          mapfile -t baselines < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql')
+          test "${#baselines[@]}" -eq 1
+          baseline="${baselines[0]}"
+          [[ "$baseline" =~ /[0-9]{14}_dealivra_staging_baseline\.sql$ ]]
+          # Schema-only export: never fetch data or repair hosted migration history.
+          supabase db dump --linked --file "$baseline"
+          test -s "$baseline"
+          # Reproduce db pull's second pass for managed schemas and privileges.
+          # The diff is applied to a disposable shadow database, never to Staging.
+          delta="$(mktemp)"
+          trap 'rm -f "$delta"' EXIT
+          # pg_dump assumes stock creation ACLs. Supabase's local defaults add
+          # API-role grants that its exported object ACLs do not fully revoke.
+          # Normalize only future postgres-owned objects before local replay;
+          # the dump restores the source default privileges at its end.
+          cat > "$delta" <<'SQL'
+          ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon, authenticated, service_role;
+          ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated, service_role;
+          ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated, service_role;
+          SQL
+          cat "$baseline" >> "$delta"
+          cat "$delta" > "$baseline"
+          supabase db diff --linked --use-migra > "$delta"
+          printf '\n' >> "$baseline"
+          cat "$delta" >> "$baseline"
 
       - name: Verify the data-free migration manifest
         run: npm run database:baseline:verify
 
-      - name: Compare local and isolated Staging migration history
-        run: supabase migration list
+      - name: Report existing Staging history without changing it
+        run: supabase migration list --linked
+
+      - name: Retain captured schema for review before database proof
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dealivra-staging-schema-review-${{ github.sha }}
+          path: supabase/migrations/*.sql
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Start a disposable local Supabase stack
         id: local_stack
@@ -84,21 +122,41 @@ jobs:
       - name: Rebuild the empty local database from migrations
         run: supabase db reset --local
 
-      - name: Verify all 17 authorization and integrity suites locally
+      - name: Bootstrap disposable fixtures and verify all 17 suites locally
+        run: npm run database:local:rollback -- --local-disposable
+
+      - name: Verify local fixture rejects missing authorization and reuse
         shell: bash
-        env:
-          PGPASSWORD: postgres
         run: |
-          set -euo pipefail
-          mapfile -t tests < <(find supabase/tests -maxdepth 1 -type f -name '*_rollback.sql' | sort)
-          test "${#tests[@]}" -eq 17
-          for test_file in "${tests[@]}"; do
-            echo "Running ${test_file}"
-            psql "postgresql://postgres@127.0.0.1:54322/postgres" \
-              -X \
-              -v ON_ERROR_STOP=1 \
-              -f "$test_file"
-          done
+          node --input-type=module <<'JS'
+          import { spawnSync } from 'node:child_process';
+          import { createLocalRollbackPlan, runLocalRollbackProof, safeLocalFailure } from './scripts/run-local-database-rollback-proof.mjs';
+          const plan = createLocalRollbackPlan({ argv: ['--local-disposable'] });
+          const result = spawnSync('psql', [
+            '--host=127.0.0.1', '--port=54322', '--username=postgres',
+            '--dbname=postgres', '--no-password', '-X', '--quiet',
+            '--set=ON_ERROR_STOP=1', '--set=VERBOSITY=verbose',
+            `--file=${plan.files[0]}`,
+          ], {
+            env: { ...plan.env, PGOPTIONS: plan.env.PGOPTIONS.replace('dealivra.local_fixture_bootstrap=on', 'dealivra.local_fixture_bootstrap=off') },
+            shell: false, encoding: 'utf8', timeout: 90000, maxBuffer: 1048576,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          if (result.status === 0 || !safeLocalFailure(result).includes('guard=local-authorization')) {
+            throw new Error('Local fixture did not prove rejection of missing authorization.');
+          }
+          let reuseRejected = false;
+          try {
+            runLocalRollbackProof({ argv: ['--local-disposable'] });
+          } catch (error) {
+            reuseRejected = error.message.includes('guard=existing-configuration');
+          }
+          if (!reuseRejected) throw new Error('Local fixture did not prove rejection of existing state.');
+          console.log('Local fixture rejected missing authorization and existing state; both transactions rolled back.');
+          JS
+
+      - name: Rehearse the final authorization upgrade with persisted fixtures
+        run: node scripts/run-local-upgrade-rehearsal.mjs --local-disposable
 
       - name: Run local database advisors
         run: supabase db advisors --local

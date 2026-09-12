@@ -31,17 +31,18 @@ export const approvedLegacyIdentifierRules = Object.freeze([
   }),
   rule({
     id: 'database-admin-rpc-compatibility',
-    expectedOccurrences: 23,
+    expectedOccurrences: 24,
     allowedPath: path => (
       supabaseSql(path)
       || path === 'src/services/supabaseRest.ts'
+      || path === 'scripts/run-local-upgrade-rehearsal.mjs'
     ),
     linePattern: /\bis_dealsafe_admin\b/i,
   }),
   rule({
     id: 'database-private-schema-compatibility',
-    expectedOccurrences: 139,
-    allowedPath: supabaseSql,
+    expectedOccurrences: 146,
+    allowedPath: path => supabaseSql(path) || path === 'scripts/run-local-upgrade-rehearsal.mjs',
     linePattern: /\bdealsafe_private\b/i,
   }),
   rule({
