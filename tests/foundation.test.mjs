@@ -14692,6 +14692,10 @@ test('database baseline proof is manual, Staging-only, and rebuilds locally', ()
   assert.match(workflow, /supabase migration new dealivra_staging_baseline/);
   assert.match(workflow, /supabase db dump --linked --file "\$baseline"/);
   assert.match(workflow, /supabase db diff --linked --use-migra > "\$delta"/);
+  for (const kind of ['FUNCTIONS', 'TABLES', 'SEQUENCES']) {
+    assert.ok(workflow.includes(`ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON ${kind} FROM anon, authenticated, service_role;`));
+  }
+  assert.ok(workflow.indexOf('ALTER DEFAULT PRIVILEGES') < workflow.indexOf('supabase db diff --linked'));
   assert.doesNotMatch(workflow, /supabase (?:migration repair|db push|db pull)\b/);
   assert.doesNotMatch(workflow, /--data-only|--role-only|db reset --linked/);
   assert.match(workflow, /npm run database:baseline:verify/);
