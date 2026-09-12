@@ -92,6 +92,9 @@ export function safeLocalFailure(result) {
   const processCode = ['ENOENT', 'EACCES', 'EPERM', 'ETIMEDOUT'].includes(result?.error?.code)
     ? result.error.code : 'unclassified';
   const rules = [
+    ['DAT-004 signed-in SECURITY DEFINER inventory changed', 'rpc-inventory'],
+    ['DAT-004 signed-in function grants or search paths are not exact', 'rpc-grants'],
+    ['DAT-004 signed-in function lacks a reviewed identity boundary', 'rpc-identity'],
     ['requires the complete reviewed schema', 'missing-schema'],
     ['requires the reviewed helper dependencies', 'missing-helper'],
     ['refuses existing configuration or Storage data', 'existing-configuration'],
