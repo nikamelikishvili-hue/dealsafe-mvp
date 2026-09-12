@@ -86,6 +86,17 @@ jobs:
           # The diff is applied to a disposable shadow database, never to Staging.
           delta="$(mktemp)"
           trap 'rm -f "$delta"' EXIT
+          # pg_dump assumes stock creation ACLs. Supabase's local defaults add
+          # API-role grants that its exported object ACLs do not fully revoke.
+          # Normalize only future postgres-owned objects before local replay;
+          # the dump restores the source default privileges at its end.
+          cat > "$delta" <<'SQL'
+          ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon, authenticated, service_role;
+          ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated, service_role;
+          ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated, service_role;
+          SQL
+          cat "$baseline" >> "$delta"
+          cat "$delta" > "$baseline"
           supabase db diff --linked --use-migra > "$delta"
           printf '\n' >> "$baseline"
           cat "$delta" >> "$baseline"
