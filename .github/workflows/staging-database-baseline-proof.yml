@@ -125,6 +125,36 @@ jobs:
       - name: Bootstrap disposable fixtures and verify all 17 suites locally
         run: npm run database:local:rollback -- --local-disposable
 
+      - name: Verify local fixture rejects missing authorization and reuse
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import { spawnSync } from 'node:child_process';
+          import { createLocalRollbackPlan, runLocalRollbackProof, safeLocalFailure } from './scripts/run-local-database-rollback-proof.mjs';
+          const plan = createLocalRollbackPlan({ argv: ['--local-disposable'] });
+          const result = spawnSync('psql', [
+            '--host=127.0.0.1', '--port=54322', '--username=postgres',
+            '--dbname=postgres', '--no-password', '-X', '--quiet',
+            '--set=ON_ERROR_STOP=1', '--set=VERBOSITY=verbose',
+            `--file=${plan.files[0]}`,
+          ], {
+            env: { ...plan.env, PGOPTIONS: plan.env.PGOPTIONS.replace('dealivra.local_fixture_bootstrap=on', 'dealivra.local_fixture_bootstrap=off') },
+            shell: false, encoding: 'utf8', timeout: 90000, maxBuffer: 1048576,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          if (result.status === 0 || !safeLocalFailure(result).includes('guard=local-authorization')) {
+            throw new Error('Local fixture did not prove rejection of missing authorization.');
+          }
+          let reuseRejected = false;
+          try {
+            runLocalRollbackProof({ argv: ['--local-disposable'] });
+          } catch (error) {
+            reuseRejected = error.message.includes('guard=existing-configuration');
+          }
+          if (!reuseRejected) throw new Error('Local fixture did not prove rejection of existing state.');
+          console.log('Local fixture rejected missing authorization and existing state; both transactions rolled back.');
+          JS
+
       - name: Run local database advisors
         run: supabase db advisors --local
 
