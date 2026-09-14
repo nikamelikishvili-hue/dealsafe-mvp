@@ -31,6 +31,9 @@ export async function runFixtureAuthProof({
     && env.DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF === productionRef
     && typeof env.SUPABASE_ACCESS_TOKEN === 'string'
     && env.SUPABASE_ACCESS_TOKEN.length >= 20);
+  const recoveryBasename = env.DEALIVRA_HTTP_RECOVERY_BASENAME;
+  requireCondition(recoveryBasename === undefined
+    || /^dat003-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.png$/.test(recoveryBasename));
 
   // No remote body, credential, identity, or arbitrary exception is logged.
   let phase = 'key-discovery';
@@ -103,6 +106,20 @@ export async function runFixtureAuthProof({
     }
     // Privileged credentials never reach the role/Storage matrix.
     serviceKey = undefined;
+
+    if (recoveryBasename) {
+      phase = 'recover-prior-probes';
+      for (let index = 0; index < 2; index += 1) {
+        const token = sessions[index].access_token;
+        const prefix = fixtures[index].id;
+        await request(baseUrl + '/storage/v1/object/deal-media', publicKey,
+          { prefixes: [prefix + '/' + recoveryBasename] }, token, 'DELETE');
+        const remaining = await request(baseUrl + '/storage/v1/object/list/deal-media', publicKey,
+          { prefix, search: recoveryBasename, limit: 2, offset: 0 }, token);
+        requireCondition(Array.isArray(remaining) && remaining.length === 0);
+      }
+      emit({ phase, outcome: 'passed' });
+    }
 
     phase = 'participant-preflight';
     for (let index = 0; index < fixtures.length; index += 1) {
