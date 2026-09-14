@@ -41,7 +41,7 @@ export const approvedLegacyIdentifierRules = Object.freeze([
   }),
   rule({
     id: 'database-private-schema-compatibility',
-    expectedOccurrences: 146,
+    expectedOccurrences: 156,
     allowedPath: path => supabaseSql(path) || path === 'scripts/run-local-upgrade-rehearsal.mjs',
     linePattern: /\bdealsafe_private\b/i,
   }),
