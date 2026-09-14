@@ -60,6 +60,14 @@ function fixtureProofHarness({ missingUser = false, loginFailure = false } = {})
           return result(index === 2 ? [] : [{ viewer_role: ['seller', 'buyer'][index], deal_status: 'accepted' }]);
         }
         if (url.includes('grant_type=refresh_token')) return result(session(Number(JSON.parse(init.body).refresh_token.slice(-1))));
+        if (url.endsWith('/storage/v1/object/deal-media')) {
+          assert.equal(init.method, 'DELETE');
+          const paths = JSON.parse(init.body).prefixes;
+          assert.equal(paths.length, 1);
+          assert.match(paths[0], /^00000000-0000-4000-8000-00000000010[23]\/dat003-5bcd5484-c7f1-4472-8841-5a76a0ab6f27\.png$/);
+          return result([]);
+        }
+        if (url.endsWith('/storage/v1/object/list/deal-media')) return result([]);
         if (url.endsWith('/logout?scope=local')) return new Response(null, { status: 204 });
         throw new Error('Unexpected request');
       },
@@ -78,7 +86,9 @@ function fixtureProofHarness({ missingUser = false, loginFailure = false } = {})
 
 test('fixture proof waits for natural expiry, refreshes roles, and cleans up only its sessions', async () => {
   const h = fixtureProofHarness();
+  h.options.env.DEALIVRA_HTTP_RECOVERY_BASENAME = 'dat003-5bcd5484-c7f1-4472-8841-5a76a0ab6f27.png';
   assert.equal(await runFixtureAuthProof(h.options), true);
+  assert.equal(h.calls.filter(call => call.init.method === 'DELETE').length, 2);
   assert.equal(h.matrixCalled(), true);
   assert.equal(h.calls.filter(call => call.url.endsWith('/logout?scope=local')).length, 3);
   assert.doesNotMatch(JSON.stringify(h.events), /refresh-|test-signature|synthetic-management-token/);
@@ -97,6 +107,10 @@ test('fixture proof rejects missing users before link generation and cleans part
 test('fixture proof rejects an unintended environment before network access', async () => {
   const h = fixtureProofHarness();
   h.options.env.DEALIVRA_DATABASE_ENVIRONMENT = 'production';
+  await assert.rejects(runFixtureAuthProof(h.options));
+  assert.equal(h.calls.length, 0);
+  h.options.env.DEALIVRA_DATABASE_ENVIRONMENT = 'staging';
+  h.options.env.DEALIVRA_HTTP_RECOVERY_BASENAME = '../customer-file.png';
   await assert.rejects(runFixtureAuthProof(h.options));
   assert.equal(h.calls.length, 0);
 });
