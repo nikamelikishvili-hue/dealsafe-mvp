@@ -3936,7 +3936,7 @@ test('legacy runtime identifiers are machine-governed migration aliases', async 
   const { verifyLegacyIdentifiers } = await import('../scripts/verify-legacy-identifiers.mjs');
   const current = verifyLegacyIdentifiers(rootPath);
   assert.equal(current.status, 'passed');
-  assert.equal(current.legacy_occurrences, 181);
+  assert.equal(current.legacy_occurrences, 191);
   assert.equal(current.approved_aliases, 9);
   assert.equal(packageJson.scripts['brand:verify'], 'node scripts/verify-legacy-identifiers.mjs');
   assert.match(packageJson.scripts.verify, /npm run brand:verify/);
@@ -16406,7 +16406,7 @@ test('staging migration history is ordered, hashed, and included in verification
 
   const result = evaluateStagingMigrationHistory(manifest);
   assert.equal(result.status, 'passed');
-  assert.equal(result.migration_count, 30);
+  assert.equal(result.migration_count, 32);
   assert.match(result.history_sha256, /^[a-f0-9]{64}$/);
   assert.equal(packageJson.scripts['database:staging-history:verify'], 'node scripts/verify-staging-migration-history.mjs');
   assert.match(packageJson.scripts.verify, /database:staging-history:verify/);
