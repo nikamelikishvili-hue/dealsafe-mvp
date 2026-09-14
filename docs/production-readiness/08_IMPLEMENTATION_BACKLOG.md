@@ -48,7 +48,7 @@ This backlog turns the production specification into controlled delivery work. P
 |---|---|---|---|
 | DAT-001 | P0 | Convert setup SQL into timestamped migrations | Empty and previous-version databases migrate automatically |
 | DAT-002 | P0 â€” in progress | Inventory every table/view/function/bucket/grant/policy | Machine-readable owner/exposure/steward inventory is wired after all 17 SQL suites; isolated Staging execution and owner review remain |
-| DAT-003 | P0 â€” in progress | Add cross-user RLS/function/storage test harness | RPC role matrix is behind an exact Staging target guard; real-token HTTP and Storage cases remain |
+| DAT-003 | P0 - verified in Staging | Add cross-user RLS/function/storage test harness | 2026-09-14 run 34872363314 passed all 11 real-token HTTP/Storage cases, probe and session cleanup, and all 17 SQL suites; see 76_STAGING_HTTP_AUTHORIZATION_MATRIX.md |
 | DAT-004 | P0 â€” repository complete | Harden `security definer` functions and grants | Fixed search path, validated inputs, explicit grants, and regression tests are present; Staging proof remains a launch gate |
 | DAT-005 | P0 â€” repository complete | Implement immutable material audit events | Append-only events, correlation IDs, mutation denial, and rollback proof are present; Staging proof remains a launch gate |
 | DAT-006 | P1 | Add PITR, storage backup, retention jobs, and restore drill | RPO/RTO evidence passes |
@@ -58,7 +58,8 @@ DAT-003 verification hardening (2026-09-08): the HTTP runner now requires
 explicit Staging isolation, valid participant action-plan rows, recognized
 authorization denials, bounded responses, and proven cleanup after interrupted
 uploads. Executable provider fixtures cover these boundaries; real-token
-hosted evidence and the 17 rollback suites are still required for closure.
+hosted evidence and the 17 rollback suites were required for closure. The
+2026-09-14 result in the matrix runbook now satisfies those conditions.
 
 ## Epic 5 — Authentication and account security
 

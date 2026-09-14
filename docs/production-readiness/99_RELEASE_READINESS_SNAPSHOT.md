@@ -142,7 +142,22 @@ code, configuration, migration, provider, policy, or ownership change after
 approval invalidates the affected evidence and requires the relevant gates to
 run again.
 
-### Immediate controlled action
+### Staging evidence update — 2026-09-14
+
+The protected Staging credentials are configured. Candidate
+`536266ef8db689a53341e8e8f2382b3838d1f9a2`, run `34872363314`, passed the
+complete 11-case real-token HTTP/Storage matrix, cleanup, all 17 SQL suites on
+a clean schema rebuild, and the bounded reconstructed authorization upgrade.
+DAT-003 is verified in Staging; see `76_STAGING_HTTP_AUTHORIZATION_MATRIX.md`.
+The migration ledger contains 32 pinned entries with its original 30 preserved.
+This supersedes the earlier missing-Staging-secrets and pending-DAT-003 status.
+
+DAT-001 remains open for baseline adoption and the complete historical upgrade
+path. FND-003 still requires exact deployment evidence and release approval.
+The contained Staging maintenance worker remains disabled pending configuration
+review. Production has not been promoted.
+
+### Earlier controlled action (superseded for Staging credentials and DAT-003)
 
 Provision `DEALIVRA_STAGING_DATABASE_URL`,
 `DEALIVRA_STAGING_SUPABASE_ACCESS_TOKEN`, and

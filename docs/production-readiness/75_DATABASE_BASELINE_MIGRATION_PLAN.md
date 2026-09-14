@@ -11,7 +11,8 @@ isolated Staging project. Production is not a baseline source or a test target.
 Use only the isolated `dealivra-staging` project. Before connecting the CLI,
 run the existing `npm run staging:database-target` guard with the protected
 Staging environment variables. Confirm the CLI version and command surface
-with `supabase --version`, `supabase db pull --help`, and
+with `supabase --version`, `supabase migration new --help`,
+`supabase db dump --help`, `supabase db diff --help`, and
 `supabase migration list --help`; do not copy flags from memory.
 
 The CLI access token, database password, and direct database URL remain
@@ -40,29 +41,46 @@ an expected preflight rejection cannot create a misleading cleanup failure.
 
 1. Start from a clean reviewed branch with no `supabase/migrations` directory.
 2. Link the CLI to the isolated Staging project after the target guard passes.
-3. Run `supabase db pull dealivra_staging_baseline`. The CLI must create the
-   timestamped baseline file; never invent its timestamp or filename.
+3. Run `supabase migration new dealivra_staging_baseline`. Require exactly one
+   canonical baseline file, then use `supabase db dump --linked --file` to
+   populate that file with schema only. Run `supabase db diff --linked --use-migra`
+   into a temporary file and append it only after the command succeeds. This
+   second pass captures managed-schema and default-privilege differences after
+   replaying the dump in a disposable shadow database. The CLI creates the
+   timestamp; never invent it. Neither command applies changes to Staging.
+   Before replay, prepend the reviewed revocations of API-role default grants
+   for future postgres-owned public functions, tables and sequences. pg_dump
+   restores object ACLs assuming stock defaults; the local Supabase template
+   otherwise adds API-role access which is absent from the source object ACLs.
+   The dump's final default-privilege statements restore the source defaults.
+   This preamble executes only in the shadow/disposable database, never hosted.
 4. Review the generated SQL for unexpected extension changes, especially
    `DROP EXTENSION`, and for any object outside the reviewed schemas.
 5. Run `npm run database:baseline:verify`. The verifier requires the baseline
    to be first, canonical timestamp ordering, unique timestamps, no Auth user
    inserts, no connection URL or privileged credential, no deprecated
    extension version pin, and emits only file sizes and SHA-256 hashes.
-6. Run `supabase migration list` and retain value-free local/remote alignment
-   evidence.
+6. Run `supabase migration list --linked` to report the existing history. This
+   inventory is not evidence that the new baseline and hosted history align.
 
-`db pull` records the generated baseline as applied in the linked Staging
-migration history. This is why the target guard and separate Staging project
-are mandatory before capture.
+Run `34656757704`, attempt 3, authenticated successfully on 2026-09-11 but
+`db pull` rejected the empty local history against 30 existing Staging
+migrations. Do not mark those migrations reverted merely to unblock capture.
+The schema dump plus diff reproduces the two capture passes in the pinned
+CLI's initial-pull implementation without its history check or remote history
+write. The generated baseline is for disposable rebuild proof; it must not be
+pushed to the existing hosted project. Reconciliation with the existing
+history and upgrade proof remain separate, reviewed activation gates.
 
 ## Empty-database proof
 
-Use a local Docker-backed Supabase stack or a disposable non-Production
-project:
+Use a local Docker-backed Supabase stack. The fixture runner below deliberately
+does not support a hosted target, even a disposable Staging project:
 
-1. run `supabase db reset` against the local stack;
-2. run all 17 sorted `supabase/tests/*_rollback.sql` suites with
-   `ON_ERROR_STOP=1`;
+1. run `supabase db reset --local` against the local stack;
+2. run `npm run database:local:rollback -- --local-disposable`. It first commits
+   the separately reviewed synthetic fixture bootstrap, then runs exactly the
+   17 named `supabase/tests/*_rollback.sql` suites with `ON_ERROR_STOP=1`;
 3. run Supabase database advisors and review every security finding;
 4. run `npm run verify` and record the exact commit and migration hashes;
 5. destroy the disposable environment or retain only synthetic `.invalid`
@@ -70,6 +88,45 @@ project:
 
 Seed files may contain synthetic development data only. Never dump Production
 data into `seed.sql`, and never use `--include-seed` against Production.
+
+### Local fixture boundary
+
+`supabase/tests/fixtures/local-authorization-bootstrap.sql` is not a migration,
+an automatic `seed.sql`, or a rollback suite. A schema-only rebuild lacks the
+users, deals, private buckets, and maintenance configuration that these suites
+require. The explicit local bootstrap supplies synthetic prerequisites without
+changing application grants, RLS policies, or rollback assertions.
+
+The runner accepts no connection URL or target override. Every database command
+uses `127.0.0.1:54322`, database/user `postgres`, no shell, no psql startup file,
+bounded execution, and a minimal subprocess environment. Hosted credentials,
+libpq service files/settings, and preload variables are not forwarded. Only
+the disposable CLI stack's local default password is supplied. Process output
+is withheld on failures because SQL errors may contain the synthetic Vault
+secret. The process reports the failed filename and stops without retries.
+
+Loopback alone cannot prove disposability (for example, an operator could
+forward a remote port). The SQL independently checks the explicit local marker
+and refuses populated application/Auth/Storage/Vault/scheduler state before
+its first write. Never port-forward a hosted database onto the local test port.
+Use only the reviewed local executable and freshly rebuilt CLI stack. A rerun
+requires another local reset; the bootstrap never deletes or reconciles
+pre-existing data. Cron fixture jobs are inactive no-ops, and no usable login
+passwords, authenticated sessions, real payment requests, or object bytes are
+created. The local Authenticator role setting required by the schema tests is
+restored only inside this disposable bootstrap.
+
+### 2026-09-08 verification status
+
+The previous workflow ran the rollback suites immediately after schema reset
+without preparing their required data. The new runner and bootstrap address
+that missing step, but their presence is **not** empty-database execution proof.
+No local Docker/Postgres engine was available during preparation, and the
+CLI-generated baseline and protected Staging credentials were still missing.
+Unit tests of the runner cannot validate SQL constraints or triggers. Keep
+DAT-001 open until the real isolated reset, bootstrap, all 17 suites, advisors,
+and upgrade proof have executed successfully. The earlier 16/17 hosted
+supplement remains a separate result, not a pass for this local workflow.
 
 ## Upgrade and rollback proof
 

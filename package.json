@@ -25,6 +25,7 @@
     "staging:database-target": "node scripts/verify-staging-database-target.mjs",
     "database:baseline:status": "node scripts/verify-database-baseline.mjs --allow-missing",
     "database:baseline:verify": "node scripts/verify-database-baseline.mjs",
+    "database:local:rollback": "node scripts/run-local-database-rollback-proof.mjs",
     "database:staging-history:verify": "node scripts/verify-staging-migration-history.mjs",
     "security:secrets": "node scripts/scan-repository-secrets.mjs",
     "security:mfa-matrix": "node scripts/run-mfa-password-only-matrix.mjs",
