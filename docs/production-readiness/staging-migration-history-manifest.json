@@ -1,9 +1,9 @@
 {
   "schema": "dealivra.staging-migration-history.v1",
-  "captured_at": "2026-08-23T15:41:00Z",
+  "captured_at": "2026-09-14T12:09:51Z",
   "source": "isolated-staging-migration-ledger",
   "project_ref_sha256": "0a2f1963eb00836412e7a9acbdb894a3f6d50b3e276c1d9e71d9740dbcc02ef1",
-  "migration_count": 30,
+  "migration_count": 32,
   "migrations": [
     ["20260810143158", "dealivra_staging_base_schema", 6352, "e874bf15485e6afb90167f3586fc0790e161458c83579a15bce48d9b49c728fe"],
     ["20260810213134", "dealivra_core_features", 61006, "d0103127d856d52a227927c3b8163636c0a0f9459536216a1eb0595ba9a9ed39"],
@@ -34,6 +34,8 @@
     ["20260810225820", "dealivra_staging_synthetic_test_fixtures_v4", 4223, "839fd328fbbd0fd93f75ade87686f5316acc1149566b73b8515f7c65700e5f71"],
     ["20260810230038", "dealivra_safe_evidence_projection_grants", 154, "d6b2a4daa5b481e396577c04405399afc754dda9eabade4e2308d1f65218d6c7"],
     ["20260810231010", "dealivra_admin_case_evidence_authorization", 563, "c02395392171f6f6e33c67cc88a00e2948e9c7ce5b032355a046f90ed08b8733"],
-    ["20260810232053", "dealivra_admin_case_evidence_boundary", 1035, "e752003abd19b0c2f7f7175be33052538c2d324790e87a450fe562016ade9948"]
+    ["20260810232053", "dealivra_admin_case_evidence_boundary", 1035, "e752003abd19b0c2f7f7175be33052538c2d324790e87a450fe562016ade9948"],
+    ["20260914032848", "dealivra_authenticated_private_schema_usage", 1216, "b7def63ef37b63617be91a24507642ff2c3c6abb9495ba50f9e251b475846394"],
+    ["20260914120951", "dealivra_deal_media_owner_read", 368, "5180c88df49fd797ac37ca2399b7f4739d16789d863290d2c33cd7710fad2ed7"]
   ]
 }
