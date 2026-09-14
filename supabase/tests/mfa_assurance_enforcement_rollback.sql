@@ -85,6 +85,9 @@ begin
   perform set_config('dealivra.test_privileged_claims', jsonb_build_object(
     'sub',privileged_id,'session_id',privileged_session,'role','authenticated','aal','aal1')::text,true);
   -- Transaction-only metadata fixtures; no Storage blobs are created.
+  -- A schema-only local rebuild has no bucket data; leave hosted buckets unchanged.
+  insert into storage.buckets(id,name,public) values('deal-media','deal-media',false)
+    on conflict(id) do nothing;
   perform set_config('dealivra.test_media_basename','rls-proof-' || gen_random_uuid()::text || '.png',true);
   insert into storage.objects(bucket_id,name,owner_id) values
     ('deal-media',member_id::text || '/' || current_setting('dealivra.test_media_basename'),member_id::text),
