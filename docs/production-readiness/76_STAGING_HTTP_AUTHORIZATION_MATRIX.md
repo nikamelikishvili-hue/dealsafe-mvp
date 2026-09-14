@@ -81,3 +81,31 @@ timeouts, and cleanup failures. They do not replace a hosted Staging run.
 
 DAT-003 closes only after the matrix passes against isolated Staging, all probe
 objects are absent, and the existing 17 rollback SQL suites still pass.
+
+## Verified Staging result — 2026-09-14
+
+DAT-003 meets those acceptance conditions on candidate
+`536266ef8db689a53341e8e8f2382b3838d1f9a2` in
+[run 34872363314](https://github.com/nikamelikishvili-hue/dealsafe-mvp/actions/runs/34872363314).
+The protected HTTP job passed all 11 cases, including a legitimately issued
+token allowed to expire naturally, both owner uploads, explicit cross-user
+denials, and owner-scoped deletion and absence checks. Its three synthetic
+Auth sessions were signed out. A subsequent database check found zero probe
+objects and zero sessions for the three test accounts.
+
+The same run rebuilt the captured schema in a disposable local database,
+passed all 17 SQL suites, rejected unauthorized fixture bootstrap and reuse,
+and passed the bounded reconstructed authorization upgrade rehearsal.
+That rehearsal is not full historical migration replay or DAT-001 completion.
+
+Real HTTP testing exposed missing private-schema name resolution for the
+invoker session hook and missing owner SELECT for Storage cleanup. Two guarded
+Staging migrations corrected those boundaries; MFA, active-session checks,
+private table denial, and cross-user file isolation remain enforced. The
+ledger now contains 32 pinned entries, with the original 30 unchanged.
+
+The runner obtains credentials only inside the protected job, creates login
+links without sending email, and emits status-only results. Staging deployment
+access was restored to protected branches only after verification; required
+review remains enabled. Production activation and the remaining release gates
+are separate work.
