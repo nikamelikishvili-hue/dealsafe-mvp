@@ -18,6 +18,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  authenticated-http-proof:
+    name: Verify synthetic sessions and Storage authorization
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 80
+    env:
+      DEALIVRA_DATABASE_ENVIRONMENT: ${{ inputs.target }}
+      DEALIVRA_STAGING_SUPABASE_PROJECT_REF: ${{ vars.DEALIVRA_STAGING_SUPABASE_PROJECT_REF }}
+      DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF }}
+    steps:
+      - name: Check out the reviewed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Use the pinned Node.js release
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+
+      - name: Verify existing fixtures, natural session expiry, and scoped uploads
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.DEALIVRA_STAGING_SUPABASE_ACCESS_TOKEN }}
+        run: node scripts/run-staging-fixture-auth-proof.mjs
+
   baseline-proof:
     name: Capture and rebuild the isolated Staging schema
     runs-on: ubuntu-latest
