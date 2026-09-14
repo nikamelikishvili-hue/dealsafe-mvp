@@ -1,6 +1,105 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { runStagingHttpAuthorizationMatrix } from '../scripts/run-staging-http-authorization-matrix.mjs';
+import { runFixtureAuthProof } from '../scripts/run-staging-fixture-auth-proof.mjs';
+
+function fixtureProofHarness({ missingUser = false, loginFailure = false } = {}) {
+  const ref = 'itlwbzjtijxiggjyetjl';
+  const base = 'https://' + ref + '.supabase.co';
+  const encodeFixture = claims => 'eyJhbGciOiJIUzI1NiJ9.'
+    + Buffer.from(JSON.stringify(claims)).toString('base64url') + '.test-signature';
+  const adminKey = encodeFixture({ role: 'service_role', ref });
+  const publicKey = 'sb_publishable_synthetic_fixture_only';
+  const calls = [];
+  const events = [];
+  let time = 1_800_000_000_000;
+  let links = 0;
+  let matrixCalled = false;
+  const user = index => ({ id: '00000000-0000-4000-8000-00000000010' + (index + 2),
+    email: 'staging-' + ['seller', 'buyer', 'outsider'][index] + '@dealivra.invalid',
+    email_confirmed_at: '2026-08-10T00:00:00Z' });
+  const session = index => ({ user: user(index), refresh_token: 'refresh-' + index,
+    access_token: encodeFixture({ sub: user(index).id, iss: base + '/auth/v1',
+      aud: 'authenticated', role: 'authenticated', exp: time / 1000 + 3600 }) });
+  const result = value => new Response(JSON.stringify(value), { status: 200 });
+  return {
+    calls, events,
+    matrixCalled: () => matrixCalled,
+    options: {
+      env: { DEALIVRA_DATABASE_ENVIRONMENT: 'staging',
+        DEALIVRA_STAGING_SUPABASE_PROJECT_REF: ref,
+        DEALIVRA_PRODUCTION_SUPABASE_PROJECT_REF: 'zbjtttdcsbnfzbpvhzfb',
+        SUPABASE_ACCESS_TOKEN: 'synthetic-management-token' },
+      now: () => time,
+      sleep: async ms => { assert.ok(ms <= 30000); time += ms; },
+      emit: value => events.push(value),
+      fetchImplementation: async (url, init) => {
+        calls.push({ url, init });
+        assert.equal(init.redirect, 'error');
+        if (url.startsWith('https://api.supabase.com/')) return result([
+          { type: 'publishable', api_key: publicKey },
+          { type: 'legacy', name: 'service_role', api_key: adminKey },
+        ]);
+        assert.ok(url.startsWith(base + '/'));
+        if (url.includes('/admin/users/')) {
+          const index = Number(url.slice(-1)) - 2;
+          return result(missingUser && index === 2 ? {} : user(index));
+        }
+        if (url.endsWith('/admin/generate_link')) {
+          assert.equal(calls.filter(call => call.url.includes('/admin/users/')).length, 3);
+          return result({ ...user(links), hashed_token: 'hash-' + links++ });
+        }
+        if (url.endsWith('/verify')) {
+          if (loginFailure && links === 2) return new Response('SECRET_SENTINEL', { status: 500 });
+          return result(session(links - 1));
+        }
+        if (url.includes('/rpc/')) {
+          assert.equal(init.headers.apikey, publicKey);
+          const sub = JSON.parse(Buffer.from(init.headers.Authorization.split('.')[1], 'base64url')).sub;
+          const index = Number(sub.slice(-1)) - 2;
+          return result(index === 2 ? [] : [{ viewer_role: ['seller', 'buyer'][index], deal_status: 'accepted' }]);
+        }
+        if (url.includes('grant_type=refresh_token')) return result(session(Number(JSON.parse(init.body).refresh_token.slice(-1))));
+        if (url.endsWith('/logout?scope=local')) return new Response(null, { status: 204 });
+        throw new Error('Unexpected request');
+      },
+      matrix: async options => {
+        matrixCalled = true;
+        const old = JSON.parse(Buffer.from(options.expiredToken.split('.')[1], 'base64url'));
+        assert.ok(time >= old.exp * 1000 + 90000);
+        assert.notEqual(options.sellerToken, options.expiredToken);
+        assert.equal(options.publishableKey, publicKey);
+        assert.ok(!JSON.stringify(options).includes(adminKey));
+        return { passed: true };
+      },
+    },
+  };
+}
+
+test('fixture proof waits for natural expiry, refreshes roles, and cleans up only its sessions', async () => {
+  const h = fixtureProofHarness();
+  assert.equal(await runFixtureAuthProof(h.options), true);
+  assert.equal(h.matrixCalled(), true);
+  assert.equal(h.calls.filter(call => call.url.endsWith('/logout?scope=local')).length, 3);
+  assert.doesNotMatch(JSON.stringify(h.events), /refresh-|test-signature|synthetic-management-token/);
+});
+
+test('fixture proof rejects missing users before link generation and cleans partial login failures', async () => {
+  const missing = fixtureProofHarness({ missingUser: true });
+  assert.equal(await runFixtureAuthProof(missing.options), false);
+  assert.ok(!missing.calls.some(call => call.url.endsWith('/admin/generate_link')));
+  const partial = fixtureProofHarness({ loginFailure: true });
+  assert.equal(await runFixtureAuthProof(partial.options), false);
+  assert.equal(partial.calls.filter(call => call.url.endsWith('/logout?scope=local')).length, 1);
+  assert.doesNotMatch(JSON.stringify(partial.events), /SECRET_SENTINEL/);
+});
+
+test('fixture proof rejects an unintended environment before network access', async () => {
+  const h = fixtureProofHarness();
+  h.options.env.DEALIVRA_DATABASE_ENVIRONMENT = 'production';
+  await assert.rejects(runFixtureAuthProof(h.options));
+  assert.equal(h.calls.length, 0);
+});
 
 const stagingRef = 'a'.repeat(20);
 const productionRef = 'b'.repeat(20);
