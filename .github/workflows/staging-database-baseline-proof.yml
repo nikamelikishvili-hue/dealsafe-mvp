@@ -39,6 +39,8 @@ jobs:
       - name: Verify existing fixtures, natural session expiry, and scoped uploads
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.DEALIVRA_STAGING_SUPABASE_ACCESS_TOKEN }}
+          # Exact two owner paths left by run 34800730910; no wildcard cleanup.
+          DEALIVRA_HTTP_RECOVERY_BASENAME: dat003-5bcd5484-c7f1-4472-8841-5a76a0ab6f27.png
         run: node scripts/run-staging-fixture-auth-proof.mjs
 
   baseline-proof:
